@@ -1,0 +1,65 @@
+[package]
+name = "evif-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Error handling
+# Logging
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+
+# Time
+chrono = { workspace = true }
+
+# Bitflags
+bitflags = "2.4"
+
+# UUID for operation IDs
+uuid = { version = "1", features = ["serde", "v4"] }
+
+# Caching
+moka = { version = "0.12", features = ["future"] }
+
+# Config serialization
+toml = "0.8"
+serde_yaml = "0.9"
+
+# Radix Tree for routing optimization
+radix_trie = "0.3"
+
+# Workspace dependencies
+evif-storage = { path = "../evif-storage" }
+
+# Extism for WASM plugin support (optional)
+extism = { version = "1.0", optional = true }
+extism-pdk = { version = "1.0", optional = true }
+
+# Base64 encoding for WASM data transfer
+base64 = "0.22"
+
+# Dynamic library loading for plugin system
+libloading = "0.8"
+
+[features]
+default = []
+wasm = ["extism", "extism-pdk"]
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tempfile = { workspace = true }

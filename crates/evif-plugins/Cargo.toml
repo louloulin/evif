@@ -1,0 +1,102 @@
+[package]
+name = "evif-plugins"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+# Core
+evif-core = { path = "../evif-core" }
+evif-storage = { path = "../evif-storage" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = "0.3"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# Utils
+bitflags = "2.6"
+
+# Encryption
+aes-gcm = "0.10"
+argon2 = "0.5"
+base64 = "0.22"
+generic-array = "1.0"
+typenum = "1.0"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# URL encoding
+urlencoding = "2.1"
+
+# Logging
+log = "0.4"
+
+# AWS SDK for S3 (optional dependency)
+aws-config = { version = "1.5", optional = true }
+aws-sdk-s3 = { version = "1.40", optional = true }
+aws-smithy-types = { version = "1.2", optional = true }
+
+# OpenDAL for unified storage access (optional dependency)
+opendal = { version = "0.50", optional = true, features = [
+    "services-memory",
+    "services-fs",
+    "services-s3",
+    "services-azblob",
+    "services-gcs",
+    "services-oss",      # 阿里云 OSS
+    "services-cos",      # 腾讯云 COS
+    "services-obs",      # 华为云 OBS
+    # "services-webdav",   # WebDAV 协议 (暂时禁用，OpenDAL 0.50.2 有 TLS 冲突)
+    # "services-ftp",      # FTP 协议 (暂时禁用，OpenDAL 0.50.2 有 TLS 冲突)
+    # "services-sftp",     # SFTP 协议 (暂时禁用，OpenDAL 0.50.2 有 TLS 冲突)
+]}
+
+# SQLite for SQLFS (optional dependency)
+rusqlite = { version = "0.32", optional = true, features = ["bundled"] }
+r2d2 = { version = "0.8", optional = true }
+r2d2_sqlite = { version = "0.25", optional = true }
+
+# SQLite for SQLFS2 (optional dependency)
+rusqlite2 = { version = "0.32", optional = true, features = ["bundled"], package = "rusqlite" }
+
+[features]
+default = []
+s3fs = ["aws-config", "aws-sdk-s3", "aws-smithy-types"]
+sqlfs = ["rusqlite", "r2d2", "r2d2_sqlite"]
+sqlfs2 = ["rusqlite2"]
+gptfs = []
+vectorfs = ["aws-config", "aws-sdk-s3", "aws-smithy-types"]
+streamrotatefs = []
+opendal = ["dep:opendal"]
+s3fs-opendal = ["opendal"]
+azureblobfs = ["opendal"]
+gcsfs = ["opendal"]
+aliyunossfs = ["opendal"]
+tencentcosfs = ["opendal"]
+huaweiobsfs = ["opendal"]
+miniofs = ["opendal"]
+webdavfs = ["opendal"]
+ftpfs = ["opendal"]
+sftpfs = ["opendal"]
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tempfile = "3.10"

@@ -1,0 +1,25 @@
+[package]
+name = "evif-macros"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Procedural macros for EVIF code generation"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Workspace dependencies
+syn = { version = "2.0.48", features = ["full", "extra-traits"] }
+quote = "1.0.35"
+proc-macro2 = "1.0.78"
+
+# Additional dependencies
+darling = "0.20.5"
+proc-macro-error = "1.0.4"
+
+[dev-dependencies]
+trybuild = "1.0.85"

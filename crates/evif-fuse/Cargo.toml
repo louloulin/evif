@@ -1,0 +1,52 @@
+[package]
+name = "evif-fuse"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "FUSE bindings for EVIF (Linux/BSD kernel integration)"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# FUSE library
+fuser = "0.13.0"
+
+# System library
+libc = "0.2"
+
+# Local crates
+evif-vfs = { path = "../evif-vfs", default-features = false }
+evif-core = { path = "../evif-core", default-features = false, features = [] }
+evif-graph = { path = "../evif-graph" }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+
+[features]
+default = []
+abi-7-9 = ["fuser/abi-7-9"]
+abi-7-10 = ["fuser/abi-7-10"]
+abi-7-11 = ["fuser/abi-7-11"]
+abi-7-12 = ["fuser/abi-7-12"]
+abi-7-13 = ["fuser/abi-7-13"]
+abi-7-14 = ["fuser/abi-7-14"]
+abi-7-15 = ["fuser/abi-7-15"]
+abi-7-16 = ["fuser/abi-7-16"]
+abi-7-17 = ["fuser/abi-7-17"]
+abi-7-18 = ["fuser/abi-7-18"]
+abi-7-19 = ["fuser/abi-7-19"]
+abi-7-25 = ["fuser/abi-7-25"]
+abi-7-26 = ["fuser/abi-7-26"]
+abi-7-27 = ["fuser/abi-7-27"]
+abi-7-28 = ["fuser/abi-7-28"]
+abi-7-29 = ["fuser/abi-7-29"]
+abi-7-30 = ["fuser/abi-7-30"]
+abi-7-31 = ["fuser/abi-7-31"]

@@ -1,0 +1,31 @@
+[package]
+name = "examples"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "test_opendal"
+path = "src/main.rs"
+
+[[bin]]
+name = "test_s3"
+path = "src/test_s3.rs"
+
+[[bin]]
+name = "test_china_cloud"
+path = "src/test_china_cloud.rs"
+
+[dependencies]
+evif-plugins = { path = "../crates/evif-plugins", features = [
+    "opendal",
+    "s3fs-opendal",
+    "aliyunossfs",
+    "tencentcosfs",
+    "huaweiobsfs",
+    "miniofs"
+] }
+evif-core = { path = "../crates/evif-core" }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+uuid = { version = "1.10", features = ["v4"] }

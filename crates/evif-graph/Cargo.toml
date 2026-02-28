@@ -1,0 +1,38 @@
+[package]
+name = "evif-graph"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Graph engine for EVIF - nodes, edges, and graph algorithms"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+petgraph = { workspace = true }
+dashmap = { workspace = true }
+ahash = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+# Additional dependencies
+parking_lot = "0.12.1"
+smallvec = "1.11.2"
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true, features = ["async_tokio"] }
+tokio-test = { workspace = true }
+
+[[bench]]
+name = "graph_bench"
+harness = false
+path = "../../benches/graph_bench.rs"

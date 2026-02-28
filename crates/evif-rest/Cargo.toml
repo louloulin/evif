@@ -1,0 +1,56 @@
+[package]
+name = "evif-rest"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "REST/HTTP API for EVIF"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Web framework
+axum = { version = "0.7.4", features = ["json", "ws"] }
+tower = "0.4.13"
+tower-http = { version = "0.5.1", features = ["cors", "trace"] }
+hyper = "1.1.0"
+
+# WebSocket support
+tokio-tungstenite = "0.21.0"
+futures-util = "0.3.28"
+
+# Utilities
+chrono = "0.4"
+uuid = { version = "1", features = ["v4", "serde"] }
+base64 = "0.22"
+
+# 文件哈希和正则
+md5 = "0.7"
+sha2 = "0.10"
+digest = "0.10"
+regex = "1"
+
+# Local crates
+evif-core = { path = "../evif-core" }
+evif-vfs = { path = "../evif-vfs" }
+evif-protocol = { path = "../evif-protocol" }
+evif-graph = { path = "../evif-graph" }
+evif-plugins = { path = "../evif-plugins" }
+
+[features]
+wasm = ["evif-core/wasm"]
+default = []
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tower-test = "0.4.0"
+reqwest = { version = "0.11", default-features = false, features = ["json"] }

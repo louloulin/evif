@@ -1,0 +1,72 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+*.rlib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+.ralph/
+.serena/
+.claude/
+
+# Build
+/dist/
+/build/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+/.cargo/
+benches/
+Benches/
+
+# Documentation
+doc/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+.cache/
+
+# Debug and test files
+debug_mount
+debug_mount.rs
+test_utf8
+test_utf8.rs
+test-*.sh
+console-*.log
+console-*.json
+network-requests.json
+EOF
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Web build
+evif-web/dist/
+evif-web/.vite/
+
+# Screenshots and images (optional - uncomment if needed)
+# *.png
+# *.jpg
+# *.jpeg
+
+# Playwright
+.playwright-mcp/

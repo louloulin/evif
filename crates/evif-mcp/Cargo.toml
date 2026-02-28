@@ -1,0 +1,36 @@
+[package]
+name = "evif-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# URL encoding for query params
+urlencoding = "2.1"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[bin]]
+name = "evif-mcp"
+path = "src/main.rs"
+
+[dev-dependencies]
+tokio-test = { workspace = true }

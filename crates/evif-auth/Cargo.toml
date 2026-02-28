@@ -1,0 +1,36 @@
+[package]
+name = "evif-auth"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Authentication and authorization for EVIF"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+tracing = { workspace = true }
+
+# Additional dependencies
+parking_lot = "0.12.1"
+dashmap = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true, features = ["async_tokio"] }
+
+[[bench]]
+name = "auth_bench"
+harness = false
+path = "../../benches/auth_bench.rs"

@@ -1,0 +1,10 @@
+[package]
+name = "e2e-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dev-dependencies]
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { workspace = true }
+serde_json = { workspace = true }

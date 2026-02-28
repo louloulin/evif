@@ -1,0 +1,37 @@
+[package]
+name = "evif-protocol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Wire protocol and serialization for EVIF"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+bytes = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+
+# Serialization formats
+rmp-serde = "1.1.2"
+prost = { version = "0.12.3", optional = true }
+
+# Local crates
+evif-graph = { path = "../evif-graph" }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+criterion = { workspace = true }
+
+[features]
+default = ["msgpack"]
+msgpack = []
+protobuf = ["prost"]

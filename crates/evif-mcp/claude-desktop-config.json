@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "evif": {
+      "command": "/path/to/evif/target/debug/evif-mcp",
+      "env": {
+        "EVIF_URL": "http://localhost:8080",
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}

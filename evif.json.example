@@ -1,0 +1,7 @@
+{
+  "mounts": [
+    { "path": "/mem", "plugin": "mem" },
+    { "path": "/hello", "plugin": "hello" },
+    { "path": "/local", "plugin": "local", "config": { "root": "/tmp/evif-local" } }
+  ]
+}
