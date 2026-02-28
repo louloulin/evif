@@ -1,0 +1,70 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]: EVIF 2.2
+    - generic [ref=e6]:
+      - button "刷新" [ref=e7] [cursor=pointer]:
+        - img [ref=e8]
+      - button "新建文件" [ref=e137] [cursor=pointer]:
+        - img [ref=e139]
+        - generic [ref=e140]: 新建文件
+      - button "切换终端" [ref=e13] [cursor=pointer]:
+        - img [ref=e14]
+      - button "切换侧边栏" [active] [ref=e16] [cursor=pointer]:
+        - img [ref=e17]
+  - button "通知中心" [ref=e20] [cursor=pointer]:
+    - img [ref=e21]
+  - generic [ref=e24]:
+    - generic "活动栏" [ref=e25]:
+      - generic [ref=e26]:
+        - button "资源管理器 (Ctrl+Shift+E)" [ref=e27] [cursor=pointer]:
+          - img [ref=e28]
+        - 'button "终端 (Ctrl+`)" [ref=e30] [cursor=pointer]':
+          - img [ref=e31]
+        - button "问题" [ref=e33] [cursor=pointer]:
+          - img [ref=e34]
+        - button "插件管理" [ref=e36] [cursor=pointer]:
+          - img [ref=e37]
+        - button "搜索与上传" [ref=e43] [cursor=pointer]:
+          - img [ref=e44]
+        - button "系统监控" [ref=e47] [cursor=pointer]:
+          - img [ref=e48]
+    - generic [ref=e51]:
+      - generic [ref=e52]: EXPLORER
+      - generic [ref=e53]:
+        - button "hello" [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]: ▶
+          - generic [ref=e144]: 📁
+          - generic [ref=e145]: hello
+        - button "local" [ref=e147] [cursor=pointer]:
+          - generic [ref=e148]: ▶
+          - generic [ref=e149]: 📁
+          - generic [ref=e150]: local
+        - button "mem" [ref=e152] [cursor=pointer]:
+          - generic [ref=e153]: ▶
+          - generic [ref=e154]: 📁
+          - generic [ref=e155]: mem
+    - generic [ref=e80]:
+      - generic [ref=e83]:
+        - paragraph [ref=e84]: 未打开文件
+        - paragraph [ref=e85]: 从侧边栏选择文件以开始编辑
+      - generic [ref=e87]:
+        - tablist [ref=e88]:
+          - tab "终端" [selected] [ref=e89] [cursor=pointer]
+          - tab "问题" [ref=e90] [cursor=pointer]
+          - tab "输出" [ref=e91] [cursor=pointer]
+        - tabpanel "终端" [ref=e92]:
+          - generic [ref=e98]:
+            - textbox "Terminal input" [ref=e99]
+            - generic [ref=e100]:
+              - generic [ref=e101]:
+                - generic [ref=e188]: 输入
+                - generic [ref=e190]: help
+                - generic [ref=e192]: 查看可用命令
+              - generic [ref=e193]: $
+              - generic [ref=e194]: EVIF 2.2 - WebSocket Terminal Connected
+              - generic [ref=e195]: $
+  - status [ref=e132]:
+    - generic [ref=e134]: ● 已连接
+    - generic [ref=e136]: EVIF 2.2
+  - region "Notifications (F8)":
+    - list

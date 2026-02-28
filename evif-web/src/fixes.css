@@ -1,0 +1,25 @@
+/* Fixes and overrides for layout/style issues */
+
+/* Ensure custom scrollbar styling is applied (use standard double-colon pseudo-elements) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
+}
+
+/* Provide a safe default for elements that might lack explicit borders */
+:where(.app, .sidebar, .editor-container, .terminal-container) {
+  border-color: hsl(var(--border));
+}

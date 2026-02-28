@@ -1,0 +1,1002 @@
+/* Reset and base styles - compatible with Tailwind */
+* {
+  box-sizing: border-box;
+}
+
+/* Let Tailwind handle margin/padding reset via @tailwind base */
+/* body styles are handled by Tailwind's @apply in index.css */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  overflow: hidden;
+}
+
+/* ========== 响应式设计 ========== */
+
+/* 响应式工具类 - 使用Tailwind断点系统 */
+@media (max-width: 639px) {
+  .responsive-hidden-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 767px) {
+  .responsive-hidden-sm {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .responsive-hidden-md {
+    display: none !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-hidden-lg {
+    display: none !important;
+  }
+}
+
+/* 移动端 (<768px) */
+@media (max-width: 767px) {
+  .app {
+    position: relative;
+  }
+
+  /* 移动端侧边栏 - 全屏抽屉模式 */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: var(--z-modal);
+    width: 85vw;
+    max-width: 320px;
+    transform: translateX(-100%);
+    transition: transform var(--duration-normal) var(--ease-in-out);
+    border-right: 1px solid hsl(var(--border-hover));
+  }
+
+  .sidebar.mobile-visible {
+    transform: translateX(0);
+    box-shadow: var(--shadow-2xl);
+  }
+
+  /* 移动端活动栏 - 隐藏或底部导航 */
+  .activity-bar {
+    display: none;
+  }
+
+  /* 移动端编辑器容器 - 全屏 */
+  .editor-container {
+    width: 100%;
+  }
+
+  /* 移动端面板 - 全屏模式 */
+  .panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-modal);
+    flex: 1;
+    max-height: 100%;
+  }
+
+  /* 移动端状态栏 - 增加触摸区域 */
+  .status-bar {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  /* 移动端文件树项 - 增加点击区域 */
+  .file-tree-item {
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 48px;
+    transition: background-color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+  }
+
+  .file-tree-item:active {
+    transform: scale(0.98);
+    background-color: hsl(var(--accent) / 0.3);
+  }
+
+  /* 移动端上下文菜单 - 全屏居中 */
+  .context-menu {
+    min-width: 200px;
+    max-width: 90vw;
+  }
+
+  .context-menu-item {
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 48px;
+    transition: background-color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+  }
+
+  .context-menu-item:active {
+    transform: scale(0.98);
+    background-color: hsl(var(--accent) / 0.4);
+  }
+}
+
+/* 平板竖屏 (768px - 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sidebar {
+    width: 220px;
+    min-width: 220px;
+  }
+
+  .editor-container {
+    min-width: 400px;
+  }
+}
+
+/* 平板横屏+桌面 (≥1024px) */
+@media (min-width: 1024px) {
+  .sidebar {
+    width: 260px;
+  }
+
+  .editor-container {
+    min-width: 600px;
+  }
+}
+
+/* 大屏优化 (≥1536px) */
+@media (min-width: 1536px) {
+  .sidebar {
+    width: 300px;
+  }
+
+  .editor-container {
+    min-width: 800px;
+  }
+}
+
+/* ========== 移动端遮罩层 ========== */
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: var(--z-modal-backdrop);
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-in-out);
+}
+
+@media (max-width: 767px) {
+  .mobile-overlay {
+    display: block;
+  }
+
+  .mobile-overlay.visible {
+    opacity: 1;
+  }
+}
+
+/* ========== 移动端菜单按钮 ========== */
+
+.mobile-menu-button {
+  display: none;
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: var(--z-fixed);
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  box-shadow: var(--shadow-md);
+}
+
+.mobile-menu-button:hover {
+  background: hsl(var(--card-hover));
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+
+.mobile-menu-button:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 767px) {
+  .mobile-menu-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* 移动端菜单按钮图标 */
+.mobile-menu-button::before {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: hsl(var(--foreground));
+  border-radius: 2px;
+  box-shadow: 0 6px 0 hsl(var(--foreground)), 0 -6px 0 hsl(var(--foreground));
+}
+
+/* ========== 响应式字体缩放 ========== */
+
+@media (max-width: 767px) {
+  :root {
+    --text-xs: 0.75rem;   /* 12px */
+    --text-sm: 0.875rem;  /* 14px */
+    --text-base: 1rem;    /* 16px */
+    --text-lg: 1.125rem;  /* 18px */
+    --text-xl: 1.25rem;   /* 20px */
+    --text-2xl: 1.5rem;   /* 24px */
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --text-xs: 0.75rem;   /* 12px */
+    --text-sm: 0.875rem;  /* 14px */
+    --text-base: 1rem;    /* 16px */
+    --text-lg: 1.125rem;  /* 18px */
+    --text-xl: 1.25rem;   /* 20px */
+    --text-2xl: 1.5rem;   /* 24px */
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --text-xs: 0.75rem;   /* 12px */
+    --text-sm: 0.875rem;  /* 14px */
+    --text-base: 1rem;    /* 16px */
+    --text-lg: 1.125rem;  /* 18px */
+    --text-xl: 1.25rem;   /* 20px */
+    --text-2xl: 1.5rem;   /* 24px */
+    --text-3xl: 1.875rem; /* 30px */
+  }
+}
+
+/* ========== 响应式触摸优化 ========== */
+
+@media (max-width: 767px) {
+  /* 所有可点击元素最小44x44px - WCAG 2.1 AA标准 */
+  button,
+  a,
+  .file-tree-item,
+  .context-menu-item,
+  .panel-tab {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 触摸反馈 - active状态缩放 */
+  button:active,
+  a:active,
+  .file-tree-item:active,
+  .context-menu-item:active {
+    transform: scale(0.95);
+  }
+
+  /* 增加间距避免误触 */
+  .activity-bar-item {
+    width: 52px;
+    height: 52px;
+  }
+
+  /* 按钮padding增加 */
+  .editor-empty-retry,
+  .file-tree-retry {
+    padding: 12px 24px;
+  }
+}
+
+/* 响应式间距系统 */
+@media (min-width: 768px) {
+  :root {
+    --spacing-responsive-sm: 0.5rem;   /* 8px */
+    --spacing-responsive-md: 1rem;     /* 16px */
+    --spacing-responsive-lg: 1.5rem;   /* 24px */
+    --spacing-responsive-xl: 2rem;     /* 32px */
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --spacing-responsive-sm: 0.5rem;   /* 8px */
+    --spacing-responsive-md: 0.75rem;  /* 12px */
+    --spacing-responsive-lg: 1rem;     /* 16px */
+    --spacing-responsive-xl: 1.25rem;  /* 20px */
+  }
+}
+
+/* Cursor 式工作台：活动栏 + 侧边栏 + 主区域 */
+.workbench {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* 活动栏（左侧图标栏）- 增强对比度和视觉反馈 */
+.activity-bar {
+  width: 48px;
+  min-width: 48px;
+  background-color: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.activity-bar-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 2px;
+}
+
+.activity-bar-item {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.activity-bar-item:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent-hover));
+  transform: translateX(2px);
+}
+
+.activity-bar-item:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.15);
+}
+
+.activity-bar-item.active {
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent-strong));
+  border-left: 2px solid hsl(var(--primary));
+  text-shadow: 0 0 8px hsl(var(--primary) / 0.4);
+}
+
+.activity-bar-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--primary));
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--card));
+  animation: badge-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* 侧边栏（资源管理器） */
+.sidebar {
+  width: 260px;
+  min-width: 200px;
+  max-width: 480px;
+  background-color: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: var(--shadow);
+}
+
+/* 主区域：编辑器 + 底部面板 */
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-container {
+  flex: 1;
+  min-height: 0;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* 底部面板（终端 / 问题 / 输出） */
+.panel {
+  flex: 0 0 200px;
+  min-height: 120px;
+  max-height: 50%;
+  display: flex;
+  flex-direction: column;
+  background-color: hsl(var(--card));
+  border-top: 1px solid hsl(var(--border));
+  overflow: hidden;
+}
+
+.panel-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.panel-tabs-list {
+  flex-shrink: 0;
+  height: 35px;
+  margin: 0;
+  padding: 0 8px;
+  border-radius: 0;
+  background: hsl(var(--muted) / 0.5);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.panel-tab {
+  height: 35px;
+  padding: 0 16px;
+  font-size: 12px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.panel-tab[data-state="active"] {
+  background: hsl(var(--background));
+  border-bottom: 1px solid transparent;
+  margin-bottom: -1px;
+}
+
+.panel-tab-count {
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: 10px;
+  background: hsl(var(--destructive) / 0.2);
+  color: hsl(var(--destructive));
+  border-radius: 4px;
+}
+
+.panel-tab-content {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  outline: none;
+}
+
+.panel-terminal,
+.panel-problems,
+.panel-output {
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+  font-size: 12px;
+}
+
+.panel-problems-empty,
+.panel-output-pre {
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+}
+
+.panel-problems-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.panel-problems-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-problems-item--error {
+  color: hsl(var(--destructive));
+}
+
+.panel-problems-item--warning {
+  color: hsl(38, 92%, 50%);
+}
+
+.panel-problems-source {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.panel-problems-message {
+  flex: 1;
+}
+
+/* 状态栏 - 增强对比度 + 响应式 */
+.status-bar {
+  height: 22px;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 11px;
+  background: hsl(var(--muted) / 0.8);
+  border-top: 1px solid hsl(var(--border-hover));
+  color: hsl(var(--muted-foreground));
+  box-shadow: var(--shadow-inner);
+}
+
+@media (max-width: 767px) {
+  .status-bar {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  .status-bar-path {
+    max-width: 150px;
+  }
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-bar-item {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.status-bar-connection.connected {
+  color: hsl(142, 76%, 50%);
+  text-shadow: 0 0 6px hsl(142, 76%, 40% / 0.5);
+}
+
+.status-bar-connection.disconnected {
+  color: hsl(var(--destructive) / 0.95);
+  text-shadow: 0 0 6px hsl(var(--destructive) / 0.4);
+}
+
+.status-bar-path {
+  max-width: 300px;
+}
+
+.terminal-container {
+  background-color: hsl(var(--background));
+  border-top: 1px solid hsl(var(--border));
+  overflow: hidden;
+}
+
+.terminal-hidden {
+  display: none;
+}
+
+/* Resizable split pane - 使用主题色 */
+.gutter {
+  background-color: hsl(var(--border));
+  background-repeat: no-repeat;
+  background-position: 50%;
+  transition: background-color 0.15s ease;
+}
+
+.gutter:hover {
+  background-color: hsl(var(--primary) / 0.4);
+}
+
+.gutter.gutter-horizontal {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bMfxAGAgYYmwGrIIiDjrELjpo5aiZeMwF+yNnOs5KSvgAAAABJRU5ErkJggg==');
+  cursor: col-resize;
+  width: 6px;
+  min-width: 6px;
+}
+
+.gutter.gutter-vertical {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHklEQVQ4T2nk5uamgAT4gR4Oo6B+EJUD4C4B6O1EG4B6O1EG4B6O1EG4x6O4AAA3fQV8n1UfGAAAAABJRU5ErkJggg==');
+  cursor: row-resize;
+  height: 6px;
+  min-height: 6px;
+}
+
+/* Context menu - 增强对比度和视觉层次 */
+.context-menu {
+  position: fixed;
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border-hover));
+  border-radius: 6px;
+  padding: 8px 0;
+  min-width: 180px;
+  z-index: 1000;
+  box-shadow: var(--shadow-lg), 0 0 0 1px hsl(var(--border) / 0.5);
+  backdrop-filter: blur(8px);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: hsl(var(--foreground));
+  transition: all var(--duration-fast) var(--ease-out);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.context-menu-item:hover:not(.disabled) {
+  background-color: hsl(var(--accent-hover));
+  color: hsl(var(--foreground));
+  transform: translateX(2px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.context-menu-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.context-menu-icon {
+  margin-right: 8px;
+  width: 16px;
+  text-align: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.context-menu-separator {
+  height: 1px;
+  background-color: hsl(var(--border));
+  margin: 8px 0;
+  box-shadow: var(--shadow-xs);
+}
+
+/* File tree - 增强对比度和视觉层次 */
+.file-tree {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.file-tree-header {
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(var(--muted-foreground));
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.file-tree-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.file-tree-empty {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+
+.file-tree-empty-text {
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.file-tree-empty-hint {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.4;
+}
+
+.file-tree-error .file-tree-empty-text {
+  color: hsl(var(--destructive) / 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.file-tree-retry {
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary) / 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  font-weight: 500;
+}
+
+.file-tree-retry:hover {
+  background: hsl(var(--primary) / 0.35);
+  color: hsl(var(--primary-foreground));
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.3);
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+  white-space: nowrap;
+  transition: all var(--duration-fast) var(--ease-out);
+  border-radius: 0 4px 4px 0;
+  margin: 0 6px 0 0;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.file-tree-item:hover {
+  background-color: hsl(var(--accent-hover));
+  color: hsl(var(--foreground));
+  transform: translateX(2px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.file-tree-item.selected {
+  background-color: hsl(var(--primary-dim));
+  color: hsl(var(--foreground));
+  border-left: 2px solid hsl(var(--primary));
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.1);
+}
+
+.file-icon {
+  margin-right: 6px;
+  font-size: 14px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.folder-icon {
+  margin-right: 6px;
+  font-size: 14px;
+  transition: transform var(--duration-fast) var(--ease-out);
+  color: hsl(var(--muted-foreground));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.folder-icon.open {
+  transform: rotate(90deg);
+  color: hsl(var(--foreground));
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Editor - 增强对比度和视觉层次 */
+.editor-tabs {
+  display: flex;
+  background-color: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  overflow-x: auto;
+  min-height: 36px;
+  box-shadow: var(--shadow-xs);
+}
+
+.editor-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  background-color: hsl(var(--muted));
+  border-right: 1px solid hsl(var(--border));
+  cursor: default;
+  white-space: nowrap;
+  color: hsl(var(--muted-foreground));
+  transition: all var(--duration-fast) var(--ease-out);
+  position: relative;
+}
+
+.editor-tab:hover {
+  background-color: hsl(var(--muted) / 1.3);
+  color: hsl(var(--foreground));
+}
+
+.editor-tab.active {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-bottom: 1px solid transparent;
+  margin-bottom: -1px;
+  position: relative;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 -2px 0 hsl(var(--primary));
+}
+
+.editor-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: hsl(var(--background));
+}
+
+/* 空状态 */
+.editor-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 2rem;
+  min-height: 200px;
+  background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(224, 30%, 8%) 100%);
+}
+
+.editor-empty-icon {
+  color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.editor-empty-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+
+.editor-empty-hint {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
+  text-align: center;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+.editor-empty-error .editor-empty-title {
+  color: hsl(var(--destructive) / 0.95);
+}
+
+.editor-empty-icon-error {
+  color: hsl(var(--destructive) / 0.7);
+}
+
+.editor-empty-retry {
+  margin-top: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary) / 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.editor-empty-retry:hover {
+  background: hsl(var(--primary) / 0.35);
+  color: hsl(var(--primary-foreground));
+}
+
+.editor-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* Menu bar styles - now using Tailwind classes in component */
+/* Keeping for backward compatibility if needed */
+
+/* Terminal */
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.terminal-wrapper {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.terminal-wrapper > div {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.terminal-container .xterm .xterm-viewport {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.terminal-container .xterm .xterm-screen {
+  width: 100% !important;
+}
+
+.terminal-container .xterm .xterm-text-layer {
+  white-space: pre;
+}
