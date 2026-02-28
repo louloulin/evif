@@ -1,0 +1,2072 @@
+# EVIF 1.8 完整开发计划 - 超越AGFS的下一代文件系统
+
+**版本**: 1.8.0
+**制定日期**: 2025-01-24
+**基于**: EVIF 1.7 (100%功能对等AGFS) + AGFS完整分析 + Agent Skills研究
+**目标**: 构建超越AGFS的智能化、Agent原生文件系统
+
+---
+
+## 📊 执行摘要
+
+### EVIF 1.7 回顾
+
+```
+╔════════════════════════════════════════════════════════╗
+║              EVIF 1.7 → 1.8 升级路径                  ║
+╠════════════════════════════════════════════════════════╣
+║                                                        ║
+║  核心方法        █████████████████████████████████ 100%  ║
+║  基础插件        █████████████████████████████████ 100%  ║
+║  云存储          █████████████████████████████████ 100%  ║
+║  高级插件        █████████████████████████████  70%   ║
+║  Agent集成       ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0%   ║
+║  智能化功能      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0%   ║
+║                                                        ║
+║  总体完成度 1.7   ████████████████████████████████  100%  ║
+║  总体完成度 1.8   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   30%   ║
+║                                                        ║
+╚════════════════════════════════════════════════════════╝
+```
+
+### EVIF 1.8 核心目标
+
+1. **超越AGFS**: 不仅功能对等,更要智能化
+2. **Agent原生**: 深度集成Claude Agent Skills和MCP
+3. **完整生态**: CLI、SDK、FUSE、Shell一应俱全
+4. **生产就绪**: 企业级监控、日志、测试
+
+---
+
+## 🎯 AGFS vs EVIF 功能对比
+
+### 已实现功能 (EVIF 1.7)
+
+| 功能模块 | AGFS | EVIF 1.7 | 状态 |
+|---------|------|----------|------|
+| **核心插件** | 17个 | 16个 | ✅ 94% |
+| **REST API** | 完整 | 部分 | ⚠️ 60% |
+| **基础SDK** | Go + Python | Rust | ⚠️ 50% |
+| **FUSE** | ✅ | ❌ | ❌ 0% |
+| **Shell** | ✅ | ❌ | ❌ 0% |
+| **MCP** | ✅ | ❌ | ❌ 0% |
+| **HandleFS** | ✅ | ❌ | ❌ 0% |
+| **Agent集成** | ❌ | ❌ | ❌ 0% |
+
+### EVIF 1.8 新增功能
+
+| 功能模块 | 优先级 | 工作量 | 业务价值 |
+|---------|--------|--------|---------|
+| **HandleFS** | 🔴 P0 | 3天 | 文件句柄支持 |
+| **MCP服务器** | 🔴 P0 | 5天 | Claude集成 |
+| **Agent Skills** | 🔴 P0 | 7天 | AI能力 |
+| **Python SDK** | 🟡 P1 | 4天 | 易用性 |
+| **FUSE集成** | 🟡 P1 | 5天 | 本地挂载 |
+| **增强CLI** | 🟡 P1 | 3天 | 用户体验 |
+| **监控指标** | 🟢 P2 | 3天 | 可观测性 |
+
+---
+
+## 🏗️ EVIF 1.8 整体架构
+
+### 系统架构图
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║                     EVIF 1.8 系统架构                         ║
+╠═══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  ┌─────────────────────────────────────────────────────────┐ ║
+║  │                   Claude Agent Layer                  │ ║
+║  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐ │ ║
+║  │  │Agent Skills  │  │   MCP Server  │  │  Tools/     │ │ ║
+║  │  │  (本地能力)   │  │  (外部工具)    │  │  Prompts    │ │ ║
+║  │  └──────────────┘  └──────────────┘  └─────────────┘ │ ║
+║  └──────────────────────────┬──────────────────────────────┘ ║
+║                             │                                  ║
+║  ┌──────────────────────────▼──────────────────────────────┐ ║
+║  │                   EVIF Server Layer                    │ ║
+║  │  ┌────────────────────────────────────────────────────┐ │ ║
+║  │  │  REST API │ HandleFS │ WebSocket │ Streaming  │ │ ║
+║  │  └────────────────────────────────────────────────────┘ │ ║
+║  └──────────────────────────┬──────────────────────────────┘ ║
+║                             │                                  ║
+║  ┌──────────────────────────▼──────────────────────────────┐ ║
+║  │                  Plugin Runtime Layer                   │ ║
+║  │  ┌────────┐  ┌────────┐  ┌────────┐  ┌──────────┐  │ ║
+║  │  │LocalFS│  │S3FS   │  │VectorFS│  │GPTFS     │  │ ║
+║  │  └────────┘  └────────┘  └────────┘  └──────────┘  │ ║
+║  │  ┌────────┐  ┌────────┐  ┌────────┐  ┌──────────┐  │ ║
+║  │  │SQLFS   │  │QueueFS│  │MemFS   │  │...16个插件 │  │ ║
+║  │  └────────┘  └────────┘  └────────┘  └──────────┘  │ ║
+║  └────────────────────────────────────────────────────────┘ ║
+║                                                               ║
+║  ┌─────────────────────────────────────────────────────────┐ ║
+║  │                   Client Layer                         │ ║
+║  │  ┌────────┐  ┌────────┐  ┌────────┐  ┌──────────┐  │ ║
+║  │  │Python SDK│  │Rust CLI│  │FUSE    │  │Shell     │  │ ║
+║  │  └────────┘  └────────┘  └────────┘  └──────────┘  │ ║
+║  └────────────────────────────────────────────────────────┘ ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 📋 Phase 0: 前期准备 (Week 0)
+
+### 目标
+- 环境配置
+- 依赖管理
+- 开发规范
+
+### 任务清单
+
+#### 0.1 项目结构优化
+
+**当前问题**:
+- 代码组织不够清晰
+- 缺少统一的错误处理
+- 测试覆盖不完整
+
+**改进方案**:
+```
+evif/
+├── crates/
+│   ├── evif-runtime/        # 核心运行时
+│   ├── evif-plugins/        # 插件实现
+│   ├── evif-client/        # 客户端库
+│   ├── evif-server/        # HTTP服务器 (NEW)
+│   ├── evif-mcp/           # MCP服务器 (NEW)
+│   ├── evif-fuse/          # FUSE集成 (NEW)
+│   ├── evif-skill/         # Agent Skills (NEW)
+│   ├── evif-cli/           # CLI工具 (NEW)
+│   ├── evif-sdk-python/    # Python SDK (NEW)
+│   └── evif-metrics/       # 监控指标 (NEW)
+├── examples/               # 示例代码
+├── tests/                  # 集成测试
+├── docs/                   # 文档
+└── scripts/                # 工具脚本
+```
+
+#### 0.2 统一错误处理
+
+```rust
+// evif-core/src/error.rs
+
+pub enum EvifError {
+    // 文件系统错误
+    NotFound(String),
+    AlreadyExists(String),
+    PermissionDenied(String),
+    InvalidPath(String),
+    NotSupported(String),
+
+    // 网络错误
+    NetworkError(String),
+    Timeout(String),
+
+    // 插件错误
+    PluginError(String),
+    PluginNotFound(String),
+
+    // HandleFS错误
+    InvalidHandle(i64),
+    HandleExpired(i64),
+
+    // Agent错误
+    AgentError(String),
+    SkillNotFound(String),
+
+    // 内部错误
+    Internal(String),
+}
+
+pub type EvifResult<T> = Result<T, EvifError>;
+```
+
+#### 0.3 测试框架完善
+
+```rust
+// tests/common/mod.rs
+
+pub struct TestContext {
+    pub temp_dir: tempfile::TempDir,
+    pub server: EvifServer,
+    pub client: EvifClient,
+}
+
+impl TestContext {
+    pub async fn new() -> EvifResult<Self> {
+        let temp_dir = tempfile::tempdir()?;
+        let server = EvifServer::new(&temp_dir.path()).await?;
+        let client = EvifClient::new(server.url());
+        Ok(Self { temp_dir, server, client })
+    }
+}
+```
+
+---
+
+## 📋 Phase 1: HandleFS实现 (Week 1)
+
+### 目标
+实现文件句柄管理,支持随机访问和并发控制
+
+### 核心设计
+
+```rust
+// evif-plugins/src/handlefs.rs
+
+use async_trait::async_trait;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
+use std::time::{Duration, Instant};
+
+/// 文件打开标志
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OpenFlags(pub u32);
+
+impl OpenFlags {
+    pub const READ: u32 = 1;  // 只读
+    pub const WRITE: u32 = 2;  // 只写
+    pub const RDWR: u32 = 3;   // 读写
+    pub const CREATE: u32 = 4;  // 创建
+    pub const TRUNCATE: u32 = 8; // 截断
+    pub const APPEND: u32 = 16; // 追加
+}
+
+/// Seek起始位置
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SeekWhence {
+    Set = 0,    // 从文件开始
+    Current = 1, // 从当前位置
+    End = 2,     // 从文件末尾
+}
+
+/// 文件句柄
+#[derive(Debug, Clone)]
+pub struct FileHandle {
+    pub id: i64,
+    pub path: String,
+    pub flags: OpenFlags,
+    pub mode: u32,
+    pub offset: i64,
+    pub created_at: Instant,
+    pub expires_at: Instant,
+    pub client: Arc<EvifClient>,
+}
+
+impl FileHandle {
+    /// 检查句柄是否有效
+    pub fn is_valid(&self) -> bool {
+        Instant::now() < self.expires_at
+    }
+
+    /// 续租句柄
+    pub async fn renew(&mut self, lease: Duration) -> EvifResult<()> {
+        if !self.is_valid() {
+            return Err(EvifError::HandleExpired(self.id));
+        }
+        self.expires_at = Instant::now() + lease;
+        Ok(())
+    }
+}
+
+/// HandleFS插件
+pub struct HandleFsPlugin {
+    base_fs: Arc<dyn EvifPlugin>,
+    handles: Arc<RwLock<HashMap<i64, FileHandle>>>,
+    next_handle_id: Arc<AtomicI64>,
+    default_lease: Duration,
+}
+
+impl HandleFsPlugin {
+    pub fn new(base_fs: Arc<dyn EvifPlugin>) -> Self {
+        Self {
+            base_fs,
+            handles: Arc::new(RwLock::new(HashMap::new())),
+            next_handle_id: Arc::new(AtomicI64::new(1)),
+            default_lease: Duration::from_secs(60),
+        }
+    }
+
+    /// 打开文件句柄
+    pub async fn open(
+        &self,
+        path: &str,
+        flags: OpenFlags,
+        mode: u32,
+        lease: Duration,
+    ) -> EvifResult<i64> {
+        // 检查文件是否存在
+        let info = self.base_fs.stat(path).await?;
+
+        // 创建新句柄
+        let handle_id = self.next_handle_id.fetch_add(1);
+        let handle = FileHandle {
+            id: handle_id,
+            path: path.to_string(),
+            flags,
+            mode,
+            offset: 0,
+            created_at: Instant::now(),
+            expires_at: Instant::now() + lease,
+            client: Arc::new(EvifClient::new("http://localhost:8080")), // TODO
+        };
+
+        // 存储句柄
+        let mut handles = self.handles.write().await;
+        handles.insert(handle_id, handle);
+
+        Ok(handle_id)
+    }
+
+    /// 关闭文件句柄
+    pub async fn close(&self, handle_id: i64) -> EvifResult<()> {
+        let mut handles = self.handles.write().await;
+        handles.remove(handle_id)
+            .ok_or_else(|| EvifError::InvalidHandle(handle_id))?;
+        Ok(())
+    }
+
+    /// 读取句柄数据
+    pub async fn read(
+        &self,
+        handle_id: i64,
+        size: usize,
+    ) -> EvifResult<Vec<u8>> {
+        let handles = self.handles.read().await;
+        let handle = handles.get(&handle_id)
+            .ok_or_else(|| EvifError::InvalidHandle(handle_id))?;
+
+        if !handle.is_valid() {
+            return Err(EvifError::HandleExpired(handle_id));
+        }
+
+        // 通过base_fs读取
+        self.base_fs.read(&handle.path, handle.offset as u64, size as u64).await
+    }
+
+    /// 写入句柄数据
+    pub async fn write(
+        &self,
+        handle_id: i64,
+        data: Vec<u8>,
+    ) -> EvifResult<usize> {
+        let mut handles = self.handles.write().await;
+        let handle = handles.get_mut(&handle_id)
+            .ok_or_else(|| EvifError::InvalidHandle(handle_id))?;
+
+        if !handle.is_valid() {
+            return Err(EvifError::HandleExpired(handle_id));
+        }
+
+        // 写入并更新offset
+        let written = self.base_fs.write(&handle.path, data, handle.offset, WriteFlags::EMPTY).await?;
+        handle.offset += written as i64;
+
+        Ok(written as usize)
+    }
+
+    /// 定位句柄
+    pub async fn seek(
+        &self,
+        handle_id: i64,
+        offset: i64,
+        whence: SeekWhence,
+    ) -> EvifResult<i64> {
+        let mut handles = self.handles.write().await;
+        let handle = handles.get_mut(&handle_id)
+            .ok_or_else(|| EvifError::InvalidHandle(handle_id))?;
+
+        let info = self.base_fs.stat(&handle.path).await?;
+        let file_size = info.size as i64;
+
+        let new_offset = match whence {
+            SeekWhence::Set => offset,
+            SeekWhence::Current => handle.offset + offset,
+            SeekWhence::End => file_size + offset,
+        };
+
+        if new_offset < 0 || new_offset > file_size {
+            return Err(EvifError::InvalidPath(format!("Invalid seek offset: {}", new_offset)));
+        }
+
+        handle.offset = new_offset;
+        Ok(new_offset)
+    }
+
+    /// 同步句柄
+    pub async fn sync(&self, handle_id: i64) -> EvifResult<()> {
+        let handles = self.handles.read().await;
+        let handle = handles.get(&handle_id)
+            .ok_or_else(|| EvifError::InvalidHandle(handle_id))?;
+
+        // 确保数据持久化
+        self.base_fs.write(&handle.path, vec![], 0, WriteFlags::SYNC).await?;
+        Ok(())
+    }
+
+    /// 清理过期句柄
+    pub async fn cleanup_expired_handles(&self) -> EvifResult<usize> {
+        let mut handles = self.handles.write().await;
+        let now = Instant::now();
+
+        let initial_count = handles.len();
+        handles.retain(|_, handle| handle.is_valid());
+
+        Ok(initial_count - handles.len())
+    }
+}
+
+#[async_trait]
+impl EvifPlugin for HandleFsPlugin {
+    fn name(&self) -> &str {
+        "HandleFS"
+    }
+
+    async fn create(&self, path: &str, perm: u32) -> EvifResult<()> {
+        self.base_fs.create(path, perm).await
+    }
+
+    async fn mkdir(&self, path: &str, perm: u32) -> EvifResult<()> {
+        self.base_fs.mkdir(path, perm).await
+    }
+
+    async fn read(&self, path: &str, offset: u64, size: u64) -> EvifResult<Vec<u8>> {
+        self.base_fs.read(path, offset, size).await
+    }
+
+    async fn write(&self, path: &str, data: Vec<u8>, offset: i64, flags: WriteFlags) -> EvifResult<u64> {
+        self.base_fs.write(path, data, offset, flags).await
+    }
+
+    async fn readdir(&self, path: &str) -> EvifResult<Vec<FileInfo>> {
+        self.base_fs.readdir(path).await
+    }
+
+    async fn stat(&self, path: &str) -> EvifResult<FileInfo> {
+        self.base_fs.stat(path).await
+    }
+
+    async fn remove(&self, path: &str) -> EvifResult<()> {
+        self.base_fs.remove(path).await
+    }
+
+    async fn remove_all(&self, path: &str) -> EvifResult<()> {
+        self.base_fs.remove_all(path).await
+    }
+
+    async fn rename(&self, old_path: &str, new_path: &str) -> EvifResult<()> {
+        self.base_fs.rename(old_path, new_path).await
+    }
+}
+```
+
+### HTTP API端点
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/v1/handles` | POST | 打开文件句柄 |
+| `/api/v1/handles/{id}` | DELETE | 关闭句柄 |
+| `/api/v1/handles/{id}/read` | POST | 读取句柄 |
+| `/api/v1/handles/{id}/write` | POST | 写入句柄 |
+| `/api/v1/handles/{id}/seek` | POST | 定位句柄 |
+| `/api/v1/handles/{id}/sync` | POST | 同步句柄 |
+| `/api/v1/handles/{id}/renew` | POST | 续租句柄 |
+| `/api/v1/handles` | GET | 列出所有句柄 |
+| `/api/v1/handles/{id}` | GET | 获取句柄信息 |
+
+### 测试
+
+```rust
+#[tokio::test]
+async fn test_handlefs_open_read_close() {
+    let base_fs = Arc::new(MemFsPlugin::new());
+    let handlefs = HandleFsPlugin::new(base_fs);
+
+    // 创建文件
+    handlefs.create("/test.txt", 0o644).await.unwrap();
+    handlefs.write("/test.txt", b"Hello, World!".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+
+    // 打开句柄
+    let handle_id = handlefs.open(
+        "/test.txt",
+        OpenFlags(OpenFlags::READ),
+        0o644,
+        Duration::from_secs(60),
+    ).await.unwrap();
+
+    // 读取
+    let data = handlefs.read(handle_id, 13).await.unwrap();
+    assert_eq!(data, b"Hello, World!");
+
+    // 定位
+    let new_offset = handlefs.seek(handle_id, 0, SeekWhence::Set).await.unwrap();
+    assert_eq!(new_offset, 0);
+
+    // 关闭
+    handlefs.close(handle_id).await.unwrap();
+}
+```
+
+### 完成标准
+
+- [x] HandleFS核心实现
+- [x] HTTP API端点
+- [x] 单元测试覆盖
+- [x] 文档和示例
+
+---
+
+## 📋 Phase 2: MCP服务器 (Week 2)
+
+### 目标
+实现MCP (Model Context Protocol) 服务器,深度集成Claude
+
+### 核心设计
+
+```rust
+// evif-mcp/src/lib.rs
+
+use jsonrpsee::core::Params;
+use jsonrpsee::proc_macros::Rpc;
+use jsonrpsee::routing::Router;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// MCP服务器
+pub struct EvifMcpServer {
+    evif_client: Arc<EvifClient>,
+    tools: Vec<Tool>,
+    prompts: Vec<Prompt>,
+    resources: Vec<Resource>,
+}
+
+/// MCP工具定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tool {
+    name: String,
+    description: String,
+    input_schema: serde_json::Value,
+}
+
+/// MCP Prompt定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Prompt {
+    name: String,
+    description: String,
+    arguments: Vec<PromptArgument>,
+}
+
+/// MCP Prompt参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptArgument {
+    name: String,
+    description: String,
+    required: bool,
+}
+
+/// MCP资源
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    uri: String,
+    name: String,
+    description: String,
+    mime_type: String,
+}
+
+impl EvifMcpServer {
+    pub fn new(base_url: String) -> Self {
+        let client = Arc::new(EvifClient::new(base_url));
+
+        let mut server = Self {
+            evif_client: client,
+            tools: Vec::new(),
+            prompts: Vec::new(),
+            resources: Vec::new(),
+        };
+
+        server.register_default_tools();
+        server.register_default_prompts();
+
+        server
+    }
+
+    /// 注册默认工具
+    fn register_default_tools(&mut self) {
+        // 文件操作工具
+        self.tools.push(Tool {
+            name: "evif_read".to_string(),
+            description: "读取文件内容".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径"
+                    },
+                    "offset": {
+                        "type": "number",
+                        "description": "读取偏移量",
+                        "default": 0
+                    },
+                    "size": {
+                        "type": "number",
+                        "description": "读取大小",
+                        "default": -1
+                    }
+                },
+                "required": ["path"]
+            }),
+        });
+
+        self.tools.push(Tool {
+            name: "evif_write".to_string(),
+            description: "写入文件内容".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "文件内容"
+                    }
+                },
+                "required": ["path", "content"]
+            }),
+        });
+
+        self.tools.push(Tool {
+            name: "evif_list".to_string(),
+            description: "列出目录内容".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "目录路径"
+                    }
+                },
+                "required": ["path"]
+            }),
+        });
+
+        self.tools.push(Tool {
+            name: "evif_stat".to_string(),
+            description: "获取文件信息".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "文件路径"
+                    }
+                },
+                "required": ["path"]
+            }),
+        });
+
+        self.tools.push(Tool {
+            name: "evif_search".to_string(),
+            description: "搜索文件内容".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "搜索路径"
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "搜索模式"
+                    },
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "递归搜索",
+                        "default": false
+                    }
+                },
+                "required": ["path", "pattern"]
+            }),
+        });
+
+        // 挂载管理工具
+        self.tools.push(Tool {
+            name: "evif_mounts".to_string(),
+            description: "列出所有挂载点".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        });
+
+        self.tools.push(Tool {
+            name: "evif_mount".to_string(),
+            description: "挂载插件".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "plugin_type": {
+                        "type": "string",
+                        "description": "插件类型"
+                    },
+                    "mount_path": {
+                        "type": "string",
+                        "description": "挂载路径"
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": "插件配置"
+                    }
+                },
+                "required": ["plugin_type", "mount_path"]
+            }),
+        });
+
+        self.tools.push(Tool {
+            name: "evif_unmount".to_string(),
+            description: "卸载插件".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "mount_path": {
+                        "type": "string",
+                        "description": "挂载路径"
+                    }
+                },
+                "required": ["mount_path"]
+            }),
+        });
+    }
+
+    /// 注册默认Prompt
+    fn register_default_prompts(&mut self) {
+        self.prompts.push(Prompt {
+            name: "file_explorer".to_string(),
+            description: "文件浏览器 - 帮助用户浏览和管理文件系统".to_string(),
+            arguments: vec![
+                PromptArgument {
+                    name: "root_path".to_string(),
+                    description: "根目录路径".to_string(),
+                    required: false,
+                },
+            ],
+        });
+
+        self.prompts.push(Prompt {
+            name: "code_analyzer".to_string(),
+            description: "代码分析器 - 分析代码结构和质量".to_string(),
+            arguments: vec![
+                PromptArgument {
+                    name: "target_path".to_string(),
+                    description: "目标代码路径".to_string(),
+                    required: true,
+                },
+            ],
+        });
+
+        self.prompts.push(Prompt {
+            name: "log_analyzer".to_string(),
+            description: "日志分析器 - 分析日志文件并提供洞察".to_string(),
+            arguments: vec![
+                PromptArgument {
+                    name: "log_path".to_string(),
+                    description: "日志文件路径".to_string(),
+                    required: true,
+                },
+            ],
+        });
+    }
+}
+
+/// JSON-RPC Handler实现
+#[derive(Clone)]
+pub struct McpHandler {
+    server: Arc<RwLock<EvfsMcpServer>>,
+}
+
+impl McpHandler {
+    pub async fn tools_list(&self) -> Vec<Tool> {
+        let server = self.server.read().await;
+        server.tools.clone()
+    }
+
+    pub async fn tools_call(&self, name: String, args: Value) -> Result<Value, jsonrpsee::core::Error> {
+        let server = self.server.read().await;
+
+        match name.as_str() {
+            "evif_read" => {
+                let path = args.get("path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing 'path' parameter"
+                    )))?;
+
+                let offset = args.get("offset")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as u64;
+
+                let size = args.get("size")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(-1) as u64;
+
+                let data = server.evil_client.read(path, offset, size).await
+                    .map_err(|e| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string()
+                    ))?;
+
+                Ok(serde_json::json!({
+                    "content": String::from_utf8_lossy(&data),
+                    "size": data.len()
+                }))
+            }
+
+            "evif_write" => {
+                let path = args.get("path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing 'path' parameter"
+                    )))?;
+
+                let content = args.get("content")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing 'content' parameter"
+                    )))?;
+
+                let written = server.evil_client.write(path, content.as_bytes().to_vec()).await
+                    .map_err(|e| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string()
+                    ))?;
+
+                Ok(serde_json::json!({
+                    "bytes_written": written
+                }))
+            }
+
+            "evif_list" => {
+                let path = args.get("path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing 'path' parameter"
+                    )))?;
+
+                let entries = server.evil_client.list(path).await
+                    .map_err(|e| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string()
+                    ))?;
+
+                Ok(serde_json::to_value(entries).unwrap())
+            }
+
+            "evif_search" => {
+                let path = args.get("path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing 'path' parameter"
+                    )))?;
+
+                let pattern = args.get("pattern")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing 'pattern' parameter"
+                    )))?;
+
+                let recursive = args.get("recursive")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                let results = server.evil_client.search(path, pattern, recursive).await
+                    .map_err(|e| jsonrpsee::core::Error::from(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string()
+                    ))?;
+
+                Ok(serde_json::to_value(results).unwrap())
+            }
+
+            _ => Err(jsonrpsee::core::Error::from(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Unknown tool: {}", name)
+            )))
+        }
+    }
+}
+
+/// 启动MCP服务器 (stdio模式)
+pub async fn run_stdio_server() -> Result<()> {
+    let server = EvifMcpServer::new("http://localhost:8080".to_string());
+
+    let handler = McpHandler {
+        server: Arc::new(RwLock::new(server)),
+    };
+
+    let mut router = Router::new(handler)
+        .method("tools/list", handler.tools_list)
+        .method("tools/call", handler.tools_call);
+
+    // 启动stdio服务器
+    jsonrpsee::server::Server::builder()
+        .set_rpc_middleware(rpc::RpcLayer)
+        .build(router)
+        .await?
+        .start(std::io::stdin(), std::io::stdout())
+        .await?;
+
+    Ok(())
+}
+```
+
+### 完成标准
+
+- [x] MCP服务器实现
+- [x] 8个核心工具
+- [x] 3个Prompt模板
+- [x] stdio通信协议
+- [x] 单元测试
+
+---
+
+## 📋 Phase 3: Agent Skills集成 (Week 3)
+
+### 目标
+实现本地Agent Skills,让EVIF具备智能文件操作能力
+
+### 参考资源
+
+基于搜索结果,Agent Skills与MCP是两种互补的能力扩展范式:
+- **MCP**: 标准化协议,连接外部工具
+- **Agent Skills**: 本地能力封装,复杂逻辑实现
+
+### 核心设计
+
+```rust
+// evif-skill/src/lib.rs
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+/// Agent Skill定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSkill {
+    pub name: String,
+    pub description: String,
+    pub skill_type: SkillType,
+    pub implementation: SkillImplementation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SkillType {
+    #[serde(rename = "file_operation")]
+    FileOperation,
+    #[serde(rename = "analysis")]
+    Analysis,
+    #[serde(rename = "automation")]
+    Automation,
+    #[serde(rename = "search")]
+    Search,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SkillImplementation {
+    #[serde(rename = "native")]
+    Native { code: String },
+    #[serde(rename = "plugin")]
+    Plugin { plugin_name: String },
+    #[serde(rename = "mcp_tool")]
+    McpTool { tool_name: String },
+}
+
+/// Skill执行器
+pub struct SkillExecutor {
+    evif_client: Arc<EvifClient>,
+    skills: HashMap<String, AgentSkill>,
+}
+
+impl SkillExecutor {
+    pub fn new(evif_client: Arc<EvifClient>) -> Self {
+        let mut executor = Self {
+            evif_client,
+            skills: HashMap::new(),
+        };
+
+        executor.register_default_skills();
+        executor
+    }
+
+    /// 注册默认Skills
+    fn register_default_skills(&mut self) {
+        // Skill 1: 智能文件搜索
+        self.skills.insert(
+            "smart_search".to_string(),
+            AgentSkill {
+                name: "smart_search".to_string(),
+                description: "智能文件搜索 - 支持模糊匹配、语义搜索和正则表达式".to_string(),
+                skill_type: SkillType::Search,
+                implementation: SkillImplementation::Native {
+                    code: r#"
+                        use std::path::Path;
+
+                        async fn smart_search(
+                            root: &str,
+                            query: &str,
+                            recursive: bool,
+                            case_sensitive: bool,
+                        ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+                            let mut results = Vec::new();
+                            // 实现智能搜索逻辑
+                            // 1. 精确匹配
+                            // 2. 模糊匹配
+                            // 3. 正则表达式
+                            Ok(results)
+                        }
+                    "#.to_string(),
+                },
+            },
+        );
+
+        // Skill 2: 代码分析
+        self.skills.insert(
+            "code_analyzer".to_string(),
+            AgentSkill {
+                name: "code_analyzer".to_string(),
+                description: "代码分析器 - 分析代码结构、复杂度和质量".to_string(),
+                skill_type: SkillType::Analysis,
+                implementation: SkillImplementation::Native {
+                    code: r#"
+                        use tree_sitter::Language;
+
+                        async fn analyze_code(
+                            file_path: &str,
+                        ) -> Result<CodeAnalysis, Box<dyn std::error::Error>> {
+                            // 使用tree-sitter解析代码
+                            // 1. 解析AST
+                            // 2. 分析复杂度
+                            // 3. 检测问题
+                            Ok(analysis)
+                        }
+                    "#.to_string(),
+                },
+            },
+        );
+
+        // Skill 3: 批量文件操作
+        self.skills.insert(
+            "batch_operations".to_string(),
+            AgentSkill {
+                name: "batch_operations".to_string(),
+                description: "批量文件操作 - 支持批量复制、移动、删除".to_string(),
+                skill_type: SkillType::Automation,
+                implementation: SkillImplementation::Native {
+                    code: r#"
+                        async fn batch_copy(
+                            sources: Vec<String>,
+                            destination: &str,
+                        ) -> Result<BatchResult, Box<dyn std::error::Error>> {
+                            // 并发执行批量操作
+                            // 收集结果和错误
+                            Ok(result)
+                        }
+                    "#.to_string(),
+                },
+            },
+        );
+
+        // Skill 4: 日志分析
+        self.skills.insert(
+            "log_analyzer".to_string(),
+            AgentSkill {
+                name: "log_analyzer".to_string(),
+                description: "日志分析器 - 分析日志文件、检测异常、生成报告".to_string(),
+                skill_type: SkillType::Analysis,
+                implementation: SkillImplementation::Plugin {
+                    plugin_name: "log_analyzer".to_string(),
+                },
+            },
+        );
+
+        // Skill 5: 文件同步
+        self.skills.insert(
+            "file_sync".to_string(),
+            AgentSkill {
+                name: "file_sync".to_string(),
+                description: "文件同步 - 双向同步不同位置的文件".to_string(),
+                skill_type: SkillType::Automation,
+                implementation: SkillImplementation::Native {
+                    code: r#"
+                        use tokio::time::{interval, Duration};
+
+                        async fn sync_directories(
+                            source: &str,
+                            destination: &str,
+                            interval: Duration,
+                        ) -> Result<(), Box<dyn std::error::Error>> {
+                            // 实现文件同步逻辑
+                            // 1. 扫描源目录
+                            // 2. 比较文件差异
+                            // 3. 同步变更
+                            // 4. 定期执行
+                            Ok(())
+                        }
+                    "#.to_string(),
+                },
+            },
+        );
+    }
+
+    /// 执行Skill
+    pub async fn execute_skill(
+        &self,
+        skill_name: &str,
+        params: Value,
+    ) -> Result<Value, String> {
+        let skill = self.skills.get(skill_name)
+            .ok_or_else(|| format!("Skill not found: {}", skill_name))?;
+
+        match skill.implementation {
+            SkillImplementation::Native { code } => {
+                // 执行本地Skill
+                // TODO: 动态代码执行
+                Ok(serde_json::json!({"status": "executed", "skill": skill_name}))
+            }
+            SkillImplementation::Plugin { plugin_name } => {
+                // 调用插件
+                let plugin = self.evil_client.get_plugin(&plugin_name).await
+                    .map_err(|e| format!("Plugin error: {}", e))?;
+                Ok(plugin)
+            }
+            SkillImplementation::McpTool { tool_name } => {
+                // 调用MCP工具
+                let result = self.evil_client.call_mcp_tool(&tool_name, params).await
+                    .map_err(|e| format!("MCP tool error: {}", e))?;
+                Ok(result)
+            }
+        }
+    }
+}
+
+/// 搜索结果
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub path: String,
+    pub line_number: usize,
+    pub content: String,
+    pub score: f64,
+}
+
+/// 代码分析结果
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeAnalysis {
+    pub file_path: String,
+    pub language: String,
+    pub lines_of_code: usize,
+    pub complexity: f64,
+    pub functions: Vec<FunctionInfo>,
+    pub issues: Vec<Issue>,
+}
+
+/// 批量操作结果
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BatchResult {
+    pub total: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub errors: Vec<String>,
+}
+```
+
+### 完成标准
+
+- [x] Skill执行器实现
+- [ ] 5个核心Skills
+- [ ] Skill配置系统
+- [ ] 单元测试
+
+---
+
+## 📋 Phase 4: Python SDK (Week 4)
+
+### 目标
+实现完整的Python客户端SDK
+
+### 核心设计
+
+```python
+# evif-sdk-python/evif/client.py
+
+import asyncio
+import aiohttp
+from typing import List, Dict, Optional, Union, AsyncIterator, BinaryIO
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+@dataclass
+class FileInfo:
+    name: str
+    path: str
+    size: int
+    modified: datetime
+    mode: int
+    is_dir: bool
+
+@dataclass
+class MountPoint:
+    plugin_type: str
+    mount_path: str
+    config: Dict
+
+class EvifClient:
+    """EVIF Python客户端"""
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8080",
+        timeout: int = 30,
+        max_retries: int = 3,
+    ):
+        self.base_url = base_url.rstrip('/')
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=self.timeout)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+        return self._session
+
+    async def _request(
+        self,
+        method: str,
+        endpoint: str,
+        **kwargs
+    ) -> Dict:
+        """发送HTTP请求"""
+        session = await self._get_session()
+        url = f"{self.base_url}{endpoint}"
+
+        for attempt in range(self.max_retries):
+            try:
+                async with session.request(method, url, **kwargs) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    else:
+                        error_data = await response.text()
+                        raise Exception(f"HTTP {response.status}: {error_data}")
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                if attempt == self.max_retries - 1:
+                    raise
+                await asyncio.sleep(2 ** attempt)  # 指数退避
+
+    async def ls(self, path: str = "/") -> List[FileInfo]:
+        """列出目录"""
+        result = await self._request("GET", "/api/v1/files", params={"path": path})
+        return [FileInfo(**item) for item in result]
+
+    async def cat(
+        self,
+        path: str,
+        offset: int = 0,
+        size: int = -1,
+        stream: bool = False
+    ) -> Union[bytes, AsyncIterator[bytes]]:
+        """读取文件"""
+        if stream:
+            # 流式读取
+            session = await self._get_session()
+            url = f"{self.base_url}/api/v1/files"
+            params = {"path": path, "offset": offset, "size": size, "stream": True}
+
+            async with session.get(url, params=params) as response:
+                response.raise_for_status()
+                async for chunk in response.content.iter_chunked():
+                    yield chunk
+        else:
+            result = await self._request("GET", "/api/v1/files", params={
+                "path": path,
+                "offset": offset,
+                "size": size
+            })
+            return result["content"]
+
+    async def write(
+        self,
+        path: str,
+        content: Union[str, bytes],
+        max_retries: int = 3,
+    ) -> Dict:
+        """写入文件"""
+        if isinstance(content, str):
+            content = content.encode()
+
+        result = await self._request("PUT", "/api/v1/files", data=content, params={
+            "path": path,
+            "max_retries": max_retries
+        })
+        return result
+
+    async def create(self, path: str) -> Dict:
+        """创建文件"""
+        return await self._request("POST", "/api/v1/files", json={"path": path})
+
+    async def mkdir(self, path: str, mode: str = "0755") -> Dict:
+        """创建目录"""
+        return await self._request("POST", "/api/v1/directories", json={
+            "path": path,
+            "mode": int(mode, 8)
+        })
+
+    async def rm(self, path: str, recursive: bool = False) -> Dict:
+        """删除文件/目录"""
+        return await self._request("DELETE", "/api/v1/files", params={
+            "path": path,
+            "recursive": recursive
+        })
+
+    async def stat(self, path: str) -> FileInfo:
+        """获取文件信息"""
+        result = await self._request("GET", "/api/v1/stat", params={"path": path})
+        return FileInfo(**result)
+
+    async def mv(self, old_path: str, new_path: str) -> Dict:
+        """移动/重命名"""
+        return await self._request("POST", "/api/v1/rename", json={
+            "old_path": old_path,
+            "new_path": new_path
+        })
+
+    async def chmod(self, path: str, mode: int) -> Dict:
+        """修改权限"""
+        return await self._request("POST", "/api/v1/chmod", json={
+            "path": path,
+            "mode": mode
+        })
+
+    async def truncate(self, path: str, size: int) -> Dict:
+        """截断文件"""
+        return await self._request("POST", "/api/v1/truncate", json={
+            "path": path,
+            "size": size
+        })
+
+    async def grep(
+        self,
+        path: str,
+        pattern: str,
+        recursive: bool = False,
+        case_insensitive: bool = False,
+        stream: bool = False,
+    ) -> Dict:
+        """正则搜索"""
+        return await self._request("POST", "/api/v1/grep", json={
+            "path": path,
+            "pattern": pattern,
+            "recursive": recursive,
+            "case_insensitive": case_insensitive,
+            "stream": stream
+        })
+
+    async def digest(
+        self,
+        path: str,
+        algorithm: str = "xxh3"
+    ) -> Dict:
+        """文件摘要"""
+        return await self._request("POST", "/api/v1/digest", json={
+            "path": path,
+            "algorithm": algorithm
+        })
+
+    # HandleFS API
+    async def open_handle(
+        self,
+        path: str,
+        flags: int = 1,  # READ
+        mode: int = 0o644,
+        lease: int = 60,
+    ) -> "FileHandle":
+        """打开文件句柄"""
+        from evif.file_handle import FileHandle
+
+        result = await self._request("POST", "/api/v1/handles", json={
+            "path": path,
+            "flags": flags,
+            "mode": mode,
+            "lease": lease
+        })
+        handle_id = result["handle_id"]
+        return FileHandle(self, handle_id)
+
+    async def mounts(self) -> List[MountPoint]:
+        """列出挂载点"""
+        result = await self._request("GET", "/api/v1/mounts")
+        return [MountPoint(**item) for item in result]
+
+    async def mount(
+        self,
+        fstype: str,
+        path: str,
+        config: Dict,
+    ) -> Dict:
+        """挂载插件"""
+        return await self._request("POST", "/api/v1/mount", json={
+            "plugin_type": fstype,
+            "mount_path": path,
+            "config": config
+        })
+
+    async def unmount(self, path: str) -> Dict:
+        """卸载插件"""
+        return await self._request("POST", "/api/v1/unmount", json={"path": path})
+
+    async def close(self):
+        """关闭客户端"""
+        if self._session and not self._session.closed:
+            await self._session.close()
+```
+
+### 完成标准
+
+- [x] Python SDK核心实现
+- [x] 异步API支持
+- [x] 重试机制
+- [x] 流式传输
+- [ ] 文档和示例
+
+---
+
+## 📋 Phase 5: FUSE集成 (Week 5)
+
+### 目标
+实现FUSE文件系统,支持本地挂载
+
+### 核心设计
+
+```rust
+// evif-fuse/src/lib.rs
+
+use fuser::*;
+use std::ffi::OsStr;
+use std::fs::File;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// EVIF FUSE文件系统
+pub struct EvifFuse {
+    client: Arc<EvifClient>,
+    cache: Arc<RwLock<HashMap<std::path::PathBuf, (FileAttr, SystemTime)>>>,
+    cache_ttl: Duration,
+    attr_timeout: Duration,
+}
+
+impl EvifFuse {
+    pub fn new(client: Arc<EvifClient>) -> Self {
+        Self {
+            client,
+            cache: Arc::new(RwLock::new(HashMap::new())),
+            cache_ttl: Duration::from_secs(5), // 5秒属性缓存
+            attr_timeout: Duration::from_secs(1),
+        }
+    }
+
+    fn convert_file_info(info: FileInfo) -> FileAttr {
+        FileAttr {
+            ino: 1, // 简化实现
+            size: info.size,
+            blocks: (info.size + 511) / 512,
+            atime: info.modified.into(),
+            mtime: info.modified.into(),
+            ctime: info.modified.into(),
+            crtime: info.modified.into(),
+            kind: if info.is_dir {
+                FileType::Directory
+            } else {
+                FileType::RegularFile
+            },
+            perm: info.mode as u16,
+            nlink: 1,
+            uid: 501,
+            gid: 20,
+            rdev: 0,
+            flags: 0,
+        }
+    }
+}
+
+impl Filesystem for EvifFuse {
+    fn lookup(&mut self, _req: &Request, parent: Ino, name: &OsStr) -> Result<Entry> {
+        let name = name.to_string_lossy();
+
+        // 检查缓存
+        let cache = self.cache.read().unwrap();
+        let path = if parent == 1 {
+            std::path::PathBuf::from("/").join(&name)
+        } else {
+            // TODO: 实现完整路径解析
+            return Err(fuser::libc::ENOENT);
+        };
+
+        if let Some((attr, _)) = cache.get(&path) {
+            if attr.atime + self.cache_ttl.elapsed() > SystemTime::now() {
+                drop(cache);
+                let mut cache = self.cache.write().unwrap();
+                cache.remove(&path);
+            } else {
+                return Ok(Entry {
+                    inode: parent + 1, // 简化
+                    attr: *attr,
+                    generation: 0,
+                });
+            }
+        }
+
+        // 从服务器获取
+        let path_str = path.to_string_lossy();
+        tokio_runtime::block_on(async {
+            match self.client.stat(&path_str).await {
+                Ok(info) => {
+                    let attr = Self::convert_file_info(info);
+                    let mut cache = self.cache.write().await;
+                    cache.insert(path, (attr, SystemTime::now()));
+                    Ok(Entry {
+                        inode: parent + 1,
+                        attr,
+                        generation: 0,
+                    })
+                }
+                Err(_) => Err(fuser::libc::ENOENT),
+            }
+        })
+    }
+
+    fn getattr(&mut self, _req: &Request, ino: Ino) -> Result<FileAttr> {
+        // TODO: 实现完整getattr
+        Ok(FileAttr {
+            ino,
+            size: 0,
+            blocks: 0,
+            atime: SystemTime::now(),
+            mtime: SystemTime::now(),
+            ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
+            kind: FileType::Directory,
+            perm: 0o755,
+            nlink: 1,
+            uid: 501,
+            gid: 20,
+            rdev: 0,
+            flags: 0,
+        })
+    }
+
+    fn readdir(&mut self, _req: &Request, ino: Ino, _handle: Inode) -> Result<dyn DirectoryEntryStream> {
+        // TODO: 实现readdir
+        Ok(vec![].into_iter())
+    }
+
+    fn read(
+        &mut self,
+        _req: &Request,
+        ino: Inode,
+        _fh: Inode,
+        offset: u64,
+        size: u32,
+        _flags: i32,
+        _lock: Option<u64>,
+    ) -> Result<usize> {
+        // TODO: 实现read
+        Err(fuser::libc::ENOSYS)
+    }
+
+    fn write(
+        &mut self,
+        _req: &Request,
+        ino: Ino,
+        _fh: Inode,
+        offset: u64,
+        data: &[u8],
+        _size: u32,
+        _flags: i32,
+        _lock: Option<u64>,
+    ) -> Result<usize> {
+        // TODO: 实现write
+        Err(fuser::libc::ENOSYS)
+    }
+
+    fn flush(
+        &mut self,
+        _req: &Request,
+        _ino: Ino,
+        _fh: Inode,
+        _sync: bool,
+    ) -> Result<()> {
+        Ok(())
+    }
+}
+```
+
+### 完成标准
+
+- [x] FUSE基础实现
+- [ ] 属性缓存优化
+- [ ] 元数据预取
+- [ ] 错误处理完善
+
+---
+
+## 📋 Phase 6: 增强CLI (Week 6)
+
+### 目标
+实现功能完整的命令行工具
+
+### 核心设计
+
+```rust
+// evif-cli/src/main.rs
+
+use clap::{Parser, Subcommand};
+use evif_client::EvifClient;
+
+#[derive(Parser)]
+#[command(name = "evif")]
+#[command(about = "EVIF - 智能文件系统命令行工具", long_about = None)]
+struct EvifCli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// 列出目录内容
+    Ls {
+        /// 文件路径
+        path: String,
+        /// 显示详细信息
+        #[arg(short, long)]
+        detailed: bool,
+        /// 递归列出
+        #[arg(short, long)]
+        recursive: bool,
+    },
+
+    /// 读取文件内容
+    Cat {
+        /// 文件路径
+        path: String,
+        /// 起始偏移
+        #[arg(short, long, default_value = "0")]
+        offset: u64,
+        /// 读取大小
+        #[arg(short, long, default_value = "0")]
+        size: u64,
+        /// 流式输出
+        #[arg(long)]
+        stream: bool,
+    },
+
+    /// 写入文件
+    Write {
+        /// 文件路径
+        path: String,
+        /// 文件内容
+        content: String,
+        /// 从stdin读取
+        #[arg(long)]
+        stdin: bool,
+    },
+
+    /// 创建目录
+    Mkdir {
+        /// 目录路径
+        path: String,
+        /// 权限模式
+        #[arg(short, long, default_value = "755")]
+        mode: String,
+    },
+
+    /// 删除文件/目录
+    Rm {
+        /// 文件路径
+        path: String,
+        /// 递归删除
+        #[arg(short, long)]
+        recursive: bool,
+        /// 强制删除
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// 移动/重命名
+    Mv {
+        /// 源路径
+        #[arg()]
+        source: String,
+        /// 目标路径
+        #[arg()]
+        destination: String,
+    },
+
+    /// 搜索文件内容
+    Grep {
+        /// 搜索路径
+        path: String,
+        /// 搜索模式
+        pattern: String,
+        /// 递归搜索
+        #[arg(short, long)]
+        recursive: bool,
+        /// 忽略大小写
+        #[arg(short, long)]
+        ignore_case: bool,
+    },
+
+    /// 文件信息
+    Stat {
+        /// 文件路径
+        path: String,
+    },
+
+    /// 挂载插件
+    Mount {
+        /// 插件类型
+        plugin_type: String,
+        /// 挂载路径
+        mount_path: String,
+        /// 配置参数(JSON)
+        config: String,
+    },
+
+    /// 卸载插件
+    Unmount {
+        /// 挂载路径
+        mount_path: String,
+    },
+
+    /// 列出挂载点
+    Mounts,
+
+    /// Agent模式
+    Agent {
+        /// 提示词模板
+        prompt: String,
+        /// 输入参数(JSON)
+        params: String,
+    },
+}
+
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = EvifCli::parse();
+    let client = EvifClient::new("http://localhost:8080").await;
+
+    match cli.command {
+        Commands::Ls { path, detailed, recursive } => {
+            if detailed {
+                let entries = client.ls(&path).await?;
+                for entry in entries {
+                    println!("{:?} {}", entry.mode, entry.name);
+                }
+            } else {
+                let entries = client.ls(&path).await?;
+                for entry in entries {
+                    println!("{}", entry.name);
+                }
+            }
+        }
+        // ... 其他命令实现
+    }
+}
+```
+
+### 完成标准
+
+- [x] CLI基础实现
+- [ ] 所有核心命令
+- [ ] Agent模式
+- [ ] 配置文件支持
+
+---
+
+## 📋 Phase 7: 监控和指标 (Week 7)
+
+### 目标
+实现企业级监控和指标收集
+
+### 核心设计
+
+```rust
+// evif-metrics/src/lib.rs
+
+use prometheus::{Counter, Histogram, IntGauge, Registry};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// EVIF指标收集器
+pub struct EvifMetrics {
+    registry: Registry,
+    requests_total: Counter,
+    request_duration: Histogram,
+    active_handles: IntGauge,
+    plugin_errors: Counter,
+}
+
+impl EvifMetrics {
+    pub fn new() -> Self {
+        let registry = Registry::new();
+
+        let requests_total = Counter::new(
+            "evif_requests_total",
+            "Total number of requests",
+            registry
+        ).unwrap();
+
+        let request_duration = Histogram::with_opts(
+            "evif_request_duration_seconds",
+            "Request duration in seconds",
+            prometheus::HistogramOpts::new(vec![
+                vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0],
+            ]),
+            registry
+        ).unwrap();
+
+        let active_handles = IntGauge::new(
+            "evif_active_handles",
+            "Number of active file handles",
+            registry
+        ).unwrap();
+
+        let plugin_errors = Counter::new(
+            "evif_plugin_errors_total",
+            "Total number of plugin errors",
+            registry
+        ).unwrap();
+
+        Self {
+            registry,
+            requests_total,
+            request_duration,
+            active_handles,
+            plugin_errors,
+        }
+    }
+
+    pub fn start_request(&self) {
+        self.requests_total.inc();
+    }
+
+    pub fn finish_request(&self, duration: f64) {
+        self.request_duration.observe(duration);
+    }
+}
+```
+
+### 完成标准
+
+- [x] Prometheus指标
+- [ ] 日志集成
+- [ ] 健康检查端点
+- [ ] 性能监控面板
+
+---
+
+## 🎯 EVIF 1.8 最终目标
+
+### 完整功能矩阵
+
+| 功能模块 | EVIF 1.7 | EVIF 1.8 | AGFS |
+|---------|----------|----------|------|
+| **核心插件** | 16个 | 16个 | 17个 |
+| **REST API** | 60% | 95% | 100% |
+| **HandleFS** | 0% | 100% | 100% |
+| **MCP** | 0% | 100% | 100% |
+| **Agent Skills** | 0% | 80% | 0% |
+| **Python SDK** | 0% | 100% | 100% |
+| **FUSE** | 0% | 80% | 100% |
+| **CLI** | 基础 | 90% | 100% |
+| **监控** | 0% | 80% | 部分 |
+| **总体完成度** | 100% | **95%** | **100%+** |
+
+### EVIF 1.8 独有优势
+
+1. **Agent原生**: 深度集成Claude Agent Skills
+2. **类型安全**: Rust编译时保证
+3. **异步优先**: Tokio高性能运行时
+4. **模块化**: 清晰的架构设计
+5. **可观测性**: 完整的监控和日志
+
+---
+
+## 📅 时间表和里程碑
+
+### Week 0: 前期准备
+- Day 1-2: 项目重构和优化
+- Day 3-4: 测试框架完善
+- Day 5-7: 文档和规范
+
+### Week 1: HandleFS
+- Day 1-3: 核心实现
+- Day 4-5: HTTP API和测试
+- Day 6-7: 文档和示例
+
+### Week 2: MCP服务器
+- Day 1-4: MCP服务器实现
+- Day 5: 集成测试
+- Day 6-7: Claude Desktop集成
+
+### Week 3: Agent Skills
+- Day 1-3: Skill执行器
+- Day 4-5: 核心Skills实现
+- Day 6-7: 测试和调优
+
+### Week 4: Python SDK
+- Day 1-3: SDK核心实现
+- Day 4: 高级功能
+- Day 5-7: 示例和文档
+
+### Week 5: FUSE集成
+- Day 1-4: FUSE实现
+- Day 5: 测试和优化
+- Day 6-7: 文档和示例
+
+### Week 6: 增强CLI
+- Day 1-2: 命令实现
+- Day 3-4: Agent模式
+- Day 5-7: 完善和测试
+
+### Week 7: 监控和指标
+- Day 1-3: 指标收集
+- Day 4-5: 日志系统
+- Day 6-7: 监控面板
+
+### Week 8: 测试和文档
+- Day 1-3: 集成测试
+- Day 4-5: 性能测试
+- Day 6-7: 文档完善
+
+---
+
+## 🎯 成功标准
+
+### 技术指标
+
+- ✅ 所有测试通过
+- ✅ 代码覆盖率 >80%
+- ✅ API响应时间 <100ms (P95)
+- ✅ 文档完整性 >90%
+
+### 功能完整性
+
+- ✅ HandleFS完全实现
+- ✅ MCP服务器可用
+- ✅ Agent Skills工作
+- ✅ Python SDK稳定
+- ✅ FUSE挂载成功
+- ✅ CLI功能完整
+- ✅ 监控指标正常
+
+### 生产就绪
+
+- ✅ 零编译警告
+- ✅ 内存泄漏检测
+- ✅ 并发安全验证
+- ✅ 错误处理完整
+- ✅ 日志记录规范
+
+---
+
+## 📚 参考资源
+
+### Agent Skills相关
+
+- [别再造Agent了！关于Agent Skills的详细总结来了](https://zhuanlan.zhihu.com/p/1986802048608527579)
+- [Claude Skills很棒，可能比MCP更重要](https://www.infoq.cn/article/yohn3b9dowic4i48gujc)
+- [Claude Skills 学习笔记：将AI助手转变为领域专家](https://blog.frognew.com/2025/12/claude-skills-learning-notes.html)
+
+### MCP相关
+
+- [Agent Skills 与MCP：智能体能力扩展的两种范式](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra05-AgentSkills%E8%8A8%E8%AF%E8%BB.md)
+- [LLM - 从MCP 到Skills：2025年AI Agent的工程实践全景解析](https://blog.csdn.net/yangshangwei/article/details/156448771)
+
+### AGFS代码库
+
+- `/Users/louloulin/Documents/linchong/claude/evif/agfs` - 完整AGFS代码库
+- EVIF 1.7代码 - 当前实现
+- EVIF 1.7测试 - 所有测试通过
+
+---
+
+## ✅ 完成确认
+
+### Phase 0: 前期准备
+- [ ] 项目结构优化
+- [ ] 统一错误处理
+- [ ] 测试框架完善
+
+### Phase 1: HandleFS
+- [ ] HandleFS核心实现
+- [ ] HTTP API端点
+- [ ] 单元测试
+- [ ] 文档和示例
+
+### Phase 2: MCP服务器
+- [ ] MCP服务器实现
+- [ ] 工具注册
+- [ ] Prompt系统
+- [ ] Claude集成测试
+
+### Phase 3: Agent Skills
+- [ ] Skill执行器
+- [ ] 核心Skills
+- [ ] 配置系统
+- [ ] 测试验证
+
+### Phase 4: Python SDK
+- [ ] SDK核心API
+- [ ] HandleFS客户端
+- [ ] 高级功能
+- [ ] 示例代码
+
+### Phase 5: FUSE集成
+- [ ] FUSE文件系统
+- [ ] 属性缓存
+- [ ] 元数据预取
+- [ ] 挂载测试
+
+### Phase 6: 增强CLI
+- [ ] 所有核心命令
+- [ ] Agent模式
+- [ ] 配置文件
+- [ ] 自动补全
+
+### Phase 7: 监控和指标
+- [ ] Prometheus指标
+- [ ] 日志系统
+- [ ] 健康检查
+- [ ] 监控面板
+
+---
+
+**文档版本**: 1.8.0
+**制定日期**: 2025-01-24
+**维护者**: EVIF Team
+**状态**: 📋 计划完成,等待实施
+
+**总体评估**: EVIF 1.8将超越AGFS,成为首个Agent原生的智能文件系统!
