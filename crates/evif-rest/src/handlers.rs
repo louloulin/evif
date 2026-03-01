@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use evif_core::{RadixMountTable, EvifPlugin, WriteFlags, OpenFlags, PluginConfigParam, DynamicPluginLoader};
 use evif_core::FileInfo as EvifFileInfo;
+use evif_graph::{Graph, Node, NodeId, Metadata, NodeType, NodeBuilder};
 use crate::metrics_handlers::TrafficStats;
 use std::time::Instant;
 use std::sync::atomic::Ordering;
@@ -22,6 +23,8 @@ pub struct AppState {
     pub start_time: Instant,
     /// 动态插件加载器
     pub dynamic_loader: Arc<DynamicPluginLoader>,
+    /// 图引擎实例
+    pub graph: Arc<Graph>,
 }
 
 /// 节点响应
@@ -30,7 +33,7 @@ pub struct NodeResponse {
     pub id: String,
     pub node_type: String,
     pub name: String,
-    pub metadata: HashMap<String, serde_json::Value>,
+    pub metadata: Metadata,
 }
 
 /// 查询响应
@@ -80,34 +83,74 @@ impl EvifHandlers {
     }
 
     /// 获取节点
-    /// NOTE: Graph functionality intentionally not implemented (confirmed not required for EVIF 1.8)
     pub async fn get_node(
+        State(state): State<AppState>,
         Path(id): Path<String>,
     ) -> RestResult<Json<NodeResponse>> {
-        Err(RestError::Internal(
-            "Graph functionality not implemented. Filesystem operations are available via /api/v1/* endpoints.".to_string()
-        ))
+        let node_id = match uuid::Uuid::parse_str(&id) {
+            Ok(id) => id,
+            Err(e) => return Err(RestError::BadRequest(format!("Invalid UUID format: {}", e))),
+        };
+        match state.graph.get_node(&node_id) {
+            Ok(node) => Ok(Json(NodeResponse {
+                id: node.id.to_string(),
+                node_type: node.node_type.as_str().to_string(),
+                name: node.name.clone(),
+                metadata: node.metadata.clone(),
+            })),
+            Err(e) => Err(RestError::NotFound(format!("Node not found: {}", e))),
+        }
     }
 
     /// 创建节点
-    /// NOTE: Graph functionality intentionally not implemented (confirmed not required for EVIF 1.8)
     pub async fn create_node(
+        State(state): State<AppState>,
         Path(node_type): Path<String>,
         Json(payload): Json<CreateNodeRequest>,
     ) -> RestResult<Json<NodeResponse>> {
-        Err(RestError::Internal(
-            "Graph functionality not implemented. Use /api/v1/files/create for filesystem operations.".to_string()
-        ))
+        let node_type = match node_type.to_lowercase().as_str() {
+            "file" => NodeType::File,
+            "directory" | "dir" => NodeType::Directory,
+            "symlink" => NodeType::Symlink,
+            "device" => NodeType::Device,
+            "process" => NodeType::Process,
+            "network" => NodeType::Network,
+            other => NodeType::Custom(other.to_string()),
+        };
+
+        let node = NodeBuilder::new(node_type, payload.name)
+            .build();
+
+        match state.graph.add_node(node) {
+            Ok(node_id) => {
+                let node = state.graph.get_node(&node_id).unwrap();
+                Ok(Json(NodeResponse {
+                    id: node.id.to_string(),
+                    node_type: node.node_type.as_str().to_string(),
+                    name: node.name.clone(),
+                    metadata: node.metadata.clone(),
+                }))
+            }
+            Err(e) => Err(RestError::Internal(format!("Failed to create node: {}", e))),
+        }
     }
 
     /// 删除节点
-    /// NOTE: Graph functionality intentionally not implemented (confirmed not required for EVIF 1.8)
     pub async fn delete_node(
+        State(state): State<AppState>,
         Path(id): Path<String>,
     ) -> RestResult<Json<serde_json::Value>> {
-        Err(RestError::Internal(
-            "Graph functionality not implemented. Use /api/v1/files/delete for filesystem operations.".to_string()
-        ))
+        let node_id = match uuid::Uuid::parse_str(&id) {
+            Ok(id) => id,
+            Err(e) => return Err(RestError::BadRequest(format!("Invalid UUID format: {}", e))),
+        };
+        match state.graph.remove_node(&node_id) {
+            Ok(_) => Ok(Json(serde_json::json!({
+                "success": true,
+                "message": format!("Node {} deleted", id)
+            }))),
+            Err(e) => Err(RestError::NotFound(format!("Failed to delete node: {}", e))),
+        }
     }
 
     /// 查询图
@@ -131,11 +174,12 @@ impl EvifHandlers {
     }
 
     /// 获取统计信息
-    pub async fn stats() -> Json<StatsResponse> {
+    pub async fn stats(State(state): State<AppState>) -> Json<StatsResponse> {
+        let uptime_secs = state.start_time.elapsed().as_secs();
         Json(StatsResponse {
-            uptime_secs: 0,
-            total_nodes: 0,
-            total_edges: 0,
+            uptime_secs,
+            total_nodes: state.graph.node_count(),
+            total_edges: state.graph.edge_count(),
             status: "running".to_string(),
         })
     }
@@ -1236,7 +1280,7 @@ mod tests {
             id: "123".to_string(),
             node_type: "file".to_string(),
             name: "test".to_string(),
-            metadata: HashMap::new(),
+            metadata: Metadata::default(),
         };
         assert_eq!(resp.id, "123");
     }

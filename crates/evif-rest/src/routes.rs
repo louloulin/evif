@@ -5,6 +5,7 @@ use axum::Router;
 use std::sync::Arc;
 use std::time::Instant;
 use evif_core::{RadixMountTable, GlobalHandleManager, DynamicPluginLoader};
+use evif_graph::Graph;
 use handlers::AppState;
 
 /// 创建 API 路由
@@ -17,6 +18,7 @@ pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
         traffic_stats: Arc::new(metrics_handlers::TrafficStats::default()),
         start_time: Instant::now(),
         dynamic_loader,
+        graph: Arc::new(Graph::new()),
     };
 
     // 创建批量操作管理器
