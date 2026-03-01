@@ -328,49 +328,26 @@ AI Agent
 
 ---
 
-#### 1.2 API 契约统一 🔴 P0
+#### 1.2 API 契约统一 ✅ 已解决
 
-**目标**: 修复 CLI 与 REST 的格式不一致问题
+**状态**: 已验证一致，测试通过
 
-**问题分析**:
-- `evif-client` 期望 read 返回 base64 编码的 `data` 字段
-- `handlers` 返回明文 JSON 的 `content` 字段
-- `write` 操作同样存在不一致
+**验证结果** (2026-03-01):
+- `handlers.rs` 返回: `{ content, data: base64, size }`
+- `evif-client` 读取: `json["data"]` (base64) 并解码
+- 测试 `test_read_file_returns_data_and_content` 通过
+- 测试 `test_write_file_accepts_base64_encoding` 通过
 
-**工作项**:
-1. **统一响应格式**
-   ```json
-   // 统一后的格式
-   {
-     "success": true,
-     "data": {
-       "content": "文件内容（明文）",
-       "encoding": "utf-8",
-       "size": 1024
-     },
-     "metadata": {
-       "path": "/test.txt",
-       "mtime": "2026-03-01T00:00:00Z"
-     }
-   }
-   ```
+**原问题分析** (已过时):
+- ~~`evif-client` 期望 read 返回 base64 编码的 `data` 字段~~
+- ~~`handlers` 返回明文 JSON 的 `content` 字段~~
+- ~~`write` 操作同样存在不一致~~
 
-2. **兼容层设计**
-   - 保留 base64 支持作为可选参数 (`?encoding=base64`)
-   - 在 `evif-client` 添加格式适配逻辑
+**当前实现**:
+- Read: 返回 `{ content, data: base64, size }`
+- Write: 接受 `{ data, encoding: "base64" }`
 
-3. **API 文档更新**
-   - OpenAPI/Swagger 规范
-   - 示例代码
-
-**验收标准**:
-- [ ] CLI `ls/cat/write` 命令正常工作
-- [ ] Web 前端文件操作不受影响
-- [ ] API 文档完整
-
-**预计工期**: 1 周
-
-**依赖**: 无
+**结论**: 该问题已在代码中修复，todo5.md 原描述不准确
 
 ---
 
@@ -1119,6 +1096,7 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 - **2026-03-01**: 更新 - 添加代码库深入分析、AgentFS 竞品、修正图系统状态、添加发现的问题清单
 - **2026-03-01**: 更新 - 修正 Mem0/Graphiti star 数量，添加 4 篇新论文 (MIRIX, Continuum Memory, A-Mem, Graphs Meet AI Agents)
 - **2026-03-01**: 更新 - 修正 Mem0 star 数量 (41k+ → 46k+)，验证代码库状态
+- **2026-03-01**: 更新 - 修正 API 契约格式描述（经验证已一致，测试通过）
 - 后续更新: 每个 Phase 完成时更新
 
 ---
