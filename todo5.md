@@ -164,7 +164,7 @@ AI Agent
 
 | 框架 | 特点 | GitHub Stars |
 |------|------|--------------|
-| **Mem0** | 生产级长期记忆，比 OpenAI Memory 高 26% 准确率 | 41k+ |
+| **Mem0** | 生产级长期记忆，比 OpenAI Memory 高 26% 准确率 | 46k+ |
 | **Graphiti** | 时间感知记忆，Neo4j 集成 | 22.9k+ |
 | **Cognee** | 图结构记忆 | 2k+ |
 | **OpenMemory** | MCP 服务器运行，跨代理共享 | 1k+ |
@@ -1118,6 +1118,7 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 - **2026-03-01**: 更新 - 添加 Meta Tools 理念分析、2026 年最新论文参考、生产级记忆框架对比
 - **2026-03-01**: 更新 - 添加代码库深入分析、AgentFS 竞品、修正图系统状态、添加发现的问题清单
 - **2026-03-01**: 更新 - 修正 Mem0/Graphiti star 数量，添加 4 篇新论文 (MIRIX, Continuum Memory, A-Mem, Graphs Meet AI Agents)
+- **2026-03-01**: 更新 - 修正 Mem0 star 数量 (41k+ → 46k+)，验证代码库状态
 - 后续更新: 每个 Phase 完成时更新
 
 ---
