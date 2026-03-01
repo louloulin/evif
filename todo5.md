@@ -18,6 +18,44 @@
 5. **技能系统分析不足** - 添加了 Skills vs MCP 的详细对比
 6. **缺少 Meta Tools 理念** - 添加 AI Agent 元工具概念分析
 7. **缺少最新论文参考** - 添加 arXiv 2026 年相关论文
+8. **图系统状态错误** - **修正: evif-graph 代码已完整实现，问题是未集成到 REST API**
+9. **缺少 AgentFS 竞品** - 添加 Turso 团队的 AgentFS
+10. **gRPC 服务状态不明** - 确认已禁用
+11. **部分插件禁用原因** - 添加 OpenDAL TLS 冲突说明
+
+---
+
+## 🔍 代码库深入分析结果
+
+### 已实现的模块 (完整)
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| **evif-core** | crates/evif-core | 核心抽象：插件接口、挂载表、句柄管理 |
+| **evif-graph** | crates/evif-graph | 图引擎：节点、边、索引、查询、执行器 |
+| **evif-plugins** | crates/evif-plugins | 30+ 插件实现 |
+| **evif-rest** | crates/evif-rest | REST API 服务 (Axum)，66+ 端点 |
+| **evif-vfs** | crates/evif-vfs | 虚拟文件系统接口 |
+| **evif-cli** | crates/evif-cli | 命令行工具 |
+| **evif-mcp** | crates/evif-mcp | MCP 服务器 |
+| **evif-fuse** | crates/evif-fuse | FUSE 集成 |
+
+### 发现的问题 (需修复)
+
+| 问题 | 位置 | 状态 | 说明 |
+|------|------|------|------|
+| **图查询 API 未集成** | evif-rest/handlers.rs | 返回错误 | evif-graph 代码完整但 REST 返回 "not implemented" |
+| **gRPC 服务禁用** | evif-grpc/server.rs.disabled | 已禁用 | 所有方法标记为 TODO |
+| **MD5 哈希未实现** | fs_handlers.rs:457 | 未实现 | md5 crate 0.7 API 变化 |
+| **WebDAV/FTP/SFTP** | plugins/ | 已禁用 | OpenDAL 0.50.2 TLS 冲突 |
+| **evif-auth 未集成** | 多个 crate | 未集成 | 代码存在但未连接到 REST |
+
+### 未实现的功能
+
+1. **认证授权** - evif-auth crate 存在但未集成到 REST API
+2. **动态插件加载** - DynamicPluginLoader 框架存在但未完全集成
+3. **Claude Code Skills** - 只有 MCP 实现，无 Skills 规范
+4. **时序知识图谱** - evif-graph 基础代码存在，需扩展时间属性
 
 ---
 
@@ -88,12 +126,46 @@ AI Agent
    - 2026年2月发布
    - 多 Agent 协作的工作空间委托协议
 
+4. **MAGMA: Multi-Graph based Agentic Memory Architecture** (arXiv 2601.03236)
+   - 创新使用四个正交记忆图：实体图、因果图、时间图、专用图
+   - 根据问题类型智能选择查询哪些图
+   - "谁做了什么"查询实体和因果图，"何时发生"优先时间图
+
+5. **Memory in the Age of AI Agents: A Survey** (arXiv 2512.13564)
+   - 多所大学联合发布（NUS, 人大, 复旦, 北大, 同济）
+   - 使用 "Form-Function-Dynamics" 三维框架分析 200+ 论文
+   - 全面综述 Agent 记忆系统
+
+6. **Fork, Explore, Commit: OS Primitives for Agentic Exploration** (arXiv 2602.08199v1)
+   - 提出使用 OS 层级原语（fork、commit）进行 Agent 探索
+   - 文件系统作为 Agent 记忆的物理层
+
+7. **MIRIX: Multi-Agent Memory System for LLM-Based Agents** (arXiv 2507.07957v1)
+   - 2025年7月发布
+   - 多 Agent 记忆系统设计
+   - 解决跨 Agent 记忆共享问题
+
+8. **Continuum Memory Architectures for Long-Horizon LLM Agents** (arXiv 2601.09913v1)
+   - 2026年1月发布
+   - 探索长周期 Agent 交互的记忆架构
+   - 分离世界事实、Agent 经验和演变信念
+
+9. **A-Mem: Agentic Memory for LLM Agents** (arXiv 2502.12110)
+   - 2025年2月发布
+   - Agent 记忆机制研究
+   - 自主记忆管理框架
+
+10. **Graphs Meet AI Agents: Taxonomy, Progress, and Future** (arXiv 2506.18019v1)
+    - 2025年6月发布
+    - 图方法在 AI Agent 中的应用综述
+    - 知识图谱与 Agent 系统集成
+
 ### 生产级记忆框架对比
 
 | 框架 | 特点 | GitHub Stars |
 |------|------|--------------|
-| **Mem0** | 生产级长期记忆，比 OpenAI Memory 高 26% 准确率 | 25k+ |
-| **Graphiti** | 时间感知记忆，Neo4j 集成 | 3k+ |
+| **Mem0** | 生产级长期记忆，比 OpenAI Memory 高 26% 准确率 | 41k+ |
+| **Graphiti** | 时间感知记忆，Neo4j 集成 | 22.9k+ |
 | **Cognee** | 图结构记忆 | 2k+ |
 | **OpenMemory** | MCP 服务器运行，跨代理共享 | 1k+ |
 
@@ -101,6 +173,20 @@ AI Agent
 - 准确率比 OpenAI Memory 高 26%
 - 延迟比全上下文方法低 91%
 - Token 节省 90%
+
+### 新发现: AgentFS (Turso)
+
+| 特性 | EVIF | AGFS | AgentFS | 差距 |
+|------|------|------|---------|------|
+| 核心方法 | 9/9 ✅ | 9/9 ✅ | 部分 | 无/小 |
+| 插件数量 | 30+ | 17 | SDK | 超越 |
+| Radix Tree | ✅ | ✅ | ❌ | 无 |
+| 双层缓存 | ❌ | ✅ | ❌ | **差距** |
+| 动态插件 | ⚠️ 基础 | ✅ | ❌ | **差距** |
+| 图查询 | ❌ 未集成 | ✅ | ❌ | **差距** |
+| AI 记忆 | ❌ | ❌ | ❌ | 共同差距 |
+| Skills 集成 | ❌ | ❌ | ❌ | 共同机会 |
+| FUSE 挂载 | ✅ | ❌ | ✅ | - |
 
 ---
 
@@ -119,26 +205,27 @@ AI Agent
 | 维度 | 完成度 | 说明 |
 |------|--------|------|
 | **核心 API** | 100% ✅ | 9/9 文件系统方法完整实现 |
-| **插件系统** | 80% ✅ | 30+ 插件，但缺少动态加载 |
-| **REST 服务** | 90% ✅ | 66+ API 端点，图查询待实现 |
+| **插件系统** | 90% ✅ | 30+ 插件，3 个因 OpenDAL TLS 冲突禁用 |
+| **REST 服务** | 80% ⚠️ | 66+ API 端点，**图功能代码已实现但未集成** |
 | **前端界面** | 60% ⚠️ | 基础功能完整，高级功能未接入 |
-| **图系统** | 20% ❌ | 代码存在但未集成到 REST |
+| **图系统** | 100% 代码 ⚠️ | **evif-graph 代码完整，但 REST API 未集成** |
 | **AI 能力** | 10% ❌ | 缺少时序记忆、向量检索优化 |
-| **认证授权** | 0% ❌ | 未实现 |
+| **认证授权** | 0% ❌ | 未实现 (注: evif-auth crate 存在但未集成) |
 | **Claude Code Skills** | 0% ❌ | 未实现 (当前只有 MCP) |
+| **gRPC 服务** | 0% ❌ | 已禁用 |
 
 ### 与竞品对比
 
-| 特性 | EVIF | AGFS | 差距 |
-|-----|------|------|------|
-| 核心方法 | 9/9 ✅ | 9/9 ✅ | 无 |
-| 插件数量 | 30+ | 17 | 超越 |
-| Radix Tree | ✅ | ✅ | 无 |
-| 双层缓存 | ❌ | ✅ | **差距** |
-| 动态插件 | ❌ | ✅ | **差距** |
-| 图查询 | ❌ | ✅ | **差距** |
-| AI 记忆 | ❌ | ❌ | 共同差距 |
-| Skills 集成 | ❌ | ❌ | 共同机会 |
+| 特性 | EVIF | AGFS | AgentFS | 差距 |
+|-----|------|------|---------|------|
+| 核心方法 | 9/9 ✅ | 9/9 ✅ | 部分 | 无 |
+| 插件数量 | 30+ | 17 | SDK | 超越 |
+| Radix Tree | ✅ | ✅ | ❌ | 无 |
+| 双层缓存 | ❌ | ✅ | ❌ | **差距** |
+| 动态插件 | ⚠️ 基础 | ✅ | ❌ | **差距** |
+| 图查询 | ❌ 未集成 | ✅ | ❌ | **差距** |
+| AI 记忆 | ❌ | ❌ | ❌ | 共同差距 |
+| Skills 集成 | ❌ | ❌ | ❌ | 共同机会 |
 
 ---
 
@@ -206,9 +293,11 @@ AI Agent
 
 **目标**: 启用 evif-graph，实现 AI Agent 核心能力
 
+**重要发现**: evif-graph 代码已完整实现（节点、边、索引、查询、执行器），但 REST API 中返回 "Graph functionality not implemented" 错误。这是集成问题，非代码缺失。
+
 **工作项**:
 1. **集成 evif-graph 到 REST API**
-   - 将 `/nodes/:id` 从占位改为实际实现
+   - 将 `/nodes/:id` 从返回错误改为实际实现
    - 实现 `/query` 端点（图查询语言）
    - 实现 `/stats` 端点（图统计信息）
    - 连接 evif-core 的 MountTable 与 evif-graph 的 Graph
@@ -944,8 +1033,9 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 
 - **AGFS**: [GitHub - c4pt0r/agfs](https://github.com/c4pt0r/agfs) - PingCAP 联合创始人黄东旭创建
 - **AGFS 文章**: [AGFS：致敬 Plan 9 "万物皆文件"理念的 Agent 文件系统](https://m.php.cn/faq/1790204.html)
-- **Mem0**: [GitHub](https://github.com/mem0ai/mem0) - 25k+ stars
-- **Graphiti**: [Zep Graphiti](https://github.com/getzep/graphiti) - 3k+ stars
+- **AgentFS**: [GitHub - tursodatabase/agentfs](https://github.com/tursodatabase/agentfs) - Turso 团队的 Agent 文件系统
+- **Mem0**: [GitHub](https://github.com/mem0ai/mem0) - 41k+ stars
+- **Graphiti**: [Zep Graphiti](https://github.com/getzep/graphiti) - 22.9k+ stars
 - **Cognee**: [GitHub](https://github.com/cognonymousai/cognee) - 2k+ stars
 
 ### Claude Code Skills
@@ -966,9 +1056,11 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 - **Everything is Context**: [51CTO](https://www.51cto.com/article/831717.html)
 - **File System as Meta Tool**: [CSDN](https://m.blog.csdn.net/weixin_43749777/article/details/156836191)
 - **Bash Is All Agent Need**: [今日头条](https://m.toutiao.com/a7592911811024814632/)
+- **OpenClaw 会话机制**: [博客园](https://www.cnblogs.com/YzpJason/p/19631621) - 使用 MEMORY.md, SOUL.md 文件实现本地记忆
 
 ### Meta Tools 与 AI Agent 架构
 
+- **2026: 大规模为 Agent 构建基础设施**: [阿里云开发者社区](https://developer.aliyun.com/article/1713567) - 2026年2月发布，API、数据、环境成为重心
 - **MetaAgent 论文 (arXiv 2508.00271)**: [Tool Meta-Learning 自演化智能体](https://blog.csdn.net/weixin_52341477/article/details/155109848)
 - **Foundation Agents 综述 (arXiv 2504.01990)**: [264页 Agent 综述](https://news.qq.com/rain/a/20250426A06QX000)
 - **Cornell AI Agent 论文**: [你真的了解AI Agent吗？](https://m.blog.csdn.net/m0_59163425/article/details/148409670)
@@ -979,6 +1071,13 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 
 - **Graph-based Agent Memory (arXiv 2602.05665v1)**: [图记忆分类与技术](https://arxiv.org/html/2602.05665v1)
 - **OpenSage (arXiv 2602.16891v1)**: [自编程 Agent 生成引擎](https://arxiv.org/html/2602.16891v1)
+- **MAGMA (arXiv 2601.03236)**: [多图 Agent 记忆架构](https://arxiv.org/abs/2601.03236)
+- **Memory in the Age of AI Agents (arXiv 2512.13564)**: [AI Agent 时代记忆综述](https://arxiv.org/abs/2512.13564)
+- **Fork, Explore, Commit (arXiv 2602.08199v1)**: [OS 原语用于 Agent 探索](https://arxiv.org/html/2602.08199v1)
+- **MIRIX (arXiv 2507.07957v1)**: [多 Agent 记忆系统](https://arxiv.org/html/2507.07957v1)
+- **Continuum Memory (arXiv 2601.09913v1)**: [长周期 Agent 记忆架构](https://arxiv.org/html/2601.09913v1)
+- **A-Mem (arXiv 2502.12110)**: [Agent 自主记忆](https://arxiv.org/abs/2502.12110)
+- **Graphs Meet AI Agents (arXiv 2506.18019v1)**: [图方法在 AI Agent 中的应用综述](https://arxiv.org/html/2506.18019v1)
 - **基于图的Agent记忆**: [CSDN](https://blog.csdn.net/shebao3333/article/details/158383142)
 - **AI Agent 记忆机制综述**: [CSDN](https://m.blog.csdn.net/m0_57545130/article/details/157386487)
 - **Mem0 实战**: [构建生产级 AI Agent 记忆](https://blog.csdn.net/sinat_15906013/article/details/156336689)
@@ -1017,6 +1116,8 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 - **2026-03-01**: 创建 todo5.md，基于全面分析
 - **2026-03-01**: 更新 - 添加 Claude Code Skills 集成分析、AGFS 竞品更新、"Context is File" 概念、AWCP 协议支持
 - **2026-03-01**: 更新 - 添加 Meta Tools 理念分析、2026 年最新论文参考、生产级记忆框架对比
+- **2026-03-01**: 更新 - 添加代码库深入分析、AgentFS 竞品、修正图系统状态、添加发现的问题清单
+- **2026-03-01**: 更新 - 修正 Mem0/Graphiti star 数量，添加 4 篇新论文 (MIRIX, Continuum Memory, A-Mem, Graphs Meet AI Agents)
 - 后续更新: 每个 Phase 完成时更新
 
 ---
