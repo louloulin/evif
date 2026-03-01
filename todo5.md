@@ -1,8 +1,21 @@
 # EVIF 后续开发计划 (todo5.md)
 
 **创建日期**: 2026-03-01
-**基于**: 全面代码分析、AGFS 竞品研究、AI Agent 时代趋势分析
+**更新日期**: 2026-03-01
+**基于**: 全面代码分析、AGFS 竞品研究、AI Agent 时代趋势分析、Claude Code Skills 研究
 **目标**: 将 EVIF 打造成 AI Agent 时代的统一文件系统抽象层
+
+---
+
+## ⚠️ 分析修正说明
+
+本次更新修正了之前分析中存在的主要问题:
+
+1. **Claude Code 集成方式错误** - 之前误以为 Claude Code 只使用 MCP，实际 Claude Code 使用 Skills 规范(轻量级提示词扩展) + CLI-offloaded MCP 模式
+2. **AGFS 竞品信息不准确** - 补充了 AGFS GitHub 仓库链接 (c4pt0r/agfs) 和作者信息 (PingCAP 黄东旭)
+3. **缺少 "Context is File" 概念** - 添加了 AI Agent 长期记忆新范式
+4. **缺少 AWCP 协议** - 添加了工作空间委托协议支持
+5. **技能系统分析不足** - 添加了 Skills vs MCP 的详细对比
 
 ---
 
@@ -13,7 +26,7 @@
 **EVIF (Everything Is a Virtual filesystem)** 是基于 Rust 实现的虚拟文件系统，遵循 Plan 9 "万物皆文件" 哲学。在 AI Agent 时代，EVIF 有机会成为：
 
 1. **AI Agent 的统一资源抽象层** - 通过文件系统接口统一访问数据库、API、云存储、向量数据库等
-2. **Claude Code 的深度集成组件** - 通过 MCP 协议提供文件系统后端和知识管理
+2. **Claude Code 的深度集成组件** - 通过 Skills 规范提供文件系统后端和知识管理
 3. **多 Agent 协作的工作空间** - 借鉴 AWCP 协议，实现文件级协作原语
 
 ### 当前状态 (2026-03-01)
@@ -27,6 +40,7 @@
 | **图系统** | 20% ❌ | 代码存在但未集成到 REST |
 | **AI 能力** | 10% ❌ | 缺少时序记忆、向量检索优化 |
 | **认证授权** | 0% ❌ | 未实现 |
+| **Claude Code Skills** | 0% ❌ | 未实现 (当前只有 MCP) |
 
 ### 与竞品对比
 
@@ -39,6 +53,7 @@
 | 动态插件 | ❌ | ✅ | **差距** |
 | 图查询 | ❌ | ✅ | **差距** |
 | AI 记忆 | ❌ | ❌ | 共同差距 |
+| Skills 集成 | ❌ | ❌ | 共同机会 |
 
 ---
 
@@ -268,6 +283,46 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 
 ### Phase 2: AI Agent 时代能力 (3-6 个月)
 
+#### 2.0 "Context is File" 核心范式 🟢 P2
+
+**目标**: 将 EVIF 打造成 AI Agent 的 "终极上下文" 存储层
+
+**核心理念**: 文件系统语义是 AI Agent 长期记忆的最佳交互层，即时上下文 (Just-in-Time Context) 控制 token 成本
+
+**工作项**:
+1. **记忆文件系统接口**
+   ```
+   /memory/
+   ├── episodes/      # 会话/事件记忆
+   ├── concepts/      # 概念/知识记忆
+   ├── entities/      # 实体记忆
+   └── context/       # 即时上下文
+   ```
+
+2. **自动记忆管理**
+   - 访问频率加权
+   - 重要性评分
+   - 自动归档/清理
+
+3. **上下文注入 API**
+   ```
+   POST /api/v1/context/inject
+   {
+     "query": "当前任务描述",
+     "max_tokens": 8000,
+     "strategy": "relevant" // relevant, recent, important
+   }
+   ```
+
+**验收标准**:
+- [ ] 记忆文件系统可用
+- [ ] 上下文注入减少 token 使用
+- [ ] 与 Claude Code Skills 集成
+
+**预计工期**: 2-3 周
+
+**依赖**: 1.1 图查询、2.1 时序知识图谱
+
 #### 2.1 时序知识图谱 🔴 P0
 
 **目标**: 为 AI Agent 提供时序感知的记忆系统
@@ -421,58 +476,87 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 
 ---
 
-#### 2.4 MCP 深度集成 🟡 P1
+#### 2.4 Claude Code Skills 深度集成 🟡 P1
 
-**目标**: 成为 Claude Code 的文件系统后端
+**目标**: 成为 Claude Code 的文件系统后端和知识管理核心
 
-**当前状态**: `evif-mcp` 基础实现
+**重要发现**: Claude Code 使用 Skills 而非纯 MCP - 这是两种不同的集成方式:
+- **Skills**: 轻量级、基于提示词的能力扩展，类似 npm 包
+- **MCP**: 工具调用协议，类似 USB-C 标准
+- Claude Code 采用 CLI-offloaded MCP 模式
+
+**当前状态**: `evif-mcp` 基础实现，Skills 未实现
 
 **工作项**:
-1. **扩展 MCP 工具集**
-   ```json
-   {
-     "tools": [
-       { "name": "read_file", "description": "读取文件" },
-       { "name": "write_file", "description": "写入文件" },
-       { "name": "query_graph", "description": "图查询" },
-       { "name": "vector_search", "description": "向量检索" },
-       { "name": "list_mounts", "description": "列出挂载点" },
-       { "name": "mount_plugin", "description": "挂载插件" }
-     ]
-   }
+1. **Skills 规范实现**
+   - 遵循 Agent Skills 规范 (https://agentskills.io/specification)
+   - 三层架构: 元数据层、指令层、资源层
+   - 支持目录结构和渐进式提示加载
+
+2. **EVIF Skills 包设计**
+   ```
+   evif-skills/
+   ├── skill.yaml          # 元数据
+   ├── prompts/
+   │   ├── read.md        # 读取文件指令
+   │   ├── write.md       # 写入文件指令
+   │   ├── query.md       # 图查询指令
+   │   └── memory.md      # 记忆管理指令
+   └── resources/
+       └── examples/      # 示例代码
    ```
 
-2. **知识管理集成**
+3. **MCP + Skills 双通道**
+   - MCP: 提供底层工具调用能力
+   - Skills: 提供业务工作流和最佳实践
+   - 两者协同工作
+
+4. **知识管理集成**
    - Claude Code 读写图节点
    - RAG 检索集成
    - 上下文注入
 
-3. **工具调用示例**
-   ```typescript
-   // Claude Code 使用 EVIF
-   const result = await mcp.callTool("query_graph", {
-     query: "MATCH (n:File)-[:TAGGED]->(t:Tag) WHERE t.name = 'important' RETURN n"
-   });
-   ```
-
-4. **工作空间协作**
-   - 多 Agent 共享 EVIF 实例
-   - 文件锁机制
-   - 变更通知
-
 **验收标准**:
-- [ ] 所有 MCP 工具可用
+- [ ] Skills 包符合规范
 - [ ] 与 Claude Code 实际集成测试
 - [ ] 性能满足交互需求（< 1s 响应）
 - [ ] 文档和示例完整
 
-**预计工期**: 2-3 周
+**预计工期**: 3-4 周
 
 **依赖**: 1.1 图查询、2.2 向量检索
 
 ---
 
 ### Phase 3: 企业级特性 (6-12 个月)
+
+#### 3.0 AWCP 协议支持 🟢 P2
+
+**目标**: 支持多 Agent 协作的工作空间委托协议
+
+**参考**: [AWCP: A Workspace Delegation Protocol](https://arxiv.org/html/2602.20493v1)
+
+**工作项**:
+1. **AWCP 控制平面**
+   - 工作空间委托机制
+   - 文件级协作原语
+
+2. **多 Agent 协作**
+   - 文件锁机制
+   - 变更通知 (WebSocket)
+   - 冲突解决策略
+
+3. **协议适配器**
+   - 支持 MCP、A2A、ANP、HTTP
+
+**验收标准**:
+- [ ] AWCP 协议兼容
+- [ ] 多 Agent 协作示例
+- [ ] 文档完整
+
+**预计工期**: 3-4 周
+
+**依赖**: 2.1 时序知识图谱
 
 #### 3.1 认证与授权 🔴 P0
 
@@ -717,22 +801,33 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 
 ### 竞品分析
 
-- **AGFS**: [AGFS：致敬 Plan 9 "万物皆文件"理念的 Agent 文件系统](https://m.php.cn/faq/1790204.html)
+- **AGFS**: [GitHub - c4pt0r/agfs](https://github.com/c4pt0r/agfs) - PingCAP 联合创始人黄东旭创建
+- **AGFS 文章**: [AGFS：致敬 Plan 9 "万物皆文件"理念的 Agent 文件系统](https://m.php.cn/faq/1790204.html)
 - **Mem0**: [GitHub](https://github.com/mem0ai/mem0) - 25k+ stars
 - **Graphiti**: [Zep Graphiti](https://github.com/getzep/graphiti) - 3k+ stars
 - **Cognee**: [GitHub](https://github.com/cognonymousai/cognee) - 2k+ stars
+
+### Claude Code Skills
+
+- **Skills 规范**: [agentskills.io/specification](https://agentskills.io/specification)
+- **Skills vs MCP**: [Agent Skills 技术解析](https://blog.csdn.net/2401_84494441/article/details/157431905)
+- **CLI-offloaded MCP**: [LinkedIn Article](https://www.linkedin.com/pulse/cli-offloaded-mcp-context-engineering-hack-anthropic-guy-vago--vix1f)
+- **Planning with Files Skill**: [GitHub](https://github.com/anthropics/planning-with-files) - 12k+ stars, Manus 方法论
+
+### "Context is File" 概念
+
+- **文件系统才是 AI Agent 的长期记忆**: [稀土掘金](https://juejin.cn/post/7610580125619142682)
+- **Manus 团队方案**: [火山引擎](https://developer.volcengine.com/articles/7586969696470040619)
+- **AI 记忆系统大横评**: [今日头条](https://m.tou.tiao.com/a7578134834892030527/)
+- **Agent Memory Paper List**: [GitHub](https://github.com/Shichun-Liu/Agent-Memory-Paper-List)
 
 ### 技术参考
 
 - **Plan 9**: [Plan 9 from Bell Labs](https://9p.io/plan9/)
 - **9P 协议**: [9P2000](https://9p.io/magic/man2html/5/intro)
-- **AWCP**: [AWCP: A Workspace Delegation Protocol](https://arxiv.org/abs/2502.16413) (2026-02-25)
-
-### 设计模式
-
-- **ECL Pipeline**: Cognee 的 Extract-Cognify-Load 管道
-- **双时间线**: Graphiti 的 EventTimeline + SemanticTimeline
-- **双层缓存**: AGFS 的 dirCache + statCache
+- **AWCP 协议**: [arXiv: A Workspace Delegation Protocol](https://arxiv.org/html/2602.20493v1) (2026-02-25)
+- **A2A 协议**: Google Agent-to-Agent 协议 (2025-04)
+- **ACP 协议**: Agent Client Protocol (Apache)
 
 ---
 
@@ -741,8 +836,10 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 ### A. 术语表
 
 - **EVIF**: Everything Is a Virtual filesystem
-- **AGFS**: Abstract Graph File System / Agent File System
-- **MCP**: Model Context Protocol
+- **AGFS**: Abstract Graph File System / Agent File System (c4pt0r/agfs)
+- **MCP**: Model Context Protocol - 工具调用协议
+- **Skills**: Agent Skills - 轻量级提示词扩展规范
+- **AWCP**: Agent Workspace Collaboration Protocol - 工作空间委托协议
 - **RAG**: Retrieval-Augmented Generation
 - **VFS**: Virtual File System
 - **FUSE**: Filesystem in Userspace
@@ -756,6 +853,7 @@ mount_table.mount("/local".to_string(), localfs_plugin).await?;
 ### C. 更新日志
 
 - **2026-03-01**: 创建 todo5.md，基于全面分析
+- **2026-03-01**: 更新 - 添加 Claude Code Skills 集成分析、AGFS 竞品更新、"Context is File" 概念、AWCP 协议支持
 - 后续更新: 每个 Phase 完成时更新
 
 ---
