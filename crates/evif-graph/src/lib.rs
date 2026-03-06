@@ -12,6 +12,7 @@ pub mod graph;
 pub mod index;
 pub mod query;
 pub mod executor;
+pub mod temporal;
 
 // 重新导出主要类型
 pub use error::{GraphError, Result};
@@ -21,3 +22,4 @@ pub use graph::{Graph, GraphEngine, GraphConfig};
 pub use index::{GraphIndex, MemoryIndex, IndexedGraph};
 pub use query::{GraphQuery, QueryBuilder, QueryResult};
 pub use executor::{QueryExecutor, PathFinder, GraphAnalyzer};
+pub use temporal::{TemporalGraph, TemporalQueryResult, TemporalPath, TimelineEvent};

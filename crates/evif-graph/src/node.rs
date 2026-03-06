@@ -24,6 +24,21 @@ pub enum NodeType {
     Process,
     /// 网络连接
     Network,
+    // ===== 记忆平台节点类型 =====
+    /// 记忆项 - 从资源中提取的结构化记忆
+    MemoryItem,
+    /// 记忆类别 - 自动组织的主题分类
+    Category,
+    /// 资源 - 原始对话、文档、图像等
+    Resource,
+    /// 事件 - 重要事件和经历
+    Event,
+    /// 用户画像 - 用户基本信息和偏好
+    Profile,
+    /// 技能 - 技能和能力
+    Skill,
+    /// 工具 - 工具使用经验
+    Tool,
     /// 自定义类型
     Custom(String),
 }
@@ -37,6 +52,20 @@ impl NodeType {
         matches!(self, NodeType::Directory)
     }
 
+    /// 检查是否为记忆相关节点类型
+    pub fn is_memory_related(&self) -> bool {
+        matches!(
+            self,
+            NodeType::MemoryItem
+                | NodeType::Category
+                | NodeType::Resource
+                | NodeType::Event
+                | NodeType::Profile
+                | NodeType::Skill
+                | NodeType::Tool
+        )
+    }
+
     pub fn as_str(&self) -> &str {
         match self {
             NodeType::File => "file",
@@ -45,6 +74,14 @@ impl NodeType {
             NodeType::Device => "device",
             NodeType::Process => "process",
             NodeType::Network => "network",
+            // 记忆平台节点类型
+            NodeType::MemoryItem => "memory_item",
+            NodeType::Category => "category",
+            NodeType::Resource => "resource",
+            NodeType::Event => "event",
+            NodeType::Profile => "profile",
+            NodeType::Skill => "skill",
+            NodeType::Tool => "tool",
             NodeType::Custom(s) => s.as_str(),
         }
     }

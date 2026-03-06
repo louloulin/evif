@@ -223,6 +223,16 @@ impl Graph {
     pub fn all_edges(&self) -> Vec<Edge> {
         self.edges.iter().map(|entry| entry.clone()).collect()
     }
+
+    /// 检查节点是否存在
+    pub fn contains_node(&self, id: &NodeId) -> bool {
+        self.nodes.contains_key(id)
+    }
+
+    /// 获取所有节点（用于时序查询）
+    pub fn get_all_nodes(&self) -> Vec<Node> {
+        self.nodes.iter().map(|entry| entry.clone()).collect()
+    }
 }
 
 impl Default for Graph {

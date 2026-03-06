@@ -20,6 +20,24 @@ pub enum EdgeType {
     Dependency,
     /// 符号链接
     Symlink,
+    // ===== 时序关系 =====
+    /// 之前（时序）- 源节点发生在目标节点之前
+    Before,
+    /// 之后（时序）- 源节点发生在目标节点之后
+    After,
+    /// 同时（时序）- 源节点与目标节点同时发生
+    Simultaneous,
+    /// 导致（因果）- 源节点导致目标节点
+    Causes,
+    // ===== 记忆关系 =====
+    /// 属于 - 记忆项属于某个类别
+    BelongsTo,
+    /// 派生自 - 记忆项派生自某个资源
+    DerivedFrom,
+    /// 引用 - 记忆项交叉引用
+    References,
+    /// 相似 - 记忆项相似
+    SimilarTo,
     /// 自定义类型
     Custom(String),
 }
@@ -31,8 +49,37 @@ impl EdgeType {
             EdgeType::Reference => "reference",
             EdgeType::Dependency => "dependency",
             EdgeType::Symlink => "symlink",
+            // 时序关系
+            EdgeType::Before => "before",
+            EdgeType::After => "after",
+            EdgeType::Simultaneous => "simultaneous",
+            EdgeType::Causes => "causes",
+            // 记忆关系
+            EdgeType::BelongsTo => "belongs_to",
+            EdgeType::DerivedFrom => "derived_from",
+            EdgeType::References => "references",
+            EdgeType::SimilarTo => "similar_to",
             EdgeType::Custom(s) => s.as_str(),
         }
+    }
+
+    /// 检查是否为时序边类型
+    pub fn is_temporal(&self) -> bool {
+        matches!(
+            self,
+            EdgeType::Before | EdgeType::After | EdgeType::Simultaneous | EdgeType::Causes
+        )
+    }
+
+    /// 检查是否为记忆相关边类型
+    pub fn is_memory_related(&self) -> bool {
+        matches!(
+            self,
+            EdgeType::BelongsTo
+                | EdgeType::DerivedFrom
+                | EdgeType::References
+                | EdgeType::SimilarTo
+        )
     }
 }
 
