@@ -28,6 +28,47 @@
 | 性能 | 中等 | 高（Rust + 异步） |
 | 主动记忆 | 支持 | 支持（计划中） |
 
+### 1.4 核心设计决策：MD 文件格式
+
+**关键洞察：Mem 平台使用 Markdown (MD) 作为核心存储格式，而非 JSON**
+
+| 特性 | JSON 格式 (memU) | MD 格式 (Mem) |
+|------|-----------------|---------------|
+| 可读性 | 机器友好 | 人类+AI 友好 |
+| 版本控制 | 二进制/复杂 | Git 天然支持 |
+| AI 理解 | 需要解析 | 直接理解 |
+| 编辑便利 | 需要工具 | 任意编辑器 |
+| 符号链接 | 需数据库关联 | 文件系统原生 |
+| 检索方式 | 数据库查询 | 路径+内容检索 |
+
+**为什么选择 MD 格式：**
+
+1. **AI 原生格式**：Claude、GPT 等 AI 模型可以直接理解和编辑 MD 格式
+2. **版本控制友好**：MD 是纯文本，Git diff 清晰可见
+3. **Plan 9 哲学**：EVIF 遵循"一切皆文件"，MD 是文件的最佳格式
+4. **可组合性**：MD 支持 include、锚点等高级特性
+5. **FUSE 友好**：通过文件系统直接访问 MD 文件
+
+**MD 文件结构设计：**
+
+```markdown
+---
+id: mem_001
+type: profile
+created: 2026-03-07T10:30:00Z
+tags: [preference, coffee]
+---
+
+# 用户偏好：咖啡
+
+我喜欢喝手冲咖啡，尤其喜欢耶加雪菲。
+
+## 相关记忆
+- [咖啡冲泡技巧](./skills/coffee_brewing.md)
+```
+
+**前端元数据（YAML Frontmatter）+ 后端内容（MD）= 最佳平衡**
+
 ---
 
 ## 二、架构分析
@@ -285,10 +326,133 @@ impl VectorFsPlugin {
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  存储层                                                                      │
 │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐       │
-│  │Memory  │ │ RocksDB│ │  Sled  │ │   S3   │ │ Vector │ │ SQLite │       │
-│  │(缓存)  │ │(持久化)│ │(快速)  │ │(云端)  │ │(向量)  │ │(轻量)  │       │
+│  │Memory  │ │ RocksDB│ │  Sled  │ │   S3   │ │ Vector │ │  MD FS │       │
+│  │(缓存)  │ │(持久化)│ │(快速)  │ │(云端)  │ │(向量)  │ │(MD文件)│       │
 │  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘       │
 └─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.1.1 MD 文件存储后端（核心特性）
+
+**MD 文件存储是 Mem 平台与 memU 的核心差异：**
+
+```rust
+// crates/evif-mem/src/storage/md_backend.rs
+
+use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+
+/// MD 文件格式的记忆项
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MdMemoryItem {
+    /// YAML Frontmatter 元数据
+    pub frontmatter: MdFrontmatter,
+    /// MD 正文内容
+    pub content: String,
+}
+
+/// YAML Frontmatter - 机器可读元数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MdFrontmatter {
+    pub id: String,
+    pub memory_type: MemoryType,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub happened_at: Option<DateTime<Utc>>,
+    pub tags: Vec<String>,
+    pub embedding_id: Option<String>,      // 向量索引引用
+    pub category_id: Option<String>,       // 类别引用
+    pub content_hash: Option<String>,      // 去重哈希
+    pub reinforcement_count: u32,           // 强化次数
+    pub references: Vec<String>,            // 交叉引用 [ref:xxx]
+}
+
+/// MD 文件目录结构
+/// /mem/{user_id}/
+/// ├── resources/
+│   │   └── {resource_id}.md
+│   ├── items/
+│   │   ├── profile/
+│   │   │   └── {item_id}.md
+│   │   ├── event/
+│   │   │   └── {item_id}.md
+│   │   ├── knowledge/
+│   │   │   └── {item_id}.md
+│   │   ├── behavior/
+│   │   │   └── {item_id}.md
+│   │   ├── skill/
+│   │   │   └── {item_id}.md
+│   │   └── tool/
+│   │       └── {item_id}.md
+│   ├── categories/
+│   │   └── {category_name}/
+│   │       ├── summary.md
+│   │       └── _index.md
+│   └── graph/
+│       └── edges/
+│           └── {edge_id}.md
+
+impl MdStorageBackend {
+    /// 读取 MD 文件
+    pub async fn read_item(&self, path: &Path) -> Result<MdMemoryItem> {
+        let content = tokio::fs::read_to_string(path).await?;
+
+        // 解析 Frontmatter
+        let (fm_str, body) = content.split_once("\n---\n")
+            .ok_or_else(|| Error::InvalidFormat)?;
+
+        let frontmatter: MdFrontmatter = serde_yaml::from_str(fm_str)?;
+
+        Ok(MdMemoryItem {
+            frontmatter,
+            content: body.to_string(),
+        })
+    }
+
+    /// 写入 MD 文件
+    pub async fn write_item(&self, path: &Path, item: &MdMemoryItem) -> Result<()> {
+        let fm_yaml = serde_yaml::to_string(&item.frontmatter)?;
+        let content = format!("---\n{}---\n{}", fm_yaml, item.content);
+        tokio::fs::write(path, content).await?;
+        Ok(())
+    }
+
+    /// 符号链接（交叉引用）
+    pub async fn create_reference(&self, from: &Path, to: &Path) -> Result<()> {
+        // 使用文件系统符号链接
+        tokio::fs::symlink(to, from).await
+    }
+}
+```
+
+**MD 文件示例：**
+
+```markdown
+---
+id: mem_profile_001
+type: profile
+created: 2026-03-07T10:30:00Z
+updated: 2026-03-07T10:30:00Z
+tags: [preference, coffee, drink]
+embedding_id: emb_001
+category_id: cat_preferences
+content_hash: a1b2c3d4
+reinforcement_count: 3
+references: [mem_skill_001, mem_knowledge_001]
+---
+
+# 用户偏好：咖啡
+
+我喜欢喝手冲咖啡，尤其喜欢耶加雪菲。口感清新，带有柑橘和花香。
+
+## 细节
+- 喜欢的冲泡方式：手冲
+- 喜欢的烘焙度：浅烘
+- 喜欢的产区：埃塞俄比亚
+
+## 相关记忆
+- 技能: [咖啡冲泡技巧](../skills/coffee_brewing.md)
+- 知识: [咖啡豆产地](../knowledge/coffee_origins.md)
 ```
 
 ### 3.2 MemPlugin 核心实现
@@ -1629,31 +1793,454 @@ impl PromptManager {
 
 ---
 
-## 十、下一步行动
+## 十、memU 深度分析补充
 
-1. **立即开始**：创建 `crates/evif-mem` 目录结构
-2. **第一周**：实现基础 MemPlugin 和数据模型
-3. **第二周**：集成嵌入管理和 LLM 客户端
-4. **第三周**：实现 Memorize Pipeline
-5. **第四周**：实现 Retrieve Pipeline
-6. **持续**：添加测试和文档
+基于对 memU 源代码的深度分析，以下是 memU 的核心设计模式和值得借鉴的特性：
+
+### 10.1 Workflow 架构 (`memu/workflow/`)
+
+memU 使用 WorkflowStep 构建处理管道，每个步骤明确声明其依赖和产出：
+
+```python
+# 步骤定义
+WorkflowStep(
+    step_id="extract_items",
+    role="extract",
+    handler=self._memorize_extract_items,
+    requires={"preprocessed_resources", "memory_types", "categories_prompt_str"},
+    produces={"resource_plans"},
+    capabilities={"llm"},
+    config={"chat_llm_profile": self.memorize_config.memory_extract_llm_profile},
+)
+```
+
+**关键特性：**
+- **声明式依赖**：明确声明 `requires`（输入）和 `produces`（输出）
+- **能力标记**：`capabilities` 指定需要的资源（llm, vector, db, io）
+- **配置传递**：通过 `config` 传递步骤特定配置
+- **多后端支持**：不同步骤可以使用不同的 LLM profile
+
+### 10.2 用户作用域模型 (`memu/database/models.py`)
+
+memU 使用 Pydantic 实现用户级别的数据隔离：
+
+```python
+# 构建作用域模型
+def merge_scope_model[TBaseRecord: BaseRecord](
+    user_model: type[BaseModel],
+    core_model: type[TBaseRecord],
+    *,
+    name_suffix: str
+) -> type[TBaseRecord]:
+    """创建继承用户作用域模型和核心模型的 scoped model"""
+    return type(
+        f"{user_model.__name__}{core_model.__name__}{name_suffix}",
+        (user_model, core_model),
+        {"model_config": ConfigDict(extra="allow")},
+    )
+```
+
+**优势：**
+- 类型安全：编译时检查用户字段
+- 灵活扩展：通过 `extra="allow"` 支持动态字段
+- 透明隔离：用户数据作为模型混入
+
+### 10.3 记忆强化机制
+
+memU 实现了记忆强化（Reinforcement）机制，基于内容哈希检测重复：
+
+```python
+def compute_content_hash(summary: str, memory_type: str) -> str:
+    """生成唯一哈希用于记忆去重"""
+    normalized = " ".join(summary.lower().split())  # 规范化空白
+    content = f"{memory_type}:{normalized}"
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+# 在 MemoryItem.extra 中存储
+# - content_hash: 内容哈希
+# - reinforcement_count: 强化次数
+# - last_reinforced_at: 上次强化时间
+```
+
+### 10.4 交叉引用系统
+
+memU 支持记忆项之间的交叉引用：
+
+```python
+# 类别摘要中的引用格式
+"[ref:abc123] 用户喜欢使用 Rust 编程"
+
+# 解析和持久化
+def _build_item_ref_id(item_id: str) -> str:
+    return item_id.replace("-", "")[:6]  # 生成短 ID
+
+# 在 persist_item_references 中更新 extra
+store.memory_item_repo.update_item(
+    item_id=matched_item_id,
+    extra={"ref_id": short_id},
+)
+```
+
+### 10.5 工具记忆 (`memu/database/models.py`)
+
+memU 专门设计了 ToolCallResult 用于记录工具调用：
+
+```python
+class ToolCallResult(BaseModel):
+    tool_name: str                    # 工具名称
+    input: dict[str, Any] | str      # 输入参数
+    output: str                      # 输出结果
+    success: bool                    # 是否成功
+    time_cost: float                 # 耗时
+    token_cost: int                  # token 消耗
+    score: float                     # 质量分数
+    call_hash: str                   # 调用哈希（去重）
+
+    def generate_hash(self) -> str:
+        """生成 MD5 哈希用于去重"""
+        combined = f"{self.tool_name}|{input_str}|{self.output}"
+        return hashlib.md5(combined.encode()).hexdigest()
+```
+
+### 10.6 检索决策 (`memu/app/retrieve.py`)
+
+memU 在检索前进行意图路由和充足性检查：
+
+```python
+# 预检索决策
+WorkflowStep(
+    step_id="route_intention",
+    role="route_intention",
+    handler=self._rag_route_intention,
+    requires={"route_intention", "original_query"},
+    produces={"needs_retrieval", "rewritten_query"},
+    capabilities={"llm"},
+)
+
+# 每个阶段后的充足性检查
+WorkflowStep(
+    step_id="sufficiency_after_category",
+    role="sufficiency_check",
+    handler=self._rag_category_sufficiency,
+    requires={"category_hits", "active_query"},
+    produces={"next_step_query", "proceed_to_items"},
+    capabilities={"llm"},
+)
+```
+
+### 10.7 多模态预处理管道
+
+memU 对不同模态有专门的处理流程：
+
+| 模态 | 预处理步骤 | 特殊处理 |
+|------|-----------|---------|
+| conversation | 分段 + 摘要 | 提取主题片段，生成摘要 |
+| document | 压缩 + 摘要 | 提取关键信息 |
+| image | Vision API | 生成描述和标题 |
+| video | 帧提取 + Vision | 提取中间帧分析 |
+| audio | 转录 (STT) | 语音转文字 |
+
+### 10.8 存储后端架构
+
+memU 支持三种存储后端：
+
+```
+┌─────────────────────────────────────────┐
+│           Database Interface             │
+├─────────────────────────────────────────┤
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ InMemory │ │  SQLite  │ │PostgreSQL│ │
+│  │ (开发/测)│ │ (轻量级) │ │ (生产级) │ │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ │
+│       └────────────┴────────────┘        │
+│                │                         │
+│         Vector Index (内存/DB)           │
+└─────────────────────────────────────────┘
+```
+
+### 10.9 Prompt 模板系统
+
+memU 使用 Jinja2 风格的模板系统，支持自定义：
+
+```python
+# 模板变量替换
+templates.insert("profile_extract", PROFILE_EXTRACT_PROMPT)
+templates.insert("event_extract", EVENT_EXTRACT_PROMPT)
+
+# 自定义 prompt 支持
+def _resolve_custom_prompt(prompt: str | CustomPrompt, templates: Mapping[str, str]) -> str:
+    if isinstance(prompt, str):
+        return prompt
+    # 合并自定义模板块
+    valid_blocks = [
+        (block.ordinal, name, block.prompt or templates.get(name))
+        for name, block in prompt.items()
+    ]
+```
 
 ---
 
-## 十一、参考资源
+## 十一、EVIF 集成设计增强
 
-### 11.1 memU 资源
+基于对 memU 的深度分析，以下是针对 EVIF 的增强设计：
+
+### 11.1 路径设计（保持 MD 格式）
+
+```
+/mem/                           # 记忆根目录
+├── {user_id}/                  # 用户作用域
+│   ├── _meta/                  # 用户元数据
+│   │   └── profile.json        # 用户配置
+│   ├── resources/              # 原始资源
+│   ├── items/                  # 记忆项
+│   │   ├── by-type/           # 按类型索引
+│   │   └── by-date/           # 按时间索引
+│   ├── categories/             # 类别（自动 + 手动）
+│   ├── graph/                  # 图数据
+│   ├── _tools/                 # 工具调用记录
+│   │   └── {tool_name}/
+│   │       └── calls.jsonl     # 工具调用日志
+│   ├── _cache/                 # 缓存层
+│   │   ├── embeddings/         # 嵌入缓存
+│   │   └── llm/               # LLM 响应缓存
+│   ├── .search                 # 检索入口（虚拟文件）
+│   ├── .memorize               # 记忆化入口（虚拟文件）
+│   └── .config                 # 用户配置（虚拟文件）
+├── _system/                    # 系统目录
+│   ├── config.json
+│   └── stats.json
+└── README.md                   # 帮助文档
+```
+
+### 11.2 数据模型增强
+
+```rust
+// 增强的记忆项模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryItem {
+    pub id: String,
+    pub resource_id: Option<String>,
+    pub memory_type: MemoryType,
+    pub summary: String,
+    pub embedding: Option<Vec<f32>>,
+    pub happened_at: Option<DateTime<Utc>>,
+    pub extra: HashMap<String, Value>,  // 扩展字段
+    // 记忆强化
+    pub content_hash: Option<String>,
+    pub reinforcement_count: u32,
+    pub last_reinforced_at: Option<DateTime<Utc>>,
+    // 交叉引用
+    pub ref_id: Option<String>,  // 短引用 ID
+    // 工具记忆（新增）
+    pub tool_calls: Vec<ToolCall>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// 工具调用记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub tool_name: String,
+    pub input: HashMap<String, Value>,
+    pub output: String,
+    pub success: bool,
+    pub time_cost_ms: u64,
+    pub token_cost: Option<u32>,
+    pub score: Option<f32>,
+    pub call_hash: String,
+    pub called_at: DateTime<Utc>,
+}
+```
+
+### 11.3 Workflow 引擎设计
+
+```rust
+// 基于 memU 的 WorkflowStep 设计
+pub struct WorkflowStep {
+    pub step_id: String,
+    pub role: StepRole,           // ingest, preprocess, extract, dedupe, categorize, persist, emit
+    pub requires: HashSet<String>, // 输入依赖
+    pub produces: HashSet<String>, // 输出产物
+    pub capabilities: HashSet<Capability>, // llm, vector, db, io
+    pub config: HashMap<String, Value>,    // 步骤配置
+}
+
+// 记忆化工作流
+pub fn build_memorize_workflow() -> Vec<WorkflowStep> {
+    vec![
+        WorkflowStep {
+            step_id: "ingest_resource".into(),
+            role: StepRole::Ingest,
+            requires: ["resource_url", "modality"].into(),
+            produces: ["local_path", "raw_text"].into(),
+            capabilities: [Capability::Io].into(),
+            config: [].into(),
+        },
+        WorkflowStep {
+            step_id: "preprocess_multimodal".into(),
+            role: StepRole::Preprocess,
+            requires: ["local_path", "modality", "raw_text"].into(),
+            produces: ["preprocessed_resources"].into(),
+            capabilities: [Capability::Llm].into(),
+            config: [("llm_profile", "preprocess")].into(),
+        },
+        // ... 更多步骤
+    ]
+}
+```
+
+### 11.4 双层缓存系统
+
+```rust
+// L1: 内存缓存（LRU）
+pub struct L1Cache {
+    embedding_cache: LruCache<String, Vec<f32>>,
+    llm_response_cache: LruCache<String, CachedResponse>,
+}
+
+// L2: 持久化缓存（RocksDB/SQLite）
+pub struct L2Cache {
+    embedding_db: RocksDB,    // 嵌入向量持久化
+    llm_cache_db: RocksDB,   // LLM 响应持久化
+}
+
+// 缓存策略
+pub enum CacheStrategy {
+    L1Only,           // 仅内存
+    L1L2,             // 内存 + 持久化
+    L2Only,           // 仅持久化
+    Bypass,           // 跳过缓存
+}
+```
+
+### 11.5 配置化挂载系统
+
+支持通过配置文件定义记忆插件的挂载点和行为：
+
+```yaml
+# evif-mem.yaml
+mounts:
+  - path: /mem
+    plugin: mem
+    config:
+      # 嵌入配置
+      embedding:
+        provider: openai
+        model: text-embedding-3-small
+        dimension: 1536
+        cache_size: 10000
+
+      # LLM 配置
+      llm:
+        provider: openai
+        default_model: gpt-4o-mini
+        profiles:
+          preprocess: gpt-4o-mini
+          extract: gpt-4o
+          category: gpt-4o-mini
+
+      # 存储配置
+      storage:
+        backend: sqlite
+        path: ~/.evif/mem.db
+        vector_backend: sqlite-vec
+
+      # 记忆配置
+      memory:
+        types:
+          - profile
+          - event
+          - knowledge
+          - behavior
+          - skill
+          - tool
+        reinforcement:
+          enabled: true
+          max_count: 10
+        dedupe:
+          enabled: true
+          hash_algorithm: sha256
+
+      # 检索配置
+      retrieve:
+        method: rag  # rag | llm | hybrid
+        sufficiency_check: true
+        route_intention: true
+        default_limit: 10
+
+      # 工具记忆配置
+      tool_memory:
+        enabled: true
+        max_calls_per_tool: 1000
+        score_threshold: 0.5
+```
+
+---
+
+## 十二、下一步行动
+
+### 12.1 立即行动
+
+1. **创建 evif-mem crate**：
+   ```bash
+   mkdir -p crates/evif-mem/src
+   touch crates/evif-mem/Cargo.toml
+   touch crates/evif-mem/src/lib.rs
+   ```
+
+2. **定义核心数据结构**：
+   - 实现基础数据模型（Resource, MemoryItem, MemoryCategory）
+   - 添加增强字段（reinforcement, tool_calls, ref_id）
+
+3. **实现 Workflow 引擎**：
+   - 定义 WorkflowStep 结构
+   - 实现工作流执行器
+
+### 12.2 实现里程碑
+
+| 阶段 | 任务 | 预计时间 |
+|------|------|---------|
+| Phase 1 | 基础框架 + 数据模型 | 1 周 |
+| Phase 2 | Embedding + LLM 客户端 | 1 周 |
+| Phase 3 | 记忆化管道（7步） | 2 周 |
+| Phase 4 | 检索管道（RAG/LLM） | 2 周 |
+| Phase 5 | 存储后端 + 缓存 | 1 周 |
+| Phase 6 | REST/CLI/FUSE 集成 | 1 周 |
+| Phase 7 | 工具记忆 + 主动记忆 | 2 周 |
+
+### 12.3 优先级排序
+
+1. **P0（必须）**：
+   - 基础 EvifPlugin 实现
+   - 记忆化管道
+   - RAG 检索
+
+2. **P1（重要）**：
+   - LLM 检索
+   - 存储后端
+   - 缓存系统
+
+3. **P2（增强）**：
+   - 工具记忆
+   - 主动记忆
+   - MCP 集成
+
+---
+
+## 十三、参考资源
+
+### 13.1 memU 资源
 - GitHub: https://github.com/NevaMind-AI/memU
 - 文档: https://memu.pro/docs
 - API: https://api.memu.so
 
-### 11.2 EVIF 资源
+### 13.2 EVIF 资源
 - 本地路径: `/Users/louloulin/Documents/linchong/claude/evif`
 - README: `evif/README-CN.md`
 - 插件示例: `evif/crates/evif-plugins/src/`
 - 图引擎: `evif/crates/evif-graph/`
 
-### 11.3 相关技术
+### 13.3 相关技术
 - OpenAI API: https://platform.openai.com/docs
 - pgvector: https://github.com/pgvector/pgvector
 - sqlite-vec: https://github.com/asg017/sqlite-vec
@@ -1661,7 +2248,7 @@ impl PromptManager {
 
 ---
 
-*文档版本: 2.0*
+*文档版本: 3.0*
 *创建日期: 2026-03-06*
-*更新日期: 2026-03-06*
+*更新日期: 2026-03-07*
 *作者: Claude (基于 memU 和 EVIF 深度分析)*
