@@ -527,3 +527,209 @@ impl EmbeddingManager {
         &self.config
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// Mock embedding client for testing
+    struct MockEmbeddingClient {
+        dimension: usize,
+        call_count: std::sync::atomic::AtomicUsize,
+    }
+
+    impl MockEmbeddingClient {
+        fn new(dimension: usize) -> Self {
+            Self {
+                dimension,
+                call_count: std::sync::atomic::AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl EmbeddingClient for MockEmbeddingClient {
+        async fn embed(&self, texts: &[String]) -> MemResult<Vec<Vec<f32>>> {
+            self.call_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(texts
+                .iter()
+                .map(|_text| vec![0.1; self.dimension])
+                .collect())
+        }
+
+        fn dimension(&self) -> usize {
+            self.dimension
+        }
+    }
+
+    #[tokio::test]
+    async fn test_l1_cache_only() -> MemResult<()> {
+        let client = Arc::new(MockEmbeddingClient::new(128));
+        let config = CacheConfig {
+            l1_size: 10,
+            l2_dir: None,
+            l2_max_entries: 100,
+            strategy: CacheStrategy::L1Only,
+        };
+
+        let manager = EmbeddingManager::new(client.clone(), config)?;
+
+        // First call - should hit API
+        let emb1 = manager.embed("test text").await?;
+        assert_eq!(emb1.len(), 128);
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // Second call - should hit L1 cache
+        let emb2 = manager.embed("test text").await?;
+        assert_eq!(emb2.len(), 128);
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1); // Still 1
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_l1_l2_cache() -> MemResult<()> {
+        let temp_dir = TempDir::new()?;
+        let client = Arc::new(MockEmbeddingClient::new(128));
+        let config = CacheConfig {
+            l1_size: 5,
+            l2_dir: Some(temp_dir.path().to_path_buf()),
+            l2_max_entries: 100,
+            strategy: CacheStrategy::L1L2,
+        };
+
+        let manager = EmbeddingManager::new(client.clone(), config)?;
+
+        // First call - should hit API
+        let _emb1 = manager.embed("cache test").await?;
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // Second call - should hit L1 cache (in same manager)
+        let _emb2 = manager.embed("cache test").await?;
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // Verify L2 has the entry
+        let stats = manager.get_stats().await;
+        assert!(stats.total_entries >= 1, "L2 should have at least 1 entry");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_bypass_cache() -> MemResult<()> {
+        let client = Arc::new(MockEmbeddingClient::new(128));
+        let config = CacheConfig {
+            l1_size: 10,
+            l2_dir: None,
+            l2_max_entries: 100,
+            strategy: CacheStrategy::Bypass,
+        };
+
+        let manager = EmbeddingManager::new(client.clone(), config)?;
+
+        // All calls should hit API
+        let _ = manager.embed("test 1").await?;
+        let _ = manager.embed("test 2").await?;
+        let _ = manager.embed("test 3").await?;
+
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 3);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_batch_embed() -> MemResult<()> {
+        let client = Arc::new(MockEmbeddingClient::new(128));
+        let config = CacheConfig {
+            l1_size: 10,
+            l2_dir: None,
+            l2_max_entries: 100,
+            strategy: CacheStrategy::L1Only,
+        };
+
+        let manager = EmbeddingManager::new(client.clone(), config)?;
+
+        let texts = vec![
+            "text 1".to_string(),
+            "text 2".to_string(),
+            "text 3".to_string(),
+        ];
+
+        // First batch - all API calls
+        let results = manager.embed_batch(&texts).await?;
+        assert_eq!(results.len(), 3);
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1); // 1 batch call
+
+        // Second batch - all from cache
+        let results2 = manager.embed_batch(&texts).await?;
+        assert_eq!(results2.len(), 3);
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1); // Still 1
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cache_stats() -> MemResult<()> {
+        let temp_dir = TempDir::new()?;
+        let client = Arc::new(MockEmbeddingClient::new(128));
+        let config = CacheConfig {
+            l1_size: 5,
+            l2_dir: Some(temp_dir.path().to_path_buf()),
+            l2_max_entries: 100,
+            strategy: CacheStrategy::L1L2,
+        };
+
+        let manager = EmbeddingManager::new(client, config)?;
+
+        let _ = manager.embed("test text").await?;
+        let _ = manager.embed("test text").await?; // Cache hit
+
+        let stats = manager.get_stats().await;
+        assert!(stats.total_entries >= 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_clear_cache() -> MemResult<()> {
+        let temp_dir = TempDir::new()?;
+        let client = Arc::new(MockEmbeddingClient::new(128));
+        let config = CacheConfig {
+            l1_size: 5,
+            l2_dir: Some(temp_dir.path().to_path_buf()),
+            l2_max_entries: 100,
+            strategy: CacheStrategy::L1L2,
+        };
+
+        let manager = EmbeddingManager::new(client.clone(), config)?;
+
+        let _ = manager.embed("test text").await?;
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // Clear cache
+        manager.clear_cache().await?;
+
+        // Next call should hit API again
+        let _ = manager.embed("test text").await?;
+        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_hash_computation() {
+        let text1 = "hello world";
+        let text2 = "hello world";
+        let text3 = "different text";
+
+        let hash1 = EmbeddingManager::compute_hash(text1);
+        let hash2 = EmbeddingManager::compute_hash(text2);
+        let hash3 = EmbeddingManager::compute_hash(text3);
+
+        // Same text should produce same hash
+        assert_eq!(hash1, hash2);
+        // Different text should produce different hash
+        assert_ne!(hash1, hash3);
+    }
+}
