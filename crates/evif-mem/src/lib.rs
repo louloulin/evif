@@ -14,12 +14,14 @@
 //! - `models`: Core data structures (MemoryItem, Resource, Category)
 //! - `storage`: Storage backends (Memory, SQLite, RocksDB)
 //! - `embedding`: Embedding management with LRU cache
+//! - `vector`: Vector search index for semantic retrieval
 //! - `llm`: LLM client implementations
 //! - `pipeline`: Memorize and retrieve pipelines
 
 pub mod models;
 pub mod storage;
 pub mod embedding;
+pub mod vector;
 pub mod error;
 
 pub use models::*;

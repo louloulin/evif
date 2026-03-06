@@ -10,6 +10,9 @@ pub enum MemError {
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
+    #[error("Invalid configuration: {0}")]
+    InvalidConfig(String),
+
     #[error("Storage error: {0}")]
     Storage(String),
 
