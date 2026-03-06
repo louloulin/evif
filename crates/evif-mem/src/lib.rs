@@ -24,5 +24,8 @@ pub mod embedding;
 pub mod vector;
 pub mod error;
 
+#[cfg(feature = "plugin")]
+pub mod plugin;
+
 pub use models::*;
 pub use error::MemError;

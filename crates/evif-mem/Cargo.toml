@@ -32,6 +32,9 @@ reqwest = { version = "0.12", features = ["json"] }
 # Optional dependencies
 rusqlite = { version = "0.32", optional = true }
 
+# EVIF core for plugin integration
+evif-core = { path = "../evif-core", optional = true }
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 tempfile = { workspace = true }
@@ -39,3 +42,4 @@ tempfile = { workspace = true }
 [features]
 default = []
 sqlite = ["dep:rusqlite"]
+plugin = ["dep:evif-core"]

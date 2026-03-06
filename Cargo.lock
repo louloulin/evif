@@ -2253,6 +2253,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
+ "evif-core",
  "hex",
  "lru",
  "reqwest 0.12.28",
