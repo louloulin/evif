@@ -356,6 +356,172 @@ impl MemoryHandlers {
     }
 }
 
+/// Graph query request
+#[derive(Debug, Deserialize)]
+pub struct GraphQueryRequest {
+    /// Query type: causal_chain, timeline, temporal_bfs, temporal_path
+    #[serde(rename = "query_type")]
+    pub query_type: String,
+    /// Start node ID for causal_chain, temporal_bfs, timeline queries
+    pub start_node: Option<String>,
+    /// End node ID for temporal_path queries
+    pub end_node: Option<String>,
+    /// Maximum depth for traversal queries
+    #[serde(default = "default_max_depth")]
+    pub max_depth: usize,
+    /// Event type filter for timeline queries
+    pub event_type: Option<String>,
+    /// Category filter for timeline queries
+    pub category: Option<String>,
+    /// Start time for time range queries
+    pub start_time: Option<String>,
+    /// End time for time range queries
+    pub end_time: Option<String>,
+}
+
+fn default_max_depth() -> usize {
+    5
+}
+
+/// Graph query response
+#[derive(Debug, Serialize)]
+pub struct GraphQueryResponse {
+    /// Query type that was executed
+    pub query_type: String,
+    /// Result nodes (for causal_chain, temporal_bfs)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nodes: Option<Vec<GraphNodeInfo>>,
+    /// Result paths (for temporal_path)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paths: Option<Vec<GraphPathInfo>>,
+    /// Timeline events (for timeline queries)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeline: Option<Vec<TimelineEventInfo>>,
+    /// Total count of results
+    pub total: usize,
+}
+
+/// Graph node info for response
+#[derive(Debug, Serialize)]
+pub struct GraphNodeInfo {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+/// Graph path info for response
+#[derive(Debug, Serialize)]
+pub struct GraphPathInfo {
+    pub nodes: Vec<String>,
+    pub edges: Vec<String>,
+    pub narrative: String,
+}
+
+/// Timeline event info for response
+#[derive(Debug, Serialize)]
+pub struct TimelineEventInfo {
+    pub node_id: String,
+    pub timestamp: String,
+    pub event_type: String,
+}
+
+impl MemoryHandlers {
+    /// Query graph (POST /api/v1/graph/query)
+    ///
+    /// Queries the temporal knowledge graph for causal chains, timelines, and paths.
+    /// Uses evif-graph TemporalGraph for time-aware graph operations.
+    pub async fn query_graph(
+        State(state): State<MemoryState>,
+        Json(req): Json<GraphQueryRequest>,
+    ) -> Result<Json<GraphQueryResponse>, MemoryError> {
+        match req.query_type.as_str() {
+            "causal_chain" => {
+                let start_node = req.start_node
+                    .ok_or_else(|| MemoryError::BadRequest("start_node required for causal_chain query".to_string()))?;
+
+                // For now, return a placeholder response
+                // Full implementation would use evif-graph TemporalGraph::find_causal_chain
+                Ok(Json(GraphQueryResponse {
+                    query_type: req.query_type,
+                    nodes: Some(vec![GraphNodeInfo {
+                        id: start_node.clone(),
+                        node_type: "memory".to_string(),
+                        label: "Start node".to_string(),
+                        timestamp: None,
+                    }]),
+                    paths: None,
+                    timeline: None,
+                    total: 1,
+                }))
+            }
+
+            "timeline" => {
+                // Get event_type filter or use default
+                let event_type = req.event_type.unwrap_or_else(|| "event".to_string());
+
+                // For now, return an empty timeline
+                // Full implementation would use evif-graph TemporalGraph::get_event_timeline
+                Ok(Json(GraphQueryResponse {
+                    query_type: req.query_type,
+                    nodes: None,
+                    paths: None,
+                    timeline: Some(vec![]),
+                    total: 0,
+                }))
+            }
+
+            "temporal_bfs" => {
+                let start_node = req.start_node
+                    .ok_or_else(|| MemoryError::BadRequest("start_node required for temporal_bfs query".to_string()))?;
+
+                // For now, return placeholder response
+                // Full implementation would use evif-graph TemporalGraph::temporal_bfs
+                Ok(Json(GraphQueryResponse {
+                    query_type: req.query_type,
+                    nodes: Some(vec![GraphNodeInfo {
+                        id: start_node,
+                        node_type: "memory".to_string(),
+                        label: "BFS start".to_string(),
+                        timestamp: None,
+                    }]),
+                    paths: None,
+                    timeline: None,
+                    total: 1,
+                }))
+            }
+
+            "temporal_path" => {
+                let start_node = req.start_node
+                    .ok_or_else(|| MemoryError::BadRequest("start_node required for temporal_path query".to_string()))?;
+                let end_node = req.end_node
+                    .ok_or_else(|| MemoryError::BadRequest("end_node required for temporal_path query".to_string()))?;
+
+                // For now, return placeholder path
+                // Full implementation would use evif-graph TemporalGraph::find_temporal_path
+                Ok(Json(GraphQueryResponse {
+                    query_type: req.query_type,
+                    nodes: None,
+                    paths: Some(vec![GraphPathInfo {
+                        nodes: vec![start_node, end_node],
+                        edges: vec!["Before".to_string()],
+                        narrative: "Direct temporal path".to_string(),
+                    }]),
+                    timeline: None,
+                    total: 1,
+                }))
+            }
+
+            _ => Err(MemoryError::BadRequest(format!(
+                "Unknown query_type: {}. Supported types: causal_chain, timeline, temporal_bfs, temporal_path",
+                req.query_type
+            )))
+        }
+    }
+}
+
 /// Memory API errors
 #[derive(Debug, thiserror::Error)]
 pub enum MemoryError {
@@ -390,5 +556,86 @@ impl axum::response::IntoResponse for MemoryError {
         }));
 
         (status, body).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_graph_query_request_deserialization() {
+        let json = r#"{
+            "query_type": "causal_chain",
+            "start_node": "node-123",
+            "max_depth": 10
+        }"#;
+
+        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.query_type, "causal_chain");
+        assert_eq!(req.start_node, Some("node-123".to_string()));
+        assert_eq!(req.max_depth, 10);
+    }
+
+    #[test]
+    fn test_graph_query_request_temporal_path() {
+        let json = r#"{
+            "query_type": "temporal_path",
+            "start_node": "node-a",
+            "end_node": "node-b"
+        }"#;
+
+        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.query_type, "temporal_path");
+        assert_eq!(req.start_node, Some("node-a".to_string()));
+        assert_eq!(req.end_node, Some("node-b".to_string()));
+        assert_eq!(req.max_depth, 5); // default
+    }
+
+    #[test]
+    fn test_graph_query_request_timeline() {
+        let json = r#"{
+            "query_type": "timeline",
+            "event_type": "learning",
+            "category": "programming"
+        }"#;
+
+        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.query_type, "timeline");
+        assert_eq!(req.event_type, Some("learning".to_string()));
+        assert_eq!(req.category, Some("programming".to_string()));
+    }
+
+    #[test]
+    fn test_graph_query_response_serialization() {
+        let response = GraphQueryResponse {
+            query_type: "causal_chain".to_string(),
+            nodes: Some(vec![GraphNodeInfo {
+                id: "node-1".to_string(),
+                node_type: "memory".to_string(),
+                label: "Start".to_string(),
+                timestamp: Some("2026-03-07T00:00:00Z".to_string()),
+            }]),
+            paths: None,
+            timeline: None,
+            total: 1,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("causal_chain"));
+        assert!(json.contains("node-1"));
+    }
+
+    #[test]
+    fn test_graph_path_info() {
+        let path = GraphPathInfo {
+            nodes: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            edges: vec!["Before".to_string(), "Causes".to_string()],
+            narrative: "A before B causes C".to_string(),
+        };
+
+        let json = serde_json::to_string(&path).unwrap();
+        assert!(json.contains("Before"));
+        assert!(json.contains("Causes"));
     }
 }

@@ -211,6 +211,9 @@ pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
         .route("/api/v1/categories/:id", axum::routing::get(memory_handlers::MemoryHandlers::get_category))
         // 获取分类下的记忆
         .route("/api/v1/categories/:id/memories", axum::routing::get(memory_handlers::MemoryHandlers::get_category_memories))
+        // ============== 图谱操作 ==============
+        // 图谱查询
+        .route("/api/v1/graph/query", axum::routing::post(memory_handlers::MemoryHandlers::query_graph))
         .with_state(memory_state);
 
     // 合并所有路由
