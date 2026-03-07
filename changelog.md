@@ -14,8 +14,8 @@ All notable changes to the Mem platform will be documented in this file.
   - 33 unit tests + 1 doc test passing
 
 ### Changed
-- Phase 1 progress: 87% → 95% complete
-- mem.md status: Phase 1 core features complete
+- Phase 1 progress: 95% → 100% complete
+- mem.md status: Phase 1 fully complete
 
 ## [1.0.5] - 2026-03-07
 
