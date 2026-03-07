@@ -1,8 +1,8 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.0
+> **版本**: 2.1
 > **日期**: 2026-03-07
-> **状态**: 完整分析
+> **状态**: Phase 1.5 部分完成
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -13,9 +13,10 @@
 
 ### 关键发现
 1. **Phase 1 完成度**: evif-mem Phase 1 核心管道已 100% 完成，包括完整的记忆化、检索和演化管道
-2. **架构差异**: evif-mem 使用 MD+YAML 格式（AI/Git/FUSE 友好），memU 使用 JSON+SQL（传统数据库友好）
-3. **主要差距**: 主动代理系统、意图预测、工作流引擎、成本优化、企业级多用户支持
-4. **独特优势**: evif-mem 拥有 evif-graph 时序图谱、FUSE 文件系统集成、高性能 Rust 异步
+2. **Phase 1.5 完成度**: Phase 1.5.1 (背景监控) 已 100% 完成，包括 ProactiveAgent 结构、后台任务管理、事件触发机制
+3. **架构差异**: evif-mem 使用 MD+YAML 格式（AI/Git/FUSE 友好），memU 使用 JSON+SQL（传统数据库友好）
+4. **主要差距**: 意图预测（Phase 1.5.2）、主动提取（Phase 1.5.3）、成本优化（Phase 1.5.4）、工作流引擎（Phase 1.6）、企业级多用户支持（Phase 1.7）
+5. **独特优势**: evif-mem 拥有 evif-graph 时序图谱、FUSE 文件系统集成、高性能 Rust 异步、主动代理背景监控
 
 ### 对比矩阵
 
@@ -778,7 +779,7 @@ class HTTPLLMClient:
 | ├─ Image | ✅ | ✅ | - | Vision API |
 | ├─ Video | ✅ | ✅ | - | ffmpeg + Vision |
 | └─ Audio | ⚠️ | ✅ | P2 | placeholder |
-| **主动代理系统** | ⚠️ 70% | ✅ 100% | **P1** | **重大差距** |
+| **主动代理系统** | ⚠️ 25% | ✅ 100% | **P1** | **重大差距** |
 | ├─ 背景监控 | ❌ | ✅ | P1 | 缺失 |
 | ├─ 意图预测 | ❌ | ✅ | P1 | 缺失 |
 | ├─ 主动提取 | ❌ | ✅ | P1 | 缺失 |
@@ -844,11 +845,13 @@ class HTTPLLMClient:
 
 **目标**: 实现 24/7 主动代理和意图预测
 
+**进度**: **25% complete** (背景监控完成)
+
 **任务**:
-- [ ] 1. 实现背景监控任务
-  - [ ] 1.1 Tokio 后台任务管理
-  - [ ] 1.2 资源监控接口
-  - [ ] 1.3 事件触发机制
+- [x] 1. 实现背景监控任务 ✅ **2026-03-07**
+  - [x] 1.1 Tokio 后台任务管理 ✅
+  - [x] 1.2 资源监控接口 ✅
+  - [x] 1.3 事件触发机制 ✅
 - [ ] 2. 实现意图预测模块
   - [ ] 2.1 IntentionPredictor 结构
   - [ ] 2.2 历史模式识别
@@ -862,10 +865,21 @@ class HTTPLLMClient:
   - [ ] 4.2 批量处理
   - [ ] 4.3 相似查询检测
 
+**已实现**:
+- ✅ ProactiveAgent 结构体
+- ✅ ProactiveConfig 配置系统
+- ✅ ProactiveEvent 事件类型
+- ✅ ProactiveStats 统计信息
+- ✅ ResourceMonitor 和 EventTrigger traits
+- ✅ Background monitoring with tokio::spawn
+- ✅ Automatic evolution scheduling
+- ✅ Memory threshold detection
+- ✅ 4 unit tests
+
 **交付物**:
-- ✅ 24/7 运行的主动代理
-- ✅ 意图预测能力
-- ✅ 成本优化机制
+- ✅ 24/7 运行的主动代理 (部分完成)
+- ⏳ 意图预测能力 (待实现)
+- ⏳ 成本优化机制 (待实现)
 
 **工作量**: 2-3 周
 
@@ -1401,10 +1415,10 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 核心管道: 100% 完成
 - ✅ 检索系统: 100% 完成
 - ✅ 演化机制: 100% 完成
-- ⚠️ 主动代理: 70% 完成
+- ⚠️ 主动代理: 25% 完成（背景监控 ✅）
 - ❌ 工作流系统: 0% 完成
 - ❌ 多用户支持: 0% 完成
-- **总体完成度: 70%**
+- **总体完成度: 75%** (从 70% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
