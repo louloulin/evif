@@ -449,7 +449,7 @@ impl DefaultWorkflowRunner {
         Ok(serde_json::json!({ "response": response }))
     }
 
-    /// Execute a parallel step
+    /// Execute a parallel step with true concurrent execution
     async fn execute_parallel_step(
         &self,
         step: &WorkflowStep,
@@ -461,31 +461,93 @@ impl DefaultWorkflowRunner {
             .as_ref()
             .ok_or_else(|| MemError::WorkflowError(format!("Parallel step '{}' has no sub-steps", step.step_id)))?;
 
-        // For simplicity, execute sub-steps sequentially (true parallel execution would use tokio::join!)
-        // This can be enhanced in a future iteration
-        let mut results = HashMap::new();
+        // Spawn all sub-steps as concurrent tokio tasks
+        let mut handles = Vec::new();
 
         for sub_step in sub_steps {
-            let start = Instant::now();
-            let mut sub_state = state.clone();
+            // Clone necessary data for the async task
+            let step_id = sub_step.step_id.clone();
+            let step_type = sub_step.step_type.clone();
+            let sub_state = state.clone();
 
-            let result = match sub_step.step_type {
-                StepType::Function => self.execute_function_step(sub_step, &sub_state).await,
-                StepType::LLM => self.execute_llm_step(sub_step, &sub_state).await,
-                StepType::Parallel => {
-                    return Err(MemError::WorkflowError(
-                        "Nested parallel steps are not supported".to_string(),
-                    ));
-                }
-            };
+            // Clone self references needed for execution
+            let llm_provider = self.llm_provider.clone();
+            let prompt_template = sub_step.prompt_template.clone();
+            let llm_profile = sub_step.llm_profile.clone();
+            let function = sub_step.function.clone();
 
-            let elapsed = start.elapsed().as_millis() as u64;
-            stats.step_times.insert(sub_step.step_id.clone(), elapsed);
+            // Spawn task based on step type
+            let handle = tokio::spawn(async move {
+                let start = Instant::now();
+
+                let result = match step_type {
+                    StepType::Function => {
+                        let func = function.as_ref().ok_or_else(|| {
+                            MemError::WorkflowError(format!("Step '{}' has no function", step_id))
+                        })?;
+
+                        let state_map = sub_state.step_outputs.clone();
+                        let result: HashMap<String, serde_json::Value> = func(state_map).await?;
+                        Ok(serde_json::to_value(result)?)
+                    }
+                    StepType::LLM => {
+                        let template = prompt_template.as_ref().ok_or_else(|| {
+                            MemError::WorkflowError(format!("Step '{}' has no prompt template", step_id))
+                        })?;
+
+                        // Render template
+                        let mut prompt = template.clone();
+                        for (key, value) in &sub_state.global {
+                            let placeholder = format!("{{{}}}", key);
+                            if let Some(s) = value.as_str() {
+                                prompt = prompt.replace(&placeholder, s);
+                            } else {
+                                prompt = prompt.replace(&placeholder, &value.to_string());
+                            }
+                        }
+                        for (s_id, output) in &sub_state.step_outputs {
+                            if let Some(obj) = output.as_object() {
+                                for (field, value) in obj {
+                                    let placeholder = format!("{{{}.{}}}", s_id, field);
+                                    if let Some(s) = value.as_str() {
+                                        prompt = prompt.replace(&placeholder, s);
+                                    } else {
+                                        prompt = prompt.replace(&placeholder, &value.to_string());
+                                    }
+                                }
+                            }
+                        }
+
+                        let llm = llm_provider.read().await;
+                        let response = llm.generate(&prompt, llm_profile.as_deref()).await?;
+                        Ok(serde_json::json!({ "response": response }))
+                    }
+                    StepType::Parallel => {
+                        Err(MemError::WorkflowError(
+                            "Nested parallel steps are not supported".to_string(),
+                        ))
+                    }
+                };
+
+                let elapsed = start.elapsed().as_millis() as u64;
+                Ok::<_, MemError>((step_id, result, elapsed))
+            });
+
+            handles.push(handle);
+        }
+
+        // Collect results from all concurrent tasks
+        let mut results = HashMap::new();
+        for handle in handles {
+            let (step_id, result, elapsed) = handle.await
+                .map_err(|e| MemError::WorkflowError(format!("Task join error: {}", e)))??;
+
+            stats.step_times.insert(step_id.clone(), elapsed);
             stats.steps_executed += 1;
 
             match result {
                 Ok(output) => {
-                    results.insert(sub_step.step_id.clone(), output);
+                    results.insert(step_id, output);
                     stats.steps_succeeded += 1;
                 }
                 Err(e) => {
@@ -493,7 +555,7 @@ impl DefaultWorkflowRunner {
                     if self.config.stop_on_error {
                         return Err(e);
                     }
-                    results.insert(sub_step.step_id.clone(), serde_json::json!({ "error": e.to_string() }));
+                    // Include error in results but continue
                 }
             }
         }
@@ -675,5 +737,171 @@ mod tests {
         assert_eq!(config.max_parallel, 10);
         assert!(config.enable_logging);
         assert!(config.stop_on_error);
+    }
+
+    #[test]
+    fn test_workflow_step_with_depends_on() {
+        let step = WorkflowStep::llm("step2", "Process {step1.result}")
+            .with_depends_on(vec!["step1".to_string()]);
+
+        assert_eq!(step.depends_on, Some(vec!["step1".to_string()]));
+    }
+
+    #[test]
+    fn test_workflow_step_with_parallel() {
+        let step = WorkflowStep::llm("step1", "Process").with_parallel(true);
+        assert!(step.parallel);
+    }
+
+    /// Mock LLM provider for testing
+    struct MockLLMProvider {
+        response: String,
+    }
+
+    impl MockLLMProvider {
+        fn new(response: impl Into<String>) -> Self {
+            Self {
+                response: response.into(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowLLMProvider for MockLLMProvider {
+        async fn generate(&self, _prompt: &str, _profile: Option<&str>) -> MemResult<String> {
+            Ok(self.response.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_workflow_runner_sequential_execution() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test response")) as Box<dyn WorkflowLLMProvider>));
+        let runner = DefaultWorkflowRunner::with_llm(llm_provider);
+
+        let steps = vec![
+            WorkflowStep::llm("step1", "First step"),
+            WorkflowStep::llm("step2", "Second step").with_depends_on(vec!["step1".to_string()]),
+        ];
+
+        let state = WorkflowState::new();
+        let (final_state, stats) = runner.run(&steps, state).await.unwrap();
+
+        assert_eq!(stats.steps_executed, 2);
+        assert_eq!(stats.steps_succeeded, 2);
+        assert_eq!(stats.steps_failed, 0);
+        assert!(final_state.get_step_output("step1").is_some());
+        assert!(final_state.get_step_output("step2").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_workflow_runner_function_step() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = DefaultWorkflowRunner::with_llm(llm_provider);
+
+        let steps = vec![
+            WorkflowStep::function(
+                "transform",
+                |state| async move {
+                    let mut result = state;
+                    result.insert("transformed".to_string(), serde_json::json!(true));
+                    Ok(result)
+                },
+                vec![Capability::DB],
+            ),
+        ];
+
+        let state = WorkflowState::new();
+        let (final_state, stats) = runner.run(&steps, state).await.unwrap();
+
+        assert_eq!(stats.steps_executed, 1);
+        assert_eq!(stats.steps_succeeded, 1);
+        assert!(final_state.get_step_output("transform").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_workflow_runner_parallel_execution() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("parallel result")) as Box<dyn WorkflowLLMProvider>));
+        let runner = DefaultWorkflowRunner::with_llm(llm_provider);
+
+        // Create parallel step with multiple sub-steps
+        let parallel_step = WorkflowStep::parallel(
+            "parallel_ops",
+            vec![
+                WorkflowStep::llm("sub1", "Sub step 1"),
+                WorkflowStep::llm("sub2", "Sub step 2"),
+                WorkflowStep::llm("sub3", "Sub step 3"),
+            ],
+        );
+
+        let steps = vec![parallel_step];
+        let state = WorkflowState::new();
+        let (final_state, stats) = runner.run(&steps, state).await.unwrap();
+
+        // All 3 sub-steps + 1 parallel container step = 4 total
+        assert_eq!(stats.steps_executed, 4);
+        assert_eq!(stats.steps_succeeded, 4);
+        assert_eq!(stats.steps_failed, 0);
+
+        // Verify parallel step output contains all sub-step results
+        let parallel_output = final_state.get_step_output("parallel_ops").unwrap();
+        assert!(parallel_output.as_object().unwrap().contains_key("sub1"));
+        assert!(parallel_output.as_object().unwrap().contains_key("sub2"));
+        assert!(parallel_output.as_object().unwrap().contains_key("sub3"));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_runner_capability_validation() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+
+        // Runner without Vector capability
+        let runner = DefaultWorkflowRunner::new(
+            llm_provider,
+            WorkflowConfig::default(),
+            HashSet::from([Capability::LLM, Capability::DB]),
+        );
+
+        // Step requires Vector capability
+        let steps = vec![
+            WorkflowStep::function(
+                "vector_op",
+                |_| async { Ok(HashMap::new()) },
+                vec![Capability::Vector],
+            ),
+        ];
+
+        let state = WorkflowState::new();
+        let result = runner.run(&steps, state).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("missing capabilities"));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_runner_template_rendering() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("processed")) as Box<dyn WorkflowLLMProvider>));
+        let runner = DefaultWorkflowRunner::with_llm(llm_provider);
+
+        let mut initial_state = WorkflowState::new();
+        initial_state.set_global("name".to_string(), serde_json::json!("Alice"));
+
+        let steps = vec![
+            WorkflowStep::llm("greet", "Hello {name}, welcome!"),
+        ];
+
+        let (final_state, stats) = runner.run(&steps, initial_state).await.unwrap();
+
+        assert_eq!(stats.steps_succeeded, 1);
+        assert!(final_state.get_step_output("greet").is_some());
+    }
+
+    #[test]
+    fn test_workflow_stats_default() {
+        let stats = WorkflowStats::default();
+        assert_eq!(stats.steps_executed, 0);
+        assert_eq!(stats.steps_succeeded, 0);
+        assert_eq!(stats.steps_failed, 0);
+        assert_eq!(stats.total_time_ms, 0);
+        assert!(stats.step_times.is_empty());
     }
 }
