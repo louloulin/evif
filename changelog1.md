@@ -1,674 +1,180 @@
-# Changelog 1 - Phase 1.5 Implementation
+# Changelog
 
-## [1.6.3] - 2026-03-07
+All notable changes to the evif-mem project will be documented in this file.
 
-### Added - Phase 1.5.4: Cost Optimization Component
+## [Unreleased]
 
-**CostOptimizer System** - LLM cost reduction strategies
+### Added - Phase 1.6: Workflow System (In Progress)
 
-#### Core Components
-1. **CostOptimizer Struct**
-   - LRU cache for query responses with TTL
-   - Batch processing for multiple queries
-   - Similar query detection mechanism
-   - Cost estimation and tracking
-
-2. **CostOptimizerConfig**
-   - `cache_max_size`: Maximum cache entries (default: 1000)
-   - `cache_ttl_secs`: Cache TTL in seconds (default: 3600)
-   - `similarity_threshold`: Query similarity threshold (default: 0.95)
-   - `enable_batching`: Enable batch processing
-   - `batch_window_ms`: Batch window in milliseconds (default: 100ms)
-   - `max_batch_size`: Maximum batch size (default: 10)
-   - `enable_similar_detection`: Enable similar query detection
-
-3. **CacheEntry**
-   - Cached response storage
-   - Creation and last access timestamps
-   - Access count tracking
-   - TTL-based expiration check
-
-4. **BatchItem**
-   - Batch queue item for deferred processing
-   - Query and embedding storage
-   - Unique ID for result tracking
-
-5. **CostOptimizerStats**
-   - Total LLM calls counter
-   - Cache hits counter
-   - Batch savings counter
-   - Similar query savings counter
-   - Estimated cost saved (in USD)
-
-#### Implementation Details
-
-**Cache Strategy**:
-```rust
-// Check cache before LLM call
-if self.check_cache(query).await? {
-    return Ok(false); // Use cached response
-}
-
-// Cache response after LLM call
-self.cache_response(query, response).await?;
-```
-
-**Batch Processing**:
-```rust
-// Add to batch queue
-pub async fn add_to_batch(&self, query: String, embedding: Option<Vec<f32>>) -> CostResult<Uuid> {
-    let item = BatchItem::new(query, embedding);
-    let id = item.id;
-    queue.push(item);
-    Ok(id)
-}
-
-// Process batch
-pub async fn process_batch(&self) -> CostResult<Vec<(Uuid, String)>> {
-    // Process all queued items together
-}
-```
-
-**Cost Estimation**:
-```rust
-pub fn estimate_cost(tokens: usize, model: &str) -> f32 {
-    let cost_per_1k = match model {
-        "gpt-4o" => 0.005,
-        "gpt-4o-mini" => 0.00015,
-        "claude-3-5-sonnet" => 0.003,
-        _ => 0.002,
-    };
-    (tokens as f32 / 1000.0) * cost_per_1k
-}
-```
-
-#### Integration with ProactiveAgent
-- `should_call_llm()`: Check if LLM call is needed or can use cache/batch
-- `get_cost_stats()`: Get cost optimization statistics
-- Integrated into `ProactiveAgent::new()` with `enable_cost_optimization` flag
-
-#### Tests Added (8 tests)
-- `test_cost_optimizer_config_default`: Configuration validation
-- `test_cache_entry_creation`: Cache entry creation
-- `test_cache_entry_expiration`: TTL-based expiration
-- `test_cache_entry_touch`: Access tracking
-- `test_batch_item_creation`: Batch item creation
-- `test_cost_optimizer_stats_default`: Statistics initialization
-- `test_estimate_cost`: Cost calculation
-- `test_query_hash`: Hash consistency
-
-#### Dependencies
-- Uses existing `sha2` and `hex` for query hashing
-- No new external dependencies
-
-#### Phase 1.5 Status
-- Phase 1.5.1: Background Monitor ✅
-- Phase 1.5.2: Intent Prediction ✅
-- Phase 1.5.3: Proactive Extraction ✅
-- Phase 1.5.4: Cost Optimization ✅
-- **Phase 1.5 Complete: 100%** 🎉
-
-#### Test Results
-- **92 unit tests passing** (8 new + 84 existing)
-- All cost optimizer tests passing
-- No breaking changes to existing functionality
-
-#### Next Steps
-- Phase 1.6: Workflow System (P1)
-- Phase 1.7: Multi-user Support (P2)
-- Phase 1.8: Backend Extensions (P2)
-
-## [1.6.0] - 2026-03-07
-
-### Added - Phase 1.5.1: Background Monitor Component
-
-**ProactiveAgent System** - Foundation of 24/7 proactive agent
+**WorkflowStep System** - Foundation for configurable memory pipelines
 
 #### Core Components
-1. **ProactiveAgent Struct**
-   - Background monitoring with Tokio spawn
-   - Configurable monitoring interval (default: 60s)
-   - Automatic memory evolution scheduling (default: 24h)
-   - Memory threshold detection and alerts
-   - Graceful shutdown mechanism
 
-2. **ProactiveConfig**
-   - `monitor_interval_secs`: Background check frequency
-   - `evolution_interval_secs`: Evolution run frequency
-   - `memory_threshold`: Threshold for proactive action (default: 1000)
-   - `enable_intent_prediction`: Intent prediction flag
-   - `enable_cost_optimization`: Cost optimization flag
+1. **WorkflowStep Structure**
+   - Flexible step definition for memory processing workflows
+   - Three step types: LLM, Function, Parallel
+   - Capability-based dependency tracking
+   - Builder pattern for ergonomic construction
 
-3. **ProactiveEvent Enum**
-   - `ResourceAdded`: New resource added event
-   - `MemoryAccessed`: Memory item accessed event
-   - `ScheduledEvolution`: Time-based evolution trigger
-   - `MemoryThreshold`: Memory count threshold event
-   - `IntentDetected`: Intent prediction event
+2. **StepType Enum**
+   - `LLM`: LLM-based processing with prompt templates
+   - `Function`: Rust function execution
+   - `Parallel`: Parallel execution of sub-steps
 
-4. **ProactiveStats**
-   - Monitoring cycles counter
-   - Evolutions triggered counter
-   - Proactively extracted memories counter
-   - Intents predicted counter
-   - Last evolution/monitor timestamps
+3. **Capability System**
+   - `LLM`: Can call LLM
+   - `Vector`: Can do vector search
+   - `DB`: Can access storage
+   - `IO`: Can do file/network I/O
+   - `Embedding`: Can generate embeddings
 
-5. **Traits for Extensibility**
-   - `ResourceMonitor`: Custom resource monitoring logic
-   - `EventTrigger`: Custom event handling logic
+4. **WorkflowState**
+   - Step output management (step_id → output)
+   - Global state accessible to all steps
+   - Mutable state propagation across workflow
 
-#### Implementation Details
+5. **WorkflowConfig**
+   - `max_parallel`: Maximum concurrent parallel steps (default: 10)
+   - `enable_logging`: Enable step-level logging (default: true)
+   - `stop_on_error`: Stop on first error (default: true)
 
-**Background Task Management**:
-- Uses `tokio::spawn` for background task
-- Concurrent timers with `tokio::select!`
-- Thread-safe shutdown with `Arc<RwLock<bool>>`
-- Automatic cleanup on shutdown
-
-**Monitoring Cycle**:
-```rust
-// Every 60 seconds (configurable)
-monitor_timer.tick() => {
-    // Check memory count
-    if let Ok(count) = storage.item_count() {
-        if count >= memory_threshold {
-            // Trigger proactive action
-            tracing::info!("Memory threshold reached: {} items", count);
-        }
-    }
-    // Update stats
-    stats.monitor_cycles += 1;
-    stats.last_monitor = Some(Utc::now());
-}
-```
-
-**Evolution Cycle**:
-```rust
-// Every 24 hours (configurable)
-evolution_timer.tick() => {
-    // Run evolution pipeline
-    match evolve_pipeline.evolve_all().await {
-        Ok(evolve_stats) => {
-                tracing::info!(
-                    "Evolution completed: total_items={}, avg_weight={:.2}, low_weight={}",
-                    evolve_stats.total_items,
-                    evolve_stats.average_weight,
-                    evolve_stats.low_weight_items
-                );
-            }
-            Err(e) => {
-                tracing::error!("Evolution failed: {}", e);
-            }
-        }
-    }
-}
-```
-
-**API**:
-- `start()`: Start background monitoring (async)
-- `stop()`: Stop background monitoring (async)
-- `get_stats()`: Get current statistics (async)
-- `predict_intent()`: Predict user intent (Phase 1.5.2 - TODO)
-- `proactive_extract()`: Proactively extract memories (Phase 1.5.3 - TODO)
-
-#### Tests
-- 4 new unit tests:
-  - `test_proactive_config_default`: Configuration defaults
-  - `test_proactive_config_custom`: Custom configuration
-  - `test_proactive_event_variants`: Event variants
-  - `test_proactive_stats_default`: Stats defaults
-
-#### Technical Details
-
-**Dependencies**:
-- `tokio::sync::{Arc, RwLock}` for thread-safe state
-- `tokio::time::{interval, Duration}` for timers
-- `chrono::{DateTime, Utc}` for timestamps
-- `tracing` for logging
-
-**Integration Points**:
-- `MemorizePipeline`: For proactive extraction (Phase 1.5.3)
-- `EvolvePipeline`: For automatic evolution
-- `MemoryStorage`: For item count monitoring
-
-**New Storage Method**:
-- `MemoryStorage::item_count()`: Returns total memory item count
-  - Added to support threshold detection
-  - Thread-safe with DashMap
-
-#### Progress Update
-
-**Phase 1.5 Status**:
-- **Background Monitor (Phase 1.5.1)**: ✅ **100% Complete**
-  - Tokio background task management ✅
-  - Resource monitoring interface ✅
-  - Event trigger mechanism ✅
-
-- **Intent Prediction (Phase 1.5.2)**: ❌ **Not Started**
-  - IntentionPredictor structure
-  - Historical pattern recognition
-  - LLM intent inference
-
-- **Proactive Extraction (Phase 1.5.3)**: ❌ **Not Started**
-  - ProactiveExtractor
-  - Automatic memory extraction
-  - Background evolution trigger
-
-- **Cost Optimization (Phase 1.5.4)**: ❌ **Not Started**
-  - LRU cache strategy
-  - Batch processing
-  - Similar query detection
-
-**Overall Phase 1.5 Progress**: **25% Complete** (1/4 sub-tasks done)
-
-**evif-mem Overall Progress**: **70% → 75%** (up 5%)
-
-#### Next Steps
-
-**Immediate (Current Sprint)**:
-1. Phase 1.5.2: Implement Intent Prediction
-   - IntentionPredictor struct
-   - Historical pattern recognition
-   - LLM intent inference
-
-**Short-term (Next Sprint)**:
-2. Phase 1.5.3: Implement Proactive Extraction
-   - ProactiveExtractor
-   - Automatic memory extraction
-3. Phase 1.5.4: Implement Cost Optimization
-   - LRU cache strategy
-   - Batch processing
-
-**Medium-term (Q2 2026)**:
-4. Phase 1.6: Workflow System
-5. Phase 1.7: Multi-user Support
-
-#### Test Results
-
-```
-cargo test -p evif-mem proactive
-
-running 4 tests
-test proactive::tests::test_proactive_config_default ... ok
-test proactive::tests::test_proactive_config_custom ... ok
-test proactive::tests::test_proactive_stats_default ... ok
-test proactive::tests::test_proactive_event_variants ... ok
-
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
-
-All 75 evif-mem tests pass.
-```
-
-#### Commit
-
-```
-git commit 0a2412d
-Author: Ralph Loop
-Message: feat(evif-mem): implement ProactiveAgent background monitor (Phase 1.5.1)
-
-Files changed: 3
-- crates/evif-mem/src/proactive.rs (new, 310 lines)
-- crates/evif-mem/src/lib.rs (updated)
-- crates/evif-mem/src/storage/memory.rs (updated)
-```
-
-#### Related Memories
-
-- mem-1772886150-f219: Task created for this implementation
-- Phase 1.5 plan from mem3.md (lines 843-870)
-- Proactive agent design from memU comparison (mem3.md lines 312-380)
-
-
----
-
-## [1.6.1] - 2026-03-07
-
-### Added - Phase 1.5.2: Intent Prediction Module
-
-**IntentionPredictor System** - Predict user intent based on memory history and context
-
-#### Core Components
-
-1. **IntentionPredictor Struct**
-   - Predicts user intent from current context
-   - Analyzes recent memory history (configurable lookback)
-   - Uses LLM for intent inference
-   - Filters predictions by confidence threshold
-
-2. **PredictedIntent**
-   - `intent_type`: Type of intent (search/create/update/delete/query/other)
-   - `confidence`: Confidence score (0.0-1.0)
-   - `related_items`: Related memory item IDs
-   - `suggested_action`: Optional suggested action
-   - `timestamp`: Prediction timestamp
-
-3. **MemoryPattern**
-   - `pattern_type`: Type of pattern (frequent_topic/time_based/sequence)
-   - `description`: Human-readable pattern description
-   - `item_ids`: Related memory items
-   - `frequency`: Pattern occurrence frequency
-   - `last_occurrence`: Last occurrence timestamp
-
-4. **IntentConfig**
-   - `lookback_hours`: Lookback period for analysis (default: 24h)
-   - `min_pattern_frequency`: Minimum pattern frequency (default: 2)
-   - `confidence_threshold`: Prediction confidence threshold (default: 0.7)
-   - `max_related_items`: Maximum related items to return (default: 5)
-
-#### Pattern Analysis Types
-
-1. **Topic Frequency Patterns**
-   - Groups memories by memory type
-   - Identifies frequently occurring topics
-   - Tracks last occurrence time
-
-2. **Time-Based Patterns**
-   - Groups memories by hour of day
-   - Identifies peak activity hours
-   - Detects daily/weekly routines
-
-3. **Sequence Patterns**
-   - Analyzes sequential memory types
-   - Detects action sequences (A → B)
-   - Tracks sequential patterns in user behavior
-
-#### LLM Integration
-
-**Intent Inference Process**:
-1. Collect recent memories and patterns
-2. Build context-aware prompt for LLM
-3. LLM analyzes patterns and predicts intent
-4. Parse LLM response into structured prediction
-5. Filter by confidence threshold
-
-**Prompt Structure**:
-- Current context
-- Recent memory patterns (frequency-weighted)
-- Recent memory summaries (top 10)
-- JSON response format specification
-
-#### Integration with ProactiveAgent
-
-- IntentionPredictor integrated into ProactiveAgent
-- Enabled via `enable_intent_prediction` config flag
-- Automatic intent prediction on context changes
-- Stats tracking for predictions
-- Event emission on intent detection
+6. **WorkflowStats**
+   - Steps executed/succeeded/failed counters
+   - Total execution time tracking
+   - Per-step timing metrics
 
 #### Implementation Details
 
 **Files Created**:
-- `crates/evif-mem/src/proactive/intention.rs` (new, 442 lines)
+- `crates/evif-mem/src/workflow.rs` (new, 358 lines)
 
 **Files Modified**:
-- `crates/evif-mem/src/proactive.rs` (updated exports and integration)
-- `crates/evif-mem/src/proactive/mod.rs` (updated module structure)
+- `crates/evif-mem/src/lib.rs` (added workflow module export)
 
 **Key Design Decisions**:
-- Uses chrono::Timelike for time pattern analysis
-- Memory type used as topic proxy (no tags field in current model)
-- Simple heuristic LLM response parsing (production should use serde_json)
-- Configurable thresholds for flexibility
-- Async/await pattern for LLM calls
+- Async function support via Pin<Box<dyn Future>>
+- Arc-wrapped functions for thread-safe sharing
+- Builder pattern for step construction
+- HashMap-based state management
+- Capability tracking via HashSet
 
 #### API Usage
 
 ```rust
-// Create intent predictor
-let predictor = IntentionPredictor::new(
-    IntentConfig::default(),
-    storage.clone(),
-    llm_client.clone(),
+// Create LLM step
+let step = WorkflowStep::llm("extract", "Extract memories from: {text}")
+    .with_llm_profile("gpt-4");
+
+// Create function step
+let step = WorkflowStep::function(
+    "dedupe",
+    |mut state| async move {
+        state.insert("deduped".to_string(), serde_json::json!(true));
+        Ok(state)
+    },
+    vec![Capability::DB],
 );
 
-// Predict intent from context
-let intent = predictor.predict("user is searching for documents").await?;
+// Create parallel step
+let parallel = WorkflowStep::parallel("parallel_extract", vec![step1, step2]);
 
-if let Some(predicted) = intent {
-    println!("Intent: {} (confidence: {:.2})", 
-        predicted.intent_type, predicted.confidence);
-}
-
-// Find patterns in memories
-let patterns = predictor.find_patterns(&memories).await?;
-for pattern in patterns {
-    println!("Pattern: {} (frequency: {})", 
-        pattern.description, pattern.frequency);
-}
+// Manage state
+let mut state = WorkflowState::new();
+state.set_step_output("step1".to_string(), serde_json::json!({"result": "ok"}));
+state.set_global("user_id".to_string(), serde_json::json!("user123"));
 ```
 
-#### Test Results
+#### Tests Added (7 tests)
+- `test_step_type_serialization`: Step type JSON serialization
+- `test_capability_hash_set`: Capability set operations
+- `test_workflow_step_llm`: LLM step construction
+- `test_workflow_step_function`: Function step construction
+- `test_workflow_step_parallel`: Parallel step construction
+- `test_workflow_state`: State management operations
+- `test_workflow_config_default`: Configuration defaults
 
-```
-cargo test -p evif-mem intention --lib
+#### Phase 1.6 Status
+- Phase 1.6.1: WorkflowStep Design ✅ **100% Complete**
+- Phase 1.6.2: WorkflowRunner ⏳ **Pending**
+- Phase 1.6.3: Interceptor Mechanism ⏳ **Pending**
+- Phase 1.6.4: PipelineManager ⏳ **Pending**
 
-running 4 tests
-test proactive::intention::tests::test_intent_config_custom ... ok
-test proactive::intention::tests::test_intent_config_default ... ok
-test proactive::intention::tests::test_memory_pattern_creation ... ok
-test proactive::intention::tests::test_predicted_intent_creation ... ok
+**Overall Phase 1.6 Progress**: **25% Complete** (1/4 sub-tasks done)
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 filtered out
-
-cargo test -p evif-mem --lib
-
-test result: ok. 79 passed; 0 failed; 0 ignored; 0 filtered out
-```
-
-#### Progress Update
-
-**Phase 1.5 Completion**:
-- Phase 1.5.1: Background Monitor ✅ 100%
-- Phase 1.5.2: Intent Prediction ✅ 100%
-- Phase 1.5.3: Proactive Extraction ⏳ Pending
-- Phase 1.5.4: Cost Optimization ⏳ Pending
-
-**Overall Phase 1.5 Progress**: 50% complete (2/4 sub-phases)
-
-**evif-mem Overall Progress**: 77% complete (up from 75%)
+**evif-mem Overall Progress**: **81% → 82%** (up 1%)
 
 #### Next Steps
 
 **Immediate (Current Sprint)**:
-1. Phase 1.5.3: Implement Proactive Extraction
-   - ProactiveExtractor
-   - Automatic memory extraction from resources
-   - Background evolution triggers
+1. Phase 1.6.2: Implement WorkflowRunner
+   - WorkflowRunner trait
+   - Sequential step execution
+   - Parallel step execution
 
 **Short-term (Next Sprint)**:
-2. Phase 1.5.4: Implement Cost Optimization
-   - LRU cache strategy
-   - Batch processing
-   - Similar query detection
+2. Phase 1.6.3: Implement Interceptor Mechanism
+   - Interceptor trait
+   - InterceptorRegistry
+   - before/after hooks
+
+3. Phase 1.6.4: Implement PipelineManager
+   - Dynamic pipeline registration
+   - Capability validation
+   - Runtime configuration
+
+#### Test Results
+
+```
+cargo test -p evif-mem workflow --lib
+
+running 7 tests
+test workflow::tests::test_capability_hash_set ... ok
+test workflow::tests::test_step_type_serialization ... ok
+test workflow::tests::test_workflow_config_default ... ok
+test workflow::tests::test_workflow_state ... ok
+test workflow::tests::test_workflow_step_function ... ok
+test workflow::tests::test_workflow_step_llm ... ok
+test workflow::tests::test_workflow_step_parallel ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured
+
+All 99 evif-mem tests pass (92 existing + 7 new).
+```
 
 #### Commit
 
 ```
-git add crates/evif-mem/src/proactive/intention.rs
-git add crates/evif-mem/src/proactive.rs
-git add mem3.md
-git add changelog1.md
+git commit 0d95e36
+Author: Ralph Loop
+Message: feat(evif-mem): implement WorkflowStep structure (Phase 1.6.1)
 
-git commit -m "feat(evif-mem): implement IntentionPredictor (Phase 1.5.2)
+- Add WorkflowStep with LLM/Function/Parallel step types
+- Implement Capability system for dependency tracking
+- Add WorkflowState for step output and global state management
+- Add WorkflowConfig and WorkflowStats for configuration and metrics
+- Implement builder pattern for ergonomic step construction
+- Add 7 unit tests for workflow basics
+- All 99 evif-mem tests passing (92 existing + 7 new)
+- Phase 1.6 progress: 0% → 25%
+- evif-mem overall: 81% → 82%
 
-- Add IntentionPredictor struct with LLM-based intent inference
-- Implement 3 pattern analysis types: topic frequency, time-based, sequence
-- Add PredictedIntent, MemoryPattern, IntentConfig structures
-- Integrate with ProactiveAgent for automatic intent prediction
-- Add 4 unit tests for intention prediction
-- All 79 evif-mem tests passing
-- Phase 1.5 progress: 25% → 50%
-- evif-mem overall: 75% → 77%"
+Files changed: 2
+- crates/evif-mem/src/workflow.rs (new, 358 lines)
+- crates/evif-mem/src/lib.rs (updated)
 ```
 
 #### Related Memories
 
-- mem-1772887659-9018: Task created for this implementation
-- Pattern: Intent prediction enables proactive agent to anticipate user needs
+- mem-1772893627-f88f: Task completion memory
+- Phase 1.6 plan from mem3.md (lines 921-948)
+- memU workflow system design (mem3.md lines 396-462)
 
 #### References
 
-- mem3.md Phase 1.5.2 specification
-- memU intention prediction system design
-- Memory in the Age of AI Agents (arXiv:2512.13564)
-
+- mem3.md Phase 1.6.1 specification
+- memU WorkflowStep design pattern
+- Workflow engine architecture from memU comparison
 
 ---
 
-## [1.6.2] - 2026-03-07
-
-### Added - Phase 1.5.3: Proactive Extraction Module
-
-**ProactiveExtractor System** - Automatic memory extraction with intent-based triggering
-
-#### Core Components
-
-1. **ProactiveExtractor Struct**
-   - Automatically extracts memories from monitored resources
-   - Integrates with ProactiveAgent background task
-   - Uses IntentionPredictor to decide when to extract
-   - Triggers background evolution after extraction
-
-2. **ExtractorConfig**
-   - `intent_confidence_threshold`: Minimum confidence for intent-based extraction (default: 0.7)
-   - `min_extraction_interval_secs`: Minimum interval between extractions (default: 300s)
-   - `max_items_per_extraction`: Maximum items per extraction run (default: 100)
-   - `auto_extract_on_intent`: Enable automatic extraction on intent detection (default: true)
-   - `trigger_evolution_after_extraction`: Trigger evolution after extraction (default: true)
-
-3. **ExtractionStats**
-   - `total_extracted`: Total items extracted proactively
-   - `intent_triggered`: Extractions triggered by intent
-   - `threshold_triggered`: Extractions triggered by threshold
-   - `scheduled_triggered`: Extractions triggered by schedule
-   - `evolutions_triggered`: Evolutions triggered after extraction
-   - `last_extraction`: Last extraction timestamp
-   - `last_source`: Last extraction source URL
-
-#### Extraction Methods
-
-1. **should_extract()** - Intent-based decision
-   - Checks confidence against threshold
-   - Verifies auto_extract_on_intent is enabled
-   - Excludes "none" intent type
-
-2. **extract_proactively()** - Core extraction
-   - Converts resource to source string
-   - Uses MemorizePipeline for extraction
-   - Limits items per extraction (configurable)
-   - Updates extraction statistics
-   - Optionally triggers evolution
-
-3. **extract_on_intent()** - Intent-driven extraction
-   - Validates intent confidence
-   - Performs extraction if warranted
-   - Tracks intent-triggered statistics
-
-4. **extract_on_threshold()** - Threshold-triggered extraction
-   - Batch extraction from multiple resources
-   - Tracks threshold-triggered statistics
-
-5. **trigger_evolution()** - Background evolution
-   - Runs EvolvePipeline.evolve_all()
-   - Tracks evolution statistics
-   - Logs completion with stats
-
-#### Integration with ProactiveAgent
-
-- ProactiveExtractor integrated into ProactiveAgent
-- Created automatically in ProactiveAgent::new()
-- Two extraction methods exposed:
-  - `proactive_extract()`: Direct extraction
-  - `proactive_extract_on_intent()`: Intent-driven extraction
-
-#### Implementation Details
-
-**Files Modified**:
-- `crates/evif-mem/src/proactive.rs` (updated, +180 lines)
-- `crates/evif-mem/src/lib.rs` (updated exports)
-
-**Key Design Decisions**:
-- Resource.url is String (not Option<String>), handled gracefully
-- Evolution triggered after extraction by default (configurable)
-- Statistics tracked atomically with RwLock
-- Configurable thresholds for flexibility
-
-#### API Usage
-
-```rust
-// Create proactive extractor (usually done via ProactiveAgent)
-let extractor = ProactiveExtractor::new(
-    ExtractorConfig::default(),
-    storage.clone(),
-    memorize_pipeline.clone(),
-    evolve_pipeline.clone(),
-    llm_client.clone(),
-);
-
-// Check if should extract based on intent
-let should = extractor.should_extract(&predicted_intent);
-
-// Extract proactively from resource
-let items = extractor.extract_proactively(resource).await?;
-
-// Extract based on intent prediction
-let items = extractor.extract_on_intent(resource, intent).await?;
-
-// Get extraction statistics
-let stats = extractor.get_stats().await;
-```
-
-#### Test Results
-
-```
-cargo test -p evif-mem proactive
-
-running 13 tests
-test proactive::intention::tests::test_intent_config_custom ... ok
-test proactive::intention::tests::test_intent_config_default ... ok
-test proactive::tests::test_extractor_config_default ... ok
-test proactive::tests::test_proactive_config_custom ... ok
-test proactive::tests::test_proactive_config_default ... ok
-test proactive::tests::test_extraction_stats_default ... ok
-test proactive::tests::test_proactive_stats_default ... ok
-test proactive::tests::test_proactive_event_variants ... ok
-test proactive::intention::tests::test_memory_pattern_creation ... ok
-test proactive::tests::test_should_extract_none_intent ... ok
-test proactive::tests::test_should_extract_high_confidence ... ok
-test proactive::intention::tests::test_predicted_intent_creation ... ok
-test proactive::tests::test_should_extract_low_confidence ... ok
-
-test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured
-
-All 84 evif-mem tests pass.
-```
-
-#### Progress Update
-
-**Phase 1.5 Status**:
-- **Background Monitor (Phase 1.5.1)**: ✅ **100% Complete**
-- **Intent Prediction (Phase 1.5.2)**: ✅ **100% Complete**
-- **Proactive Extraction (Phase 1.5.3)**: ✅ **100% Complete**
-- **Cost Optimization (Phase 1.5.4)**: ⏳ **Not Started**
-
-**Overall Phase 1.5 Progress**: **75% Complete** (3/4 sub-phases done)
-
-**evif-mem Overall Progress**: **77% → 79%** (up 2%)
-
-#### Next Steps
-
-**Immediate (Current Sprint)**:
-1. Phase 1.5.4: Implement Cost Optimization
-   - LRU cache strategy
-   - Batch processing
-   - Similar query detection
-
-**Short-term (Next Sprint)**:
-2. Phase 1.6: Implement Workflow System
-   - WorkflowStep structure
-   - WorkflowRunner trait
-   - Interceptor mechanism
-
-**Medium-term (Q2 2026)**:
-3. Phase 1.7: Multi-user Support
-4. Phase 2: Advanced features
+## [1.5.4] - 2026-03-07

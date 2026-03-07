@@ -922,11 +922,14 @@ class HTTPLLMClient:
 
 **目标**: 实现可配置的工作流引擎
 
-**任务**:
-- [ ] 1. 设计工作流核心
-  - [ ] 1.1 WorkflowStep 结构
-  - [ ] 1.2 WorkflowState 状态管理
-  - [ ] 1.3 能力依赖检查
+**进度**: **25% complete** ⚠️ (Phase 1.6.1 完成)
+- [x] 1. 设计工作流核心 ✅ **2026-03-07**
+  - [x] 1.1 WorkflowStep 结构 ✅
+  - [x] 1.2 WorkflowState 状态管理 ✅
+  - [x] 1.3 Capability 能力系统 ✅
+  - [x] 1.4 WorkflowConfig 配置 ✅
+  - [x] 1.5 WorkflowStats 统计 ✅
+  - [x] 1.6 7 unit tests for workflow basics ✅
 - [ ] 2. 实现工作流运行器
   - [ ] 2.1 WorkflowRunner trait
   - [ ] 2.2 顺序执行
@@ -1451,9 +1454,9 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 检索系统: 100% 完成
 - ✅ 演化机制: 100% 完成
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
-- ❌ 工作流系统: 0% 完成
+- ⚠️ 工作流系统: 25% 完成（WorkflowStep ✅、WorkflowState ✅、Capability ✅）
 - ❌ 多用户支持: 0% 完成
-- **总体完成度: 79%** (从 75% 提升)
+- **总体完成度: 82%** (从 81% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
