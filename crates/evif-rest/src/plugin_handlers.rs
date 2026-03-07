@@ -11,14 +11,16 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use evif_core::{MountTable, EvifPlugin, DynamicPluginLoader, PluginInfo as EvifPluginInfo};
+use evif_core::{MountTable, EvifPlugin, DynamicPluginLoader, PluginInfo as EvifPluginInfo, PluginRegistry, PluginState as RegistryPluginState};
 use std::sync::OnceLock;
+use crate::handlers::AppState;
 
 /// 应用状态
 #[derive(Clone)]
 pub struct PluginState {
     pub mount_table: Arc<MountTable>,
     pub dynamic_loader: Arc<DynamicPluginLoader>,
+    pub plugin_registry: Arc<PluginRegistry>,
 }
 
 /// 插件信息

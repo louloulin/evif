@@ -20,6 +20,7 @@ pub mod batch_operations;
 pub mod file_monitor;
 pub mod acl;
 pub mod dynamic_loader;
+pub mod plugin_registry;
 
 // WASM plugin support (requires "wasm" feature)
 #[cfg(feature = "wasm")]
@@ -52,5 +53,8 @@ pub use acl::{
 pub use dynamic_loader::{
     DynamicPluginLoader, DynamicPluginLoaderBuilder, PluginInfo,
     EVIF_PLUGIN_ABI_VERSION, PluginPtr
+};
+pub use plugin_registry::{
+    PluginRegistry, PluginRegistryRef, PluginState, RegisteredPlugin
 };
 

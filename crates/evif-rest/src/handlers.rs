@@ -6,7 +6,7 @@ use axum::{Json, extract::{Path, State, Query}};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use evif_core::{RadixMountTable, EvifPlugin, WriteFlags, OpenFlags, PluginConfigParam, DynamicPluginLoader};
+use evif_core::{RadixMountTable, EvifPlugin, WriteFlags, OpenFlags, PluginConfigParam, DynamicPluginLoader, PluginRegistry, PluginState as RegistryPluginState, RegisteredPlugin};
 use evif_core::FileInfo as EvifFileInfo;
 use evif_graph::{Graph, Node, NodeId, Metadata, NodeType, NodeBuilder};
 use crate::metrics_handlers::TrafficStats;
@@ -23,6 +23,8 @@ pub struct AppState {
     pub start_time: Instant,
     /// 动态插件加载器
     pub dynamic_loader: Arc<DynamicPluginLoader>,
+    /// 插件注册表
+    pub plugin_registry: Arc<PluginRegistry>,
     /// 图引擎实例
     pub graph: Arc<Graph>,
 }
@@ -901,6 +903,146 @@ impl EvifHandlers {
             "description": plugin_info.description(),
             "mount_path": mount_path,
             "path": library_name,
+        })))
+    }
+
+    /// 获取插件状态
+    /// GET /api/v1/plugins/:name/status
+    pub async fn get_plugin_status(
+        State(state): State<AppState>,
+        Path(name): Path<String>,
+    ) -> RestResult<Json<serde_json::Value>> {
+        // 首先尝试从 registry 获取状态
+        if let Some(plugin) = state.plugin_registry.get(&name) {
+            return Ok(Json(serde_json::json!({
+                "name": plugin.name,
+                "version": plugin.version,
+                "author": plugin.author,
+                "description": plugin.description,
+                "state": plugin.state.to_string(),
+                "mount_path": plugin.mount_path,
+                "library_path": plugin.library_path,
+                "loaded_at": plugin.loaded_at.to_rfc3339(),
+                "last_active_at": plugin.last_active_at.to_rfc3339(),
+                "failure_count": plugin.failure_count,
+            })));
+        }
+
+        // 如果 registry 中没有，尝试从 mount_table 获取
+        let mount_paths = state.mount_table.list_mounts().await;
+        for path in mount_paths {
+            let (plugin_opt, _relative_path) = state.mount_table.lookup_with_path(&path).await;
+            if let Some(plugin) = plugin_opt {
+                if plugin.name() == name {
+                    return Ok(Json(serde_json::json!({
+                        "name": name,
+                        "version": "1.0.0",
+                        "state": "active",
+                        "mount_path": path,
+                    })));
+                }
+            }
+        }
+
+        Err(RestError::NotFound(format!("Plugin '{}' not found", name)))
+    }
+
+    /// 重新加载插件
+    /// POST /api/v1/plugins/:name/reload
+    pub async fn reload_plugin(
+        State(state): State<AppState>,
+        Path(name): Path<String>,
+    ) -> RestResult<Json<serde_json::Value>> {
+        // 1. 从 registry 获取插件信息
+        let plugin_info = state.plugin_registry.get(&name)
+            .ok_or_else(|| RestError::NotFound(format!("Plugin '{}' not found in registry", name)))?;
+
+        let library_path = plugin_info.library_path.clone();
+
+        // 2. 卸载现有插件
+        let mount_path = format!("/{}", name);
+        let _ = state.mount_table.unmount(&mount_path).await;
+        let _ = state.dynamic_loader.unload_plugin(&name);
+
+        // 3. 重新加载插件
+        let new_info = state.dynamic_loader.load_plugin(&name)
+            .map_err(|e| RestError::Internal(format!("Failed to reload plugin '{}': {}", name, e)))?;
+
+        // 4. 创建新实例
+        let plugin = state.dynamic_loader.create_plugin(&name)
+            .map_err(|e| RestError::Internal(format!("Failed to create plugin instance: {}", e)))?;
+
+        // 5. 重新挂载
+        state.mount_table.mount(mount_path.clone(), plugin).await
+            .map_err(|e| RestError::Internal(format!("Failed to mount plugin: {}", e)))?;
+
+        // 6. 更新 registry 状态
+        state.plugin_registry.activate(&name, mount_path.clone())
+            .map_err(|e| RestError::Internal(format!("Failed to update registry: {}", e)))?;
+
+        Ok(Json(serde_json::json!({
+            "message": format!("Plugin '{}' reloaded successfully", name),
+            "name": new_info.name(),
+            "version": new_info.version(),
+            "mount_path": mount_path,
+        })))
+    }
+
+    /// 获取所有可用插件（包括已加载和内置）
+    /// GET /api/v1/plugins/available
+    pub async fn list_available_plugins(
+        State(state): State<AppState>,
+    ) -> RestResult<Json<serde_json::Value>> {
+        // 获取已注册的插件
+        let registered = state.plugin_registry.list_all();
+        let registered_names: Vec<String> = registered.iter().map(|p| p.name.clone()).collect();
+
+        // 获取已挂载的插件
+        let mount_paths = state.mount_table.list_mounts().await;
+        let mut mounted = std::collections::HashMap::new();
+        for path in mount_paths {
+            let (plugin_opt, _relative_path) = state.mount_table.lookup_with_path(&path).await;
+            if let Some(plugin) = plugin_opt {
+                mounted.insert(plugin.name().to_string(), path);
+            }
+        }
+
+        let mut plugins = Vec::new();
+
+        // 添加已注册的插件
+        for plugin in registered {
+            plugins.push(serde_json::json!({
+                "name": plugin.name,
+                "version": plugin.version,
+                "state": plugin.state.to_string(),
+                "is_loaded": true,
+                "is_mounted": mounted.contains_key(&plugin.name),
+            }));
+        }
+
+        // 添加内置插件（未注册的）
+        let built_in = vec![
+            "localfs", "s3fs", "memoryfs", "httpfs", "queuefs",
+            "sqlfs", "gitfs", "encryptfs", "tieredfs", "webdavfs",
+            "tarfs", "zipfs", "httpcachefs", "redisfs", "mongofs"
+        ];
+
+        for name in built_in {
+            if !registered_names.contains(&name.to_string()) {
+                let is_mounted = mounted.contains_key(name);
+                plugins.push(serde_json::json!({
+                    "name": name,
+                    "version": "1.0.0",
+                    "state": if is_mounted { "active" } else { "available" },
+                    "is_loaded": false,
+                    "is_mounted": is_mounted,
+                }));
+            }
+        }
+
+        Ok(Json(serde_json::json!({
+            "plugins": plugins,
+            "total": plugins.len(),
         })))
     }
 

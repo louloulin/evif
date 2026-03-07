@@ -4,7 +4,7 @@ use crate::{handlers, handle_handlers, wasm_handlers, ws_handlers, HandleState, 
 use axum::Router;
 use std::sync::Arc;
 use std::time::Instant;
-use evif_core::{RadixMountTable, GlobalHandleManager, DynamicPluginLoader};
+use evif_core::{RadixMountTable, GlobalHandleManager, DynamicPluginLoader, PluginRegistry};
 use evif_graph::Graph;
 use handlers::AppState;
 
@@ -18,6 +18,7 @@ pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
         traffic_stats: Arc::new(metrics_handlers::TrafficStats::default()),
         start_time: Instant::now(),
         dynamic_loader,
+        plugin_registry: Arc::new(PluginRegistry::new()),
         graph: Arc::new(Graph::new()),
     };
 
@@ -88,9 +89,14 @@ pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
         // ============== 插件管理 ==============
         // 列出插件
         .route("/api/v1/plugins", axum::routing::get(handlers::EvifHandlers::list_plugins))
+        // 获取可用插件列表
+        .route("/api/v1/plugins/available", axum::routing::get(handlers::EvifHandlers::list_available_plugins))
         // Phase 8.2: 获取插件 README 与配置参数
         .route("/api/v1/plugins/:name/readme", axum::routing::get(handlers::EvifHandlers::get_plugin_readme))
         .route("/api/v1/plugins/:name/config", axum::routing::get(handlers::EvifHandlers::get_plugin_config))
+        // 插件状态和重载
+        .route("/api/v1/plugins/:name/status", axum::routing::get(handlers::EvifHandlers::get_plugin_status))
+        .route("/api/v1/plugins/:name/reload", axum::routing::post(handlers::EvifHandlers::reload_plugin))
         // 加载外部插件
         .route("/api/v1/plugins/load", axum::routing::post(handlers::EvifHandlers::load_plugin))
         // 卸载插件
