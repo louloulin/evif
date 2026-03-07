@@ -1072,7 +1072,7 @@ evif-mem stats --category programming
   - [x] Hybrid 模式
 - [x] 实现 `LLMClient` 抽象
   - [x] OpenAI 客户端
-  - [ ] Anthropic 客户端
+  - [x] Anthropic 客户端
 - [x] 实现 REST API
   - [x] POST /api/v1/memories
   - [x] POST /api/v1/memories/search
