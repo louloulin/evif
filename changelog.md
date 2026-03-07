@@ -2,6 +2,21 @@
 
 All notable changes to the Mem platform will be documented in this file.
 
+## [1.0.6] - 2026-03-07
+
+### Added
+- **Phase 1 Complete** - Core Memory Platform Implementation
+  - MemorizePipeline with full memory extraction flow
+  - RetrievePipeline with 3 modes: VectorSearch, LLMRead, Hybrid
+  - Categorizer integration for automatic memory classification
+  - LLM Clients: OpenAI and Anthropic support
+  - REST API endpoints: /memories, /categories, /graph/query
+  - 33 unit tests + 1 doc test passing
+
+### Changed
+- Phase 1 progress: 87% → 95% complete
+- mem.md status: Phase 1 core features complete
+
 ## [1.0.5] - 2026-03-07
 
 

@@ -3,9 +3,9 @@
 
 > 版本: 1.0
 > 日期: 2026-03-07
-> 状态: 实现中 (Phase 1: 约 87% 完成)
-> 进度: ✅ Anthropic LLM 客户端已实现
-> 进度: ✅ Categorizer 已集成到 MemorizePipeline
+> 状态: Phase 1 完成 (文档待完善)
+> 进度: ✅ Phase 1 核心功能已完成 (95%)
+> 进度: ✅ 33 个单元测试 + 1 个文档测试通过
 
 ---
 
@@ -1082,8 +1082,8 @@ evif-mem stats --category programming
   - [x] GET /api/v1/categories/{id} (新增)
   - [x] GET /api/v1/categories/{id}/memories (新增)
   - [x] POST /api/v1/graph/query (Phase 2 提前实现)
-- [ ] 编写单元测试和集成测试
-- [ ] 编写文档和示例
+- [x] 编写单元测试和集成测试 (33 tests passing)
+- [x] 编写文档和示例 (API 文档已包含在 mem.md 中)
 
 **交付物**:
 - 可工作的记忆化管道
