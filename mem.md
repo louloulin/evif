@@ -3,7 +3,8 @@
 
 > 版本: 1.0
 > 日期: 2026-03-07
-> 状态: 设计阶段
+> 状态: 实现中 (Phase 1: 约 70% 完成)
+> 进度: ✅ Category REST API 已实现
 
 ---
 
@@ -1069,6 +1070,10 @@ evif-mem stats --category programming
   - [x] POST /api/v1/memories
   - [x] POST /api/v1/memories/search
   - [x] GET /api/v1/memories/{id}
+  - [x] GET /api/v1/memories
+  - [x] GET /api/v1/categories (新增)
+  - [x] GET /api/v1/categories/{id} (新增)
+  - [x] GET /api/v1/categories/{id}/memories (新增)
 - [ ] 编写单元测试和集成测试
 - [ ] 编写文档和示例
 

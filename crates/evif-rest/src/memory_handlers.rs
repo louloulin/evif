@@ -134,6 +134,24 @@ pub struct MemoryItemResponse {
     pub updated: String,
 }
 
+/// Category response
+#[derive(Debug, Serialize)]
+pub struct CategoryResponse {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub item_count: u32,
+    pub created: String,
+    pub updated: String,
+}
+
+/// Category with memories response
+#[derive(Debug, Serialize)]
+pub struct CategoryWithMemoriesResponse {
+    pub category: CategoryResponse,
+    pub memories: Vec<MemoryItemResponse>,
+}
+
 /// Memory handlers
 pub struct MemoryHandlers;
 
@@ -253,6 +271,88 @@ impl MemoryHandlers {
             .collect();
 
         Ok(Json(responses))
+    }
+
+    /// List all categories (GET /api/v1/categories)
+    ///
+    /// Lists all memory categories.
+    pub async fn list_categories(
+        State(state): State<MemoryState>,
+    ) -> Result<Json<Vec<CategoryResponse>>, MemoryError> {
+        let categories = state.storage.get_all_categories();
+
+        let responses: Vec<CategoryResponse> = categories
+            .into_iter()
+            .map(|cat| CategoryResponse {
+                id: cat.id,
+                name: cat.name,
+                description: cat.description,
+                item_count: cat.item_count,
+                created: cat.created_at.to_rfc3339(),
+                updated: cat.updated_at.to_rfc3339(),
+            })
+            .collect();
+
+        Ok(Json(responses))
+    }
+
+    /// Get category by ID (GET /api/v1/categories/{id})
+    ///
+    /// Retrieves a specific category by its ID.
+    pub async fn get_category(
+        State(state): State<MemoryState>,
+        Path(id): Path<String>,
+    ) -> Result<Json<CategoryResponse>, MemoryError> {
+        match state.storage.get_category(&id) {
+            Ok(cat) => Ok(Json(CategoryResponse {
+                id: cat.id,
+                name: cat.name,
+                description: cat.description,
+                item_count: cat.item_count,
+                created: cat.created_at.to_rfc3339(),
+                updated: cat.updated_at.to_rfc3339(),
+            })),
+            Err(_) => Err(MemoryError::NotFound(format!("Category with id '{}' not found", id)))
+        }
+    }
+
+    /// Get memories in category (GET /api/v1/categories/{id}/memories)
+    ///
+    /// Retrieves all memories belonging to a specific category.
+    pub async fn get_category_memories(
+        State(state): State<MemoryState>,
+        Path(id): Path<String>,
+    ) -> Result<Json<CategoryWithMemoriesResponse>, MemoryError> {
+        // Get category
+        let category = state.storage.get_category(&id)
+            .map_err(|_| MemoryError::NotFound(format!("Category with id '{}' not found", id)))?;
+
+        // Get memories in category
+        let items = state.storage.get_items_in_category(&id);
+
+        let memories: Vec<MemoryItemResponse> = items
+            .into_iter()
+            .map(|item| MemoryItemResponse {
+                id: item.id,
+                memory_type: format!("{:?}", item.memory_type),
+                content: item.content,
+                summary: item.summary,
+                created: item.created_at.to_rfc3339(),
+                updated: item.updated_at.to_rfc3339(),
+            })
+            .collect();
+
+        Ok(Json(CategoryWithMemoriesResponse {
+            category: CategoryResponse {
+                id: category.id,
+                name: category.name,
+                description: category.description,
+                item_count: category.item_count,
+                created: category.created_at.to_rfc3339(),
+                updated: category.updated_at.to_rfc3339(),
+            },
+            memories,
+        }))
     }
 }
 

@@ -204,6 +204,13 @@ pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
         .route("/api/v1/memories/search", axum::routing::post(memory_handlers::MemoryHandlers::search_memories))
         // 获取单个记忆
         .route("/api/v1/memories/:id", axum::routing::get(memory_handlers::MemoryHandlers::get_memory))
+        // ============== 分类操作 ==============
+        // 列出分类
+        .route("/api/v1/categories", axum::routing::get(memory_handlers::MemoryHandlers::list_categories))
+        // 获取单个分类
+        .route("/api/v1/categories/:id", axum::routing::get(memory_handlers::MemoryHandlers::get_category))
+        // 获取分类下的记忆
+        .route("/api/v1/categories/:id/memories", axum::routing::get(memory_handlers::MemoryHandlers::get_category_memories))
         .with_state(memory_state);
 
     // 合并所有路由
