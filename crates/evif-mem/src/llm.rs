@@ -68,6 +68,16 @@ pub struct OpenAIClient {
     base_url: String,
 }
 
+/// Anthropic Client
+///
+/// LLM client implementation using Anthropic API (Claude).
+pub struct AnthropicClient {
+    api_key: String,
+    model: String,
+    client: reqwest::Client,
+    base_url: String,
+}
+
 impl OpenAIClient {
     /// Create a new OpenAI client
     pub fn new(api_key: String) -> Self {
@@ -242,6 +252,124 @@ impl LLMClient for OpenAIClient {
     }
 }
 
+impl AnthropicClient {
+    /// Create a new Anthropic client
+    pub fn new(api_key: String) -> Self {
+        Self {
+            api_key,
+            model: "claude-3-5-sonnet-20241022".to_string(),
+            client: reqwest::Client::new(),
+            base_url: "https://api.anthropic.com/v1".to_string(),
+        }
+    }
+
+    /// Create with custom configuration
+    pub fn with_config(api_key: String, model: String, base_url: Option<String>) -> Self {
+        Self {
+            api_key,
+            model,
+            client: reqwest::Client::new(),
+            base_url: base_url.unwrap_or_else(|| "https://api.anthropic.com/v1".to_string()),
+        }
+    }
+}
+
+#[async_trait]
+impl LLMClient for AnthropicClient {
+    async fn generate(&self, prompt: &str) -> MemResult<String> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            max_tokens: u32,
+            messages: Vec<Message>,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            content: Vec<ContentBlock>,
+        }
+
+        #[derive(Deserialize)]
+        struct ContentBlock {
+            text: String,
+        }
+
+        let request = Request {
+            model: self.model.clone(),
+            max_tokens: 4096,
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/messages", self.base_url))
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        result
+            .content
+            .first()
+            .map(|c| c.text.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))
+    }
+
+    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
+        // TODO: Implement LLM-based memory extraction
+        // For now, return empty vec (will be implemented in Task 4)
+        Ok(vec![])
+    }
+
+    async fn embed(&self, _text: &str) -> MemResult<Vec<f32>> {
+        // Anthropic doesn't provide an embeddings API
+        // Users should use OpenAI or other embedding services
+        Err(MemError::Embedding(
+            "Anthropic does not provide embeddings API. Use OpenAI or other embedding services.".to_string()
+        ))
+    }
+
+    async fn analyze_category(&self, _memories: &[String]) -> MemResult<CategoryAnalysis> {
+        // TODO: Implement category analysis
+        // For now, return placeholder (will be implemented later)
+        Ok(CategoryAnalysis {
+            name: "uncategorized".to_string(),
+            description: "Default category".to_string(),
+            themes: vec![],
+            tags: vec![],
+        })
+    }
+
+    async fn rerank(&self, _query: &str, items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        // TODO: Implement reranking logic
+        // For now, return items as-is (will be implemented in Task 5)
+        Ok(items)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,6 +392,23 @@ mod tests {
         assert_eq!(client.model, "gpt-4o-mini");
         assert_eq!(client.embedding_model, "text-embedding-3-large");
         assert_eq!(client.base_url, "https://custom.openai.com/v1");
+    }
+
+    #[test]
+    fn test_anthropic_client_creation() {
+        let client = AnthropicClient::new("test-key".to_string());
+        assert_eq!(client.model, "claude-3-5-sonnet-20241022");
+    }
+
+    #[test]
+    fn test_anthropic_client_custom_config() {
+        let client = AnthropicClient::with_config(
+            "test-key".to_string(),
+            "claude-3-opus-20240229".to_string(),
+            Some("https://custom.anthropic.com/v1".to_string()),
+        );
+        assert_eq!(client.model, "claude-3-opus-20240229");
+        assert_eq!(client.base_url, "https://custom.anthropic.com/v1");
     }
 
     // Note: Integration tests with real API calls should be in tests/ directory
