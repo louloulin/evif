@@ -412,6 +412,55 @@ pub struct OpenAIEmbeddingClient {
 - OpenAI API 集成
 - 未来可扩展本地模型
 
+#### 1.5 LLM 客户端抽象 (crates/evif-mem/src/llm.rs)
+
+```rust
+/// LLM 客户端 trait
+#[async_trait]
+pub trait LLMClient: Send + Sync {
+    /// 生成文本
+    async fn generate(&self, prompt: &str) -> MemResult<String>;
+
+    /// 提取结构化记忆
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>>;
+
+    /// 生成嵌入向量
+    async fn embed(&self, text: &str) -> MemResult<Vec<f32>>;
+
+    /// 分析记忆类别
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis>;
+
+    /// 重排序
+    async fn rerank(&self, query: &str, items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>>;
+}
+
+/// OpenAI 客户端
+pub struct OpenAIClient {
+    api_key: String,
+    model: String,  // gpt-4o
+    embedding_model: String,  // text-embedding-3-small
+    client: reqwest::Client,
+    base_url: String,
+}
+
+/// 分类分析结果
+pub struct CategoryAnalysis {
+    pub name: String,
+    pub description: String,
+    pub themes: Vec<String>,
+    pub tags: Vec<String>,
+}
+```
+
+**特性**:
+- 统一的 LLM 接口抽象
+- OpenAI API 完整集成
+- 支持自定义配置 (model, embedding_model, base_url)
+- 完整的错误处理和类型安全
+
+**测试覆盖**: 23 tests passing
+**提交**: 9f6944e
+
 ### 2. 待实现组件
 
 #### 2.1 记忆化管道 (Memorize Pipeline)

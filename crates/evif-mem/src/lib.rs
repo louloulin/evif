@@ -22,6 +22,7 @@ pub mod embedding;
 pub mod error;
 pub mod llm;
 pub mod models;
+pub mod pipeline;
 pub mod storage;
 pub mod vector;
 
@@ -30,3 +31,4 @@ pub mod plugin;
 
 pub use error::MemError;
 pub use models::*;
+pub use pipeline::*;
