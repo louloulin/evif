@@ -5,9 +5,10 @@
 //! - RetrievePipeline: Search and retrieve memories
 //! - EvolvePipeline: Self-evolving memory management (future)
 //! - Categorizer: Auto-categorize memory items based on vector similarity
+//! - ResourceLoader: Load resources from various sources (URL, file, text)
 
 use crate::embedding::EmbeddingManager;
-use crate::error::MemResult;
+use crate::error::{MemError, MemResult};
 use crate::llm::LLMClient;
 use crate::models::{MemoryItem, Modality, Resource};
 use crate::storage::memory::MemoryStorage;
@@ -15,6 +16,7 @@ use crate::vector::VectorIndex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sha2::{Digest, Sha256};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -96,17 +98,20 @@ impl MemorizePipeline {
     /// This is the main entry point for the memorization pipeline.
     /// Takes raw text, extracts memories, and stores them.
     pub async fn memorize_text(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
-        // Step 1: Create resource
-        let resource = Resource::new("text://input".to_string(), Modality::Conversation);
+        // Use ResourceLoader to create resource from text
+        let resource_loader = ResourceLoader::new();
+        let (resource, content) = resource_loader.load_text(text).await?;
+
+        // Store resource
         let resource_id = resource.id.clone();
         self.storage.put_resource(resource)?;
 
-        // Step 2: Extract memories using LLM
+        // Extract memories using LLM
         let llm = self.llm_client.read().await;
-        let memories = llm.extract_memories(text).await?;
+        let memories = llm.extract_memories(&content).await?;
         drop(llm); // Release lock early
 
-        // Step 3: Process each memory
+        // Process each memory
         let mut stored_memories = Vec::new();
         for mut memory in memories {
             // Set resource reference
@@ -114,7 +119,7 @@ impl MemorizePipeline {
 
             // Calculate content hash for deduplication
             let hash = self.calculate_hash(&memory.content);
-            memory.content_hash = Some(hash);
+            memory.content_hash = Some(hash.clone());
 
             // Generate embedding
             let embedding = {
@@ -124,16 +129,94 @@ impl MemorizePipeline {
             let embedding_id = uuid::Uuid::new_v4().to_string();
             memory.embedding_id = Some(embedding_id.clone());
 
-            // Step 4: Store in storage (handles deduplication)
+            // Check for existing memory with same hash (deduplication)
+            if let Ok(existing) = self.storage.get_items_by_hash(&hash) {
+                if let Some(mut existing_item) = existing.into_iter().next() {
+                    // Reinforce existing memory
+                    existing_item.reinforcement_count += 1;
+                    existing_item.last_reinforced_at = Some(chrono::Utc::now());
+                    self.storage.put_item(existing_item)?;
+                    continue;
+                }
+            }
+
+            // Store in storage
             self.storage.put_item(memory.clone())?;
 
-            // Step 5: Add to vector index
+            // Add to vector index
             {
                 let index = self.vector_index.write().await;
                 index.add(memory.id.clone(), embedding, None).await?;
             }
 
-            // Step 6: Categorize the memory item
+            // Categorize the memory item
+            let category_id = self.categorizer.categorize(&memory).await?;
+            memory.category_id = Some(category_id);
+
+            stored_memories.push(memory);
+        }
+
+        Ok(stored_memories)
+    }
+
+    /// Memorize from a resource source (URL, file, or text)
+    ///
+    /// This is the main entry point for the full memorization pipeline.
+    /// Takes a resource identifier (URL, file path, or text), loads it,
+    /// extracts memories, and stores them.
+    pub async fn memorize_resource(&self, source: &str) -> MemResult<Vec<MemoryItem>> {
+        // Use ResourceLoader to load resource
+        let resource_loader = ResourceLoader::new();
+        let (resource, content) = resource_loader.load(source).await?;
+
+        // Store resource
+        let resource_id = resource.id.clone();
+        self.storage.put_resource(resource)?;
+
+        // Extract memories using LLM
+        let llm = self.llm_client.read().await;
+        let memories = llm.extract_memories(&content).await?;
+        drop(llm); // Release lock early
+
+        // Process each memory
+        let mut stored_memories = Vec::new();
+        for mut memory in memories {
+            // Set resource reference
+            memory.resource_id = Some(resource_id.clone());
+
+            // Calculate content hash for deduplication
+            let hash = self.calculate_hash(&memory.content);
+            memory.content_hash = Some(hash.clone());
+
+            // Generate embedding
+            let embedding = {
+                let emb_mgr = self.embedding_manager.read().await;
+                emb_mgr.embed(&memory.content).await?
+            };
+            let embedding_id = uuid::Uuid::new_v4().to_string();
+            memory.embedding_id = Some(embedding_id.clone());
+
+            // Check for existing memory with same hash (deduplication)
+            if let Ok(existing) = self.storage.get_items_by_hash(&hash) {
+                if let Some(mut existing_item) = existing.into_iter().next() {
+                    // Reinforce existing memory
+                    existing_item.reinforcement_count += 1;
+                    existing_item.last_reinforced_at = Some(chrono::Utc::now());
+                    self.storage.put_item(existing_item)?;
+                    continue;
+                }
+            }
+
+            // Store in storage
+            self.storage.put_item(memory.clone())?;
+
+            // Add to vector index
+            {
+                let index = self.vector_index.write().await;
+                index.add(memory.id.clone(), embedding, None).await?;
+            }
+
+            // Categorize the memory item
             let category_id = self.categorizer.categorize(&memory).await?;
             memory.category_id = Some(category_id);
 
@@ -149,6 +232,233 @@ impl MemorizePipeline {
         hasher.update(content.as_bytes());
         format!("{:x}", hasher.finalize())
     }
+}
+
+/// ResourceLoader - loads resources from various sources
+///
+/// Supported sources:
+/// - `text://...` - Direct text input
+/// - `file:///path/to/file` - Local file path
+/// - `http://...` or `https://...` - Web URL
+/// - `/path/to/file` - Local file path (auto-detected)
+///
+/// Supported modalities:
+/// - Conversation: text conversations
+/// - Document: documents, articles
+/// - Image: images (future: Vision API)
+/// - Video: videos (future: keyframe extraction)
+/// - Audio: audio files (future: transcription)
+pub struct ResourceLoader {
+    http_client: reqwest::Client,
+}
+
+impl ResourceLoader {
+    /// Create a new ResourceLoader
+    pub fn new() -> Self {
+        Self {
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    /// Load resource from various sources
+    ///
+    /// Automatically detects source type from the input string:
+    /// - URL (http/https) -> fetch from web
+    /// - file:// scheme -> read from local file
+    /// - Absolute path -> read from local file
+    /// - Other -> treat as direct text input
+    pub async fn load(&self, source: &str) -> MemResult<(Resource, String)> {
+        let source = source.trim();
+
+        if source.starts_with("http://") || source.starts_with("https://") {
+            self.load_url(source).await
+        } else if source.starts_with("file://") {
+            let path = &source[7..]; // Remove "file://" prefix
+            self.load_file(Path::new(path)).await
+        } else if source.starts_with('/') || source.starts_with("./") || source.starts_with("../") {
+            // Likely a file path
+            self.load_file(Path::new(source)).await
+        } else if source.starts_with("text://") {
+            // Direct text input with explicit scheme
+            let content = &source[7..]; // Remove "text://" prefix
+            self.load_text(content).await
+        } else {
+            // Default: treat as direct text input
+            self.load_text(source).await
+        }
+    }
+
+    /// Load from direct text input
+    pub async fn load_text(&self, text: &str) -> MemResult<(Resource, String)> {
+        let resource = Resource::new("text://input".to_string(), Modality::Conversation);
+        Ok((resource, text.to_string()))
+    }
+
+    /// Load from local file
+    pub async fn load_file(&self, path: &Path) -> MemResult<(Resource, String)> {
+        let content = tokio::fs::read_to_string(path).await?;
+
+        // Detect modality from file extension
+        let modality = detect_modality_from_path(path);
+        let url = format!("file://{}", path.display());
+
+        let mut resource = Resource::new(url, modality);
+        resource.local_path = Some(path.display().to_string());
+
+        Ok((resource, content))
+    }
+
+    /// Load from URL (http/https)
+    pub async fn load_url(&self, url: &str) -> MemResult<(Resource, String)> {
+        let response = self
+            .http_client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| MemError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to fetch URL: {}", e),
+            )))?;
+
+        // Detect content type
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("text/plain");
+
+        // Detect modality from content type
+        let modality = detect_modality_from_content_type(content_type);
+
+        // Get content based on content type
+        let content = if content_type.contains("application/json") {
+            // Pretty print JSON
+            let json: serde_json::Value = response
+                .json()
+                .await
+                .map_err(|e| MemError::Parse(format!("Failed to parse JSON: {}", e)))?;
+            serde_json::to_string_pretty(&json).unwrap_or_default()
+        } else if content_type.contains("text/html") {
+            // For HTML, extract text content (simple approach)
+            let html = response
+                .text()
+                .await
+                .map_err(|e| MemError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to read HTML: {}", e),
+                )))?;
+            extract_text_from_html(&html)
+        } else {
+            // Plain text or other
+            response
+                .text()
+                .await
+                .map_err(|e| MemError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to read content: {}", e),
+                )))?
+        };
+
+        let mut resource = Resource::new(url.to_string(), modality);
+        // Try to get title from HTML if available
+        if modality == Modality::Document {
+            resource.caption = extract_title_from_html(&content);
+        }
+
+        Ok((resource, content))
+    }
+}
+
+impl Default for ResourceLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Detect modality from file extension
+fn detect_modality_from_path(path: &Path) -> Modality {
+    let extension = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    match extension.as_str() {
+        "txt" | "md" | "markdown" | "rst" | "org" | "text" => Modality::Document,
+        "json" | "xml" | "yaml" | "yml" | "toml" | "csv" => Modality::Document,
+        "html" | "htm" => Modality::Document,
+        "pdf" => Modality::Document,
+        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "webp" | "svg" => Modality::Image,
+        "mp4" | "avi" | "mov" | "mkv" | "webm" | "flv" => Modality::Video,
+        "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" => Modality::Audio,
+        "log" | "out" | "err" => Modality::Conversation,
+        _ => Modality::Document,
+    }
+}
+
+/// Detect modality from content-type header
+fn detect_modality_from_content_type(content_type: &str) -> Modality {
+    let content_type = content_type.to_lowercase();
+
+    if content_type.contains("text/html") {
+        Modality::Document
+    } else if content_type.contains("application/json") {
+        Modality::Document
+    } else if content_type.contains("text/") {
+        Modality::Document
+    } else if content_type.contains("image/") {
+        Modality::Image
+    } else if content_type.contains("video/") {
+        Modality::Video
+    } else if content_type.contains("audio/") {
+        Modality::Audio
+    } else {
+        Modality::Document
+    }
+}
+
+/// Simple HTML text extraction (strips tags)
+fn extract_text_from_html(html: &str) -> String {
+    // Simple approach: remove script and style tags first, then strip all HTML tags
+    let without_scripts = regex_lite::Regex::new(r"(?is)<script[^>]*>.*?</script>")
+        .map(|re| re.replace_all(html, "").into_owned())
+        .unwrap_or_else(|_| html.to_string());
+
+    let without_styles = regex_lite::Regex::new(r"(?is)<style[^>]*>.*?</style>")
+        .map(|re| re.replace_all(&without_scripts, "").into_owned())
+        .unwrap_or(without_scripts);
+
+    let without_tags = regex_lite::Regex::new(r"<[^>]+>")
+        .map(|re| re.replace_all(&without_styles, " ").into_owned())
+        .unwrap_or(without_styles);
+
+    // Clean up whitespace
+    let cleaned = regex_lite::Regex::new(r"\s+")
+        .map(|re| re.replace_all(&without_tags, " ").into_owned())
+        .unwrap_or(without_tags);
+
+    cleaned.trim().to_string()
+}
+
+/// Extract title from HTML if available
+fn extract_title_tag_from_html(html: &str) -> Option<String> {
+    // Try to extract <title> tag content
+    regex_lite::Regex::new(r"(?is)<title[^>]*>(.*?)</title>")
+        .ok()
+        .and_then(|re| re.captures(html))
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().trim().to_string())
+}
+
+/// Simple title extraction from HTML
+fn extract_title_from_html(content: &str) -> Option<String> {
+    // Check if it looks like HTML
+    if !content.contains("<html") && !content.contains("<!DOCTYPE") {
+        return None;
+    }
+
+    // Try to extract <title> tag content
+    extract_title_tag_from_html(content)
 }
 
 /// Retrieve Pipeline
@@ -784,5 +1094,81 @@ mod tests {
         assert_eq!(parsed.relevant_memories.len(), 2);
         assert_eq!(parsed.relevant_memories[0].id, "memory-1");
         assert!((parsed.relevant_memories[0].score - 0.95).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_resource_loader_text() {
+        let loader = ResourceLoader::new();
+
+        // Test direct text input
+        let (resource, content) = loader.load("Hello, this is a test message").await.unwrap();
+
+        assert_eq!(content, "Hello, this is a test message");
+        assert_eq!(resource.url, "text://input");
+        assert_eq!(resource.modality, Modality::Conversation);
+    }
+
+    #[tokio::test]
+    async fn test_resource_loader_text_explicit_scheme() {
+        let loader = ResourceLoader::new();
+
+        // Test text:// scheme
+        let (resource, content) = loader.load("text://Hello, explicit scheme").await.unwrap();
+
+        assert_eq!(content, "Hello, explicit scheme");
+        assert_eq!(resource.url, "text://input");
+        assert_eq!(resource.modality, Modality::Conversation);
+    }
+
+    #[test]
+    fn test_detect_modality_from_path() {
+        // Test various file extensions
+        assert_eq!(detect_modality_from_path(Path::new("test.txt")), Modality::Document);
+        assert_eq!(detect_modality_from_path(Path::new("test.md")), Modality::Document);
+        assert_eq!(detect_modality_from_path(Path::new("test.json")), Modality::Document);
+        assert_eq!(detect_modality_from_path(Path::new("test.html")), Modality::Document);
+        assert_eq!(detect_modality_from_path(Path::new("test.jpg")), Modality::Image);
+        assert_eq!(detect_modality_from_path(Path::new("test.png")), Modality::Image);
+        assert_eq!(detect_modality_from_path(Path::new("test.mp4")), Modality::Video);
+        assert_eq!(detect_modality_from_path(Path::new("test.mp3")), Modality::Audio);
+        assert_eq!(detect_modality_from_path(Path::new("test.log")), Modality::Conversation);
+    }
+
+    #[test]
+    fn test_detect_modality_from_content_type() {
+        // Test various content types
+        assert_eq!(detect_modality_from_content_type("text/html"), Modality::Document);
+        assert_eq!(detect_modality_from_content_type("application/json"), Modality::Document);
+        assert_eq!(detect_modality_from_content_type("text/plain"), Modality::Document);
+        assert_eq!(detect_modality_from_content_type("image/jpeg"), Modality::Image);
+        assert_eq!(detect_modality_from_content_type("image/png"), Modality::Image);
+        assert_eq!(detect_modality_from_content_type("video/mp4"), Modality::Video);
+        assert_eq!(detect_modality_from_content_type("audio/mpeg"), Modality::Audio);
+    }
+
+    #[test]
+    fn test_extract_text_from_html() {
+        let html = r#"<html><head><title>Test Page</title></head><body><script>alert('test')</script><p>Hello World</p></body></html>"#;
+        let text = extract_text_from_html(html);
+
+        assert!(text.contains("Hello World"));
+        assert!(!text.contains("<script>"));
+        assert!(!text.contains("alert"));
+    }
+
+    #[test]
+    fn test_extract_title_from_html() {
+        let html = r#"<html><head><title>My Title</title></head><body>Content</body></html>"#;
+        let title = extract_title_from_html(html);
+
+        assert_eq!(title, Some("My Title".to_string()));
+    }
+
+    #[test]
+    fn test_extract_title_from_non_html() {
+        let text = "This is just plain text without any HTML tags.";
+        let title = extract_title_from_html(text);
+
+        assert_eq!(title, None);
     }
 }

@@ -86,6 +86,20 @@ impl MemoryStorage {
             .ok_or_else(|| MemError::NotFound(format!("Memory item not found: {}", id)))
     }
 
+    /// Get memory items by content hash (for deduplication check)
+    pub fn get_items_by_hash(&self, hash: &str) -> MemResult<Vec<MemoryItem>> {
+        let mut results = Vec::new();
+        // Search through all items to find matching hash
+        // This is O(n) but acceptable for in-memory storage
+        // For production, consider adding a reverse index
+        for item in self.items.iter() {
+            if item.content_hash.as_deref() == Some(hash) {
+                results.push(item.clone());
+            }
+        }
+        Ok(results)
+    }
+
     pub fn get_items_by_type(&self, memory_type: &str) -> Vec<MemoryItem> {
         self.items_by_type
             .get(memory_type)

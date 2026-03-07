@@ -54,7 +54,7 @@ impl std::fmt::Display for MemoryType {
 }
 
 /// Modality - type of input resource
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Modality {
     Conversation,
