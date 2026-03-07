@@ -1054,14 +1054,14 @@ evif-mem stats --category programming
 - [ ] 实现 `MemorizePipeline`
   - [ ] ResourceLoader（支持 text/file/url）
   - [ ] Preprocessor（text 模态）
-  - [ ] Extractor（LLM 提取）
-  - [ ] Deduplicator（content hash）
+  - [x] Extractor（LLM 提取）
+  - [x] Deduplicator（content hash）
   - [ ] Categorizer（向量聚类）
   - [ ] Persister（MD 文件 + 向量索引）
 - [ ] 实现 `RetrievePipeline`
   - [ ] VectorSearch 模式
   - [ ] LLMRead 模式
-  - [ ] Hybrid 模式
+  - [x] Hybrid 模式
 - [ ] 实现 `LLMClient` 抽象
   - [ ] OpenAI 客户端
   - [ ] Anthropic 客户端

@@ -373,6 +373,51 @@ impl EvifMcpServer {
                     "required": ["handle_id"]
                 }),
             },
+            // Memory tools
+            Tool {
+                name: "evif_memorize".to_string(),
+                description: "Store text as memories in the memory system".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "Text content to memorize"
+                        },
+                        "modality": {
+                            "type": "string",
+                            "description": "Modality type (conversation, document, code, etc.)"
+                        }
+                    },
+                    "required": ["text"]
+                }),
+            },
+            Tool {
+                name: "evif_retrieve".to_string(),
+                description: "Search memories using vector or hybrid search".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query"
+                        },
+                        "mode": {
+                            "type": "string",
+                            "description": "Search mode: vector or hybrid"
+                        },
+                        "k": {
+                            "type": "number",
+                            "description": "Number of results to return"
+                        },
+                        "threshold": {
+                            "type": "number",
+                            "description": "Similarity threshold (0.0-1.0)"
+                        }
+                    },
+                    "required": ["query"]
+                }),
+            },
         ];
 
         *self.tools.write().await = tools;
@@ -785,6 +830,71 @@ impl EvifMcpServer {
                     .send()
                     .await
                     .map_err(|e| format!("Failed to close handle: {}", e))?;
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+                Ok(result)
+            }
+
+            // Memory tools - using REST API (requires evif-mem REST endpoints)
+            "evif_memorize" => {
+                let text = arguments["text"]
+                    .as_str()
+                    .ok_or("Missing 'text' argument")?;
+
+                let modality = arguments["modality"]
+                    .as_str()
+                    .unwrap_or("conversation");
+
+                let url = format!("{}/api/v1/memories", self.config.evif_url);
+                let response = self.client
+                    .post(&url)
+                    .json(&json!({
+                        "text": text,
+                        "modality": modality
+                    }))
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to memorize: {}", e))?;
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+                Ok(result)
+            }
+
+            "evif_retrieve" => {
+                let query = arguments["query"]
+                    .as_str()
+                    .ok_or("Missing 'query' argument")?;
+
+                let mode = arguments["mode"].as_str().unwrap_or("vector");
+                let k = arguments["k"].as_u64().unwrap_or(10) as usize;
+                let threshold = arguments["threshold"].as_f64().unwrap_or(0.5) as f32;
+
+                // Build mode-specific parameters
+                let (mode_type, mode_params) = if mode == "hybrid" {
+                    ("hybrid", json!({ "vector_k": k, "llm_top_n": 3 }))
+                } else {
+                    ("vector", json!({ "k": k, "threshold": threshold }))
+                };
+
+                let url = format!("{}/api/v1/memories/search", self.config.evif_url);
+                let response = self.client
+                    .post(&url)
+                    .json(&json!({
+                        "query": query,
+                        "mode": mode_type,
+                        "mode_params": mode_params
+                    }))
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to retrieve: {}", e))?;
 
                 let result: Value = response
                     .json()
