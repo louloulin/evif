@@ -2,6 +2,30 @@
 
 All notable changes to the Mem platform will be documented in this file.
 
+## [1.3.0] - 2026-03-07
+
+### Added
+- **EvolvePipeline** - Memory Evolution System (Phase 1.3 complete)
+  - `EvolvePipeline` struct for self-evolving memory management
+  - `reinforce()` - Strengthen frequently accessed memories
+  - `decay()` - Reduce weight based on time since last access
+  - `merge()` - Combine similar memories using LLM
+  - `calculate_weight()` - Calculate memory weight with decay (exposed as public API)
+  - `evolve_all()` - Batch evolution for all memories
+  - `EvolveStats` struct for evolution statistics
+  - 8 new unit tests for evolve functionality
+
+### Changed
+- Phase 1.3 progress: 70% → 100% complete
+- evif-mem overall completion: 97% → 100%
+- **Phase 1 is now 100% complete!** 🎉
+
+### Technical Details
+- Weight formula: `(1.0 + reinforcement_bonus) * time_decay`
+- Time decay: exponential with 30-day half-life
+- Reinforcement bonus: min(count * 0.1, 1.0)
+- LLM-based memory merging preserves key information
+
 ## [1.2.0] - 2026-03-07
 
 ### Progress Update
