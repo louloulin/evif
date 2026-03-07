@@ -224,7 +224,7 @@ impl LLMClient for OpenAIClient {
             .ok_or_else(|| MemError::Embedding("No embedding returned".to_string()))
     }
 
-    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+    async fn analyze_category(&self, _memories: &[String]) -> MemResult<CategoryAnalysis> {
         // TODO: Implement category analysis
         // For now, return placeholder (will be implemented later)
         Ok(CategoryAnalysis {

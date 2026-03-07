@@ -4,6 +4,7 @@
 //! - MemorizePipeline: Extract and store memories from input
 //! - RetrievePipeline: Search and retrieve memories
 //! - EvolvePipeline: Self-evolving memory management (future)
+//! - Categorizer: Auto-categorize memory items based on vector similarity
 
 use crate::embedding::EmbeddingManager;
 use crate::error::MemResult;
@@ -58,11 +59,13 @@ pub enum RetrieveMode {
 /// 4. Generate embeddings
 /// 5. Persist to storage
 /// 6. Update vector index
+/// 7. Categorize items
 pub struct MemorizePipeline {
     llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
     storage: Arc<MemoryStorage>,
     vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
     embedding_manager: Arc<RwLock<EmbeddingManager>>,
+    categorizer: Categorizer,
 }
 
 impl MemorizePipeline {
@@ -73,11 +76,18 @@ impl MemorizePipeline {
         vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
         embedding_manager: Arc<RwLock<EmbeddingManager>>,
     ) -> Self {
+        let categorizer = Categorizer::new(
+            storage.clone(),
+            vector_index.clone(),
+            embedding_manager.clone(),
+            llm_client.clone(),
+        );
         Self {
             llm_client,
             storage,
             vector_index,
             embedding_manager,
+            categorizer,
         }
     }
 
@@ -122,6 +132,10 @@ impl MemorizePipeline {
                 let index = self.vector_index.write().await;
                 index.add(memory.id.clone(), embedding, None).await?;
             }
+
+            // Step 6: Categorize the memory item
+            let category_id = self.categorizer.categorize(&memory).await?;
+            memory.category_id = Some(category_id);
 
             stored_memories.push(memory);
         }
@@ -434,6 +448,153 @@ Respond ONLY with valid JSON, no additional text."#,
                     .collect()
             }
         }
+    }
+}
+
+/// Categorizer
+///
+/// Automatically categorizes memory items using vector similarity:
+/// 1. Find most similar existing category by embedding
+/// 2. If similarity >= threshold, assign to that category
+/// 3. If no similar category, create new category using LLM analysis
+pub struct Categorizer {
+    storage: Arc<MemoryStorage>,
+    vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
+    embedding_manager: Arc<RwLock<EmbeddingManager>>,
+    llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+    similarity_threshold: f32,
+}
+
+impl Categorizer {
+    /// Create a new categorizer
+    pub fn new(
+        storage: Arc<MemoryStorage>,
+        vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
+        embedding_manager: Arc<RwLock<EmbeddingManager>>,
+        llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+    ) -> Self {
+        Self {
+            storage,
+            vector_index,
+            embedding_manager,
+            llm_client,
+            similarity_threshold: 0.7, // Default threshold
+        }
+    }
+
+    /// Create categorizer with custom threshold
+    pub fn with_threshold(
+        storage: Arc<MemoryStorage>,
+        vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
+        embedding_manager: Arc<RwLock<EmbeddingManager>>,
+        llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+        threshold: f32,
+    ) -> Self {
+        Self {
+            storage,
+            vector_index,
+            embedding_manager,
+            llm_client,
+            similarity_threshold: threshold,
+        }
+    }
+
+    /// Categorize a memory item
+    ///
+    /// Returns the category ID that the item was assigned to.
+    pub async fn categorize(&self, item: &MemoryItem) -> MemResult<String> {
+        // Get item embedding
+        let item_embedding = {
+            let emb_mgr = self.embedding_manager.read().await;
+            emb_mgr.embed(&item.content).await?
+        };
+
+        // Try to find similar existing category
+        if let Some(category_id) = self.find_similar_category(&item_embedding).await? {
+            // Link item to existing category
+            self.storage.link_item_to_category(&item.id, &category_id)?;
+            return Ok(category_id);
+        }
+
+        // No similar category found - create new one
+        let category_id = self.create_new_category(item, &item_embedding).await?;
+
+        // Link item to new category
+        self.storage.link_item_to_category(&item.id, &category_id)?;
+
+        Ok(category_id)
+    }
+
+    /// Find the most similar existing category
+    ///
+    /// Returns Some(category_id) if similarity >= threshold, None otherwise
+    async fn find_similar_category(&self, item_embedding: &[f32]) -> MemResult<Option<String>> {
+        let categories = self.storage.get_all_categories();
+
+        if categories.is_empty() {
+            return Ok(None);
+        }
+
+        // Search for similar categories using vector index
+        let search_results = {
+            let index = self.vector_index.read().await;
+            index.search(item_embedding, Some(10), None).await?
+        };
+
+        // Filter results by category prefix and threshold
+        for result in search_results {
+            // Category IDs in vector index are prefixed with "cat:"
+            if result.id.starts_with("cat:") {
+                let category_id = result.id.strip_prefix("cat:").unwrap().to_string();
+
+                // Check if category still exists
+                if self.storage.get_category(&category_id).is_ok() {
+                    if result.score >= self.similarity_threshold {
+                        return Ok(Some(category_id));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Create a new category for the memory item
+    ///
+    /// Uses LLM to generate category name and description,
+    /// then stores the category and adds its embedding to the index.
+    async fn create_new_category(
+        &self,
+        item: &MemoryItem,
+        item_embedding: &[f32],
+    ) -> MemResult<String> {
+        // Use LLM to analyze and generate category info
+        let analysis = {
+            let llm = self.llm_client.read().await;
+            llm.analyze_category(&[item.content.clone()]).await?
+        };
+
+        // Create new category
+        let mut category = crate::models::MemoryCategory::new(
+            analysis.name.clone(),
+            analysis.description.clone(),
+        );
+
+        // Generate category embedding ID
+        let category_embedding_id = uuid::Uuid::new_v4().to_string();
+        category.embedding_id = Some(category_embedding_id.clone());
+
+        // Store category
+        self.storage.put_category(category.clone())?;
+
+        // Add category embedding to vector index (prefixed with "cat:")
+        let vector_id = format!("cat:{}", category.id);
+        {
+            let index = self.vector_index.write().await;
+            index.add(vector_id, item_embedding.to_vec(), None).await?;
+        }
+
+        Ok(category.id)
     }
 }
 

@@ -4,6 +4,22 @@ All notable changes to the Mem platform will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-03-07
+
+### Added
+- **Categorizer Integration in MemorizePipeline** (Phase 1 feature)
+  - Auto-categorizes memory items using vector similarity
+  - `Categorizer::categorize()` method for memory classification
+  - `find_similar_category()` for matching existing categories
+  - `create_new_category()` with LLM-generated category descriptions
+  - Category embeddings prefixed with "cat:" in vector index
+  - Configurable similarity threshold (default: 0.7)
+
+### Changed
+- Phase 1 progress: ~80% → ~85% complete
+- MemorizePipeline now calls categorizer after storing memory items
+- Memory items automatically linked to categories
+
 ## [1.0.3] - 2026-03-07
 
 ### Added

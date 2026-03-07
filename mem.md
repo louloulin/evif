@@ -3,10 +3,8 @@
 
 > 版本: 1.0
 > 日期: 2026-03-07
-> 状态: 实现中 (Phase 1: 约 80% 完成)
-> 进度: ✅ LLMRead mode 已实现
-
-> 进度: ~80% → ~ 85% (增加 5%)
+> 状态: 实现中 (Phase 1: 约 85% 完成)
+> 进度: ✅ Categorizer 已集成到 MemorizePipeline
 
 ---
 
@@ -1065,7 +1063,7 @@ evif-mem stats --category programming
   - [x] Preprocessor（text 模态）
   - [x] Extractor（LLM 提取）
   - [x] Deduplicator（content hash）
-  - [ ] Categorizer（向量聚类）
+  - [x] Categorizer（向量聚类）✅ 新增
   - [x] Persister（MD 文件 + 向量索引）
 - [x] 实现 `RetrievePipeline`
   - [x] VectorSearch 模式
