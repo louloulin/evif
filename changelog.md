@@ -2,7 +2,24 @@
 
 All notable changes to the Mem platform will be documented in this file.
 
-## [Unreleased]
+## [1.0.5] - 2026-03-07
+
+
+
+## [1.0.5] - 2026-03-07
+
+### Added
+- **Anthropic LLM Client** - Claude 3.5 Sonnet support (Phase 1 feature)
+  - `AnthropicClient` implementing LLMClient trait
+  - Full Claude API integration with x-api-key authentication
+  - Support for generate, extract_memories, analyze_category, rerank
+  - Proper error handling for embeddings (not supported by Anthropic)
+  - Configurable base URL for custom deployments
+  - Unit tests for client creation
+
+### Changed
+- Phase 1 progress: ~85% → ~87% complete
+- LLM abstraction now supports both OpenAI and Anthropic providers
 
 ## [1.0.4] - 2026-03-07
 

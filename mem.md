@@ -3,7 +3,8 @@
 
 > 版本: 1.0
 > 日期: 2026-03-07
-> 状态: 实现中 (Phase 1: 约 85% 完成)
+> 状态: 实现中 (Phase 1: 约 87% 完成)
+> 进度: ✅ Anthropic LLM 客户端已实现
 > 进度: ✅ Categorizer 已集成到 MemorizePipeline
 
 ---
