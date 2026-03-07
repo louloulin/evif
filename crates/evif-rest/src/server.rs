@@ -75,55 +75,37 @@ fn create_plugin_from_config(plugin: &str, config: Option<&serde_json::Value>) -
     }
 }
 
-/// 加载挂载配置：优先 EVIF_CONFIG 文件，其次 EVIF_MOUNTS 环境变量（JSON 数组），否则返回默认列表
+/// 加载挂载配置：优先 EVIF_CONFIG 文件，其次 EVIF_MOUNTS 环境变量（JSON/YAML/TOML 数组），否则返回默认列表
+/// 支持的文件格式：JSON (.json), YAML (.yaml/.yml), TOML (.toml)
 fn load_mount_config() -> Vec<MountConfigEntry> {
-    // 1. 环境变量 EVIF_CONFIG 指定配置文件路径
+    // 1. 环境变量 EVIF_CONFIG 指定配置文件路径（支持 JSON/YAML/TOML）
     if let Ok(path) = std::env::var("EVIF_CONFIG") {
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(arr) = parsed.get("mounts").and_then(|m| m.as_array()) {
-                    let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
-                        .map(|v| serde_json::from_value(v.clone()))
-                        .collect();
-                    if let Ok(entries) = entries {
-                        info!("Loaded {} mounts from EVIF_CONFIG={}", entries.len(), path);
-                        return entries;
-                    }
-                }
-            }
+        if let Ok(entries) = load_config_file(&path) {
+            info!("Loaded {} mounts from EVIF_CONFIG={}", entries.len(), path);
+            return entries;
         }
     }
 
-    // 2. 环境变量 EVIF_MOUNTS 为 JSON 数组字符串
+    // 2. 环境变量 EVIF_MOUNTS 为 JSON/YAML/TOML 数组字符串
     if let Ok(json_str) = std::env::var("EVIF_MOUNTS") {
-        if let Ok(entries) = serde_json::from_str::<Vec<MountConfigEntry>>(&json_str) {
+        if let Ok(entries) = parse_mounts_from_string(&json_str) {
             info!("Loaded {} mounts from EVIF_MOUNTS", entries.len());
             return entries;
         }
     }
 
-    // 3. 当前目录下的 evif.json
-    for name in ["evif.json", "./evif.json"] {
+    // 3. 当前目录下的配置文件（按优先级：evif.json > evif.yaml > evif.yml > evif.toml）
+    for name in ["evif.json", "evif.yaml", "evif.yml", "evif.toml", "./evif.json", "./evif.yaml", "./evif.yml", "./evif.toml"] {
         if Path::new(name).exists() {
-            if let Ok(content) = std::fs::read_to_string(name) {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(arr) = parsed.get("mounts").and_then(|m| m.as_array()) {
-                        let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
-                            .map(|v| serde_json::from_value(v.clone()))
-                            .collect();
-                        if let Ok(entries) = entries {
-                            info!("Loaded {} mounts from {}", entries.len(), name);
-                            return entries;
-                        }
-                    }
-                }
+            if let Ok(entries) = load_config_file(name) {
+                info!("Loaded {} mounts from {}", entries.len(), name);
+                return entries;
             }
-            break;
         }
     }
 
     // 4. 默认挂载（与原先写死行为一致）
-    info!("Using default mount config (no EVIF_CONFIG/EVIF_MOUNTS/evif.json)");
+    info!("Using default mount config (no EVIF_CONFIG/EVIF_MOUNTS/evif config files)");
     vec![
         MountConfigEntry { path: "/mem".to_string(), plugin: "mem".to_string(), config: None },
         MountConfigEntry { path: "/hello".to_string(), plugin: "hello".to_string(), config: None },
@@ -133,6 +115,74 @@ fn load_mount_config() -> Vec<MountConfigEntry> {
             config: Some(serde_json::json!({ "root": "/tmp/evif-local" })),
         },
     ]
+}
+
+/// 从文件加载配置（自动检测格式：JSON/YAML/TOML）
+fn load_config_file(path: &str) -> Result<Vec<MountConfigEntry>, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
+
+    parse_mounts_from_string(&content)
+}
+
+/// 从字符串解析挂载配置（支持 JSON/YAML/TOML）
+fn parse_mounts_from_string(content: &str) -> Result<Vec<MountConfigEntry>, String> {
+    // 尝试 JSON
+    if let Ok(entries) = serde_json::from_str::<Vec<MountConfigEntry>>(content) {
+        return Ok(entries);
+    }
+
+    // 尝试 JSON（对象形式：{ mounts: [...] }）
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
+        if let Some(arr) = parsed.get("mounts").and_then(|m| m.as_array()) {
+            let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
+                .map(|v| serde_json::from_value(v.clone()))
+                .collect();
+            if let Ok(entries) = entries {
+                return Ok(entries);
+            }
+        }
+    }
+
+    // 尝试 YAML
+    if let Ok(entries) = serde_yaml::from_str::<Vec<MountConfigEntry>>(content) {
+        return Ok(entries);
+    }
+
+    // 尝试 YAML（对象形式：{ mounts: [...] }）
+    if let Ok(parsed) = serde_yaml::from_str::<serde_yaml::Value>(content) {
+        if let Some(arr) = parsed.get("mounts") {
+            if let Some(arr) = arr.as_sequence() {
+                let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
+                    .map(|v| serde_yaml::from_value(v.clone()))
+                    .collect();
+                if let Ok(entries) = entries {
+                    return Ok(entries);
+                }
+            }
+        }
+    }
+
+    // 尝试 TOML
+    if let Ok(entries) = toml::from_str::<Vec<MountConfigEntry>>(content) {
+        return Ok(entries);
+    }
+
+    // 尝试 TOML（表形式：[mounts]）
+    if let Ok(parsed) = toml::from_str::<toml::Value>(content) {
+        if let Some(arr) = parsed.get("mounts") {
+            if let Some(arr) = arr.as_array() {
+                let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
+                    .map(|v| serde::Deserialize::deserialize(v.clone()))
+                    .collect();
+                if let Ok(entries) = entries {
+                    return Ok(entries);
+                }
+            }
+        }
+    }
+
+    Err("Failed to parse config: unsupported format (tried JSON, YAML, TOML)".to_string())
 }
 
 /// 服务器配置
@@ -214,5 +264,84 @@ mod tests {
         let config = ServerConfig::default();
         let server = EvifServer::new(config);
         assert_eq!(server.config.bind_addr, "0.0.0.0");
+    }
+
+    #[test]
+    fn test_parse_mounts_json_array() {
+        let json = r#"[
+            {"path": "/test1", "plugin": "mem", "config": null},
+            {"path": "/test2", "plugin": "local", "config": {"root": "/tmp/test"}}
+        ]"#;
+        let entries = parse_mounts_from_string(json).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path, "/test1");
+        assert_eq!(entries[0].plugin, "mem");
+        assert_eq!(entries[1].path, "/test2");
+        assert_eq!(entries[1].plugin, "local");
+    }
+
+    #[test]
+    fn test_parse_mounts_json_object() {
+        let json = r#"{
+            "mounts": [
+                {"path": "/test", "plugin": "mem"}
+            ]
+        }"#;
+        let entries = parse_mounts_from_string(json).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "/test");
+    }
+
+    #[test]
+    fn test_parse_mounts_yaml_array() {
+        let yaml = r#"
+- path: /test1
+  plugin: mem
+- path: /test2
+  plugin: local
+  config:
+    root: /tmp/test
+"#;
+        let entries = parse_mounts_from_string(yaml).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path, "/test1");
+        assert_eq!(entries[1].path, "/test2");
+    }
+
+    #[test]
+    fn test_parse_mounts_yaml_object() {
+        let yaml = r#"
+mounts:
+  - path: /test
+    plugin: mem
+"#;
+        let entries = parse_mounts_from_string(yaml).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "/test");
+    }
+
+    #[test]
+    fn test_parse_mounts_toml_array() {
+        let toml = r#"
+[[mounts]]
+path = "/test1"
+plugin = "mem"
+
+[[mounts]]
+path = "/test2"
+plugin = "local"
+config = { root = "/tmp/test" }
+"#;
+        let entries = parse_mounts_from_string(toml).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path, "/test1");
+        assert_eq!(entries[1].path, "/test2");
+    }
+
+    #[test]
+    fn test_parse_mounts_invalid_format() {
+        let invalid = "not a valid config";
+        let result = parse_mounts_from_string(invalid);
+        assert!(result.is_err());
     }
 }

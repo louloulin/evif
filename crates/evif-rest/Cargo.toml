@@ -46,6 +46,10 @@ evif-protocol = { path = "../evif-protocol" }
 evif-graph = { path = "../evif-graph" }
 evif-plugins = { path = "../evif-plugins" }
 
+# Config file formats (re-export from evif-core for mount config)
+toml = "0.8"
+serde_yaml = "0.9"
+
 [features]
 wasm = ["evif-core/wasm"]
 default = []
