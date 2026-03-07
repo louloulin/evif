@@ -13,6 +13,7 @@ mod batch_handlers;
 mod ws_handlers;
 mod compat_fs;
 mod collab_handlers;
+mod memory_handlers;
 
 pub use server::{EvifServer, ServerConfig};
 pub use handlers::{EvifHandlers, AppState, NodeResponse, QueryResponse, StatsResponse};
@@ -28,6 +29,7 @@ pub use batch_handlers::{
     BatchOperationManager, BatchOperationInfo, OperationStatus,
     create_batch_routes, BatchCopyRequestJson, BatchDeleteRequestJson
 };
+pub use memory_handlers::{MemoryHandlers, MemoryState, create_memory_state, init_memory_pipelines};
 
 use axum::{
     http::StatusCode,

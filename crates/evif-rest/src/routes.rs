@@ -1,6 +1,6 @@
 // REST API 路由 - 增强版，完全对标AGFS
 
-use crate::{handlers, handle_handlers, wasm_handlers, ws_handlers, HandleState, batch_handlers, CompatFsHandlers, metrics_handlers, collab_handlers};
+use crate::{handlers, handle_handlers, wasm_handlers, ws_handlers, HandleState, batch_handlers, CompatFsHandlers, metrics_handlers, collab_handlers, memory_handlers};
 use axum::Router;
 use std::sync::Arc;
 use std::time::Instant;
@@ -185,8 +185,23 @@ pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
         .route("/api/v1/users", axum::routing::get(collab_handlers::CollabHandlers::list_users))
         .with_state(collab_handlers::CollabState::default());
 
+    // 创建 Memory 路由
+    let memory_state = memory_handlers::create_memory_state();
+
+    let memory_routes = Router::new()
+        // ============== 记忆操作 ==============
+        // 创建记忆
+        .route("/api/v1/memories", axum::routing::post(memory_handlers::MemoryHandlers::create_memory))
+        // 列出记忆
+        .route("/api/v1/memories", axum::routing::get(memory_handlers::MemoryHandlers::list_memories))
+        // 搜索记忆
+        .route("/api/v1/memories/search", axum::routing::post(memory_handlers::MemoryHandlers::search_memories))
+        // 获取单个记忆
+        .route("/api/v1/memories/:id", axum::routing::get(memory_handlers::MemoryHandlers::get_memory))
+        .with_state(memory_state);
+
     // 合并所有路由
-    base_routes.merge(collab_routes).merge(handle_routes).merge(batch_routes).merge(ws_routes)
+    base_routes.merge(collab_routes).merge(handle_routes).merge(batch_routes).merge(ws_routes).merge(memory_routes)
 }
 
 #[cfg(test)]

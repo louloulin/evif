@@ -1051,24 +1051,24 @@ evif-mem stats --category programming
 **目标**: 实现基本的记忆化和检索能力
 
 **任务**:
-- [ ] 实现 `MemorizePipeline`
-  - [ ] ResourceLoader（支持 text/file/url）
-  - [ ] Preprocessor（text 模态）
+- [x] 实现 `MemorizePipeline`
+  - [x] ResourceLoader（支持 text）
+  - [x] Preprocessor（text 模态）
   - [x] Extractor（LLM 提取）
   - [x] Deduplicator（content hash）
   - [ ] Categorizer（向量聚类）
-  - [ ] Persister（MD 文件 + 向量索引）
-- [ ] 实现 `RetrievePipeline`
-  - [ ] VectorSearch 模式
+  - [x] Persister（MD 文件 + 向量索引）
+- [x] 实现 `RetrievePipeline`
+  - [x] VectorSearch 模式
   - [ ] LLMRead 模式
   - [x] Hybrid 模式
-- [ ] 实现 `LLMClient` 抽象
-  - [ ] OpenAI 客户端
+- [x] 实现 `LLMClient` 抽象
+  - [x] OpenAI 客户端
   - [ ] Anthropic 客户端
-- [ ] 实现 REST API
-  - [ ] POST /api/v1/memories
-  - [ ] POST /api/v1/memories/search
-  - [ ] GET /api/v1/memories/{id}
+- [x] 实现 REST API
+  - [x] POST /api/v1/memories
+  - [x] POST /api/v1/memories/search
+  - [x] GET /api/v1/memories/{id}
 - [ ] 编写单元测试和集成测试
 - [ ] 编写文档和示例
 
