@@ -393,3 +393,164 @@ git commit -m "feat(evif-mem): implement IntentionPredictor (Phase 1.5.2)
 - mem3.md Phase 1.5.2 specification
 - memU intention prediction system design
 - Memory in the Age of AI Agents (arXiv:2512.13564)
+
+
+---
+
+## [1.6.2] - 2026-03-07
+
+### Added - Phase 1.5.3: Proactive Extraction Module
+
+**ProactiveExtractor System** - Automatic memory extraction with intent-based triggering
+
+#### Core Components
+
+1. **ProactiveExtractor Struct**
+   - Automatically extracts memories from monitored resources
+   - Integrates with ProactiveAgent background task
+   - Uses IntentionPredictor to decide when to extract
+   - Triggers background evolution after extraction
+
+2. **ExtractorConfig**
+   - `intent_confidence_threshold`: Minimum confidence for intent-based extraction (default: 0.7)
+   - `min_extraction_interval_secs`: Minimum interval between extractions (default: 300s)
+   - `max_items_per_extraction`: Maximum items per extraction run (default: 100)
+   - `auto_extract_on_intent`: Enable automatic extraction on intent detection (default: true)
+   - `trigger_evolution_after_extraction`: Trigger evolution after extraction (default: true)
+
+3. **ExtractionStats**
+   - `total_extracted`: Total items extracted proactively
+   - `intent_triggered`: Extractions triggered by intent
+   - `threshold_triggered`: Extractions triggered by threshold
+   - `scheduled_triggered`: Extractions triggered by schedule
+   - `evolutions_triggered`: Evolutions triggered after extraction
+   - `last_extraction`: Last extraction timestamp
+   - `last_source`: Last extraction source URL
+
+#### Extraction Methods
+
+1. **should_extract()** - Intent-based decision
+   - Checks confidence against threshold
+   - Verifies auto_extract_on_intent is enabled
+   - Excludes "none" intent type
+
+2. **extract_proactively()** - Core extraction
+   - Converts resource to source string
+   - Uses MemorizePipeline for extraction
+   - Limits items per extraction (configurable)
+   - Updates extraction statistics
+   - Optionally triggers evolution
+
+3. **extract_on_intent()** - Intent-driven extraction
+   - Validates intent confidence
+   - Performs extraction if warranted
+   - Tracks intent-triggered statistics
+
+4. **extract_on_threshold()** - Threshold-triggered extraction
+   - Batch extraction from multiple resources
+   - Tracks threshold-triggered statistics
+
+5. **trigger_evolution()** - Background evolution
+   - Runs EvolvePipeline.evolve_all()
+   - Tracks evolution statistics
+   - Logs completion with stats
+
+#### Integration with ProactiveAgent
+
+- ProactiveExtractor integrated into ProactiveAgent
+- Created automatically in ProactiveAgent::new()
+- Two extraction methods exposed:
+  - `proactive_extract()`: Direct extraction
+  - `proactive_extract_on_intent()`: Intent-driven extraction
+
+#### Implementation Details
+
+**Files Modified**:
+- `crates/evif-mem/src/proactive.rs` (updated, +180 lines)
+- `crates/evif-mem/src/lib.rs` (updated exports)
+
+**Key Design Decisions**:
+- Resource.url is String (not Option<String>), handled gracefully
+- Evolution triggered after extraction by default (configurable)
+- Statistics tracked atomically with RwLock
+- Configurable thresholds for flexibility
+
+#### API Usage
+
+```rust
+// Create proactive extractor (usually done via ProactiveAgent)
+let extractor = ProactiveExtractor::new(
+    ExtractorConfig::default(),
+    storage.clone(),
+    memorize_pipeline.clone(),
+    evolve_pipeline.clone(),
+    llm_client.clone(),
+);
+
+// Check if should extract based on intent
+let should = extractor.should_extract(&predicted_intent);
+
+// Extract proactively from resource
+let items = extractor.extract_proactively(resource).await?;
+
+// Extract based on intent prediction
+let items = extractor.extract_on_intent(resource, intent).await?;
+
+// Get extraction statistics
+let stats = extractor.get_stats().await;
+```
+
+#### Test Results
+
+```
+cargo test -p evif-mem proactive
+
+running 13 tests
+test proactive::intention::tests::test_intent_config_custom ... ok
+test proactive::intention::tests::test_intent_config_default ... ok
+test proactive::tests::test_extractor_config_default ... ok
+test proactive::tests::test_proactive_config_custom ... ok
+test proactive::tests::test_proactive_config_default ... ok
+test proactive::tests::test_extraction_stats_default ... ok
+test proactive::tests::test_proactive_stats_default ... ok
+test proactive::tests::test_proactive_event_variants ... ok
+test proactive::intention::tests::test_memory_pattern_creation ... ok
+test proactive::tests::test_should_extract_none_intent ... ok
+test proactive::tests::test_should_extract_high_confidence ... ok
+test proactive::intention::tests::test_predicted_intent_creation ... ok
+test proactive::tests::test_should_extract_low_confidence ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured
+
+All 84 evif-mem tests pass.
+```
+
+#### Progress Update
+
+**Phase 1.5 Status**:
+- **Background Monitor (Phase 1.5.1)**: ✅ **100% Complete**
+- **Intent Prediction (Phase 1.5.2)**: ✅ **100% Complete**
+- **Proactive Extraction (Phase 1.5.3)**: ✅ **100% Complete**
+- **Cost Optimization (Phase 1.5.4)**: ⏳ **Not Started**
+
+**Overall Phase 1.5 Progress**: **75% Complete** (3/4 sub-phases done)
+
+**evif-mem Overall Progress**: **77% → 79%** (up 2%)
+
+#### Next Steps
+
+**Immediate (Current Sprint)**:
+1. Phase 1.5.4: Implement Cost Optimization
+   - LRU cache strategy
+   - Batch processing
+   - Similar query detection
+
+**Short-term (Next Sprint)**:
+2. Phase 1.6: Implement Workflow System
+   - WorkflowStep structure
+   - WorkflowRunner trait
+   - Interceptor mechanism
+
+**Medium-term (Q2 2026)**:
+3. Phase 1.7: Multi-user Support
+4. Phase 2: Advanced features

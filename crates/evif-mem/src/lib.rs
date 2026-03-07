@@ -17,6 +17,7 @@
 //! - `vector`: Vector search index for semantic retrieval
 //! - `llm`: LLM client implementations
 //! - `pipeline`: Memorize and retrieve pipelines
+//! - `proactive`: Background monitoring and proactive extraction (Phase 1.5)
 
 pub mod embedding;
 pub mod error;
@@ -33,3 +34,8 @@ pub mod plugin;
 pub use error::MemError;
 pub use models::*;
 pub use pipeline::*;
+pub use proactive::{
+    ExtractionStats, ExtractorConfig, ProactiveAgent, ProactiveConfig, ProactiveEvent,
+    ProactiveExtractor, ProactiveStats, ProactiveResult, ResourceMonitor, EventTrigger,
+    IntentionPredictor, IntentConfig, IntentResult, PredictedIntent, MemoryPattern,
+};

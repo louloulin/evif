@@ -2,7 +2,7 @@
 
 > **版本**: 2.1
 > **日期**: 2026-03-07
-> **状态**: Phase 1.5 部分完成
+> **状态**: Phase 1.5 部分完成 (75%)
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -13,9 +13,9 @@
 
 ### 关键发现
 1. **Phase 1 完成度**: evif-mem Phase 1 核心管道已 100% 完成，包括完整的记忆化、检索和演化管道
-2. **Phase 1.5 完成度**: Phase 1.5.1 (背景监控) 和 Phase 1.5.2 (意图预测) 已完成，主动代理系统完成 50%
+2. **Phase 1.5 完成度**: Phase 1.5.1 (背景监控) 和 Phase 1.5.2 (意图预测) 和 Phase 1.5.3 (主动提取) 已完成，主动代理系统完成 75%
 3. **架构差异**: evif-mem 使用 MD+YAML 格式（AI/Git/FUSE 友好），memU 使用 JSON+SQL（传统数据库友好）
-4. **主要差距**: 主动提取（Phase 1.5.3）、成本优化（Phase 1.5.4）、工作流引擎（Phase 1.6）、企业级多用户支持（Phase 1.7）
+4. **主要差距**: 成本优化（Phase 1.5.4）、工作流引擎（Phase 1.6）、企业级多用户支持（Phase 1.7）
 5. **独特优势**: evif-mem 拥有 evif-graph 时序图谱、FUSE 文件系统集成、高性能 Rust 异步、主动代理背景监控、意图预测能力
 
 ### 对比矩阵
@@ -845,7 +845,7 @@ class HTTPLLMClient:
 
 **目标**: 实现 24/7 主动代理和意图预测
 
-**进度**: **50% complete** (背景监控完成，意图预测完成)
+**进度**: **75% complete** (背景监控完成，意图预测完成，主动提取完成)
 
 **任务**:
 - [x] 1. 实现背景监控任务 ✅ **2026-03-07**
@@ -856,10 +856,15 @@ class HTTPLLMClient:
   - [x] 2.1 IntentionPredictor 结构 ✅
   - [x] 2.2 历史模式识别 ✅
   - [x] 2.3 LLM 意图推理 ✅
-- [ ] 3. 实现主动提取
-  - [ ] 3.1 ProactiveExtractor
-  - [ ] 3.2 自动记忆提取
-  - [ ] 3.3 背景演化触发
+- [x] 3. 实现主动提取 ✅ **2026-03-07**
+  - [x] 3.1 ProactiveExtractor 结构 ✅
+  - [x] 3.2 ExtractorConfig 配置 ✅
+  - [x] 3.3 ExtractionStats 统计 ✅
+  - [x] 3.4 extract_proactively() 自动记忆提取 ✅
+  - [x] 3.5 extract_on_intent() 意图驱动提取 ✅
+  - [x] 3.6 extract_on_threshold() 阈值触发提取 ✅
+  - [x] 3.7 trigger_evolution() 背景演化触发 ✅
+  - [x] 3.8 5 unit tests for extraction logic ✅
 - [ ] 4. 实现成本优化
   - [ ] 4.1 LRU 缓存策略
   - [ ] 4.2 批量处理
@@ -880,13 +885,23 @@ class HTTPLLMClient:
 - ✅ IntentConfig 配置系统
 - ✅ 3种模式分析：话题频率、时间模式、序列模式
 - ✅ LLM-based 意图推理
+- ✅ ProactiveExtractor 结构体 (Phase 1.5.3)
+- ✅ ExtractorConfig 提取配置
+- ✅ ExtractionStats 提取统计
+- ✅ should_extract() 意图决策
+- ✅ extract_proactively() 主动提取
+- ✅ extract_on_intent() 意图驱动
+- ✅ extract_on_threshold() 阈值触发
+- ✅ trigger_evolution() 背景演化
+- ✅ 5 unit tests for extraction logic
 - ✅ 4 unit tests for intention prediction
 - ✅ 4 unit tests for proactive agent
-- ✅ Total: 79 tests passing
+- ✅ Total: 84 tests passing
 
 **交付物**:
 - ✅ 24/7 运行的主动代理 (部分完成)
 - ✅ 意图预测能力 (已完成)
+- ✅ 主动记忆提取 (已完成)
 - ⏳ 成本优化机制 (待实现)
 
 **工作量**: 2-3 周

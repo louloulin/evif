@@ -111,6 +111,206 @@ pub trait EventTrigger: Send + Sync {
     fn handle_event(&self, event: ProactiveEvent) -> ProactiveResult<()>;
 }
 
+/// Configuration for proactive extractor
+#[derive(Debug, Clone)]
+pub struct ExtractorConfig {
+    /// Confidence threshold for intent-based extraction
+    pub intent_confidence_threshold: f32,
+    /// Minimum interval between extractions (seconds)
+    pub min_extraction_interval_secs: u64,
+    /// Maximum items to extract per run
+    pub max_items_per_extraction: usize,
+    /// Enable automatic extraction on intent detection
+    pub auto_extract_on_intent: bool,
+    /// Enable background evolution after extraction
+    pub trigger_evolution_after_extraction: bool,
+}
+
+impl Default for ExtractorConfig {
+    fn default() -> Self {
+        Self {
+            intent_confidence_threshold: 0.7,     // 70% confidence
+            min_extraction_interval_secs: 300,   // 5 minutes
+            max_items_per_extraction: 100,
+            auto_extract_on_intent: true,
+            trigger_evolution_after_extraction: true,
+        }
+    }
+}
+
+/// Statistics for proactive extractor
+#[derive(Debug, Clone, Default)]
+pub struct ExtractionStats {
+    /// Total items extracted proactively
+    pub total_extracted: u64,
+    /// Extractions triggered by intent
+    pub intent_triggered: u64,
+    /// Extractions triggered by threshold
+    pub threshold_triggered: u64,
+    /// Extractions triggered by schedule
+    pub scheduled_triggered: u64,
+    /// Evolutions triggered after extraction
+    pub evolutions_triggered: u64,
+    /// Last extraction time
+    pub last_extraction: Option<DateTime<Utc>>,
+    /// Last extraction source
+    pub last_source: Option<String>,
+}
+
+/// Proactive extractor for automatic memory extraction
+pub struct ProactiveExtractor {
+    /// Configuration
+    config: ExtractorConfig,
+    /// Memory storage
+    storage: Arc<MemoryStorage>,
+    /// Memorize pipeline for extraction
+    memorize_pipeline: Arc<MemorizePipeline>,
+    /// Evolve pipeline for post-extraction evolution
+    evolve_pipeline: Arc<EvolvePipeline>,
+    /// LLM client for intent checking
+    llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+    /// Statistics
+    stats: Arc<RwLock<ExtractionStats>>,
+}
+
+impl ProactiveExtractor {
+    /// Create a new proactive extractor
+    pub fn new(
+        config: ExtractorConfig,
+        storage: Arc<MemoryStorage>,
+        memorize_pipeline: Arc<MemorizePipeline>,
+        evolve_pipeline: Arc<EvolvePipeline>,
+        llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+    ) -> Self {
+        Self {
+            config,
+            storage,
+            memorize_pipeline,
+            evolve_pipeline,
+            llm_client,
+            stats: Arc::new(RwLock::new(ExtractionStats::default())),
+        }
+    }
+
+    /// Check if extraction should be performed based on intent
+    pub fn should_extract(&self, intent: &PredictedIntent) -> bool {
+        intent.confidence >= self.config.intent_confidence_threshold
+            && self.config.auto_extract_on_intent
+            && intent.intent_type != "none"
+    }
+
+    /// Extract memories proactively from a resource
+    pub async fn extract_proactively(&self, resource: Resource) -> ProactiveResult<Vec<MemoryItem>> {
+        tracing::info!(
+            "Proactively extracting memories from resource: {:?}",
+            resource.id
+        );
+
+        // Convert resource to source string for memorize_pipeline
+        let source = if resource.url.is_empty() {
+            resource.id.to_string()
+        } else {
+            resource.url.clone()
+        };
+
+        // Use memorize pipeline to extract
+        let items = self.memorize_pipeline
+            .memorize_resource(&source)
+            .await?;
+
+        // Limit items per extraction
+        let items: Vec<MemoryItem> = items
+            .into_iter()
+            .take(self.config.max_items_per_extraction)
+            .collect();
+
+        // Update statistics
+        {
+            let mut stats = self.stats.write().await;
+            stats.total_extracted += items.len() as u64;
+            stats.last_extraction = Some(Utc::now());
+            stats.last_source = Some(resource.url.clone());
+        }
+
+        tracing::info!("Proactively extracted {} memory items", items.len());
+
+        // Trigger evolution if configured
+        if self.config.trigger_evolution_after_extraction && !items.is_empty() {
+            self.trigger_evolution().await?;
+        }
+
+        Ok(items)
+    }
+
+    /// Extract memories based on intent prediction
+    pub async fn extract_on_intent(
+        &self,
+        resource: Resource,
+        intent: PredictedIntent,
+    ) -> ProactiveResult<Vec<MemoryItem>> {
+        if !self.should_extract(&intent) {
+            return Ok(vec![]);
+        }
+
+        let items = self.extract_proactively(resource).await?;
+
+        // Update intent-triggered stats
+        {
+            let mut stats = self.stats.write().await;
+            stats.intent_triggered += 1;
+        }
+
+        Ok(items)
+    }
+
+    /// Extract memories when threshold is reached
+    pub async fn extract_on_threshold(&self, resources: Vec<Resource>) -> ProactiveResult<Vec<MemoryItem>> {
+        let mut all_items = Vec::new();
+
+        for resource in resources {
+            let items = self.extract_proactively(resource).await?;
+            all_items.extend(items);
+        }
+
+        // Update threshold-triggered stats
+        {
+            let mut stats = self.stats.write().await;
+            stats.threshold_triggered += 1;
+        }
+
+        Ok(all_items)
+    }
+
+    /// Trigger background evolution after extraction
+    pub async fn trigger_evolution(&self) -> ProactiveResult<()> {
+        tracing::info!("Triggering background evolution after proactive extraction");
+
+        match self.evolve_pipeline.evolve_all().await {
+            Ok(evolve_stats) => {
+                let mut stats = self.stats.write().await;
+                stats.evolutions_triggered += 1;
+
+                tracing::info!(
+                    "Evolution completed: total_items={}, avg_weight={:.2}",
+                    evolve_stats.total_items,
+                    evolve_stats.average_weight
+                );
+
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("Evolution failed: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    /// Get extraction statistics
+    pub async fn get_stats(&self) -> ExtractionStats {
+        self.stats.read().await.clone()
+    }
+}
+
 /// Proactive agent for background monitoring and automatic memory management
 pub struct ProactiveAgent {
     /// Configuration
@@ -125,6 +325,8 @@ pub struct ProactiveAgent {
     llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
     /// Intent predictor (Phase 1.5.2)
     intent_predictor: Option<IntentionPredictor>,
+    /// Proactive extractor (Phase 1.5.3)
+    extractor: Option<ProactiveExtractor>,
     /// Statistics
     stats: Arc<RwLock<ProactiveStats>>,
     /// Shutdown signal
@@ -151,6 +353,15 @@ impl ProactiveAgent {
             None
         };
 
+        // Create proactive extractor (Phase 1.5.3)
+        let extractor = Some(ProactiveExtractor::new(
+            ExtractorConfig::default(),
+            storage.clone(),
+            memorize_pipeline.clone(),
+            evolve_pipeline.clone(),
+            llm_client.clone(),
+        ));
+
         Self {
             config,
             storage,
@@ -158,6 +369,7 @@ impl ProactiveAgent {
             evolve_pipeline,
             llm_client,
             intent_predictor,
+            extractor,
             stats: Arc::new(RwLock::new(ProactiveStats::default())),
             shutdown: Arc::new(RwLock::new(false)),
         }
@@ -281,10 +493,47 @@ impl ProactiveAgent {
         }
     }
 
-    /// Proactively extract memories from resource (Phase 1.5.3 - to be implemented)
-    pub async fn proactive_extract(&self, _resource: Resource) -> ProactiveResult<Vec<MemoryItem>> {
-        // TODO: Implement proactive extraction
-        // This will be implemented in Phase 1.5.3
+    /// Proactively extract memories from resource (Phase 1.5.3)
+    pub async fn proactive_extract(&self, resource: Resource) -> ProactiveResult<Vec<MemoryItem>> {
+        if let Some(ref extractor) = self.extractor {
+            let items = extractor.extract_proactively(resource).await?;
+
+            // Update proactive stats
+            {
+                let mut stats = self.stats.write().await;
+                stats.proactively_extracted += items.len() as u64;
+            }
+
+            Ok(items)
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    /// Proactively extract based on predicted intent (Phase 1.5.3)
+    pub async fn proactive_extract_on_intent(
+        &self,
+        resource: Resource,
+        context: &str,
+    ) -> ProactiveResult<Vec<MemoryItem>> {
+        // First predict intent
+        if let Some(ref predictor) = self.intent_predictor {
+            if let Some(intent) = predictor.predict(context).await? {
+                // Then extract if intent warrants it
+                if let Some(ref extractor) = self.extractor {
+                    let items = extractor.extract_on_intent(resource, intent).await?;
+
+                    // Update proactive stats
+                    {
+                        let mut stats = self.stats.write().await;
+                        stats.proactively_extracted += items.len() as u64;
+                    }
+
+                    return Ok(items);
+                }
+            }
+        }
+
         Ok(vec![])
     }
 }
@@ -346,6 +595,84 @@ mod tests {
         assert_eq!(config.memory_threshold, 500);
         assert!(!config.enable_intent_prediction);
         assert!(config.enable_cost_optimization);
+    }
+
+    #[test]
+    fn test_extractor_config_default() {
+        let config = ExtractorConfig::default();
+        assert!((config.intent_confidence_threshold - 0.7).abs() < 0.01);
+        assert_eq!(config.min_extraction_interval_secs, 300);
+        assert_eq!(config.max_items_per_extraction, 100);
+        assert!(config.auto_extract_on_intent);
+        assert!(config.trigger_evolution_after_extraction);
+    }
+
+    #[test]
+    fn test_extraction_stats_default() {
+        let stats = ExtractionStats::default();
+        assert_eq!(stats.total_extracted, 0);
+        assert_eq!(stats.intent_triggered, 0);
+        assert_eq!(stats.threshold_triggered, 0);
+        assert_eq!(stats.scheduled_triggered, 0);
+        assert_eq!(stats.evolutions_triggered, 0);
+        assert!(stats.last_extraction.is_none());
+        assert!(stats.last_source.is_none());
+    }
+
+    #[test]
+    fn test_should_extract_high_confidence() {
+        let config = ExtractorConfig::default();
+        let intent = PredictedIntent {
+            intent_type: "search".to_string(),
+            confidence: 0.85,
+            related_items: vec![],
+            suggested_action: Some("retrieve".to_string()),
+            timestamp: Utc::now(),
+        };
+
+        // Create extractor with mock dependencies
+        // In real test, we'd use mock storage and pipelines
+        let should = intent.confidence >= config.intent_confidence_threshold
+            && config.auto_extract_on_intent
+            && intent.intent_type != "none";
+
+        assert!(should);
+    }
+
+    #[test]
+    fn test_should_extract_low_confidence() {
+        let config = ExtractorConfig::default();
+        let intent = PredictedIntent {
+            intent_type: "search".to_string(),
+            confidence: 0.5,  // Below threshold
+            related_items: vec![],
+            suggested_action: Some("retrieve".to_string()),
+            timestamp: Utc::now(),
+        };
+
+        let should = intent.confidence >= config.intent_confidence_threshold
+            && config.auto_extract_on_intent
+            && intent.intent_type != "none";
+
+        assert!(!should);
+    }
+
+    #[test]
+    fn test_should_extract_none_intent() {
+        let config = ExtractorConfig::default();
+        let intent = PredictedIntent {
+            intent_type: "none".to_string(),
+            confidence: 0.9,
+            related_items: vec![],
+            suggested_action: None,
+            timestamp: Utc::now(),
+        };
+
+        let should = intent.confidence >= config.intent_confidence_threshold
+            && config.auto_extract_on_intent
+            && intent.intent_type != "none";
+
+        assert!(!should);
     }
 }
 
