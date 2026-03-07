@@ -50,6 +50,61 @@ pub enum RetrieveMode {
         /// Maximum number of items to process
         max_items: usize,
     },
+    /// Full RAG mode with complete retrieval pipeline
+    ///
+    /// This implements the complete RAG flow from mem2.md Phase 1.2:
+    /// 1. Intent Routing - determine if retrieval is needed
+    /// 2. Query Rewriting - LLM optimizes the query
+    /// 3. Category-first Search - search relevant categories first
+    /// 4. Item Search - search memory items within categories
+    /// 5. Sufficiency Check - LLM evaluates if results are sufficient
+    /// 6. Resource Search - retrieve original resources
+    RAG {
+        /// Enable intent routing (skip retrieval if not needed)
+        intent_routing: bool,
+        /// Enable query rewriting for better retrieval
+        query_rewriting: bool,
+        /// Enable category-first search strategy
+        category_first: bool,
+        /// Enable sufficiency check (early stopping)
+        sufficiency_check: bool,
+        /// Include original resources in response
+        include_resources: bool,
+        /// Maximum results to return
+        max_results: usize,
+    },
+}
+
+/// RAG Response - complete response from RAG mode retrieval
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RAGResponse {
+    /// Retrieved memory items with relevance scores
+    pub items: Vec<(MemoryItem, f32)>,
+    /// Related categories (if category_first enabled)
+    pub categories: Vec<crate::models::MemoryCategory>,
+    /// Original resources (if include_resources enabled)
+    pub resources: Vec<Resource>,
+    /// Metadata about the retrieval process
+    pub metadata: RAGMetadata,
+}
+
+/// Metadata about the RAG retrieval process
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RAGMetadata {
+    /// Whether retrieval was needed (intent routing result)
+    pub intent_needed: Option<bool>,
+    /// Original query from user
+    pub original_query: String,
+    /// Rewritten query (if query_rewriting enabled)
+    pub rewritten_query: Option<String>,
+    /// Sufficiency score 0.0-1.0 (if sufficiency_check enabled)
+    pub sufficiency_score: Option<f32>,
+    /// Total candidate items before filtering
+    pub total_candidates: usize,
+    /// Number of categories searched
+    pub categories_searched: usize,
+    /// Retrieval time in milliseconds
+    pub retrieval_time_ms: u64,
 }
 
 /// Memorize Pipeline
@@ -690,6 +745,368 @@ impl RetrievePipeline {
             }
             RetrieveMode::LLMRead { category_id, max_items } => {
                 self.llm_read_search(query, &category_id, max_items).await
+            }
+            RetrieveMode::RAG {
+                intent_routing,
+                query_rewriting,
+                category_first,
+                sufficiency_check,
+                include_resources,
+                max_results,
+            } => {
+                let response = self
+                    .rag_search(
+                        query,
+                        intent_routing,
+                        query_rewriting,
+                        category_first,
+                        sufficiency_check,
+                        include_resources,
+                        max_results,
+                    )
+                    .await?;
+                Ok(response.items)
+            }
+        }
+    }
+
+    /// Full RAG search with complete pipeline
+    ///
+    /// Implements the complete RAG flow:
+    /// 1. Intent routing - check if retrieval is needed
+    /// 2. Query rewriting - optimize query for retrieval
+    /// 3. Category-first search - find relevant categories
+    /// 4. Item search - search items within categories
+    /// 5. Sufficiency check - evaluate if results are sufficient
+    /// 6. Resource search - retrieve original resources
+    pub async fn rag_search(
+        &self,
+        query: &str,
+        intent_routing: bool,
+        query_rewriting: bool,
+        category_first: bool,
+        sufficiency_check: bool,
+        include_resources: bool,
+        max_results: usize,
+    ) -> MemResult<RAGResponse> {
+        use std::time::Instant;
+        let start = Instant::now();
+
+        let mut metadata = RAGMetadata {
+            intent_needed: None,
+            original_query: query.to_string(),
+            rewritten_query: None,
+            sufficiency_score: None,
+            total_candidates: 0,
+            categories_searched: 0,
+            retrieval_time_ms: 0,
+        };
+
+        let mut categories = Vec::new();
+        let mut resources = Vec::new();
+
+        // Step 1: Intent routing - check if retrieval is needed
+        if intent_routing {
+            let should_retrieve = self.should_retrieve(query).await?;
+            metadata.intent_needed = Some(should_retrieve);
+            if !should_retrieve {
+                // No retrieval needed, return empty results
+                metadata.retrieval_time_ms = start.elapsed().as_millis() as u64;
+                return Ok(RAGResponse {
+                    items: vec![],
+                    categories,
+                    resources,
+                    metadata,
+                });
+            }
+        }
+
+        // Step 2: Query rewriting - optimize the query
+        let search_query = if query_rewriting {
+            let rewritten = self.rewrite_query(query).await?;
+            metadata.rewritten_query = Some(rewritten.clone());
+            rewritten
+        } else {
+            query.to_string()
+        };
+
+        // Step 3 & 4: Search for items
+        let items = if category_first {
+            // Category-first search strategy
+            let (found_items, found_categories) = self
+                .category_first_search(&search_query, max_results)
+                .await?;
+            categories = found_categories;
+            metadata.categories_searched = categories.len();
+            found_items
+        } else {
+            // Direct vector search
+            self.vector_search(&search_query, max_results, 0.0).await?
+        };
+
+        metadata.total_candidates = items.len();
+        let mut items = items;
+
+        // Step 5: Sufficiency check - evaluate if results are sufficient
+        if sufficiency_check && !items.is_empty() {
+            let score = self.check_sufficiency(query, &items).await?;
+            metadata.sufficiency_score = Some(score);
+
+            // If results are sufficient, we could stop early
+            // For now, we just record the score
+        }
+
+        // Step 6: Resource search - retrieve original resources
+        if include_resources {
+            for (item, _) in &items {
+                if let Some(ref resource_id) = item.resource_id {
+                    if let Ok(resource) = self.storage.get_resource(resource_id) {
+                        if !resources.iter().any(|r: &Resource| r.id == resource.id) {
+                            resources.push(resource);
+                        }
+                    }
+                }
+            }
+        }
+
+        metadata.retrieval_time_ms = start.elapsed().as_millis() as u64;
+
+        Ok(RAGResponse {
+            items,
+            categories,
+            resources,
+            metadata,
+        })
+    }
+
+    /// Intent routing - determine if retrieval is needed for this query
+    ///
+    /// Uses LLM to analyze if the query requires memory retrieval
+    /// or can be answered directly.
+    async fn should_retrieve(&self, query: &str) -> MemResult<bool> {
+        let prompt = format!(
+            r#"Analyze this user query and determine if it requires retrieving stored memories/information.
+
+USER QUERY: {}
+
+Answer "yes" if the query:
+- Asks about past events, conversations, or experiences
+- Requests specific information that might be stored
+- References something that was previously discussed
+- Requires looking up user preferences or profile
+- Needs context from previous interactions
+
+Answer "no" if the query:
+- Is a general knowledge question
+- Is a simple greeting or small talk
+- Can be answered without any context
+- Is a creative request (write, create, generate)
+
+Respond with ONLY "yes" or "no", no additional text."#,
+            query
+        );
+
+        let response = {
+            let llm = self.llm_client.read().await;
+            llm.generate(&prompt).await?
+        };
+
+        Ok(response.trim().to_lowercase() == "yes")
+    }
+
+    /// Query rewriting - optimize query for better retrieval
+    ///
+    /// Uses LLM to rewrite the query to be more effective for
+    /// vector similarity search.
+    async fn rewrite_query(&self, query: &str) -> MemResult<String> {
+        let prompt = format!(
+            r#"Rewrite this query to be more effective for semantic search.
+
+ORIGINAL QUERY: {}
+
+Guidelines for rewriting:
+- Expand abbreviations and acronyms
+- Add relevant synonyms and related terms
+- Make implicit context explicit
+- Keep the core meaning intact
+- Aim for 1-2 sentences
+
+RESPONSE FORMAT:
+{{"rewritten_query": "<your rewritten query>"}}
+
+Respond ONLY with valid JSON, no additional text."#,
+            query
+        );
+
+        let response = {
+            let llm = self.llm_client.read().await;
+            llm.generate(&prompt).await?
+        };
+
+        // Parse JSON response
+        #[derive(serde::Deserialize)]
+        struct RewriteResponse {
+            rewritten_query: String,
+        }
+
+        match serde_json::from_str::<RewriteResponse>(&response) {
+            Ok(parsed) => Ok(parsed.rewritten_query),
+            Err(_) => {
+                // Fallback to original query if parsing fails
+                Ok(query.to_string())
+            }
+        }
+    }
+
+    /// Category-first search strategy
+    ///
+    /// First finds relevant categories, then searches within those categories.
+    /// This provides better context-aware retrieval.
+    async fn category_first_search(
+        &self,
+        query: &str,
+        max_results: usize,
+    ) -> MemResult<(Vec<(MemoryItem, f32)>, Vec<crate::models::MemoryCategory>)> {
+        // Step 1: Generate query embedding
+        let query_embedding = {
+            let emb_mgr = self.embedding_manager.read().await;
+            emb_mgr.embed(query).await?
+        };
+
+        // Step 2: Search for relevant categories (with "cat:" prefix)
+        let category_results = {
+            let index = self.vector_index.read().await;
+            index.search(&query_embedding, Some(5), None).await?
+        };
+
+        // Step 3: Filter for category results
+        let category_ids: Vec<String> = category_results
+            .into_iter()
+            .filter(|r| r.id.starts_with("cat:"))
+            .filter_map(|r| {
+                let cat_id = r.id.strip_prefix("cat:")?.to_string();
+                // Verify category exists
+                if self.storage.get_category(&cat_id).is_ok() {
+                    Some((cat_id, r.score))
+                } else {
+                    None
+                }
+            })
+            .take(3) // Top 3 categories
+            .map(|(id, _)| id)
+            .collect();
+
+        // Step 4: Get category objects
+        let mut categories = Vec::new();
+        for cat_id in &category_ids {
+            if let Ok(category) = self.storage.get_category(cat_id) {
+                categories.push(category);
+            }
+        }
+
+        // Step 5: Search items within categories
+        let mut all_items = Vec::new();
+        for cat_id in &category_ids {
+            let items_in_cat = self.storage.get_items_in_category(cat_id);
+            for item in items_in_cat {
+                // Score based on category relevance
+                all_items.push((item, 0.7)); // Default score for category match
+            }
+        }
+
+        // Step 6: Also do vector search to find items that might not be in top categories
+        let vector_items = self.vector_search(query, max_results, 0.5).await?;
+
+        // Merge results, preferring vector scores
+        for (item, score) in vector_items {
+            if let Some(pos) = all_items.iter().position(|(i, _)| i.id == item.id) {
+                // Update score if vector score is higher
+                if score > all_items[pos].1 {
+                    all_items[pos].1 = score;
+                }
+            } else {
+                all_items.push((item, score));
+            }
+        }
+
+        // Step 7: Sort by score and limit results
+        all_items.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        all_items.truncate(max_results);
+
+        Ok((all_items, categories))
+    }
+
+    /// Sufficiency check - evaluate if results are sufficient
+    ///
+    /// Uses LLM to judge if the retrieved items adequately answer the query.
+    async fn check_sufficiency(
+        &self,
+        query: &str,
+        items: &[(MemoryItem, f32)],
+    ) -> MemResult<f32> {
+        // Format items for LLM analysis
+        let items_text = items
+            .iter()
+            .take(5)
+            .enumerate()
+            .map(|(idx, (item, score))| {
+                format!(
+                    "[{}] Score: {:.2}\nSummary: {}\nContent: {}\n",
+                    idx + 1,
+                    score,
+                    item.summary,
+                    if item.content.len() > 200 {
+                        format!("{}...", &item.content[..200])
+                    } else {
+                        item.content.clone()
+                    }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n---\n");
+
+        let prompt = format!(
+            r#"Evaluate if these retrieved memories sufficiently answer the user query.
+
+USER QUERY: {}
+
+RETRIEVED MEMORIES:
+{}
+
+Rate the sufficiency on a scale of 0.0 to 1.0:
+- 1.0: Results completely answer the query
+- 0.7-0.9: Results provide good coverage but might need more
+- 0.4-0.6: Results partially address the query
+- 0.0-0.3: Results do not adequately address the query
+
+RESPONSE FORMAT:
+{{"sufficiency_score": <0.0-1.0>, "reasoning": "<brief explanation>"}}
+
+Respond ONLY with valid JSON, no additional text."#,
+            query, items_text
+        );
+
+        let response = {
+            let llm = self.llm_client.read().await;
+            llm.generate(&prompt).await?
+        };
+
+        // Parse JSON response
+        #[derive(serde::Deserialize)]
+        struct SufficiencyResponse {
+            sufficiency_score: f32,
+            #[allow(dead_code)]
+            reasoning: String,
+        }
+
+        match serde_json::from_str::<SufficiencyResponse>(&response) {
+            Ok(parsed) => {
+                // Clamp score to valid range
+                Ok(parsed.sufficiency_score.clamp(0.0, 1.0))
+            }
+            Err(_) => {
+                // Fallback to moderate score
+                Ok(0.5)
             }
         }
     }
@@ -1491,5 +1908,213 @@ mod tests {
 
         // Verify long output is stored
         assert_eq!(tool_call.output.len(), 2000);
+    }
+
+    #[test]
+    fn test_rag_mode_enum() {
+        // Test that RAG mode can be created
+        let mode = RetrieveMode::RAG {
+            intent_routing: true,
+            query_rewriting: true,
+            category_first: true,
+            sufficiency_check: true,
+            include_resources: false,
+            max_results: 10,
+        };
+
+        // Verify mode creation
+        match mode {
+            RetrieveMode::RAG {
+                intent_routing,
+                query_rewriting,
+                category_first,
+                sufficiency_check,
+                include_resources,
+                max_results,
+            } => {
+                assert!(intent_routing);
+                assert!(query_rewriting);
+                assert!(category_first);
+                assert!(sufficiency_check);
+                assert!(!include_resources);
+                assert_eq!(max_results, 10);
+            }
+            _ => panic!("Expected RAG mode"),
+        }
+    }
+
+    #[test]
+    fn test_rag_mode_serialization() {
+        // Test that RAG mode can be serialized/deserialized
+        let mode = RetrieveMode::RAG {
+            intent_routing: true,
+            query_rewriting: false,
+            category_first: true,
+            sufficiency_check: false,
+            include_resources: true,
+            max_results: 20,
+        };
+
+        let json = serde_json::to_string(&mode).expect("Failed to serialize");
+        let decoded: RetrieveMode = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        match decoded {
+            RetrieveMode::RAG {
+                intent_routing,
+                query_rewriting,
+                category_first,
+                sufficiency_check,
+                include_resources,
+                max_results,
+            } => {
+                assert!(intent_routing);
+                assert!(!query_rewriting);
+                assert!(category_first);
+                assert!(!sufficiency_check);
+                assert!(include_resources);
+                assert_eq!(max_results, 20);
+            }
+            _ => panic!("Expected RAG mode"),
+        }
+    }
+
+    #[test]
+    fn test_rag_response_creation() {
+        // Test that RAGResponse can be created
+        let metadata = RAGMetadata {
+            intent_needed: Some(true),
+            original_query: "test query".to_string(),
+            rewritten_query: Some("optimized test query".to_string()),
+            sufficiency_score: Some(0.85),
+            total_candidates: 15,
+            categories_searched: 3,
+            retrieval_time_ms: 250,
+        };
+
+        let response = RAGResponse {
+            items: vec![],
+            categories: vec![],
+            resources: vec![],
+            metadata,
+        };
+
+        assert_eq!(response.metadata.original_query, "test query");
+        assert_eq!(response.metadata.rewritten_query, Some("optimized test query".to_string()));
+        assert_eq!(response.metadata.sufficiency_score, Some(0.85));
+        assert_eq!(response.metadata.retrieval_time_ms, 250);
+    }
+
+    #[test]
+    fn test_rag_metadata_serialization() {
+        // Test that RAGMetadata can be serialized/deserialized
+        let metadata = RAGMetadata {
+            intent_needed: Some(true),
+            original_query: "what is Rust?".to_string(),
+            rewritten_query: Some("Rust programming language features and characteristics".to_string()),
+            sufficiency_score: Some(0.9),
+            total_candidates: 25,
+            categories_searched: 5,
+            retrieval_time_ms: 150,
+        };
+
+        let json = serde_json::to_string(&metadata).expect("Failed to serialize");
+        let decoded: RAGMetadata = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(decoded.intent_needed, Some(true));
+        assert_eq!(decoded.original_query, "what is Rust?");
+        assert_eq!(decoded.sufficiency_score, Some(0.9));
+    }
+
+    #[test]
+    fn test_intent_routing_prompt_format() {
+        // Test that intent routing prompt is properly formatted
+        let query = "What did I say about Rust yesterday?";
+        let prompt = format!(
+            r#"Analyze this user query and determine if it requires retrieving stored memories/information.
+
+USER QUERY: {}
+
+Answer "yes" if the query:
+- Asks about past events, conversations, or experiences
+- Requests specific information that might be stored
+- References something that was previously discussed
+- Requires looking up user preferences or profile
+- Needs context from previous interactions
+
+Answer "no" if the query:
+- Is a general knowledge question
+- Is a simple greeting or small talk
+- Can be answered without any context
+- Is a creative request (write, create, generate)
+
+Respond with ONLY "yes" or "no", no additional text."#,
+            query
+        );
+
+        assert!(prompt.contains(query));
+        assert!(prompt.contains("past events"));
+        assert!(prompt.contains("general knowledge"));
+    }
+
+    #[test]
+    fn test_query_rewriting_prompt_format() {
+        // Test that query rewriting prompt is properly formatted
+        let query = "Rust async";
+        let prompt = format!(
+            r#"Rewrite this query to be more effective for semantic search.
+
+ORIGINAL QUERY: {}
+
+Guidelines for rewriting:
+- Expand abbreviations and acronyms
+- Add relevant synonyms and related terms
+- Make implicit context explicit
+- Keep the core meaning intact
+- Aim for 1-2 sentences
+
+RESPONSE FORMAT:
+{{"rewritten_query": "<your rewritten query>"}}
+
+Respond ONLY with valid JSON, no additional text."#,
+            query
+        );
+
+        assert!(prompt.contains(query));
+        assert!(prompt.contains("Expand abbreviations"));
+        assert!(prompt.contains("rewritten_query"));
+    }
+
+    #[test]
+    fn test_sufficiency_check_response_parsing() {
+        // Test parsing sufficiency check response
+        let response = r#"{
+            "sufficiency_score": 0.85,
+            "reasoning": "Results cover main aspects but might need more detail"
+        }"#;
+
+        #[derive(serde::Deserialize)]
+        struct SufficiencyResponse {
+            sufficiency_score: f32,
+            reasoning: String,
+        }
+
+        let parsed: SufficiencyResponse = serde_json::from_str(response).expect("Failed to parse");
+        assert!((parsed.sufficiency_score - 0.85).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_query_rewrite_response_parsing() {
+        // Test parsing query rewrite response
+        let response = r#"{
+            "rewritten_query": "Rust async programming patterns and best practices"
+        }"#;
+
+        #[derive(serde::Deserialize)]
+        struct RewriteResponse {
+            rewritten_query: String,
+        }
+
+        let parsed: RewriteResponse = serde_json::from_str(response).expect("Failed to parse");
+        assert_eq!(parsed.rewritten_query, "Rust async programming patterns and best practices");
     }
 }

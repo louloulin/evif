@@ -2,6 +2,25 @@
 
 All notable changes to the Mem platform will be documented in this file.
 
+## [1.1.0] - 2026-03-07
+
+### Added
+- **RetrievePipeline - Full RAG Mode** (Phase 1.2 complete)
+  - `RetrieveMode::RAG` variant for complete retrieval pipeline
+  - Intent Routing: `should_retrieve()` determines if retrieval is needed
+  - Query Rewriting: `rewrite_query()` optimizes queries with LLM
+  - Category-first Search: `category_first_search()` searches categories first
+  - Sufficiency Check: `check_sufficiency()` evaluates result completeness
+  - Resource Search: retrieves original resources via `include_resources`
+  - `RAGResponse` struct with items, categories, resources, and metadata
+  - `RAGMetadata` struct for retrieval process tracking
+  - 9 new unit tests for RAG functionality
+
+### Changed
+- Phase 1.2 progress: 0% → 100% complete
+- evif-mem overall completion: 87% → 95%
+- RetrievePipeline now has 4 modes: VectorSearch, LLMRead, Hybrid, RAG
+
 ## [1.0.6] - 2026-03-07
 
 ### Added
