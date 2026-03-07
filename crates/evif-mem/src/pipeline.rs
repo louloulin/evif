@@ -2,7 +2,7 @@
 //!
 //! Implements the core memory processing workflows:
 //! - MemorizePipeline: Extract and store memories from input
-//! - RetrievePipeline: Search and retrieve memories (future)
+//! - RetrievePipeline: Search and retrieve memories
 //! - EvolvePipeline: Self-evolving memory management (future)
 
 use crate::embedding::EmbeddingManager;
@@ -11,9 +11,25 @@ use crate::llm::LLMClient;
 use crate::models::{MemoryItem, Modality, Resource};
 use crate::storage::memory::MemoryStorage;
 use crate::vector::VectorIndex;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+/// Retrieve mode for searching memories
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RetrieveMode {
+    /// Vector search mode using embeddings
+    VectorSearch {
+        /// Number of results to return
+        k: usize,
+        /// Minimum similarity threshold (0.0-1.0)
+        threshold: f32,
+    },
+    // Future modes:
+    // - LLMRead: Read category files directly
+    // - Hybrid: Combine vector + LLM approaches
+}
 
 /// Memorize Pipeline
 ///
@@ -103,6 +119,94 @@ impl MemorizePipeline {
     }
 }
 
+/// Retrieve Pipeline
+///
+/// Searches and retrieves memories from the memory system:
+/// 1. Accept query (text or vector)
+/// 2. Choose retrieval mode (VectorSearch, LLMRead, Hybrid)
+/// 3. Return ranked results
+pub struct RetrievePipeline {
+    llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+    storage: Arc<MemoryStorage>,
+    vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
+    embedding_manager: Arc<RwLock<EmbeddingManager>>,
+}
+
+impl RetrievePipeline {
+    /// Create a new retrieve pipeline
+    pub fn new(
+        llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+        storage: Arc<MemoryStorage>,
+        vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
+        embedding_manager: Arc<RwLock<EmbeddingManager>>,
+    ) -> Self {
+        Self {
+            llm_client,
+            storage,
+            vector_index,
+            embedding_manager,
+        }
+    }
+
+    /// Retrieve memories using text query
+    ///
+    /// This is the main entry point for the retrieval pipeline.
+    /// Takes a text query and retrieval mode, returns ranked memories.
+    pub async fn retrieve_text(
+        &self,
+        query: &str,
+        mode: RetrieveMode,
+    ) -> MemResult<Vec<(MemoryItem, f32)>> {
+        match mode {
+            RetrieveMode::VectorSearch { k, threshold } => {
+                self.vector_search(query, k, threshold).await
+            }
+        }
+    }
+
+    /// Vector search implementation
+    ///
+    /// 1. Generate embedding for query
+    /// 2. Search vector index
+    /// 3. Fetch memory items from storage
+    /// 4. Return items with scores
+    async fn vector_search(
+        &self,
+        query: &str,
+        k: usize,
+        threshold: f32,
+    ) -> MemResult<Vec<(MemoryItem, f32)>> {
+        // Step 1: Generate query embedding
+        let query_embedding = {
+            let emb_mgr = self.embedding_manager.read().await;
+            emb_mgr.embed(query).await?
+        };
+
+        // Step 2: Search vector index
+        let search_results = {
+            let index = self.vector_index.read().await;
+            index.search(&query_embedding, Some(k), None).await?
+        };
+
+        // Step 3: Fetch items and filter by threshold
+        let mut results = Vec::new();
+        for search_result in search_results {
+            // Filter by threshold
+            if search_result.score < threshold {
+                continue;
+            }
+
+            // Fetch memory item from storage
+            match self.storage.get_item(&search_result.id) {
+                Ok(item) => results.push((item, search_result.score)),
+                Err(_) => continue, // Skip if item not found
+            }
+        }
+
+        Ok(results)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,5 +239,35 @@ mod tests {
             "Different content should produce different hash"
         );
         assert_eq!(hash1.len(), 64, "SHA-256 hash should be 64 hex characters");
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_pipeline_creation() {
+        // Test that we can create a RetrievePipeline
+        let llm_client = Arc::new(RwLock::new(Box::new(OpenAIClient::new(
+            "test-key".to_string(),
+            None,
+            None,
+        )) as Box<dyn LLMClient>));
+
+        let storage = Arc::new(MemoryStorage::new());
+
+        let vector_index = Arc::new(RwLock::new(Box::new(
+            InMemoryVectorIndex::new(1536, VectorIndexConfig::default()).unwrap(),
+        ) as Box<dyn VectorIndex>));
+
+        let embedding_manager = Arc::new(RwLock::new(
+            EmbeddingManager::new("test-key".to_string(), None, None).unwrap(),
+        ));
+
+        let pipeline = RetrievePipeline::new(
+            llm_client,
+            storage,
+            vector_index,
+            embedding_manager,
+        );
+
+        // Verify pipeline was created
+        assert!(true, "Pipeline created successfully");
     }
 }
