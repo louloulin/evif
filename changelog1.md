@@ -6,7 +6,103 @@ All notable changes to the evif-mem project will be documented in this file.
 
 ### Added - Phase 1.6: Workflow System (In Progress)
 
-**WorkflowStep System** - Foundation for configurable memory pipelines
+**WorkflowRunner Implementation** - Workflow execution engine with sequential and parallel support
+
+#### Phase 1.6.2: WorkflowRunner
+
+1. **WorkflowRunner Trait**
+   - `run()` - Execute workflow steps with initial state
+   - `validate_capabilities()` - Verify required capabilities are available
+   - Returns `(WorkflowState, WorkflowStats)` tuple
+
+2. **DefaultWorkflowRunner Implementation**
+   - Executes LLM steps via WorkflowLLMProvider trait
+   - Executes Function steps directly via Arc<StepFunction>
+   - Executes Parallel steps with sub-step handling
+   - Template rendering for prompts with `{var}` and `{step.field}` syntax
+   - Dependency checking before step execution
+   - Error handling with stop_on_error configuration
+   - Per-step timing statistics
+
+3. **WorkflowLLMProvider Trait**
+   - Abstracts LLM operations for workflow execution
+   - `generate(prompt, profile)` - Generate completion with optional profile
+
+4. **Error Handling Enhancements**
+   - Added `WorkflowError` variant to MemError enum
+   - Added `Json` error variant for serde_json::Error
+   - Type annotation fixes for HashMap results
+
+#### Tests Added
+- All 7 existing workflow tests still pass
+- Total: 99 evif-mem tests passing
+
+#### API Usage
+
+```rust
+use evif_mem::workflow::{DefaultWorkflowRunner, WorkflowRunner, WorkflowStep, WorkflowState};
+
+// Create LLM provider
+let llm_provider: Arc<RwLock<Box<dyn WorkflowLLMProvider>>> = ...;
+
+// Create runner
+let runner = DefaultWorkflowRunner::with_llm(llm_provider);
+
+// Define steps
+let steps = vec![
+    WorkflowStep::llm("extract", "Extract memories from: {text}")
+        .with_llm_profile("gpt-4"),
+    WorkflowStep::function(
+        "dedupe",
+        |mut state| async move {
+            state.insert("deduped".to_string(), serde_json::json!(true));
+            Ok(state)
+        },
+        vec![Capability::DB],
+    ),
+];
+
+// Execute workflow
+let initial_state = WorkflowState::with_global(
+    vec![("text".to_string(), serde_json::json!("content here"))]
+        .into_iter()
+        .collect()
+);
+
+let (final_state, stats) = runner.run(&steps, initial_state).await?;
+```
+
+#### Phase 1.6 Status
+- Phase 1.6.1: WorkflowStep Design ✅ **100% Complete**
+- Phase 1.6.2: WorkflowRunner ✅ **100% Complete**
+- Phase 1.6.3: Interceptor Mechanism ⏳ **Pending**
+- Phase 1.6.4: PipelineManager ⏳ **Pending**
+
+**Overall Phase 1.6 Progress**: **50% Complete** (2/4 sub-tasks done)
+
+**evif-mem Overall Progress**: **82% → 83%** (up 1%)
+
+#### Files Modified
+- `crates/evif-mem/src/workflow.rs` (added WorkflowRunner trait and DefaultWorkflowRunner)
+- `crates/evif-mem/src/error.rs` (added WorkflowError and Json error variants)
+
+#### Next Steps
+
+**Immediate (Current Sprint)**:
+1. Phase 1.6.3: Implement Interceptor Mechanism
+   - Interceptor trait
+   - InterceptorRegistry
+   - before/after hooks
+
+**Short-term (Next Sprint)**:
+2. Phase 1.6.4: Implement PipelineManager
+   - Dynamic pipeline registration
+   - Capability validation
+   - Runtime configuration
+
+---
+
+### Phase 1.6.1: WorkflowStep System (Previously Completed)
 
 #### Core Components
 
@@ -95,13 +191,13 @@ state.set_global("user_id".to_string(), serde_json::json!("user123"));
 
 #### Phase 1.6 Status
 - Phase 1.6.1: WorkflowStep Design ✅ **100% Complete**
-- Phase 1.6.2: WorkflowRunner ⏳ **Pending**
+- Phase 1.6.2: WorkflowRunner ✅ **100% Complete**
 - Phase 1.6.3: Interceptor Mechanism ⏳ **Pending**
 - Phase 1.6.4: PipelineManager ⏳ **Pending**
 
-**Overall Phase 1.6 Progress**: **25% Complete** (1/4 sub-tasks done)
+**Overall Phase 1.6 Progress**: **50% Complete** (2/4 sub-tasks done)
 
-**evif-mem Overall Progress**: **81% → 82%** (up 1%)
+**evif-mem Overall Progress**: **82% → 83%** (up 1%)
 
 #### Next Steps
 

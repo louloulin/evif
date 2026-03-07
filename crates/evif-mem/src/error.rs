@@ -33,6 +33,12 @@ pub enum MemError {
 
     #[error("Serialization error: {0}")]
     Serialization(String),
+
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("Workflow error: {0}")]
+    WorkflowError(String),
 }
 
 pub type MemResult<T> = Result<T, MemError>;

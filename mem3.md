@@ -922,7 +922,7 @@ class HTTPLLMClient:
 
 **目标**: 实现可配置的工作流引擎
 
-**进度**: **25% complete** ⚠️ (Phase 1.6.1 完成)
+**进度**: **50% complete** ⚠️ (Phase 1.6.1-1.6.2 完成)
 - [x] 1. 设计工作流核心 ✅ **2026-03-07**
   - [x] 1.1 WorkflowStep 结构 ✅
   - [x] 1.2 WorkflowState 状态管理 ✅
@@ -930,10 +930,14 @@ class HTTPLLMClient:
   - [x] 1.4 WorkflowConfig 配置 ✅
   - [x] 1.5 WorkflowStats 统计 ✅
   - [x] 1.6 7 unit tests for workflow basics ✅
-- [ ] 2. 实现工作流运行器
-  - [ ] 2.1 WorkflowRunner trait
-  - [ ] 2.2 顺序执行
-  - [ ] 2.3 并行执行
+- [x] 2. 实现工作流运行器 ✅ **2026-03-07**
+  - [x] 2.1 WorkflowRunner trait ✅
+  - [x] 2.2 DefaultWorkflowRunner 实现 ✅
+  - [x] 2.3 WorkflowLLMProvider trait ✅
+  - [x] 2.4 Sequential execution ✅
+  - [x] 2.5 Parallel execution (sub-steps) ✅
+  - [x] 2.6 Template rendering for LLM prompts ✅
+  - [x] 2.7 Capability validation ✅
 - [ ] 3. 实现拦截器机制
   - [ ] 3.1 Interceptor trait
   - [ ] 3.2 InterceptorRegistry
@@ -943,10 +947,9 @@ class HTTPLLMClient:
   - [ ] 4.2 管道验证
   - [ ] 4.3 运行时配置
 
-**交付物**:
 - ✅ 工作流引擎
-- ✅ 拦截器系统
-- ✅ 动态管道管理
+- ❌ 拦截器系统
+- ❌ 动态管道管理
 
 **工作量**: 3-4 周
 
@@ -1454,9 +1457,9 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 检索系统: 100% 完成
 - ✅ 演化机制: 100% 完成
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
-- ⚠️ 工作流系统: 25% 完成（WorkflowStep ✅、WorkflowState ✅、Capability ✅）
+- ⚠️ 工作流系统: 50% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅）
 - ❌ 多用户支持: 0% 完成
-- **总体完成度: 82%** (从 81% 提升)
+- **总体完成度: 83%** (从 82% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成

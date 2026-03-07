@@ -2,12 +2,24 @@
 //!
 //! This module provides a flexible workflow engine that allows dynamic configuration
 //! of memory processing pipelines, inspired by memU's workflow system.
+//!
+//! # Architecture
+//! - `WorkflowStep`: Single step definition (LLM, Function, or Parallel)
+//! - `WorkflowRunner`: Trait for executing workflows
+//! - `DefaultWorkflowRunner`: Default implementation with sequential and parallel execution
+//! - `WorkflowState`: State passed between steps
+//! - `WorkflowConfig`: Configuration options
+//! - `WorkflowStats`: Execution statistics
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
+
+use async_trait::async_trait;
+use tokio::sync::RwLock;
 
 use crate::error::{MemError, MemResult};
 
@@ -263,6 +275,316 @@ pub struct WorkflowStats {
     pub total_time_ms: u64,
     /// Step execution times (step_id -> time_ms)
     pub step_times: HashMap<String, u64>,
+}
+
+/// Workflow Runner Trait
+///
+/// Defines the interface for executing workflow steps.
+#[async_trait]
+pub trait WorkflowRunner: Send + Sync {
+    /// Run a workflow with the given steps and initial state
+    ///
+    /// Returns the final state after all steps have been executed.
+    async fn run(
+        &self,
+        steps: &[WorkflowStep],
+        initial_state: WorkflowState,
+    ) -> MemResult<(WorkflowState, WorkflowStats)>;
+
+    /// Validate that required capabilities are available
+    ///
+    /// Returns an error if any step requires capabilities not in the provided set.
+    fn validate_capabilities(
+        &self,
+        steps: &[WorkflowStep],
+        available_capabilities: &HashSet<Capability>,
+    ) -> MemResult<()>;
+}
+
+/// LLM Provider trait for workflow execution
+///
+/// Abstracts LLM operations needed by the workflow runner.
+#[async_trait]
+pub trait WorkflowLLMProvider: Send + Sync {
+    /// Generate completion with the given prompt
+    async fn generate(&self, prompt: &str, profile: Option<&str>) -> MemResult<String>;
+}
+
+/// Default Workflow Runner Implementation
+///
+/// Executes workflow steps sequentially or in parallel based on step configuration.
+pub struct DefaultWorkflowRunner {
+    /// LLM provider for LLM steps
+    llm_provider: Arc<RwLock<Box<dyn WorkflowLLMProvider>>>,
+    /// Configuration
+    config: WorkflowConfig,
+    /// Available capabilities
+    capabilities: HashSet<Capability>,
+}
+
+impl DefaultWorkflowRunner {
+    /// Create a new workflow runner
+    pub fn new(
+        llm_provider: Arc<RwLock<Box<dyn WorkflowLLMProvider>>>,
+        config: WorkflowConfig,
+        capabilities: HashSet<Capability>,
+    ) -> Self {
+        Self {
+            llm_provider,
+            config,
+            capabilities,
+        }
+    }
+
+    /// Create a runner with default configuration
+    pub fn with_llm(llm_provider: Arc<RwLock<Box<dyn WorkflowLLMProvider>>>) -> Self {
+        Self::new(
+            llm_provider,
+            WorkflowConfig::default(),
+            HashSet::from([Capability::LLM, Capability::DB, Capability::IO]),
+        )
+    }
+
+    /// Execute a single step
+    async fn execute_step(
+        &self,
+        step: &WorkflowStep,
+        state: &mut WorkflowState,
+        stats: &mut WorkflowStats,
+    ) -> MemResult<()> {
+        let start = Instant::now();
+
+        // Check dependencies
+        if let Some(deps) = &step.depends_on {
+            for dep_id in deps {
+                if !state.step_outputs.contains_key(dep_id) {
+                    return Err(MemError::WorkflowError(format!(
+                        "Step '{}' depends on '{}' which has not been executed",
+                        step.step_id, dep_id
+                    )));
+                }
+            }
+        }
+
+        let result = match step.step_type {
+            StepType::Function => self.execute_function_step(step, state).await,
+            StepType::LLM => self.execute_llm_step(step, state).await,
+            StepType::Parallel => self.execute_parallel_step(step, state, stats).await,
+        };
+
+        let elapsed = start.elapsed().as_millis() as u64;
+        stats.step_times.insert(step.step_id.clone(), elapsed);
+        stats.steps_executed += 1;
+
+        match result {
+            Ok(output) => {
+                state.set_step_output(step.step_id.clone(), output);
+                stats.steps_succeeded += 1;
+                Ok(())
+            }
+            Err(e) => {
+                stats.steps_failed += 1;
+                if self.config.stop_on_error {
+                    Err(e)
+                } else {
+                    // Log error but continue
+                    if self.config.enable_logging {
+                        tracing::warn!("Step '{}' failed: {}", step.step_id, e);
+                    }
+                    state.set_step_output(
+                        step.step_id.clone(),
+                        serde_json::json!({ "error": e.to_string() }),
+                    );
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    /// Execute a function step
+    async fn execute_function_step(
+        &self,
+        step: &WorkflowStep,
+        state: &WorkflowState,
+    ) -> MemResult<serde_json::Value> {
+        let func = step
+            .function
+            .as_ref()
+            .ok_or_else(|| MemError::WorkflowError(format!("Step '{}' has no function", step.step_id)))?;
+
+        let state_map = state.step_outputs.clone();
+        let mut result: HashMap<String, serde_json::Value> = func(state_map).await?;
+
+        // Merge result into state
+        if let Some(global) = result.remove("global") {
+            let mut state = state.clone();
+            if let Ok(global_map) = serde_json::from_value::<HashMap<String, serde_json::Value>>(global) {
+                for (k, v) in global_map {
+                    state.set_global(k, v);
+                }
+            }
+        }
+
+        Ok(serde_json::to_value(result)?)
+    }
+
+    /// Execute an LLM step
+    async fn execute_llm_step(
+        &self,
+        step: &WorkflowStep,
+        state: &WorkflowState,
+    ) -> MemResult<serde_json::Value> {
+        let template = step
+            .prompt_template
+            .as_ref()
+            .ok_or_else(|| MemError::WorkflowError(format!("Step '{}' has no prompt template", step.step_id)))?;
+
+        // Render template with state
+        let prompt = self.render_template(template, state)?;
+
+        // Call LLM
+        let llm = self.llm_provider.read().await;
+        let response = llm.generate(&prompt, step.llm_profile.as_deref()).await?;
+
+        Ok(serde_json::json!({ "response": response }))
+    }
+
+    /// Execute a parallel step
+    async fn execute_parallel_step(
+        &self,
+        step: &WorkflowStep,
+        state: &mut WorkflowState,
+        stats: &mut WorkflowStats,
+    ) -> MemResult<serde_json::Value> {
+        let sub_steps = step
+            .sub_steps
+            .as_ref()
+            .ok_or_else(|| MemError::WorkflowError(format!("Parallel step '{}' has no sub-steps", step.step_id)))?;
+
+        // For simplicity, execute sub-steps sequentially (true parallel execution would use tokio::join!)
+        // This can be enhanced in a future iteration
+        let mut results = HashMap::new();
+
+        for sub_step in sub_steps {
+            let start = Instant::now();
+            let mut sub_state = state.clone();
+
+            let result = match sub_step.step_type {
+                StepType::Function => self.execute_function_step(sub_step, &sub_state).await,
+                StepType::LLM => self.execute_llm_step(sub_step, &sub_state).await,
+                StepType::Parallel => {
+                    return Err(MemError::WorkflowError(
+                        "Nested parallel steps are not supported".to_string(),
+                    ));
+                }
+            };
+
+            let elapsed = start.elapsed().as_millis() as u64;
+            stats.step_times.insert(sub_step.step_id.clone(), elapsed);
+            stats.steps_executed += 1;
+
+            match result {
+                Ok(output) => {
+                    results.insert(sub_step.step_id.clone(), output);
+                    stats.steps_succeeded += 1;
+                }
+                Err(e) => {
+                    stats.steps_failed += 1;
+                    if self.config.stop_on_error {
+                        return Err(e);
+                    }
+                    results.insert(sub_step.step_id.clone(), serde_json::json!({ "error": e.to_string() }));
+                }
+            }
+        }
+
+        Ok(serde_json::to_value(results)?)
+    }
+
+    /// Render a template with state values
+    fn render_template(&self, template: &str, state: &WorkflowState) -> MemResult<String> {
+        let mut result = template.to_string();
+
+        // Replace global variables: {var_name}
+        for (key, value) in &state.global {
+            let placeholder = format!("{{{}}}", key);
+            if let Some(s) = value.as_str() {
+                result = result.replace(&placeholder, s);
+            } else {
+                result = result.replace(&placeholder, &value.to_string());
+            }
+        }
+
+        // Replace step outputs: {step_id.field}
+        for (step_id, output) in &state.step_outputs {
+            if let Some(obj) = output.as_object() {
+                for (field, value) in obj {
+                    let placeholder = format!("{{{}.{}}}", step_id, field);
+                    if let Some(s) = value.as_str() {
+                        result = result.replace(&placeholder, s);
+                    } else {
+                        result = result.replace(&placeholder, &value.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(result)
+    }
+}
+
+#[async_trait]
+impl WorkflowRunner for DefaultWorkflowRunner {
+    async fn run(
+        &self,
+        steps: &[WorkflowStep],
+        initial_state: WorkflowState,
+    ) -> MemResult<(WorkflowState, WorkflowStats)> {
+        let start = Instant::now();
+        let mut state = initial_state;
+        let mut stats = WorkflowStats::default();
+
+        // Validate capabilities
+        self.validate_capabilities(steps, &self.capabilities)?;
+
+        // Execute steps sequentially
+        for step in steps {
+            self.execute_step(step, &mut state, &mut stats).await?;
+        }
+
+        stats.total_time_ms = start.elapsed().as_millis() as u64;
+
+        Ok((state, stats))
+    }
+
+    fn validate_capabilities(
+        &self,
+        steps: &[WorkflowStep],
+        available_capabilities: &HashSet<Capability>,
+    ) -> MemResult<()> {
+        for step in steps {
+            let missing: Vec<_> = step
+                .capabilities
+                .difference(available_capabilities)
+                .collect();
+
+            if !missing.is_empty() {
+                let missing_str: Vec<_> = missing.iter().map(|c| c.to_string()).collect();
+                return Err(MemError::WorkflowError(format!(
+                    "Step '{}' requires missing capabilities: {}",
+                    step.step_id,
+                    missing_str.join(", ")
+                )));
+            }
+
+            // Recursively validate sub-steps
+            if let Some(sub_steps) = &step.sub_steps {
+                self.validate_capabilities(sub_steps, available_capabilities)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
