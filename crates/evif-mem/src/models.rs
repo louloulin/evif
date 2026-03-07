@@ -263,7 +263,7 @@ impl MdFrontmatter {
 
 /// Compute content hash for deduplication
 pub fn compute_content_hash(summary: &str, memory_type: &MemoryType) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let normalized = summary.to_lowercase();
     let content = format!("{}:{}", memory_type.as_str(), normalized);
     let mut hasher = Sha256::new();

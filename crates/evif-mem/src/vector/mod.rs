@@ -70,7 +70,12 @@ pub enum VectorMetric {
 #[async_trait]
 pub trait VectorIndex: Send + Sync {
     /// Add vectors to the index
-    async fn add(&self, id: String, vector: Vec<f32>, metadata: Option<HashMap<String, String>>) -> MemResult<()>;
+    async fn add(
+        &self,
+        id: String,
+        vector: Vec<f32>,
+        metadata: Option<HashMap<String, String>>,
+    ) -> MemResult<()>;
 
     /// Add multiple vectors at once (batch)
     async fn add_batch(

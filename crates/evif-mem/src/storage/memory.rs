@@ -145,11 +145,11 @@ impl MemoryStorage {
         self.get_category(category_id)?;
 
         let relation = CategoryItem::new(item_id.to_string(), category_id.to_string());
-        self.category_items
-            .insert(relation.id.clone(), relation);
+        self.category_items.insert(relation.id.clone(), relation);
 
         // Update category item count and add to index
-        let mut ids = self.items_by_category
+        let mut ids = self
+            .items_by_category
             .entry(category_id.to_string())
             .or_insert_with(Vec::new);
 
@@ -186,7 +186,7 @@ impl Default for MemoryStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{MemoryType, Modality, compute_content_hash};
+    use crate::models::{compute_content_hash, MemoryType, Modality};
 
     #[test]
     fn test_put_and_get_resource() {
@@ -220,9 +220,21 @@ mod tests {
     fn test_get_items_by_type() {
         let storage = MemoryStorage::new();
 
-        let item1 = MemoryItem::new(MemoryType::Profile, "Profile 1".to_string(), "Content 1".to_string());
-        let item2 = MemoryItem::new(MemoryType::Profile, "Profile 2".to_string(), "Content 2".to_string());
-        let item3 = MemoryItem::new(MemoryType::Event, "Event 1".to_string(), "Content 3".to_string());
+        let item1 = MemoryItem::new(
+            MemoryType::Profile,
+            "Profile 1".to_string(),
+            "Content 1".to_string(),
+        );
+        let item2 = MemoryItem::new(
+            MemoryType::Profile,
+            "Profile 2".to_string(),
+            "Content 2".to_string(),
+        );
+        let item3 = MemoryItem::new(
+            MemoryType::Event,
+            "Event 1".to_string(),
+            "Content 3".to_string(),
+        );
 
         storage.put_item(item1).unwrap();
         storage.put_item(item2).unwrap();
@@ -239,10 +251,18 @@ mod tests {
     fn test_deduplication_by_hash() {
         let storage = MemoryStorage::new();
 
-        let mut item1 = MemoryItem::new(MemoryType::Profile, "Same summary".to_string(), "Content".to_string());
+        let mut item1 = MemoryItem::new(
+            MemoryType::Profile,
+            "Same summary".to_string(),
+            "Content".to_string(),
+        );
         item1.content_hash = Some(compute_content_hash("Same summary", &MemoryType::Profile));
 
-        let mut item2 = MemoryItem::new(MemoryType::Profile, "Same summary".to_string(), "Content".to_string());
+        let mut item2 = MemoryItem::new(
+            MemoryType::Profile,
+            "Same summary".to_string(),
+            "Content".to_string(),
+        );
         item2.content_hash = Some(compute_content_hash("Same summary", &MemoryType::Profile));
 
         storage.put_item(item1.clone()).unwrap();
@@ -257,7 +277,10 @@ mod tests {
     fn test_category_operations() {
         let storage = MemoryStorage::new();
 
-        let category = MemoryCategory::new("Programming".to_string(), "Related to programming".to_string());
+        let category = MemoryCategory::new(
+            "Programming".to_string(),
+            "Related to programming".to_string(),
+        );
         storage.put_category(category.clone()).unwrap();
 
         let retrieved = storage.get_category(&category.id).unwrap();
@@ -271,12 +294,19 @@ mod tests {
     fn test_link_item_to_category() {
         let storage = MemoryStorage::new();
 
-        let item = MemoryItem::new(MemoryType::Skill, "Rust programming".to_string(), "Content".to_string());
-        let category = MemoryCategory::new("Programming".to_string(), "Programming skills".to_string());
+        let item = MemoryItem::new(
+            MemoryType::Skill,
+            "Rust programming".to_string(),
+            "Content".to_string(),
+        );
+        let category =
+            MemoryCategory::new("Programming".to_string(), "Programming skills".to_string());
 
         storage.put_item(item.clone()).unwrap();
         storage.put_category(category.clone()).unwrap();
-        storage.link_item_to_category(&item.id, &category.id).unwrap();
+        storage
+            .link_item_to_category(&item.id, &category.id)
+            .unwrap();
 
         let items_in_category = storage.get_items_in_category(&category.id);
         assert_eq!(items_in_category.len(), 1);
@@ -284,7 +314,11 @@ mod tests {
 
     #[test]
     fn test_ref_id_generation() {
-        let mut item = MemoryItem::new(MemoryType::Profile, "Test".to_string(), "Content".to_string());
+        let mut item = MemoryItem::new(
+            MemoryType::Profile,
+            "Test".to_string(),
+            "Content".to_string(),
+        );
         let ref_id = item.generate_ref_id();
 
         assert!(!ref_id.is_empty());

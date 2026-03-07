@@ -18,14 +18,15 @@
 //! - `llm`: LLM client implementations
 //! - `pipeline`: Memorize and retrieve pipelines
 
+pub mod embedding;
+pub mod error;
+pub mod llm;
 pub mod models;
 pub mod storage;
-pub mod embedding;
 pub mod vector;
-pub mod error;
 
 #[cfg(feature = "plugin")]
 pub mod plugin;
 
-pub use models::*;
 pub use error::MemError;
+pub use models::*;

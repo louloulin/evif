@@ -2,16 +2,16 @@
 //!
 //! Exposes memory platform as a filesystem for EVIF mounting.
 
-use evif_core::{EvifPlugin, FileInfo, WriteFlags, EvifResult, EvifError, PluginConfigParam};
 use async_trait::async_trait;
+use chrono::Utc;
+use evif_core::{EvifError, EvifPlugin, EvifResult, FileInfo, PluginConfigParam, WriteFlags};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
-use chrono::Utc;
 
-use crate::storage::memory::MemoryStorage;
-use crate::models::{MemoryItem, MemoryCategory, MemoryType, MdFrontmatter, compute_content_hash};
 use crate::error::MemError;
+use crate::models::{compute_content_hash, MdFrontmatter, MemoryCategory, MemoryItem, MemoryType};
+use crate::storage::memory::MemoryStorage;
 
 /// Memory filesystem node
 #[derive(Debug)]
@@ -136,10 +136,10 @@ impl MemPlugin {
         let parent_path = if parts.len() == 1 {
             String::from("/")
         } else {
-            format!("/{}", parts[..parts.len()-1].join("/"))
+            format!("/{}", parts[..parts.len() - 1].join("/"))
         };
 
-        let basename = parts[parts.len()-1].to_string();
+        let basename = parts[parts.len() - 1].to_string();
         let parent = self.find_node(&parent_path).await?;
         Ok((parent, basename))
     }
@@ -228,7 +228,10 @@ impl MemPlugin {
                 };
 
                 let node = MemFsNode {
-                    name: format!("{}.md", item.id.replace('-', "").chars().take(8).collect::<String>()),
+                    name: format!(
+                        "{}.md",
+                        item.id.replace('-', "").chars().take(8).collect::<String>()
+                    ),
                     is_dir: false,
                     data: content.into_bytes(),
                     mode: self.config.default_mode,
@@ -331,7 +334,8 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
 - Mount at `/mem` to access memory as filesystem
 - Each memory type has its own directory
 - MD files contain YAML frontmatter + content
-"#.to_string()
+"#
+        .to_string()
     }
 
     fn get_config_params(&self) -> Vec<PluginConfigParam> {
@@ -368,7 +372,9 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
         let mut parent_node = parent.write().await;
 
         if !parent_node.is_dir {
-            return Err(EvifError::InvalidPath("Parent is not a directory".to_string()));
+            return Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ));
         }
 
         if let Some(children) = &mut parent_node.children {
@@ -378,12 +384,14 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
 
             children.insert(
                 basename.clone(),
-                Arc::new(RwLock::new(MemFsNode::new_file(basename, perm)))
+                Arc::new(RwLock::new(MemFsNode::new_file(basename, perm))),
             );
 
             Ok(())
         } else {
-            Err(EvifError::InvalidPath("Parent is not a directory".to_string()))
+            Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ))
         }
     }
 
@@ -392,22 +400,28 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
         let mut parent_node = parent.write().await;
 
         if !parent_node.is_dir {
-            return Err(EvifError::InvalidPath("Parent is not a directory".to_string()));
+            return Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ));
         }
 
         if let Some(children) = &mut parent_node.children {
             if children.contains_key(&basename) {
-                return Err(EvifError::InvalidPath("Directory already exists".to_string()));
+                return Err(EvifError::InvalidPath(
+                    "Directory already exists".to_string(),
+                ));
             }
 
             children.insert(
                 basename.clone(),
-                Arc::new(RwLock::new(MemFsNode::new_dir(basename, perm)))
+                Arc::new(RwLock::new(MemFsNode::new_dir(basename, perm))),
             );
 
             Ok(())
         } else {
-            Err(EvifError::InvalidPath("Parent is not a directory".to_string()))
+            Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ))
         }
     }
 
@@ -422,9 +436,13 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
         Ok(node_ref.data.clone())
     }
 
-    async fn write(&self, path: &str, data: Vec<u8>, _offset: i64, _flags: WriteFlags)
-        -> EvifResult<u64>
-    {
+    async fn write(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        _offset: i64,
+        _flags: WriteFlags,
+    ) -> EvifResult<u64> {
         let node = self.find_node(path).await?;
         let mut node_ref = node.write().await;
 
@@ -438,7 +456,8 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
                 if let Ok(item) = self.md_to_item(&content) {
                     // Store in memory backend
                     let mut item = item;
-                    item.content_hash = Some(compute_content_hash(&item.content, &item.memory_type));
+                    item.content_hash =
+                        Some(compute_content_hash(&item.content, &item.memory_type));
 
                     if let Err(e) = self.storage.put_item(item) {
                         tracing::warn!("Failed to store memory item: {}", e);
@@ -498,7 +517,9 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
         let mut parent_node = parent.write().await;
 
         if !parent_node.is_dir {
-            return Err(EvifError::InvalidPath("Parent is not a directory".to_string()));
+            return Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ));
         }
 
         if let Some(children) = &mut parent_node.children {
@@ -507,7 +528,9 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
             }
             Ok(())
         } else {
-            Err(EvifError::InvalidPath("Parent is not a directory".to_string()))
+            Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ))
         }
     }
 
@@ -519,21 +542,28 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
             let mut old_parent_node = old_parent.write().await;
 
             if !old_parent_node.is_dir {
-                return Err(EvifError::InvalidPath("Parent is not a directory".to_string()));
+                return Err(EvifError::InvalidPath(
+                    "Parent is not a directory".to_string(),
+                ));
             }
 
             if let Some(children) = &mut old_parent_node.children {
-                children.remove(&old_basename)
+                children
+                    .remove(&old_basename)
                     .ok_or_else(|| EvifError::NotFound(old_path.to_string()))?
             } else {
-                return Err(EvifError::InvalidPath("Parent is not a directory".to_string()));
+                return Err(EvifError::InvalidPath(
+                    "Parent is not a directory".to_string(),
+                ));
             }
         };
 
         let mut new_parent_node = new_parent.write().await;
 
         if !new_parent_node.is_dir {
-            return Err(EvifError::InvalidPath("Parent is not a directory".to_string()));
+            return Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ));
         }
 
         if let Some(children) = &mut new_parent_node.children {
@@ -548,7 +578,9 @@ Memory filesystem plugin - exposes memory platform as a filesystem.
             children.insert(new_basename, old_node);
             Ok(())
         } else {
-            Err(EvifError::InvalidPath("Parent is not a directory".to_string()))
+            Err(EvifError::InvalidPath(
+                "Parent is not a directory".to_string(),
+            ))
         }
     }
 
@@ -595,7 +627,14 @@ mod tests {
 
         // Create file
         fs.create("/test/file1.md", 0o644).await.unwrap();
-        fs.write("/test/file1.md", b"# Hello\n\nContent".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+        fs.write(
+            "/test/file1.md",
+            b"# Hello\n\nContent".to_vec(),
+            0,
+            WriteFlags::CREATE,
+        )
+        .await
+        .unwrap();
 
         // Read file
         let data = fs.read("/test/file1.md", 0, 100).await.unwrap();
@@ -618,7 +657,14 @@ mod tests {
 
         fs.mkdir("/test", 0o755).await.unwrap();
         fs.create("/test/file.txt", 0o644).await.unwrap();
-        fs.write("/test/file.txt", b"test data".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+        fs.write(
+            "/test/file.txt",
+            b"test data".to_vec(),
+            0,
+            WriteFlags::CREATE,
+        )
+        .await
+        .unwrap();
 
         // Delete file
         fs.remove("/test/file.txt").await.unwrap();
@@ -656,6 +702,13 @@ references: []
 This is the memory content."#;
 
         fs.create("/test/item.md", 0o644).await.unwrap();
-        fs.write("/test/item.md", md_content.as_bytes().to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+        fs.write(
+            "/test/item.md",
+            md_content.as_bytes().to_vec(),
+            0,
+            WriteFlags::CREATE,
+        )
+        .await
+        .unwrap();
     }
 }

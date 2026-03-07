@@ -1,7 +1,7 @@
 //! Embedding management with dual-layer cache (L1: memory, L2: persistent)
 
-use async_trait::async_trait;
 use crate::error::{MemError, MemResult};
+use async_trait::async_trait;
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -202,7 +202,8 @@ impl L2Cache {
         }
 
         // Find entry with lowest access count
-        let lru_key = self.index
+        let lru_key = self
+            .index
             .iter()
             .min_by_key(|(_, v)| v.access_count)
             .map(|(k, _)| k.clone());
@@ -337,7 +338,9 @@ impl EmbeddingManager {
         }
 
         // L2: Check persistent cache
-        if self.config.strategy == CacheStrategy::L1L2 || self.config.strategy == CacheStrategy::L2Only {
+        if self.config.strategy == CacheStrategy::L1L2
+            || self.config.strategy == CacheStrategy::L2Only
+        {
             let mut l2_guard = self.l2_cache.lock().await;
             if let Some(ref mut l2) = *l2_guard {
                 if let Some(cached) = l2.get(&key) {
@@ -402,7 +405,10 @@ impl EmbeddingManager {
 
         // L2 check for remaining - collect keys to fetch from L2 first
         let mut l2_hits: Vec<(usize, Vec<f32>)> = Vec::new();
-        if !uncached.is_empty() && (self.config.strategy == CacheStrategy::L1L2 || self.config.strategy == CacheStrategy::L2Only) {
+        if !uncached.is_empty()
+            && (self.config.strategy == CacheStrategy::L1L2
+                || self.config.strategy == CacheStrategy::L2Only)
+        {
             let mut l2_guard = self.l2_cache.lock().await;
             if let Some(ref mut l2) = *l2_guard {
                 let mut still_uncached = Vec::new();
@@ -551,7 +557,8 @@ mod tests {
     #[async_trait]
     impl EmbeddingClient for MockEmbeddingClient {
         async fn embed(&self, texts: &[String]) -> MemResult<Vec<Vec<f32>>> {
-            self.call_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.call_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(texts
                 .iter()
                 .map(|_text| vec![0.1; self.dimension])
@@ -578,12 +585,18 @@ mod tests {
         // First call - should hit API
         let emb1 = manager.embed("test text").await?;
         assert_eq!(emb1.len(), 128);
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
 
         // Second call - should hit L1 cache
         let emb2 = manager.embed("test text").await?;
         assert_eq!(emb2.len(), 128);
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1); // Still 1
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        ); // Still 1
 
         Ok(())
     }
@@ -603,11 +616,17 @@ mod tests {
 
         // First call - should hit API
         let _emb1 = manager.embed("cache test").await?;
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
 
         // Second call - should hit L1 cache (in same manager)
         let _emb2 = manager.embed("cache test").await?;
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
 
         // Verify L2 has the entry
         let stats = manager.get_stats().await;
@@ -633,7 +652,10 @@ mod tests {
         let _ = manager.embed("test 2").await?;
         let _ = manager.embed("test 3").await?;
 
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 3);
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            3
+        );
 
         Ok(())
     }
@@ -659,12 +681,18 @@ mod tests {
         // First batch - all API calls
         let results = manager.embed_batch(&texts).await?;
         assert_eq!(results.len(), 3);
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1); // 1 batch call
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        ); // 1 batch call
 
         // Second batch - all from cache
         let results2 = manager.embed_batch(&texts).await?;
         assert_eq!(results2.len(), 3);
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1); // Still 1
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        ); // Still 1
 
         Ok(())
     }
@@ -705,14 +733,20 @@ mod tests {
         let manager = EmbeddingManager::new(client.clone(), config)?;
 
         let _ = manager.embed("test text").await?;
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
 
         // Clear cache
         manager.clear_cache().await?;
 
         // Next call should hit API again
         let _ = manager.embed("test text").await?;
-        assert_eq!(client.call_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(
+            client.call_count.load(std::sync::atomic::Ordering::SeqCst),
+            2
+        );
 
         Ok(())
     }

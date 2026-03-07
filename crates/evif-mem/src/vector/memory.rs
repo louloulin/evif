@@ -4,8 +4,8 @@
 //! Suitable for development and small to medium datasets.
 
 use super::{
-    cosine_similarity, dot_product, euclidean_distance, normalize_vector, IndexStats,
-    SearchResult, VectorIndex, VectorIndexConfig, VectorMetric,
+    cosine_similarity, dot_product, euclidean_distance, normalize_vector, IndexStats, SearchResult,
+    VectorIndex, VectorIndexConfig, VectorMetric,
 };
 use crate::error::{MemError, MemResult};
 use async_trait::async_trait;
@@ -148,7 +148,11 @@ impl VectorIndex for InMemoryVectorIndex {
             .collect();
 
         // Sort by score descending
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Return top k
         results.truncate(k);
@@ -208,26 +212,22 @@ mod tests {
             .add(
                 "doc1".to_string(),
                 vec![1.0, 0.0, 0.0],
-                Some([("text".to_string(), "Document 1".to_string())].into_iter().collect()),
+                Some(
+                    [("text".to_string(), "Document 1".to_string())]
+                        .into_iter()
+                        .collect(),
+                ),
             )
             .await
             .unwrap();
 
         index
-            .add(
-                "doc2".to_string(),
-                vec![0.0, 1.0, 0.0],
-                None,
-            )
+            .add("doc2".to_string(), vec![0.0, 1.0, 0.0], None)
             .await
             .unwrap();
 
         index
-            .add(
-                "doc3".to_string(),
-                vec![1.0, 1.0, 0.0],
-                None,
-            )
+            .add("doc3".to_string(), vec![1.0, 1.0, 0.0], None)
             .await
             .unwrap();
 
@@ -259,7 +259,10 @@ mod tests {
     async fn test_remove() {
         let index = InMemoryVectorIndex::new(2, VectorIndexConfig::default()).unwrap();
 
-        index.add("doc1".to_string(), vec![1.0, 0.0], None).await.unwrap();
+        index
+            .add("doc1".to_string(), vec![1.0, 0.0], None)
+            .await
+            .unwrap();
         assert_eq!(index.len().await, 1);
 
         index.remove("doc1").await.unwrap();
@@ -270,7 +273,10 @@ mod tests {
     async fn test_stats() {
         let index = InMemoryVectorIndex::new(128, VectorIndexConfig::default()).unwrap();
 
-        index.add("doc1".to_string(), vec![0.0; 128], None).await.unwrap();
+        index
+            .add("doc1".to_string(), vec![0.0; 128], None)
+            .await
+            .unwrap();
 
         let stats = index.stats().await;
         assert_eq!(stats.total_vectors, 1);
