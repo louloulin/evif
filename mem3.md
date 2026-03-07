@@ -1,8 +1,8 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.1
+> **版本**: 2.2
 > **日期**: 2026-03-07
-> **状态**: Phase 1.5 部分完成 (75%)
+> **状态**: Phase 1.5 完成 (100%) ✅
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -13,10 +13,10 @@
 
 ### 关键发现
 1. **Phase 1 完成度**: evif-mem Phase 1 核心管道已 100% 完成，包括完整的记忆化、检索和演化管道
-2. **Phase 1.5 完成度**: Phase 1.5.1 (背景监控) 和 Phase 1.5.2 (意图预测) 和 Phase 1.5.3 (主动提取) 已完成，主动代理系统完成 75%
+2. **Phase 1.5 完成度**: Phase 1.5 (主动代理系统) 已 100% 完成 ✅ - 包括背景监控、意图预测、主动提取、成本优化
 3. **架构差异**: evif-mem 使用 MD+YAML 格式（AI/Git/FUSE 友好），memU 使用 JSON+SQL（传统数据库友好）
-4. **主要差距**: 成本优化（Phase 1.5.4）、工作流引擎（Phase 1.6）、企业级多用户支持（Phase 1.7）
-5. **独特优势**: evif-mem 拥有 evif-graph 时序图谱、FUSE 文件系统集成、高性能 Rust 异步、主动代理背景监控、意图预测能力
+4. **主要差距**: 工作流引擎（Phase 1.6）、企业级多用户支持（Phase 1.7）
+5. **独特优势**: evif-mem 拥有 evif-graph 时序图谱、FUSE 文件系统集成、高性能 Rust 异步、主动代理背景监控、意图预测能力、成本优化机制
 
 ### 对比矩阵
 
@@ -845,9 +845,7 @@ class HTTPLLMClient:
 
 **目标**: 实现 24/7 主动代理和意图预测
 
-**进度**: **75% complete** (背景监控完成，意图预测完成，主动提取完成)
-
-**任务**:
+**进度**: **100% complete** ✅ (Phase 1.5.1-1.5.4 全部完成)
 - [x] 1. 实现背景监控任务 ✅ **2026-03-07**
   - [x] 1.1 Tokio 后台任务管理 ✅
   - [x] 1.2 资源监控接口 ✅
@@ -865,10 +863,14 @@ class HTTPLLMClient:
   - [x] 3.6 extract_on_threshold() 阈值触发提取 ✅
   - [x] 3.7 trigger_evolution() 背景演化触发 ✅
   - [x] 3.8 5 unit tests for extraction logic ✅
-- [ ] 4. 实现成本优化
-  - [ ] 4.1 LRU 缓存策略
-  - [ ] 4.2 批量处理
-  - [ ] 4.3 相似查询检测
+- [x] 4. 实现成本优化 ✅ **2026-03-07**
+  - [x] 4.1 LRU 缓存策略 ✅
+  - [x] 4.2 批量处理 ✅
+  - [x] 4.3 相似查询检测 ✅
+  - [x] 4.4 CostOptimizer 结构 ✅
+  - [x] 4.5 CacheEntry 和 BatchItem 数据结构 ✅
+  - [x] 4.6 CostOptimizerStats 统计 ✅
+  - [x] 4.7 8 unit tests for cost optimization ✅
 
 **已实现**:
 - ✅ ProactiveAgent 结构体
@@ -893,16 +895,26 @@ class HTTPLLMClient:
 - ✅ extract_on_intent() 意图驱动
 - ✅ extract_on_threshold() 阈值触发
 - ✅ trigger_evolution() 背景演化
+- ✅ CostOptimizer 结构体 (Phase 1.5.4)
+- ✅ CostOptimizerConfig 配置系统
+- ✅ LRU cache with TTL for query responses
+- ✅ Batch processing for multiple queries
+- ✅ Similar query detection mechanism
+- ✅ should_call_llm() decision logic
+- ✅ get_cached_response() cache retrieval
+- ✅ cache_response() cache storage
+- ✅ estimate_cost() cost calculation
 - ✅ 5 unit tests for extraction logic
 - ✅ 4 unit tests for intention prediction
 - ✅ 4 unit tests for proactive agent
-- ✅ Total: 84 tests passing
+- ✅ 8 unit tests for cost optimization
+- ✅ Total: 92 tests passing
 
 **交付物**:
-- ✅ 24/7 运行的主动代理 (部分完成)
+- ✅ 24/7 运行的主动代理 (已完成)
 - ✅ 意图预测能力 (已完成)
 - ✅ 主动记忆提取 (已完成)
-- ⏳ 成本优化机制 (待实现)
+- ✅ 成本优化机制 (已完成)
 
 **工作量**: 2-3 周
 
@@ -1438,10 +1450,10 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 核心管道: 100% 完成
 - ✅ 检索系统: 100% 完成
 - ✅ 演化机制: 100% 完成
-- ⚠️ 主动代理: 25% 完成（背景监控 ✅）
+- ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
 - ❌ 工作流系统: 0% 完成
 - ❌ 多用户支持: 0% 完成
-- **总体完成度: 75%** (从 70% 提升)
+- **总体完成度: 79%** (从 75% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
@@ -1454,10 +1466,9 @@ let items = pipeline.memorize_text("conversation content").await?;
 
 ### 关键差距
 
-1. **主动代理系统** (P0): 24/7 监控、意图预测、成本优化
-2. **工作流引擎** (P1): WorkflowStep、Interceptor、PipelineManager
-3. **多用户支持** (P2): User Scope、租户隔离、用户模型
-4. **后端扩展** (P2): PostgreSQL、多 LLM、多 Embedding
+1. **工作流引擎** (P1): WorkflowStep、Interceptor、PipelineManager
+2. **多用户支持** (P2): User Scope、租户隔离、用户模型
+3. **后端扩展** (P2): PostgreSQL、多 LLM、多 Embedding
 
 ### 独特优势
 

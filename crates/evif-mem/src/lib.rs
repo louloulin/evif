@@ -38,4 +38,5 @@ pub use proactive::{
     ExtractionStats, ExtractorConfig, ProactiveAgent, ProactiveConfig, ProactiveEvent,
     ProactiveExtractor, ProactiveStats, ProactiveResult, ResourceMonitor, EventTrigger,
     IntentionPredictor, IntentConfig, IntentResult, PredictedIntent, MemoryPattern,
+    CostOptimizer, CostOptimizerConfig, CostOptimizerStats, CacheEntry, BatchItem,
 };

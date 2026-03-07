@@ -7,18 +7,25 @@
 //! - `ResourceMonitor`: Monitors resources for changes
 //! - `EventTrigger`: Triggers actions based on events
 //! - `IntentionPredictor`: Predicts user intent (Phase 1.5.2)
+//! - `CostOptimizer`: Reduces LLM costs (Phase 1.5.4)
 //!
 //! # Phase 1.5 Implementation
 //! - Background task management (Tokio spawn) ✅
 //! - Resource monitoring interface ✅
 //! - Event trigger mechanism ✅
 //! - Intent prediction module ✅ (Phase 1.5.2)
+//! - Proactive extraction ✅ (Phase 1.5.3)
+//! - Cost optimization ✅ (Phase 1.5.4)
 
 // Module structure for proactive system
 pub mod intention;
+pub mod cost;
 
 pub use intention::{
     IntentionPredictor, IntentConfig, IntentResult, PredictedIntent, MemoryPattern,
+};
+pub use cost::{
+    CostOptimizer, CostOptimizerConfig, CostOptimizerStats, CacheEntry, BatchItem,
 };
 
 use crate::error::MemError;
@@ -26,6 +33,7 @@ use crate::models::{MemoryItem, Resource};
 use crate::pipeline::{EvolvePipeline, MemorizePipeline};
 use crate::storage::MemoryStorage;
 use crate::llm::LLMClient;
+use crate::vector::VectorIndex;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
@@ -327,6 +335,8 @@ pub struct ProactiveAgent {
     intent_predictor: Option<IntentionPredictor>,
     /// Proactive extractor (Phase 1.5.3)
     extractor: Option<ProactiveExtractor>,
+    /// Cost optimizer (Phase 1.5.4)
+    cost_optimizer: Option<Arc<CostOptimizer>>,
     /// Statistics
     stats: Arc<RwLock<ProactiveStats>>,
     /// Shutdown signal
@@ -341,6 +351,7 @@ impl ProactiveAgent {
         memorize_pipeline: Arc<MemorizePipeline>,
         evolve_pipeline: Arc<EvolvePipeline>,
         llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+        vector_index: Arc<RwLock<Box<dyn VectorIndex>>>,
     ) -> Self {
         // Create intent predictor if enabled
         let intent_predictor = if config.enable_intent_prediction {
@@ -362,6 +373,16 @@ impl ProactiveAgent {
             llm_client.clone(),
         ));
 
+        // Create cost optimizer if enabled (Phase 1.5.4)
+        let cost_optimizer = if config.enable_cost_optimization {
+            Some(Arc::new(CostOptimizer::new(
+                CostOptimizerConfig::default(),
+                vector_index,
+            )))
+        } else {
+            None
+        };
+
         Self {
             config,
             storage,
@@ -370,6 +391,7 @@ impl ProactiveAgent {
             llm_client,
             intent_predictor,
             extractor,
+            cost_optimizer,
             stats: Arc::new(RwLock::new(ProactiveStats::default())),
             shutdown: Arc::new(RwLock::new(false)),
         }
@@ -535,6 +557,24 @@ impl ProactiveAgent {
         }
 
         Ok(vec![])
+    }
+
+    /// Get cost optimizer statistics (Phase 1.5.4)
+    pub async fn get_cost_stats(&self) -> Option<CostOptimizerStats> {
+        if let Some(ref optimizer) = self.cost_optimizer {
+            Some(optimizer.get_stats().await)
+        } else {
+            None
+        }
+    }
+
+    /// Check if LLM call should be made or use cache/batch (Phase 1.5.4)
+    pub async fn should_call_llm(&self, query: &str) -> ProactiveResult<bool> {
+        if let Some(ref optimizer) = self.cost_optimizer {
+            optimizer.should_call_llm(query).await
+        } else {
+            Ok(true) // Always call if no optimizer
+        }
     }
 }
 
