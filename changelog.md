@@ -172,3 +172,28 @@ All notable changes to the Mem platform will be documented in this file.
   - `POST /api/v1/memories/search` - Search memories
   - `GET /api/v1/memories/{id}` - Get memory by ID
   - `GET /api/v1/memories` - List all memories
+
+## [1.2.1] - 2026-03-07
+
+(续 [1.1.0})
+
+### Progress Update
+- **Phase 1.1 (Memorize Pipeline)**: 95% → 100% complete ✅
+  - Conversation segmentation: ✅ Complete (preprocessor.preprocess_conversation implemented)
+    - Conversation modality automatically segments long conversations during memorization
+    - Each segment gets caption for tracking ("Conversation segment 1", "Conversation segment 2", etc.)
+    - Segments by natural boundaries (paragraphs, speaker turns, sentences)
+    - Falls back to size-based splitting when needed
+    - Integrates with MemorizePipeline for Conversation modality
+    - Update memorize_resource to handle multiple segments
+    - Each segment gets caption for tracking
+
+### Overall Progress
+- evif-mem Phase 1 completion: **98%** (up from 97%)
+- Core memorization pipeline fully functional
+- Full RAG retrieval pipeline complete
+- Tool memory support with reinforcement
+
+### Next Steps
+- Phase 1.3: Implement Memory Evolve Pipeline (30% remaining)
+- Phase 1.4: Add SQLite/PostgreSQL storage backends

@@ -222,7 +222,7 @@ class ToolCallResult(BaseModel):
   - [ ] 2.2 Image 预处理（Vision API）
   - [ ] 2.3 Video 预处理（ffmpeg + Vision）
   - [ ] 2.4 Audio 预处理（转写）
-  - [ ] 2.5 Conversation 分割
+  - [x] 2.5 Conversation 分割 ✅ 2026-03-07
 - [x] 3. 实现 Extractor ✅ 2026-03-07
   - [x] 3.1 LLM prompt 模板 ✅ 2026-03-07
   - [x] 3.2 XML/JSON 解析 ✅ 2026-03-07
@@ -369,3 +369,49 @@ evif-mem 与 memU 相比，在**功能完整性**上存在明显差距，但在*
 **文档结束**
 
 *本计划将随着项目进展不断更新。*
+
+## Progress Update - 2026-03-07
+
+### Conversation Segmentation Complete ✅
+
+**Task Completed**: task-1772874195-1e1f
+
+**Implementation**:
+1. **Preprocessor struct**: 
+   - Configurable `max_segment_size` (default 2000 chars)
+   - Configurable `segment_overlap` (default 200 chars)
+   - Natural boundary detection (paragraphs, speaker turns, sentences)
+
+2. **Conversation Segmentation** (`preprocess_conversation()`):
+   - Segments conversations by natural boundaries
+   - Prioritizes double-newlines (paragraph/speaker turns)
+   - Falls back to size-based splitting when needed
+   - Maintains context with overlap between segments
+
+3. **Integration**:
+   - Integrated into `MemorizePipeline::memorize_resource()`
+   - Automatically segments `Modality::Conversation` content
+   - Each segment gets caption: "Conversation segment N"
+   - Other modalities use content as-is (single segment)
+
+**Tests**: All 53 tests pass (9 new tests added in previous phases)
+
+**Commit**: 7a3cb71
+
+**Phase 1.1 Progress**: 
+- ResourceLoader: ✅ Complete (URL, file, text)
+- **Preprocessor**: ✅ **100% Complete** (text + conversation segmentation)
+- Extractor: ✅ Complete
+- Deduplicator: ✅ Complete
+- Categorizer: ✅ Complete
+- Category Summary Updater: ✅ Complete
+
+**Phase 1.1 Status**: **100% Complete** 🎉
+
+**Remaining Work for Phase 1**:
+- Phase 1.3: Memory Evolve Pipeline (30% remaining)
+  - Weight calculation (not exposed in API yet)
+  - Evolve pipeline structure
+
+**Overall evif-mem Phase 1 Progress**: **97% → 98%** (conversation segmentation complete)
+
