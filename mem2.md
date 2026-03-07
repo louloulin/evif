@@ -293,7 +293,7 @@ class ToolCallResult(BaseModel):
 **目标**: 支持多存储后端和多 LLM 后端
 
 **任务**:
-- [ ] 1. 实现 SQLite 存储后端
+- [x] 1. 实现 SQLite 存储后端 ✅ 2026-03-07
 - [ ] 2. 实现 PostgreSQL 存储后端
 - [ ] 3. 添加更多 LLM 后端
   - [ ] 3.1 Grok
@@ -304,7 +304,7 @@ class ToolCallResult(BaseModel):
   - [ ] 4.2 本地模型支持
 
 **交付物**:
-- 多存储后端支持
+- ✅ SQLite 存储后端支持 (Phase 1.4 progress: 25%)
 - 多 LLM/Embedding 后端
 
 ### Phase 1.5: 高级特性 (2027)
@@ -554,3 +554,92 @@ Multimodal preprocessing was already fully implemented but lacked tests and docu
 - Audio: Returns placeholder - requires external transcription service (OpenAI Whisper recommended)
 - MIME type detection supported for: PNG, JPEG, GIF, WebP
 
+
+## Progress Update - 2026-03-07 (Phase 1.4 Started)
+
+### SQLite Storage Backend Complete ✅
+
+**Task Completed**: task-1772881326-b135
+
+**Implementation**:
+1. **SQLiteStorage struct**:
+   - Persistent storage backend using SQLite database
+   - Thread-safe through `Arc<Mutex<Connection>>`
+   - Support for both file-based and in-memory databases
+
+2. **Database Schema**:
+   - `resources` table: stores Resource objects with modality, local_path, caption, embedding_id
+   - `memory_items` table: stores MemoryItem objects with all fields including reinforcement tracking
+   - `categories` table: stores MemoryCategory objects with summary and item_count
+   - `category_items` table: many-to-many relationship between items and categories
+   - Indexes for performance: type, hash, ref_id, category relationships
+
+3. **Full CRUD Operations**:
+   - Resource: `put_resource`, `get_resource`
+   - Memory Item: `put_item`, `get_item`, `get_items_by_hash`, `get_items_by_type`, `get_all_items`, `delete_item`
+   - Category: `put_category`, `get_category`, `get_all_categories`, `delete_category`
+   - Relationship: `link_item_to_category`, `get_items_in_category`
+
+4. **Advanced Features**:
+   - Content hash deduplication with reinforcement counting
+   - Automatic ref_id generation
+   - Category item count updates
+   - Embedding ID references (not storing vectors directly)
+   - Timestamp tracking (created_at, updated_at, last_reinforced_at)
+
+5. **Feature Flag**:
+   - Enabled with `--features sqlite` cargo flag
+   - rusqlite dependency already configured as optional
+
+**Tests**: 9 new unit tests, all 80 tests pass
+- `test_sqlite_storage_creation` - Basic creation test
+- `test_put_and_get_resource` - Resource CRUD
+- `test_put_and_get_item` - Item CRUD
+- `test_get_items_by_type` - Type-based querying
+- `test_deduplication_by_hash` - Deduplication logic
+- `test_category_operations` - Category CRUD
+- `test_link_item_to_category` - Relationship management
+- `test_delete_item` - Deletion logic
+- `test_embedding_id_storage` - Embedding reference storage
+
+**New Types**:
+- `SQLiteStorage`: Persistent storage backend
+
+**Usage Example**:
+```rust
+use evif_mem::storage::SQLiteStorage;
+
+// Create file-based storage
+let storage = SQLiteStorage::new("memories.db")?;
+
+// Or in-memory for testing
+let storage = SQLiteStorage::in_memory()?;
+
+// Use same interface as MemoryStorage
+storage.put_item(item)?;
+let items = storage.get_items_by_type("profile");
+```
+
+**Commit**: (pending)
+
+**Phase 1.4 Progress**:
+- SQLite storage backend: ✅ Complete (25% of Phase 1.4)
+- PostgreSQL storage backend: Pending
+- Additional LLM backends: Pending
+- Additional Embedding backends: Pending
+
+**Phase 1.4 Status**: 25% complete
+
+**Overall evif-mem Progress**: Phase 1 complete, Phase 1.4 started
+
+**Remaining Work for Phase 1.4**:
+- PostgreSQL storage backend
+- Grok, OpenRouter, Ollama LLM backends
+- Ollama embeddings, local model support
+
+**Technical Notes**:
+- Uses rusqlite 0.32 for SQLite bindings
+- Embeddings stored as ID references, not blobs (different from MemoryStorage)
+- Same API as MemoryStorage for drop-in replacement
+- Suitable for development, testing, and small-scale production use
+- Performance: O(log n) for indexed queries, O(1) for primary key lookups

@@ -74,6 +74,23 @@ impl Modality {
             Modality::Audio => "audio",
         }
     }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "conversation" => Some(Modality::Conversation),
+            "document" => Some(Modality::Document),
+            "image" => Some(Modality::Image),
+            "video" => Some(Modality::Video),
+            "audio" => Some(Modality::Audio),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Modality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 /// Resource - raw input data (conversation, document, image, etc.)

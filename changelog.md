@@ -2,6 +2,42 @@
 
 All notable changes to the Mem platform will be documented in this file.
 
+## [1.5.0] - 2026-03-07
+
+### Added
+- **SQLite Storage Backend** - Phase 1.4 first feature complete
+  - `SQLiteStorage` struct for persistent storage using SQLite database
+  - Full CRUD operations for resources, memory items, categories
+  - Content hash deduplication with reinforcement counting
+  - Category-item relationship management
+  - Embedding ID references support
+  - Thread-safe through `Arc<Mutex<Connection>>`
+  - Support for file-based and in-memory databases
+  - Feature flag: `--features sqlite`
+
+### Database Schema
+- `resources` table with modality, local_path, caption, embedding_id
+- `memory_items` table with all MemoryItem fields
+- `categories` table with summary and item_count
+- `category_items` table for many-to-many relationships
+- Performance indexes on type, hash, ref_id, and relationships
+
+### Tests
+- 9 new unit tests for SQLite storage
+- All 80 tests pass (71 existing + 9 new)
+
+### Changed
+- Phase 1.4 progress: 0% → 25% complete
+- Added `Modality::from_str()` method for parsing
+- Added `Display` trait implementation for `Modality`
+
+### Technical Details
+- Uses rusqlite 0.32 for SQLite bindings
+- Same API as MemoryStorage for drop-in replacement
+- Embeddings stored as ID references (not blobs)
+- Automatic timestamp tracking (created_at, updated_at, last_reinforced_at)
+- Performance: O(log n) for indexed queries, O(1) for primary key lookups
+
 ## [1.4.0] - 2026-03-07
 
 ### Added
