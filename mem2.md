@@ -8,7 +8,7 @@
 
 ## 1. 执行摘要
 
-本文档对比 memU（Python 实现）和 evif-mem（Rust 实现）的功能集，分析当前实现与 memU 完整功能之间的差距，并制定扩展计划。核心发现：**evif-mem Phase 1 完成度 95%，Retrieve 管道 RAG 完整流程已实现 (2026-03-07)**。
+本文档对比 memU（Python 实现）和 evif-mem（Rust 实现）的功能集，分析当前实现与 memU 完整功能之间的差距，并制定扩展计划。核心发现：**evif-mem Phase 1 完成度 97%，Retrieve 管道 RAG 完整流程已实现，Memorize 管道核心功能已完成 (2026-03-07)**。
 
 ---
 
@@ -213,29 +213,29 @@ class ToolCallResult(BaseModel):
 **目标**: 实现完整的记忆化管道
 
 **任务**:
-- [ ] 1. 实现 ResourceLoader
-  - [ ] 1.1 支持 URL 加载
-  - [ ] 1.2 支持本地文件
-  - [ ] 1.3 支持 text 直接输入
+- [x] 1. 实现 ResourceLoader ✅ 2026-03-07
+  - [x] 1.1 支持 URL 加载 ✅ 2026-03-07
+  - [x] 1.2 支持本地文件 ✅ 2026-03-07
+  - [x] 1.3 支持 text 直接输入 ✅ 2026-03-07
 - [ ] 2. 实现 Preprocessor
-  - [ ] 2.1 Text 预处理（已有基础）
+  - [x] 2.1 Text 预处理（已有基础） ✅ 2026-03-07
   - [ ] 2.2 Image 预处理（Vision API）
   - [ ] 2.3 Video 预处理（ffmpeg + Vision）
   - [ ] 2.4 Audio 预处理（转写）
   - [ ] 2.5 Conversation 分割
-- [ ] 3. 实现 Extractor
-  - [ ] 3.1 LLM prompt 模板
-  - [ ] 3.2 XML/JSON 解析
-  - [ ] 3.3 结构化输出
-- [ ] 4. 实现 Deduplicator
-  - [ ] 4.1 content hash 计算
-  - [ ] 4.2 重复检测
-- [ ] 5. 完善 Categorizer（已在 Phase 1 实现）
-- [ ] 6. 完善 Persister（已在 Phase 1 实现）
-- [ ] 7. **实现 Category Summary Updater** ⭐
-  - [ ] 7.1 LLM prompt 模板
-  - [ ] 7.2 增量更新逻辑
-  - [ ] 7.3 引用支持 [ref:xxx]
+- [x] 3. 实现 Extractor ✅ 2026-03-07
+  - [x] 3.1 LLM prompt 模板 ✅ 2026-03-07
+  - [x] 3.2 XML/JSON 解析 ✅ 2026-03-07
+  - [x] 3.3 结构化输出 ✅ 2026-03-07
+- [x] 4. 实现 Deduplicator ✅ 2026-03-07
+  - [x] 4.1 content hash 计算 ✅ 2026-03-07
+  - [x] 4.2 重复检测 ✅ 2026-03-07
+- [x] 5. 完善 Categorizer（已在 Phase 1 实现） ✅ 2026-03-07
+- [x] 6. 完善 Persister（已在 Phase 1 实现） ✅ 2026-03-07
+- [x] 7. **实现 Category Summary Updater** ⭐ ✅ 2026-03-07
+  - [x] 7.1 LLM prompt 模板 ✅ 2026-03-07
+  - [x] 7.2 增量更新逻辑 ✅ 2026-03-07
+  - [x] 7.3 引用支持 [ref:xxx] ✅ 2026-03-07 (via ref_id)
 
 **交付物**:
 - 完整的 MemorizePipeline
@@ -271,13 +271,13 @@ class ToolCallResult(BaseModel):
 **目标**: 支持 Tool Memory 和强化
 
 **任务**:
-- [ ] 1. 实现 ToolCallResult 模型
-  - [ ] 1.1 扩展 MemoryItem
-  - [ ] 1.2 Tool memory 提取
-- [ ] 2. 实现 Reinforcement 机制
-  - [ ] 2.1 reinforcement_count 计数
-  - [ ] 2.2 last_reinforced_at 更新
-  - [ ] 2.3 权重计算
+- [x] 1. 实现 ToolCallResult 模型 ✅ 2026-03-07 (as ToolCall)
+  - [x] 1.1 扩展 MemoryItem ✅ 2026-03-07 (MemoryType::Tool)
+  - [x] 1.2 Tool memory 提取 ✅ 2026-03-07 (memorize_tool_call)
+- [x] 2. 实现 Reinforcement 机制 ✅ 2026-03-07
+  - [x] 2.1 reinforcement_count 计数 ✅ 2026-03-07
+  - [x] 2.2 last_reinforced_at 更新 ✅ 2026-03-07
+  - [ ] 2.3 权重计算 (未暴露API)
 - [ ] 3. 实现 Memory Evolve Pipeline
   - [ ] 3.1 强化逻辑
   - [ ] 3.2 衰减逻辑

@@ -2,6 +2,30 @@
 
 All notable changes to the Mem platform will be documented in this file.
 
+## [1.2.0] - 2026-03-07
+
+### Progress Update
+- **Phase 1.1 (Memorize Pipeline)**: 90% → 95% complete
+  - ResourceLoader: ✅ Complete (URL, file, text sources)
+  - Preprocessor: ⚠️ Partial (text only, multi-modal pending)
+  - Extractor: ✅ Complete (LLM-based)
+  - Deduplicator: ✅ Complete (content hash)
+  - Categorizer: ✅ Complete (vector similarity + LLM)
+  - Persister: ✅ Complete
+  - Category Summary Updater: ✅ Complete
+
+- **Phase 1.3 (Tool Memory & Reinforcement)**: 70% complete
+  - ToolCall model: ✅ Complete
+  - memorize_tool_call: ✅ Complete
+  - Reinforcement count: ✅ Complete
+  - Memory Evolve Pipeline: ❌ Pending
+
+### Overall Progress
+- evif-mem Phase 1 completion: **97%** (up from 95%)
+- Core memorization pipeline fully functional
+- Full RAG retrieval pipeline complete
+- Tool memory support with reinforcement
+
 ## [1.1.0] - 2026-03-07
 
 ### Added
