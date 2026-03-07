@@ -6,11 +6,20 @@
 //! - `ProactiveAgent`: Main agent struct with background monitoring
 //! - `ResourceMonitor`: Monitors resources for changes
 //! - `EventTrigger`: Triggers actions based on events
+//! - `IntentionPredictor`: Predicts user intent (Phase 1.5.2)
 //!
 //! # Phase 1.5 Implementation
-//! - Background task management (Tokio spawn)
-//! - Resource monitoring interface
-//! - Event trigger mechanism
+//! - Background task management (Tokio spawn) ✅
+//! - Resource monitoring interface ✅
+//! - Event trigger mechanism ✅
+//! - Intent prediction module ✅ (Phase 1.5.2)
+
+// Module structure for proactive system
+pub mod intention;
+
+pub use intention::{
+    IntentionPredictor, IntentConfig, IntentResult, PredictedIntent, MemoryPattern,
+};
 
 use crate::error::MemError;
 use crate::models::{MemoryItem, Resource};
@@ -114,6 +123,8 @@ pub struct ProactiveAgent {
     evolve_pipeline: Arc<EvolvePipeline>,
     /// LLM client for intent prediction
     llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
+    /// Intent predictor (Phase 1.5.2)
+    intent_predictor: Option<IntentionPredictor>,
     /// Statistics
     stats: Arc<RwLock<ProactiveStats>>,
     /// Shutdown signal
@@ -129,12 +140,24 @@ impl ProactiveAgent {
         evolve_pipeline: Arc<EvolvePipeline>,
         llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
     ) -> Self {
+        // Create intent predictor if enabled
+        let intent_predictor = if config.enable_intent_prediction {
+            Some(IntentionPredictor::new(
+                IntentConfig::default(),
+                storage.clone(),
+                llm_client.clone(),
+            ))
+        } else {
+            None
+        };
+
         Self {
             config,
             storage,
             memorize_pipeline,
             evolve_pipeline,
             llm_client,
+            intent_predictor,
             stats: Arc::new(RwLock::new(ProactiveStats::default())),
             shutdown: Arc::new(RwLock::new(false)),
         }
@@ -224,15 +247,38 @@ impl ProactiveAgent {
         self.stats.read().await.clone()
     }
 
-    /// Predict user intent (Phase 1.5.2 - to be implemented)
-    pub async fn predict_intent(&self, _context: &str) -> ProactiveResult<Option<String>> {
+    /// Predict user intent (Phase 1.5.2)
+    pub async fn predict_intent(&self, context: &str) -> ProactiveResult<Option<String>> {
         if !self.config.enable_intent_prediction {
             return Ok(None);
         }
 
-        // TODO: Implement intent prediction with LLM
-        // This will be implemented in Phase 1.5.2
-        Ok(None)
+        // Use intent predictor if available
+        if let Some(ref predictor) = self.intent_predictor {
+            match predictor.predict(context).await? {
+                Some(intent) => {
+                    // Update stats
+                    let mut stats = self.stats.write().await;
+                    stats.intents_predicted += 1;
+
+                    // Emit event
+                    let event = ProactiveEvent::IntentDetected {
+                        intent: intent.intent_type.clone(),
+                        confidence: intent.confidence,
+                    };
+                    tracing::info!(
+                        "Intent predicted: {} (confidence: {:.2})",
+                        intent.intent_type,
+                        intent.confidence
+                    );
+
+                    Ok(Some(intent.intent_type))
+                }
+                None => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     /// Proactively extract memories from resource (Phase 1.5.3 - to be implemented)
