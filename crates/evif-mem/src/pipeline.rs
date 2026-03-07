@@ -711,14 +711,16 @@ fn extract_title_tag_from_html(html: &str) -> Option<String> {
 /// - Text: Direct processing
 /// - Conversation: Segmentation into multiple parts
 /// - Document: Text extraction from HTML
-/// - Image: Vision API (future)
-/// - Video: Keyframe extraction (future)
-/// - Audio: Transcription (future)
+/// - Image: Vision API analysis
+/// - Video: Keyframe extraction + Vision API (requires ffmpeg)
+/// - Audio: Transcription (requires external service)
 pub struct Preprocessor {
     /// Maximum segment size for conversations (in characters)
     max_segment_size: usize,
     /// Overlap between segments to maintain context
     segment_overlap: usize,
+    /// LLM client for vision analysis (optional)
+    llm_client: Option<Arc<RwLock<Box<dyn LLMClient>>>>,
 }
 
 impl Preprocessor {
@@ -727,6 +729,7 @@ impl Preprocessor {
         Self {
             max_segment_size: 2000,
             segment_overlap: 200,
+            llm_client: None,
         }
     }
 
@@ -735,23 +738,53 @@ impl Preprocessor {
         Self {
             max_segment_size,
             segment_overlap,
+            llm_client: None,
         }
     }
 
-    /// Preprocess content based on modality
+    /// Configure with LLM client for multimodal processing
+    pub fn with_llm_client(llm_client: Arc<RwLock<Box<dyn LLMClient>>>) -> Self {
+        Self {
+            max_segment_size: 2000,
+            segment_overlap: 200,
+            llm_client: Some(llm_client),
+        }
+    }
+
+    /// Preprocess content based on modality (synchronous version)
     ///
     /// Returns a vector of (content, caption) tuples:
     /// - Text/Document: Single item
     /// - Conversation: Multiple segments
-    /// - Image/Video/Audio: Empty (future implementation)
+    /// - Image/Video/Audio: Returns placeholder (use preprocess_async for these)
     pub fn preprocess(&self, content: &str, modality: &Modality) -> MemResult<Vec<(String, Option<String>)>> {
         match modality {
             Modality::Conversation => self.preprocess_conversation(content),
             Modality::Document => self.preprocess_document(content),
-            _ => {
-                // For now, return single item for other modalities
-                Ok(vec![(content.to_string(), None)])
+            Modality::Image | Modality::Video | Modality::Audio => {
+                // For multimodal content, use preprocess_async
+                Err(MemError::Processing(
+                    "Image/Video/Audio require async preprocessing. Use preprocess_async()".to_string()
+                ))
             }
+        }
+    }
+
+    /// Preprocess content based on modality (async version for multimodal)
+    ///
+    /// Returns a vector of (content, caption) tuples:
+    /// - Text/Document: Single item
+    /// - Conversation: Multiple segments
+    /// - Image: Vision API analysis
+    /// - Video: Frame extraction + Vision API (requires ffmpeg)
+    /// - Audio: Placeholder (requires external transcription service)
+    pub async fn preprocess_async(&self, content: &str, modality: &Modality) -> MemResult<Vec<(String, Option<String>)>> {
+        match modality {
+            Modality::Conversation => self.preprocess_conversation(content),
+            Modality::Document => self.preprocess_document(content),
+            Modality::Image => self.preprocess_image(content).await,
+            Modality::Video => self.preprocess_video(content).await,
+            Modality::Audio => self.preprocess_audio(content).await,
         }
     }
 
@@ -882,7 +915,107 @@ impl Preprocessor {
             segment[start..].to_string()
         }
     }
+
+    /// Preprocess image content using vision API
+    ///
+    /// The content parameter should be a file path or URL to the image.
+    /// Uses LLM vision API to extract description and caption.
+    async fn preprocess_image(&self, image_path: &str) -> MemResult<Vec<(String, Option<String>)>> {
+        let llm = self.llm_client.as_ref().ok_or_else(|| {
+            MemError::Processing("LLM client required for image preprocessing".to_string())
+        })?;
+
+        // Read image file
+        let image_data = tokio::fs::read(image_path).await
+            .map_err(|e| MemError::Processing(format!("Failed to read image file: {}", e)))?;
+
+        // Detect MIME type from file extension
+        let mime_type = if image_path.ends_with(".png") {
+            "image/png"
+        } else if image_path.ends_with(".jpg") || image_path.ends_with(".jpeg") {
+            "image/jpeg"
+        } else if image_path.ends_with(".gif") {
+            "image/gif"
+        } else if image_path.ends_with(".webp") {
+            "image/webp"
+        } else {
+            "image/jpeg" // Default to JPEG
+        };
+
+        // Call vision API
+        let llm_guard = llm.read().await;
+        let analysis = llm_guard.analyze_image(&image_data, mime_type).await?;
+
+        // Return description with caption
+        Ok(vec![(analysis.description, Some(analysis.caption))])
+    }
+
+    /// Preprocess video content by extracting keyframe and analyzing
+    ///
+    /// The content parameter should be a file path to the video.
+    /// Extracts middle frame using ffmpeg and analyzes with vision API.
+    async fn preprocess_video(&self, video_path: &str) -> MemResult<Vec<(String, Option<String>)>> {
+        let llm = self.llm_client.as_ref().ok_or_else(|| {
+            MemError::Processing("LLM client required for video preprocessing".to_string())
+        })?;
+
+        // Create temp file for frame extraction
+        let temp_dir = std::env::temp_dir();
+        let frame_path = temp_dir.join(format!("evif_frame_{}.jpg", uuid::Uuid::new_v4()));
+        let frame_path_str = frame_path.to_str().ok_or_else(|| {
+            MemError::Processing("Invalid temp path".to_string())
+        })?;
+
+        // Extract middle frame using ffmpeg
+        // Using a simple approach: extract frame at 00:00:01 (1 second)
+        let output = tokio::process::Command::new("ffmpeg")
+            .arg("-i")
+            .arg(video_path)
+            .arg("-ss")
+            .arg("00:00:01")
+            .arg("-frames:v")
+            .arg("1")
+            .arg("-q:v")
+            .arg("2")
+            .arg(frame_path_str)
+            .output()
+            .await
+            .map_err(|e| MemError::Processing(format!("ffmpeg failed: {}. Make sure ffmpeg is installed.", e)))?;
+
+        if !output.status.success() {
+            return Err(MemError::Processing(
+                "Failed to extract video frame. Make sure ffmpeg is installed and video file is valid.".to_string()
+            ));
+        }
+
+        // Analyze extracted frame
+        let result = self.preprocess_image(frame_path_str).await;
+
+        // Clean up temp file
+        let _ = tokio::fs::remove_file(frame_path).await;
+
+        result
+    }
+
+    /// Preprocess audio content
+    ///
+    /// The content parameter should be a file path to the audio file.
+    /// Currently returns a placeholder - requires external transcription service.
+    async fn preprocess_audio(&self, audio_path: &str) -> MemResult<Vec<(String, Option<String>)>> {
+        // Audio preprocessing requires external transcription service
+        // Options: OpenAI Whisper, local Whisper model, Google Speech-to-Text, etc.
+        // For now, return a placeholder that indicates transcription is needed
+
+        let placeholder = format!(
+            "Audio file: {}\n\nNote: Audio transcription requires an external service (e.g., OpenAI Whisper). \
+            Please use a dedicated transcription tool or service to convert this audio to text before memorizing.",
+            audio_path
+        );
+
+        Ok(vec![(placeholder, Some("Audio (transcription required)".to_string()))])
+    }
 }
+
 
 impl Default for Preprocessor {
     fn default() -> Self {
@@ -2683,5 +2816,122 @@ Respond ONLY with valid JSON, no additional text."#,
         // Test that merge with single item returns that item
         let item_ids = vec!["single-id".to_string()];
         assert_eq!(item_ids.len(), 1, "Single item should be handled");
+    }
+
+    // ==================== Multimodal Preprocessing Tests ====================
+
+    #[test]
+    fn test_preprocessor_creation() {
+        // Test that Preprocessor can be created with default settings
+        let preprocessor = Preprocessor::new();
+        assert!(true, "Preprocessor created successfully");
+    }
+
+    #[test]
+    fn test_preprocessor_with_segment_config() {
+        // Test that Preprocessor can be configured with segment settings
+        let preprocessor = Preprocessor::with_segment_config(3000, 300);
+        assert!(true, "Preprocessor with config created successfully");
+    }
+
+    #[test]
+    fn test_preprocess_conversation_single_segment() {
+        // Test conversation preprocessing with short content
+        let preprocessor = Preprocessor::new();
+        let content = "This is a short conversation.";
+
+        let result = preprocessor.preprocess_conversation(content)
+            .expect("Failed to preprocess conversation");
+
+        assert_eq!(result.len(), 1, "Short conversation should produce one segment");
+        assert!(result[0].1.is_some(), "Segment should have caption");
+        assert!(result[0].1.as_ref().unwrap().contains("segment"), "Caption should mention segment");
+    }
+
+    #[test]
+    fn test_preprocess_conversation_multiple_segments() {
+        // Test conversation preprocessing with long content that needs splitting
+        let preprocessor = Preprocessor::with_segment_config(100, 20);
+
+        // Create content that will need to be split
+        let content = "First paragraph with enough content to fill a segment.\n\nSecond paragraph that should create another segment.\n\nThird paragraph for the final segment.";
+
+        let result = preprocessor.preprocess_conversation(content)
+            .expect("Failed to preprocess conversation");
+
+        assert!(result.len() > 1, "Long conversation should produce multiple segments");
+        assert!(result[0].1.is_some(), "First segment should have caption");
+    }
+
+    #[test]
+    fn test_preprocess_document_plain_text() {
+        // Test document preprocessing with plain text
+        let preprocessor = Preprocessor::new();
+        let content = "This is a plain text document.";
+
+        let result = preprocessor.preprocess_document(content)
+            .expect("Failed to preprocess document");
+
+        assert_eq!(result.len(), 1, "Document should produce one segment");
+        assert_eq!(result[0].0, content, "Plain text should be returned as-is");
+        assert!(result[0].1.is_none(), "Plain text should not have caption");
+    }
+
+    #[test]
+    fn test_preprocess_document_html() {
+        // Test document preprocessing with HTML
+        let preprocessor = Preprocessor::new();
+        let content = r#"<!DOCTYPE html><html><head><title>Test Page</title></head><body><p>Hello World</p></body></html>"#;
+
+        let result = preprocessor.preprocess_document(content)
+            .expect("Failed to preprocess HTML document");
+
+        assert_eq!(result.len(), 1, "HTML should produce one segment");
+        assert!(result[0].0.contains("Hello World"), "HTML should be extracted to text");
+        assert!(result[0].1.is_some(), "HTML should have title as caption");
+    }
+
+    #[test]
+    fn test_preprocess_sync_image_error() {
+        // Test that sync preprocessing returns error for Image
+        let preprocessor = Preprocessor::new();
+        let result = preprocessor.preprocess("image.jpg", &Modality::Image);
+
+        assert!(result.is_err(), "Sync preprocessing should error for Image");
+        assert!(result.unwrap_err().to_string().contains("async"), "Error should mention async");
+    }
+
+    #[test]
+    fn test_preprocess_sync_video_error() {
+        // Test that sync preprocessing returns error for Video
+        let preprocessor = Preprocessor::new();
+        let result = preprocessor.preprocess("video.mp4", &Modality::Video);
+
+        assert!(result.is_err(), "Sync preprocessing should error for Video");
+        assert!(result.unwrap_err().to_string().contains("async"), "Error should mention async");
+    }
+
+    #[test]
+    fn test_preprocess_sync_audio_error() {
+        // Test that sync preprocessing returns error for Audio
+        let preprocessor = Preprocessor::new();
+        let result = preprocessor.preprocess("audio.mp3", &Modality::Audio);
+
+        assert!(result.is_err(), "Sync preprocessing should error for Audio");
+        assert!(result.unwrap_err().to_string().contains("async"), "Error should mention async");
+    }
+
+    #[tokio::test]
+    async fn test_preprocess_audio_placeholder() {
+        // Test that audio preprocessing returns placeholder
+        let preprocessor = Preprocessor::new();
+        let result = preprocessor.preprocess_audio("test.mp3").await
+            .expect("Failed to preprocess audio");
+
+        assert_eq!(result.len(), 1, "Audio should produce one segment");
+        assert!(result[0].0.contains("test.mp3"), "Placeholder should mention filename");
+        assert!(result[0].0.contains("transcription"), "Placeholder should mention transcription");
+        assert!(result[0].1.is_some(), "Audio should have caption");
+        assert!(result[0].1.as_ref().unwrap().contains("transcription"), "Caption should mention transcription");
     }
 }

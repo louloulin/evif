@@ -37,6 +37,12 @@ pub trait LLMClient: Send + Sync {
     ///
     /// Given a query and a list of items, reorder them by relevance.
     async fn rerank(&self, query: &str, items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>>;
+
+    /// Analyze an image and extract description
+    ///
+    /// Uses vision API to analyze image content and generate description + caption.
+    /// Image data should be in a common format (JPEG, PNG, etc.).
+    async fn analyze_image(&self, image_data: &[u8], mime_type: &str) -> MemResult<ImageAnalysis>;
 }
 
 /// Category Analysis Result
@@ -55,6 +61,18 @@ pub struct CategoryAnalysis {
 
     /// Suggested tags
     pub tags: Vec<String>,
+}
+
+/// Image Analysis Result
+///
+/// LLM-generated analysis of an image for memory extraction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageAnalysis {
+    /// Detailed description of the image content
+    pub description: String,
+
+    /// Short caption summarizing the image
+    pub caption: String,
 }
 
 /// OpenAI Client
@@ -250,6 +268,110 @@ impl LLMClient for OpenAIClient {
         // For now, return items as-is (will be implemented in Task 5)
         Ok(items)
     }
+
+    async fn analyze_image(&self, image_data: &[u8], mime_type: &str) -> MemResult<ImageAnalysis> {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            max_tokens: u32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: Vec<Content>,
+        }
+
+        #[derive(Serialize)]
+        struct Content {
+            #[serde(rename = "type")]
+            content_type: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            text: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            image_url: Option<ImageUrl>,
+        }
+
+        #[derive(Serialize)]
+        struct ImageUrl {
+            url: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        // Encode image to base64
+        let base64_image = STANDARD.encode(image_data);
+        let data_url = format!("data:{};base64,{}", mime_type, base64_image);
+
+        let request = Request {
+            model: self.model.clone(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: vec![
+                    Content {
+                        content_type: "text".to_string(),
+                        text: Some("Analyze this image and provide a detailed description and a short caption. Format your response as JSON: {\"description\": \"<detailed description>\", \"caption\": \"<short caption>\"}".to_string()),
+                        image_url: None,
+                    },
+                    Content {
+                        content_type: "image_url".to_string(),
+                        text: None,
+                        image_url: Some(ImageUrl { url: data_url }),
+                    },
+                ],
+            }],
+            max_tokens: 1024,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        let content = result
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))?;
+
+        // Parse JSON response
+        let analysis: ImageAnalysis = serde_json::from_str(&content)
+            .map_err(|e| MemError::Llm(format!("Failed to parse image analysis: {}", e)))?;
+
+        Ok(analysis)
+    }
 }
 
 impl AnthropicClient {
@@ -367,6 +489,111 @@ impl LLMClient for AnthropicClient {
         // TODO: Implement reranking logic
         // For now, return items as-is (will be implemented in Task 5)
         Ok(items)
+    }
+
+    async fn analyze_image(&self, image_data: &[u8], mime_type: &str) -> MemResult<ImageAnalysis> {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            max_tokens: u32,
+            messages: Vec<Message>,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: Vec<Content>,
+        }
+
+        #[derive(Serialize)]
+        struct Content {
+            #[serde(rename = "type")]
+            content_type: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            text: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            source: Option<ImageSource>,
+        }
+
+        #[derive(Serialize)]
+        struct ImageSource {
+            #[serde(rename = "type")]
+            source_type: String,
+            media_type: String,
+            data: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            content: Vec<ContentBlock>,
+        }
+
+        #[derive(Deserialize)]
+        struct ContentBlock {
+            text: String,
+        }
+
+        let base64_image = STANDARD.encode(image_data);
+
+        let request = Request {
+            model: self.model.clone(),
+            max_tokens: 1024,
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: vec![
+                    Content {
+                        content_type: "text".to_string(),
+                        text: Some("Analyze this image and provide a detailed description and a short caption. Format your response as JSON: {\"description\": \"<detailed description>\", \"caption\": \"<short caption>\"}".to_string()),
+                        source: None,
+                    },
+                    Content {
+                        content_type: "image".to_string(),
+                        text: None,
+                        source: Some(ImageSource {
+                            source_type: "base64".to_string(),
+                            media_type: mime_type.to_string(),
+                            data: base64_image,
+                        }),
+                    },
+                ],
+            }],
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/messages", self.base_url))
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        let content = result
+            .content
+            .first()
+            .map(|c| c.text.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))?;
+
+        // Parse JSON response
+        let analysis: ImageAnalysis = serde_json::from_str(&content)
+            .map_err(|e| MemError::Llm(format!("Failed to parse image analysis: {}", e)))?;
+
+        Ok(analysis)
     }
 }
 

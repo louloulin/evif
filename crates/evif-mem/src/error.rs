@@ -25,6 +25,9 @@ pub enum MemError {
     #[error("Parse error: {0}")]
     Parse(String),
 
+    #[error("Processing error: {0}")]
+    Processing(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

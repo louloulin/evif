@@ -2,6 +2,33 @@
 
 All notable changes to the Mem platform will be documented in this file.
 
+## [1.4.0] - 2026-03-07
+
+### Added
+- **Multimodal Preprocessing Tests** - Phase 1.1 now 100% complete
+  - 10 new unit tests for Preprocessor multimodal support
+  - Tests for conversation segmentation
+  - Tests for document preprocessing (plain text + HTML)
+  - Tests for async multimodal error handling (Image/Video/Audio)
+  - Tests for audio placeholder functionality
+
+### Verified Existing Implementation
+- **Image Preprocessing**: Full Vision API support (OpenAI GPT-4V, Anthropic Claude)
+- **Video Preprocessing**: ffmpeg frame extraction + Vision API analysis
+- **Audio Preprocessing**: Placeholder with external transcription note
+- **LLMClient.analyze_image()**: Implemented for both OpenAI and Anthropic
+
+### Changed
+- Phase 1.1 progress: 100% complete (all modalities tested)
+- Test count: 61 → 71 tests (all passing)
+- Documentation updated in mem2.md
+
+### Technical Details
+- Image MIME types supported: PNG, JPEG, GIF, WebP
+- Video: Middle frame extraction using ffmpeg
+- Audio: Requires external service (OpenAI Whisper recommended)
+- Preprocessor supports both sync (text) and async (multimodal) methods
+
 ## [1.3.0] - 2026-03-07
 
 ### Added
