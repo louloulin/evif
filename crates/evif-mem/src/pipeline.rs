@@ -10,12 +10,13 @@
 use crate::embedding::EmbeddingManager;
 use crate::error::{MemError, MemResult};
 use crate::llm::LLMClient;
-use crate::models::{MemoryItem, MemoryType, Modality, Resource, ToolCall};
+use crate::models::{MemoryCategory, MemoryItem, MemoryType, Modality, Resource, ToolCall};
 use crate::storage::memory::MemoryStorage;
 use crate::vector::VectorIndex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -211,19 +212,6 @@ impl MemorizePipeline {
             stored_memories.push(memory);
         }
 
-        // Update category summaries after all items are processed
-        let mut category_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for memory in &stored_memories {
-            if let Some(ref cat_id) = memory.category_id {
-                category_ids.insert(cat_id.clone());
-            }
-        }
-        for cat_id in category_ids {
-            if let Err(e) = self.categorizer.update_category_summary(&cat_id).await {
-                tracing::warn!("Failed to update category summary for {}: {}", cat_id, e);
-            }
-        }
-
         Ok(stored_memories)
     }
 
@@ -239,56 +227,86 @@ impl MemorizePipeline {
 
         // Store resource
         let resource_id = resource.id.clone();
-        self.storage.put_resource(resource)?;
+        self.storage.put_resource(resource.clone())?;
 
-        // Extract memories using LLM
+        // Preprocess content based on modality
+        let preprocessor = Preprocessor::new();
+        let segments = match resource.modality {
+            Modality::Conversation => {
+                // Segment conversation into multiple parts
+                preprocessor.preprocess_conversation(&content)?
+            }
+            _ => {
+                // For other modalities, use content as-is (single segment)
+                vec![(content.clone(), None)]
+            }
+        };
+
+        // Extract memories from each segment
         let llm = self.llm_client.read().await;
-        let memories = llm.extract_memories(&content).await?;
+        let mut all_memories = Vec::new();
+
+        for (segment_content, segment_caption) in segments {
+            // Extract memories from this segment
+            let mut segment_memories = llm.extract_memories(&segment_content).await?;
+
+            // Add segment caption to each memory if available
+            if let Some(caption) = segment_caption {
+                for memory in &mut segment_memories {
+                    let new_summary = format!("[{}] {}", caption, &memory.summary);
+                    memory.summary = new_summary;
+                }
+            }
+
+            all_memories.push((segment_content.to_string(), segment_memories));
+        }
         drop(llm); // Release lock early
 
         // Process each memory
         let mut stored_memories = Vec::new();
-        for mut memory in memories {
-            // Set resource reference
-            memory.resource_id = Some(resource_id.clone());
+        for (segment_content, memories) in all_memories {
+            for mut memory in memories {
+                // Set resource reference
+                memory.resource_id = Some(resource_id.clone());
 
-            // Calculate content hash for deduplication
-            let hash = self.calculate_hash(&memory.content);
-            memory.content_hash = Some(hash.clone());
+                // Calculate content hash for deduplication
+                let hash = self.calculate_hash(&memory.content);
+                memory.content_hash = Some(hash.clone());
 
-            // Generate embedding
-            let embedding = {
-                let emb_mgr = self.embedding_manager.read().await;
-                emb_mgr.embed(&memory.content).await?
-            };
-            let embedding_id = uuid::Uuid::new_v4().to_string();
-            memory.embedding_id = Some(embedding_id.clone());
+                // Generate embedding
+                let embedding = {
+                    let emb_mgr = self.embedding_manager.read().await;
+                    emb_mgr.embed(&memory.content).await?
+                };
+                let embedding_id = uuid::Uuid::new_v4().to_string();
+                memory.embedding_id = Some(embedding_id.clone());
 
-            // Check for existing memory with same hash (deduplication)
-            if let Ok(existing) = self.storage.get_items_by_hash(&hash) {
-                if let Some(mut existing_item) = existing.into_iter().next() {
-                    // Reinforce existing memory
-                    existing_item.reinforcement_count += 1;
-                    existing_item.last_reinforced_at = Some(chrono::Utc::now());
-                    self.storage.put_item(existing_item)?;
-                    continue;
+                // Check for existing memory with same hash (deduplication)
+                if let Ok(existing) = self.storage.get_items_by_hash(&hash) {
+                    if let Some(mut existing_item) = existing.into_iter().next() {
+                        // Reinforce existing memory
+                        existing_item.reinforcement_count += 1;
+                        existing_item.last_reinforced_at = Some(chrono::Utc::now());
+                        self.storage.put_item(existing_item)?;
+                        continue;
+                    }
                 }
+
+                // Store in storage
+                self.storage.put_item(memory.clone())?;
+
+                // Add to vector index
+                {
+                    let index = self.vector_index.write().await;
+                    index.add(memory.id.clone(), embedding, None).await?;
+                }
+
+                // Categorize the memory item
+                let category_id = self.categorizer.categorize(&memory).await?;
+                memory.category_id = Some(category_id);
+
+                stored_memories.push(memory);
             }
-
-            // Store in storage
-            self.storage.put_item(memory.clone())?;
-
-            // Add to vector index
-            {
-                let index = self.vector_index.write().await;
-                index.add(memory.id.clone(), embedding, None).await?;
-            }
-
-            // Categorize the memory item
-            let category_id = self.categorizer.categorize(&memory).await?;
-            memory.category_id = Some(category_id);
-
-            stored_memories.push(memory);
         }
 
         // Update category summaries after all items are processed
@@ -685,6 +703,191 @@ fn extract_title_tag_from_html(html: &str) -> Option<String> {
         .and_then(|re| re.captures(html))
         .and_then(|caps| caps.get(1))
         .map(|m| m.as_str().trim().to_string())
+}
+
+/// Preprocessor for different modalities
+///
+/// Handles preprocessing of different content types before memory extraction:
+/// - Text: Direct processing
+/// - Conversation: Segmentation into multiple parts
+/// - Document: Text extraction from HTML
+/// - Image: Vision API (future)
+/// - Video: Keyframe extraction (future)
+/// - Audio: Transcription (future)
+pub struct Preprocessor {
+    /// Maximum segment size for conversations (in characters)
+    max_segment_size: usize,
+    /// Overlap between segments to maintain context
+    segment_overlap: usize,
+}
+
+impl Preprocessor {
+    /// Create a new preprocessor with default settings
+    pub fn new() -> Self {
+        Self {
+            max_segment_size: 2000,
+            segment_overlap: 200,
+        }
+    }
+
+    /// Configure segment size for conversations
+    pub fn with_segment_config(max_segment_size: usize, segment_overlap: usize) -> Self {
+        Self {
+            max_segment_size,
+            segment_overlap,
+        }
+    }
+
+    /// Preprocess content based on modality
+    ///
+    /// Returns a vector of (content, caption) tuples:
+    /// - Text/Document: Single item
+    /// - Conversation: Multiple segments
+    /// - Image/Video/Audio: Empty (future implementation)
+    pub fn preprocess(&self, content: &str, modality: &Modality) -> MemResult<Vec<(String, Option<String>)>> {
+        match modality {
+            Modality::Conversation => self.preprocess_conversation(content),
+            Modality::Document => self.preprocess_document(content),
+            _ => {
+                // For now, return single item for other modalities
+                Ok(vec![(content.to_string(), None)])
+            }
+        }
+    }
+
+    /// Preprocess conversation content by splitting into segments
+    ///
+    /// Conversation segmentation strategy:
+    /// 1. Split by natural boundaries (paragraphs, speaker turns)
+    /// 2. Ensure each segment fits within max_segment_size
+    /// 3. Add overlap between segments to maintain context
+    fn preprocess_conversation(&self, content: &str) -> MemResult<Vec<(String, Option<String>)>> {
+        let mut segments = Vec::new();
+
+        // Split by common conversation delimiters
+        let delimiters = ["\n\n", "\n", ". ", "! ", "? "];
+
+        // Try to find natural conversation boundaries
+        let mut parts = Vec::new();
+        let mut remaining = content;
+
+        // Split by double newlines first (paragraph/speaker turns)
+        for delimiter in &delimiters {
+            if remaining.contains(delimiter) {
+                parts = remaining.split(*delimiter)
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                break;
+            }
+        }
+
+        // If no natural boundaries found, split by size
+        if parts.is_empty() {
+            parts = self.split_by_size(content);
+        }
+
+        // Combine parts into segments with overlap
+        let mut current_segment = String::new();
+        let mut segment_index = 0;
+
+        for part in parts {
+            // Check if adding this part would exceed max size
+            if current_segment.len() + part.len() + 2 > self.max_segment_size && !current_segment.is_empty() {
+                // Save current segment
+                let caption = format!("Conversation segment {}", segment_index + 1);
+                segments.push((current_segment.trim().to_string(), Some(caption)));
+
+                // Start new segment with overlap
+                segment_index += 1;
+                current_segment = self.get_overlap_content(&current_segment);
+                current_segment.push_str(&part);
+            } else {
+                if !current_segment.is_empty() {
+                    current_segment.push_str("\n\n");
+                }
+                current_segment.push_str(&part);
+            }
+        }
+
+        // Add final segment if not empty
+        if !current_segment.trim().is_empty() {
+            let caption = format!("Conversation segment {}", segment_index + 1);
+            segments.push((current_segment.trim().to_string(), Some(caption)));
+        }
+
+        // Ensure at least one segment exists
+        if segments.is_empty() {
+            segments.push((content.to_string(), Some("Conversation segment 1".to_string())));
+        }
+
+        Ok(segments)
+    }
+
+    /// Preprocess document content
+    fn preprocess_document(&self, content: &str) -> MemResult<Vec<(String, Option<String>)>> {
+        // Check if it's HTML
+        if content.contains("<html") || content.contains("<!DOCTYPE") {
+            // Extract text from HTML
+            let text = extract_text_from_html(content);
+            let title = extract_title_tag_from_html(content);
+            Ok(vec![(text, title)])
+        } else {
+            // Plain text document
+            Ok(vec![(content.to_string(), None)])
+        }
+    }
+
+    /// Split content by size when no natural boundaries exist
+    fn split_by_size(&self, content: &str) -> Vec<String> {
+        let mut parts = Vec::new();
+        let chars: Vec<char> = content.chars().collect();
+        let total_len = chars.len();
+
+        let mut start = 0;
+        while start < total_len {
+            let end = std::cmp::min(start + self.max_segment_size, total_len);
+
+            // Try to find a good break point (space, punctuation)
+            let break_point = if end < total_len {
+                chars[start..end]
+                    .iter()
+                    .rposition(|&c| c == ' ' || c == '.' || c == '!' || c == '?')
+                    .map(|i| start + i + 1)
+            } else {
+                None
+            };
+
+            let actual_end = break_point.unwrap_or(end);
+            let part: String = chars[start..actual_end].iter().collect();
+            let trimmed = part.trim().to_string();
+
+            if !trimmed.is_empty() {
+                parts.push(trimmed);
+            }
+
+            start = actual_end;
+        }
+
+        parts
+    }
+
+    /// Get overlap content from the end of current segment
+    fn get_overlap_content(&self, segment: &str) -> String {
+        if segment.len() <= self.segment_overlap {
+            segment.to_string()
+        } else {
+            // Take last N characters as overlap
+            let start = segment.len() - self.segment_overlap;
+            segment[start..].to_string()
+        }
+    }
+}
+
+impl Default for Preprocessor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Simple title extraction from HTML
