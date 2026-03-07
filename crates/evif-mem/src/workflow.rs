@@ -310,6 +310,144 @@ pub trait WorkflowLLMProvider: Send + Sync {
     async fn generate(&self, prompt: &str, profile: Option<&str>) -> MemResult<String>;
 }
 
+/// Interceptor context - contains information passed to interceptors
+#[derive(Debug, Clone)]
+pub struct InterceptorContext {
+    /// Step ID being executed
+    pub step_id: String,
+    /// Step type
+    pub step_type: StepType,
+    /// Prompt (for LLM steps)
+    pub prompt: Option<String>,
+    /// LLM profile (for LLM steps)
+    pub llm_profile: Option<String>,
+    /// Current workflow state
+    pub state: WorkflowState,
+    /// Additional metadata
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl InterceptorContext {
+    /// Create a new interceptor context
+    pub fn new(step_id: String, step_type: StepType, state: WorkflowState) -> Self {
+        Self {
+            step_id,
+            step_type,
+            prompt: None,
+            llm_profile: None,
+            state,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Set prompt
+    pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.prompt = Some(prompt.into());
+        self
+    }
+
+    /// Set LLM profile
+    pub fn with_llm_profile(mut self, profile: impl Into<String>) -> Self {
+        self.llm_profile = Some(profile.into());
+        self
+    }
+
+    /// Add metadata
+    pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.metadata.insert(key.into(), value);
+        self
+    }
+}
+
+/// Interceptor trait - allows hooking into workflow execution
+///
+/// Interceptors can modify context before step execution and results after execution.
+/// This enables cross-cutting concerns like logging, monitoring, caching, and rate limiting.
+#[async_trait]
+pub trait Interceptor: Send + Sync {
+    /// Called before step execution
+    ///
+    /// Can modify the context (e.g., add metadata, modify prompt).
+    async fn before(&self, context: &mut InterceptorContext) -> MemResult<()>;
+
+    /// Called after step execution
+    ///
+    /// Can modify the result (e.g., cache it, transform it).
+    async fn after(
+        &self,
+        result: serde_json::Value,
+        context: &InterceptorContext,
+    ) -> MemResult<serde_json::Value>;
+}
+
+/// Interceptor registry - manages multiple interceptors
+pub struct InterceptorRegistry {
+    /// Registered interceptors
+    interceptors: RwLock<Vec<Arc<dyn Interceptor>>>,
+}
+
+impl InterceptorRegistry {
+    /// Create a new empty registry
+    pub fn new() -> Self {
+        Self {
+            interceptors: RwLock::new(Vec::new()),
+        }
+    }
+
+    /// Register an interceptor
+    pub async fn register(&self, interceptor: Arc<dyn Interceptor>) {
+        let mut interceptors = self.interceptors.write().await;
+        interceptors.push(interceptor);
+    }
+
+    /// Get number of registered interceptors
+    pub async fn len(&self) -> usize {
+        self.interceptors.read().await.len()
+    }
+
+    /// Check if registry is empty
+    pub async fn is_empty(&self) -> bool {
+        self.interceptors.read().await.is_empty()
+    }
+
+    /// Execute all before hooks
+    pub async fn execute_before(&self, context: &mut InterceptorContext) -> MemResult<()> {
+        for interceptor in self.interceptors.read().await.iter() {
+            interceptor.before(context).await?;
+        }
+        Ok(())
+    }
+
+    /// Execute all after hooks
+    pub async fn execute_after(
+        &self,
+        result: serde_json::Value,
+        context: &InterceptorContext,
+    ) -> MemResult<serde_json::Value> {
+        let mut current_result = result;
+        for interceptor in self.interceptors.read().await.iter() {
+            current_result = interceptor.after(current_result, context).await?;
+        }
+        Ok(current_result)
+    }
+}
+
+impl Default for InterceptorRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Debug for InterceptorRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InterceptorRegistry")
+            .field("count", &self.interceptors.blocking_read().len())
+            .finish()
+    }
+}
+
+/// Interceptor context - contains information passed to interceptors
+
 /// Default Workflow Runner Implementation
 ///
 /// Executes workflow steps sequentially or in parallel based on step configuration.
@@ -320,6 +458,8 @@ pub struct DefaultWorkflowRunner {
     config: WorkflowConfig,
     /// Available capabilities
     capabilities: HashSet<Capability>,
+    /// Interceptor registry
+    interceptors: Arc<InterceptorRegistry>,
 }
 
 impl DefaultWorkflowRunner {
@@ -333,6 +473,7 @@ impl DefaultWorkflowRunner {
             llm_provider,
             config,
             capabilities,
+            interceptors: Arc::new(InterceptorRegistry::new()),
         }
     }
 
@@ -343,6 +484,19 @@ impl DefaultWorkflowRunner {
             WorkflowConfig::default(),
             HashSet::from([Capability::LLM, Capability::DB, Capability::IO]),
         )
+    }
+
+    /// Create a runner with interceptors
+    pub fn with_interceptors(
+        llm_provider: Arc<RwLock<Box<dyn WorkflowLLMProvider>>>,
+        interceptors: Arc<InterceptorRegistry>,
+    ) -> Self {
+        Self {
+            llm_provider,
+            config: WorkflowConfig::default(),
+            capabilities: HashSet::from([Capability::LLM, Capability::DB, Capability::IO]),
+            interceptors,
+        }
     }
 
     /// Execute a single step
@@ -903,5 +1057,75 @@ mod tests {
         assert_eq!(stats.steps_failed, 0);
         assert_eq!(stats.total_time_ms, 0);
         assert!(stats.step_times.is_empty());
+    }
+
+    // === Interceptor Tests ===
+
+    /// Mock interceptor for testing
+    struct MockInterceptor {
+        name: String,
+    }
+
+    impl MockInterceptor {
+        fn new(name: impl Into<String>) -> Self {
+            Self {
+                name: name.into(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Interceptor for MockInterceptor {
+        async fn before(&self, context: &mut InterceptorContext) -> MemResult<()> {
+            // Add metadata
+            context.metadata.insert("interceptor_name".to_string(), serde_json::Value::String(self.name.clone()));
+            context.metadata.insert("before_timestamp".to_string(), serde_json::Value::String(chrono::Utc::now().to_string()));
+            Ok(())
+        }
+
+        async fn after(
+            &self,
+            result: serde_json::Value,
+            _context: &InterceptorContext,
+        ) -> MemResult<serde_json::Value> {
+            // Modify result
+            let mut modified = result.as_object().unwrap().clone();
+            modified.insert("interceptor".to_string(), serde_json::Value::String(self.name.clone()));
+            Ok(serde_json::to_value(modified)?)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_interceptor_registry() {
+        let registry = InterceptorRegistry::new();
+
+        // Test empty registry
+        assert!(registry.is_empty().await);
+
+        // Register mock interceptor
+        let interceptor = Arc::new(MockInterceptor::new("test_interceptor"));
+        registry.register(interceptor).await;
+
+        // Verify registration
+        assert_eq!(registry.len().await, 1);
+        assert!(!registry.is_empty().await);
+
+        // Create context
+        let state = WorkflowState::new();
+        let mut context = InterceptorContext::new(
+            "test_step".to_string(),
+            StepType::Function,
+            state,
+        );
+
+        // Execute before hook
+        registry.execute_before(&mut context).await.unwrap();
+        assert!(context.metadata.contains_key("interceptor_name"));
+        assert!(context.metadata.contains_key("before_timestamp"));
+
+        // Execute after hook
+        let result = serde_json::json!({"result": "success"});
+        let processed = registry.execute_after(result, &context).await.unwrap();
+        assert_eq!(processed["interceptor"], "test_interceptor");
     }
 }
