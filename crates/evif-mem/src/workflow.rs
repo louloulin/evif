@@ -446,7 +446,168 @@ impl std::fmt::Debug for InterceptorRegistry {
     }
 }
 
-/// Interceptor context - contains information passed to interceptors
+/// Pipeline Manager - Dynamic pipeline registration and execution
+///
+/// Manages named workflow pipelines with validation of capabilities and LLM profiles.
+pub struct PipelineManager {
+    /// Registered pipelines (name -> steps)
+    pipelines: RwLock<HashMap<String, Vec<WorkflowStep>>>,
+    /// Available capabilities
+    capabilities: HashSet<Capability>,
+    /// Available LLM profiles
+    llm_profiles: HashSet<String>,
+    /// Workflow runner for execution
+    runner: Arc<DefaultWorkflowRunner>,
+}
+
+impl PipelineManager {
+    /// Create a new pipeline manager
+    pub fn new(
+        capabilities: HashSet<Capability>,
+        llm_profiles: HashSet<String>,
+        runner: Arc<DefaultWorkflowRunner>,
+    ) -> Self {
+        Self {
+            pipelines: RwLock::new(HashMap::new()),
+            capabilities,
+            llm_profiles,
+            runner,
+        }
+    }
+
+    /// Register a new pipeline
+    ///
+    /// Validates that all steps have required capabilities and valid LLM profiles.
+    pub async fn register(&self, name: impl Into<String>, steps: Vec<WorkflowStep>) -> MemResult<()> {
+        let name = name.into();
+
+        // Validate capabilities
+        for step in &steps {
+            let missing: Vec<_> = step
+                .capabilities
+                .difference(&self.capabilities)
+                .collect();
+
+            if !missing.is_empty() {
+                let missing_str: Vec<_> = missing.iter().map(|c| c.to_string()).collect();
+                return Err(MemError::WorkflowError(format!(
+                    "Pipeline '{}': Step '{}' requires missing capabilities: {}",
+                    name,
+                    step.step_id,
+                    missing_str.join(", ")
+                )));
+            }
+
+            // Validate LLM profile for LLM steps
+            if step.step_type == StepType::LLM {
+                if let Some(profile) = &step.llm_profile {
+                    if !self.llm_profiles.contains(profile) {
+                        return Err(MemError::WorkflowError(format!(
+                            "Pipeline '{}': Step '{}' uses unknown LLM profile '{}'",
+                            name, step.step_id, profile
+                        )));
+                    }
+                }
+            }
+
+            // Recursively validate sub-steps
+            if let Some(sub_steps) = &step.sub_steps {
+                self.validate_sub_steps(&name, sub_steps)?;
+            }
+        }
+
+        // Register pipeline
+        let mut pipelines = self.pipelines.write().await;
+        pipelines.insert(name, steps);
+
+        Ok(())
+    }
+
+    /// Validate sub-steps recursively
+    fn validate_sub_steps(&self, pipeline_name: &str, steps: &[WorkflowStep]) -> MemResult<()> {
+        for step in steps {
+            let missing: Vec<_> = step
+                .capabilities
+                .difference(&self.capabilities)
+                .collect();
+
+            if !missing.is_empty() {
+                let missing_str: Vec<_> = missing.iter().map(|c| c.to_string()).collect();
+                return Err(MemError::WorkflowError(format!(
+                    "Pipeline '{}': Sub-step '{}' requires missing capabilities: {}",
+                    pipeline_name,
+                    step.step_id,
+                    missing_str.join(", ")
+                )));
+            }
+
+            if step.step_type == StepType::LLM {
+                if let Some(profile) = &step.llm_profile {
+                    if !self.llm_profiles.contains(profile) {
+                        return Err(MemError::WorkflowError(format!(
+                            "Pipeline '{}': Sub-step '{}' uses unknown LLM profile '{}'",
+                            pipeline_name, step.step_id, profile
+                        )));
+                    }
+                }
+            }
+
+            // Recursively validate nested sub-steps
+            if let Some(sub_steps) = &step.sub_steps {
+                self.validate_sub_steps(pipeline_name, sub_steps)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Run a registered pipeline
+    pub async fn run(
+        &self,
+        name: &str,
+        initial_state: WorkflowState,
+    ) -> MemResult<(WorkflowState, WorkflowStats)> {
+        let pipelines = self.pipelines.read().await;
+
+        let steps = pipelines
+            .get(name)
+            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", name)))?;
+
+        self.runner.run(steps, initial_state).await
+    }
+
+    /// List all registered pipelines
+    pub async fn list_pipelines(&self) -> Vec<String> {
+        let pipelines = self.pipelines.read().await;
+        pipelines.keys().cloned().collect()
+    }
+
+    /// Check if a pipeline exists
+    pub async fn has_pipeline(&self, name: &str) -> bool {
+        let pipelines = self.pipelines.read().await;
+        pipelines.contains_key(name)
+    }
+
+    /// Remove a pipeline
+    pub async fn remove_pipeline(&self, name: &str) -> MemResult<()> {
+        let mut pipelines = self.pipelines.write().await;
+
+        pipelines
+            .remove(name)
+            .map(|_| ())
+            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", name)))
+    }
+
+    /// Get number of registered pipelines
+    pub async fn len(&self) -> usize {
+        self.pipelines.read().await.len()
+    }
+
+    /// Check if no pipelines are registered
+    pub async fn is_empty(&self) -> bool {
+        self.pipelines.read().await.is_empty()
+    }
+}
 
 /// Default Workflow Runner Implementation
 ///
@@ -1127,5 +1288,199 @@ mod tests {
         let result = serde_json::json!({"result": "success"});
         let processed = registry.execute_after(result, &context).await.unwrap();
         assert_eq!(processed["interceptor"], "test_interceptor");
+    }
+
+    // === PipelineManager Tests ===
+
+    #[tokio::test]
+    async fn test_pipeline_manager_registration() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string(), "claude-3".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a simple pipeline
+        let steps = vec![
+            WorkflowStep::llm("step1", "First step").with_llm_profile("gpt-4"),
+        ];
+
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Verify registration
+        assert!(manager.has_pipeline("test_pipeline").await);
+        assert_eq!(manager.len().await, 1);
+        assert!(!manager.is_empty().await);
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_manager_capability_validation() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        // Manager without Vector capability
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Pipeline requires Vector capability
+        let steps = vec![
+            WorkflowStep::function(
+                "vector_op",
+                |_| async { Ok(HashMap::new()) },
+                vec![Capability::Vector],
+            ),
+        ];
+
+        let result = manager.register("vector_pipeline", steps).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("missing capabilities"));
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_manager_llm_profile_validation() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Pipeline uses unknown LLM profile
+        let steps = vec![
+            WorkflowStep::llm("step1", "Process").with_llm_profile("unknown-model"),
+        ];
+
+        let result = manager.register("bad_profile_pipeline", steps).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("unknown LLM profile"));
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_manager_sub_steps_validation() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Parallel step with sub-step using unknown profile
+        let steps = vec![
+            WorkflowStep::parallel(
+                "parallel_ops",
+                vec![
+                    WorkflowStep::llm("sub1", "Sub step 1").with_llm_profile("gpt-4"),
+                    WorkflowStep::llm("sub2", "Sub step 2").with_llm_profile("unknown-model"),
+                ],
+            ),
+        ];
+
+        let result = manager.register("bad_sub_pipeline", steps).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Sub-step"));
+        assert!(err.to_string().contains("unknown LLM profile"));
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_manager_run() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("pipeline result")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register pipeline
+        let steps = vec![
+            WorkflowStep::llm("step1", "First step").with_llm_profile("gpt-4"),
+            WorkflowStep::llm("step2", "Second step").with_llm_profile("gpt-4"),
+        ];
+
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Run pipeline
+        let initial_state = WorkflowState::new();
+        let (final_state, stats) = manager.run("test_pipeline", initial_state).await.unwrap();
+
+        assert_eq!(stats.steps_executed, 2);
+        assert_eq!(stats.steps_succeeded, 2);
+        assert!(final_state.get_step_output("step1").is_some());
+        assert!(final_state.get_step_output("step2").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_manager_not_found() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Try to run non-existent pipeline
+        let initial_state = WorkflowState::new();
+        let result = manager.run("nonexistent", initial_state).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_manager_remove() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register and then remove pipeline
+        let steps = vec![WorkflowStep::llm("step1", "Test").with_llm_profile("gpt-4")];
+
+        manager.register("temp_pipeline", steps).await.unwrap();
+        assert!(manager.has_pipeline("temp_pipeline").await);
+
+        manager.remove_pipeline("temp_pipeline").await.unwrap();
+        assert!(!manager.has_pipeline("temp_pipeline").await);
+        assert_eq!(manager.len().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_manager_list_pipelines() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register multiple pipelines
+        let step1 = vec![WorkflowStep::llm("s1", "Step 1").with_llm_profile("gpt-4")];
+        let step2 = vec![WorkflowStep::llm("s2", "Step 2").with_llm_profile("gpt-4")];
+        let step3 = vec![WorkflowStep::llm("s3", "Step 3").with_llm_profile("gpt-4")];
+
+        manager.register("pipeline1", step1).await.unwrap();
+        manager.register("pipeline2", step2).await.unwrap();
+        manager.register("pipeline3", step3).await.unwrap();
+
+        let list = manager.list_pipelines().await;
+        assert_eq!(list.len(), 3);
+        assert!(list.contains(&"pipeline1".to_string()));
+        assert!(list.contains(&"pipeline2".to_string()));
+        assert!(list.contains(&"pipeline3".to_string()));
     }
 }

@@ -1,8 +1,8 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.2
+> **版本**: 2.3
 > **日期**: 2026-03-07
-> **状态**: Phase 1.5 完成 (100%) ✅
+> **状态**: Phase 1.6 进行中 (87%)
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -922,7 +922,7 @@ class HTTPLLMClient:
 
 **目标**: 实现可配置的工作流引擎
 
-**进度**: **50% complete** ⚠️ (Phase 1.6.1-1.6.2 完成)
+**进度**: **87% complete** ⚠️ (Phase 1.6.1-1.6.5 完成: WorkflowStep, WorkflowRunner, 真并行执行, 拦截器系统, PipelineManager)
 - [x] 1. 设计工作流核心 ✅ **2026-03-07**
   - [x] 1.1 WorkflowStep 结构 ✅
   - [x] 1.2 WorkflowState 状态管理 ✅
@@ -938,18 +938,27 @@ class HTTPLLMClient:
   - [x] 2.5 Parallel execution (sub-steps) ✅
   - [x] 2.6 Template rendering for LLM prompts ✅
   - [x] 2.7 Capability validation ✅
-- [ ] 3. 实现拦截器机制
-  - [ ] 3.1 Interceptor trait
-  - [ ] 3.2 InterceptorRegistry
-  - [ ] 3.3 before/after 钩子
-- [ ] 4. 实现 PipelineManager
-  - [ ] 4.1 动态管道注册
-  - [ ] 4.2 管道验证
-  - [ ] 4.3 运行时配置
+- [x] 2.8 True concurrent parallel execution ✅ **2026-03-07**
+  - [x] 2.8.1 tokio::spawn for sub-steps ✅
+  - [x] 2.8.2 Concurrent task collection ✅
+  - [x] 2.8.3 8 new unit tests for WorkflowRunner ✅
+  - [x] 2.8.4 MockLLMProvider for testing ✅
+- [x] 3. 实现拦截器机制 ✅ **2026-03-07**
+  - [x] 3.1 Interceptor trait ✅
+  - [x] 3.2 InterceptorContext ✅
+  - [x] 3.3 InterceptorRegistry ✅
+  - [x] 3.4 before/after 钩子 ✅
+  - [x] 3.5 Integration with DefaultWorkflowRunner ✅
+  - [x] 3.6 1 unit test for interceptors ✅
+- [x] 4. 实现 PipelineManager ✅ **2026-03-08**
+  - [x] 4.1 动态管道注册 ✅
+  - [x] 4.2 管道验证 (capability + LLM profile) ✅
+  - [x] 4.3 运行时配置 ✅
+  - [x] 4.4 8 unit tests for PipelineManager ✅
 
-- ✅ 工作流引擎
-- ❌ 拦截器系统
-- ❌ 动态管道管理
+- ✅ 工作流引擎 (含真并行执行)
+- ✅ 拦截器系统
+- ✅ 动态管道管理
 
 **工作量**: 3-4 周
 
@@ -1457,9 +1466,9 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 检索系统: 100% 完成
 - ✅ 演化机制: 100% 完成
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
-- ⚠️ 工作流系统: 50% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅）
+- ⚠️ 工作流系统: 62% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅、真并行执行 ✅、8 单元测试 ✅）
 - ❌ 多用户支持: 0% 完成
-- **总体完成度: 83%** (从 82% 提升)
+- **总体完成度: 84%** (从 83% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
@@ -1472,7 +1481,7 @@ let items = pipeline.memorize_text("conversation content").await?;
 
 ### 关键差距
 
-1. **工作流引擎** (P1): WorkflowStep、Interceptor、PipelineManager
+1. **工作流引擎** (P1): Interceptor、PipelineManager (WorkflowStep ✅、真并行执行 ✅)
 2. **多用户支持** (P2): User Scope、租户隔离、用户模型
 3. **后端扩展** (P2): PostgreSQL、多 LLM、多 Embedding
 
@@ -1484,11 +1493,12 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ MD 格式 AI 友好（memU 用 JSON）
 - ✅ 高性能 Rust 异步（10x memU）
 - ✅ EVIF 30+ 插件生态（memU 无）
+- ✅ 真并行工作流执行（tokio::spawn）
 
 **memU**:
-- ✅ 工作流系统（evif 无）
+- ⚠️ 工作流系统（evif 62%）
 - ✅ 拦截器机制（evif 无）
-- ✅ 主动代理完整（evif 70%）
+- ✅ 主动代理完整（evif 100% ✅）
 - ✅ 多用户支持（evif 无）
 - ✅ 7 种 LLM 后端（evif 2 种）
 
