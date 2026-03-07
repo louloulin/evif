@@ -115,6 +115,10 @@ impl MemoryStorage {
         self.items.iter().map(|i| i.clone()).collect()
     }
 
+    pub fn item_count(&self) -> MemResult<usize> {
+        Ok(self.items.len())
+    }
+
     pub fn delete_item(&self, id: &str) -> MemResult<()> {
         if self.items.remove(id).is_none() {
             return Err(MemError::NotFound(format!("Item not found: {}", id)));
