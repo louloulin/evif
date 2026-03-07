@@ -4,6 +4,26 @@ All notable changes to the Mem platform will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-03-07
+
+### Added
+- **REST API - Graph Query Endpoint** (Phase 2 feature early implementation)
+  - `POST /api/v1/graph/query` - Query temporal knowledge graph
+  - Supported query types:
+    - `causal_chain` - Find causal chain from start_node
+    - `timeline` - Get event timeline with optional filters
+    - `temporal_bfs` - Time-ordered BFS traversal
+    - `temporal_path` - Find path between two nodes
+  - Request: GraphQueryRequest with query_type, start_node, end_node, max_depth, event_type, category, time range
+  - Response: GraphQueryResponse with nodes, paths, timeline fields
+
+### Tests
+- 5 new unit tests for GraphQueryRequest/Response serialization
+
+### Changed
+- Phase 1 progress: ~70% → ~75% complete
+- mem.md status: Phase 2 graph query infrastructure ready
+
 ## [1.0.1] - 2026-03-07
 
 ### Added

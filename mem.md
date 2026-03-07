@@ -3,8 +3,8 @@
 
 > 版本: 1.0
 > 日期: 2026-03-07
-> 状态: 实现中 (Phase 1: 约 70% 完成)
-> 进度: ✅ Category REST API 已实现
+> 状态: 实现中 (Phase 1: 约 75% 完成)
+> 进度: ✅ Graph Query REST API 已实现
 
 ---
 
@@ -1074,6 +1074,7 @@ evif-mem stats --category programming
   - [x] GET /api/v1/categories (新增)
   - [x] GET /api/v1/categories/{id} (新增)
   - [x] GET /api/v1/categories/{id}/memories (新增)
+  - [x] POST /api/v1/graph/query (Phase 2 提前实现)
 - [ ] 编写单元测试和集成测试
 - [ ] 编写文档和示例
 
@@ -1101,8 +1102,8 @@ evif-mem stats --category programming
   - [ ] timeline 查询
   - [ ] similar 查询
   - [ ] temporal_bfs 查询
-- [ ] REST API 端点
-  - [ ] POST /api/v1/graph/query
+- [x] REST API 端点 (Phase 2 提前实现)
+  - [x] POST /api/v1/graph/query
 - [ ] CLI 命令
   - [ ] evif-mem graph causal-chain
   - [ ] evif-mem graph timeline
