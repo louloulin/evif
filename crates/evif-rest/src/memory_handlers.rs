@@ -9,29 +9,44 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::sync::RwLock;
+
+use evif_mem::storage::memory::MemoryStorage;
+use evif_mem::models::{MemoryItem, MemoryType};
 
 /// Memory state shared across handlers
 #[derive(Clone)]
 pub struct MemoryState {
-    /// Placeholder for memorize pipeline - will be initialized on startup
-    pub initialized: Arc<RwLock<bool>>,
+    /// Storage for memory items
+    pub storage: Arc<MemoryStorage>,
+}
+
+impl MemoryState {
+    /// Create new memory state with storage
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(MemoryStorage::new()),
+        }
+    }
+}
+
+impl Default for MemoryState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Initialize memory state
 pub fn create_memory_state() -> MemoryState {
-    MemoryState {
-        initialized: Arc::new(RwLock::new(false)),
-    }
+    MemoryState::new()
 }
 
-/// Initialize memory state (to be called on startup with proper dependencies)
-pub async fn init_memory_pipelines(_state: &MemoryState) -> Result<(), String> {
-    // In production, this would initialize the actual pipelines with:
-    // - LLM client (OpenAI/Anthropic/Ollama)
-    // - Vector index (InMemoryVectorIndex / Faiss / Qdrant)
-    // - Storage backend (Memory / Sled / RocksDB / SQLite)
-    *(_state.initialized.write().map_err(|e| e.to_string())?) = true;
+/// Initialize memory pipelines (to be called on startup with proper dependencies)
+pub async fn init_memory_pipelines(
+    _state: &MemoryState,
+    _openai_api_key: &str,
+) -> Result<(), String> {
+    // Pipeline initialization is optional - handlers work with basic storage
+    // Pipeline can be added later when LLM integration is needed
     Ok(())
 }
 
@@ -114,11 +129,9 @@ pub struct MemoryItemResponse {
     #[serde(rename = "type")]
     pub memory_type: String,
     pub content: String,
-    pub tags: Vec<String>,
+    pub summary: String,
     pub created: String,
     pub updated: String,
-    pub references: Vec<String>,
-    pub category_ids: Vec<String>,
 }
 
 /// Memory handlers
@@ -128,79 +141,118 @@ impl MemoryHandlers {
     /// Create memory (POST /api/v1/memories)
     ///
     /// Creates a new memory from the given content.
-    /// The content is processed through the MemorizePipeline to extract structured memories.
+    /// Stores the content directly as a MemoryItem for now.
     pub async fn create_memory(
         State(state): State<MemoryState>,
         Json(req): Json<CreateMemoryRequest>,
     ) -> Result<Json<CreateMemoryResponse>, MemoryError> {
-        // Check if memory system is initialized
-        let initialized = *state.initialized.read()
-            .map_err(|e| MemoryError::Internal(e.to_string()))?;
+        // Create a simple memory item from the content
+        let memory_item = MemoryItem::new(
+            MemoryType::Knowledge,
+            req.content.chars().take(100).collect(),
+            req.content,
+        );
 
-        if !initialized {
-            // Return a placeholder response for now
-            // In production: pipeline.memorize_text(&req.content).await?;
-            let memory_id = uuid::Uuid::new_v4().to_string();
-
-            return Ok(Json(CreateMemoryResponse {
-                memory_id,
-                extracted_items: vec![ExtractedMemoryItem {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    memory_type: "knowledge".to_string(),
-                    summary: format!("Extracted from: {}", &req.content[..req.content.len().min(50)]),
-                    category: None,
-                }],
-            }));
+        // Store in memory
+        if let Err(e) = state.storage.put_item(memory_item.clone()) {
+            return Err(MemoryError::Internal(e.to_string()));
         }
 
-        // TODO: Call actual MemorizePipeline when initialized
-        Err(MemoryError::NotInitialized)
+        let memory_id = memory_item.id.clone();
+        let extracted_items = vec![ExtractedMemoryItem {
+            id: memory_item.id,
+            memory_type: "knowledge".to_string(),
+            summary: memory_item.summary,
+            category: None,
+        }];
+
+        Ok(Json(CreateMemoryResponse {
+            memory_id,
+            extracted_items,
+        }))
     }
 
     /// Search memories (POST /api/v1/memories/search)
     ///
-    /// Searches memories using the specified mode:
-    /// - vector: Vector similarity search
-    /// - hybrid: Combined vector + LLM reranking
+    /// Searches memories using simple content matching.
+    /// For now, performs basic text search on stored memories.
     pub async fn search_memories(
         State(state): State<MemoryState>,
         Json(req): Json<SearchMemoryRequest>,
     ) -> Result<Json<SearchMemoryResponse>, MemoryError> {
-        // Check if memory system is initialized
-        let _initialized = *state.initialized.read()
-            .map_err(|e| MemoryError::Internal(e.to_string()))?;
+        // Get all items and do simple text matching
+        let all_items = state.storage.get_all_items();
 
-        // Return empty results for now
-        // In production: pipeline.retrieve_text(&req.query, mode).await?;
-        Ok(Json(SearchMemoryResponse {
-            results: vec![],
-            total: 0,
-        }))
+        // Simple search - filter by content containing query
+        let query_lower = req.query.to_lowercase();
+        let results: Vec<MemorySearchResult> = all_items
+            .into_iter()
+            .filter(|item| {
+                item.content.to_lowercase().contains(&query_lower) ||
+                item.summary.to_lowercase().contains(&query_lower)
+            })
+            .take(req.vector_k)
+            .enumerate()
+            .map(|(idx, item)| {
+                // Calculate a simple score based on position (higher = better)
+                let score = 1.0 - (idx as f32 * 0.1);
+                MemorySearchResult {
+                    id: item.id,
+                    memory_type: format!("{:?}", item.memory_type),
+                    content: item.content,
+                    score: score.max(0.0),
+                    category: item.category_id,
+                }
+            })
+            .collect();
+
+        let total = results.len();
+        Ok(Json(SearchMemoryResponse { results, total }))
     }
 
     /// Get memory by ID (GET /api/v1/memories/{id})
     ///
     /// Retrieves a specific memory by its ID.
     pub async fn get_memory(
-        State(_state): State<MemoryState>,
+        State(state): State<MemoryState>,
         Path(id): Path<String>,
     ) -> Result<Json<MemoryItemResponse>, MemoryError> {
-        // TODO: Implement actual retrieval from storage
-        let _ = id;
-
-        // Return not found for now
-        Err(MemoryError::NotFound(format!("Memory with id '{}' not found", id)))
+        // Try to get the memory from storage
+        match state.storage.get_item(&id) {
+            Ok(item) => Ok(Json(MemoryItemResponse {
+                id: item.id,
+                memory_type: format!("{:?}", item.memory_type),
+                content: item.content,
+                summary: item.summary,
+                created: item.created_at.to_rfc3339(),
+                updated: item.updated_at.to_rfc3339(),
+            })),
+            Err(_) => Err(MemoryError::NotFound(format!("Memory with id '{}' not found", id)))
+        }
     }
 
     /// List all memories (GET /api/v1/memories)
     ///
     /// Lists all stored memories.
     pub async fn list_memories(
-        State(_state): State<MemoryState>,
+        State(state): State<MemoryState>,
     ) -> Result<Json<Vec<MemoryItemResponse>>, MemoryError> {
-        // Return empty for now
-        // In production: iterate through storage
-        Ok(Json(vec![]))
+        // Get all items from storage
+        let items = state.storage.get_all_items();
+
+        let responses: Vec<MemoryItemResponse> = items
+            .into_iter()
+            .map(|item| MemoryItemResponse {
+                id: item.id,
+                memory_type: format!("{:?}", item.memory_type),
+                content: item.content,
+                summary: item.summary,
+                created: item.created_at.to_rfc3339(),
+                updated: item.updated_at.to_rfc3339(),
+            })
+            .collect();
+
+        Ok(Json(responses))
     }
 }
 

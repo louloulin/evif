@@ -2349,6 +2349,7 @@ dependencies = [
  "digest",
  "evif-core",
  "evif-graph",
+ "evif-mem",
  "evif-plugins",
  "evif-protocol",
  "evif-vfs",
