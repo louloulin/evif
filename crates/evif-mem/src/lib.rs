@@ -27,6 +27,7 @@ pub mod pipeline;
 pub mod proactive;
 pub mod storage;
 pub mod vector;
+pub mod workflow;
 
 #[cfg(feature = "plugin")]
 pub mod plugin;
