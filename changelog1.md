@@ -4,6 +4,45 @@ All notable changes to the evif-mem project will be documented in this file.
 
 ## [Unreleased]
 
+### Added - Phase 1.8: Backend Extensions (In Progress)
+
+**Ollama Client Implementation** - Local LLM support for privacy-focused deployments
+
+#### Phase 1.8.1: OllamaClient ✅ **2026-03-08**
+
+1. **OllamaClient Structure**
+   - Added `OllamaClient` struct for local LLM operations
+   - Default model: llama2, embedding model: nomic-embed-text
+   - Default base URL: http://localhost:11434
+
+2. **LLMClient Trait Implementation**
+   - `generate()` - Text generation via /api/generate endpoint
+   - `embed()` - Embedding generation via /api/embeddings endpoint
+   - `analyze_category()` - Category analysis with key-value parsing
+   - `rerank()` - Simple keyword-based reranking
+   - `analyze_image()` - Returns placeholder (Ollama doesn't support vision)
+
+3. **Configuration Options**
+   - `new()` - Create with defaults
+   - `with_config()` - Custom model, embedding model, base URL
+   - `model()` / `embedding_model()` - Accessor methods
+
+4. **Test Infrastructure**
+   - Added 3 new unit tests:
+     - `test_ollama_client_default` - Verify default configuration
+     - `test_ollama_client_custom_config` - Verify custom settings
+     - `test_ollama_client_model_accessors` - Verify accessor methods
+
+#### Phase 1.8 Status
+- Phase 1.8.1: OllamaClient ✅ **100% Complete**
+- **Phase 1.8 Overall: 10% Complete**
+
+**evif-mem Overall Progress**: **93% → 94%** (up 1%)
+
+LLM Backends: 2 → 3 (OpenAI, Anthropic, Ollama)
+
+---
+
 ### Added - Phase 1.7: Multi-User Support (Complete)
 
 **Multi-User Support Implementation** - User scope and tenant isolation for enterprise deployment

@@ -96,6 +96,17 @@ pub struct AnthropicClient {
     base_url: String,
 }
 
+/// Ollama Client
+///
+/// LLM client implementation using Ollama (local LLM server).
+/// Supports both text generation and embeddings.
+pub struct OllamaClient {
+    model: String,
+    embedding_model: String,
+    client: reqwest::Client,
+    base_url: String,
+}
+
 impl OpenAIClient {
     /// Create a new OpenAI client
     pub fn new(api_key: String) -> Self {
@@ -597,6 +608,239 @@ impl LLMClient for AnthropicClient {
     }
 }
 
+impl OllamaClient {
+    /// Create a new Ollama client with default settings
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create with custom configuration
+    pub fn with_config(
+        model: String,
+        embedding_model: String,
+        base_url: Option<String>,
+    ) -> Self {
+        Self {
+            model,
+            embedding_model,
+            client: reqwest::Client::new(),
+            base_url: base_url.unwrap_or_else(|| "http://localhost:11434".to_string()),
+        }
+    }
+
+    /// Get the configured model
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    /// Get the configured embedding model
+    pub fn embedding_model(&self) -> &str {
+        &self.embedding_model
+    }
+}
+
+impl Default for OllamaClient {
+    fn default() -> Self {
+        Self {
+            model: "llama2".to_string(),
+            embedding_model: "nomic-embed-text".to_string(),
+            client: reqwest::Client::new(),
+            base_url: "http://localhost:11434".to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl LLMClient for OllamaClient {
+    async fn generate(&self, prompt: &str) -> MemResult<String> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            prompt: String,
+            stream: bool,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            response: String,
+        }
+
+        let request = Request {
+            model: self.model.clone(),
+            prompt: prompt.to_string(),
+            stream: false,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/api/generate", self.base_url))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        Ok(result.response)
+    }
+
+    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
+        // TODO: Implement LLM-based memory extraction with Ollama
+        // For now, return empty vec
+        Ok(vec![])
+    }
+
+    async fn embed(&self, text: &str) -> MemResult<Vec<f32>> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            input: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            embedding: Vec<f32>,
+        }
+
+        let request = Request {
+            model: self.embedding_model.clone(),
+            input: text.to_string(),
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/api/embeddings", self.base_url))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Embedding(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Embedding(format!(
+                "API error {}: {}",
+                status, body
+            )));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Embedding(format!("Parse error: {}", e)))?;
+
+        Ok(result.embedding)
+    }
+
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+        let prompt = format!(
+            "Analyze these memories and provide:\n1. A category name\n2. A description\n3. Common themes (list)\n4. Suggested tags (list)\n\nMemories:\n{}",
+            memories.join("\n- ")
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse simple key-value format
+        let mut name = "Uncategorized".to_string();
+        let mut description = "".to_string();
+        let mut themes = vec![];
+        let mut tags = vec![];
+
+        for line in response.lines() {
+            let line = line.trim();
+            if line.starts_with("name:") || line.starts_with("Name:") {
+                name = line.split(':').nth(1).unwrap_or("Uncategorized").trim().to_string();
+            } else if line.starts_with("description:") || line.starts_with("Description:") {
+                description = line.split(':').nth(1).unwrap_or("").trim().to_string();
+            } else if line.starts_with("themes:") || line.starts_with("Themes:") {
+                let theme_str = line.split(':').nth(1).unwrap_or("");
+                themes = theme_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            } else if line.starts_with("tags:") || line.starts_with("Tags:") {
+                let tag_str = line.split(':').nth(1).unwrap_or("");
+                tags = tag_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+        }
+
+        Ok(CategoryAnalysis {
+            name,
+            description,
+            themes,
+            tags,
+        })
+    }
+
+    async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        // Simple reranking based on keyword matching
+        // Collect as owned strings to avoid borrow issues
+        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+
+        for item in items.iter_mut() {
+            let content_lower = item.content.to_lowercase();
+            let summary_lower = item.summary.to_lowercase();
+            let mut score = 0.0;
+
+            for term in &query_terms {
+                if content_lower.contains(term.as_str()) {
+                    score += 1.0;
+                }
+                if summary_lower.contains(term.as_str()) {
+                    score += 0.5;
+                }
+            }
+
+            // Normalize by content length
+            if !content_lower.is_empty() {
+                score /= (content_lower.len() as f32 / 100.0).max(1.0);
+            }
+        }
+
+        // Sort by relevance (content match > summary match)
+        items.sort_by(|a, b| {
+            let a_content = a.content.to_lowercase();
+            let b_content = b.content.to_lowercase();
+            let a_summary = a.summary.to_lowercase();
+            let b_summary = b.summary.to_lowercase();
+
+            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
+            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+
+            b_score.cmp(&a_score)
+        });
+
+        Ok(items)
+    }
+
+    async fn analyze_image(&self, _image_data: &[u8], _mime_type: &str) -> MemResult<ImageAnalysis> {
+        // Ollama doesn't support vision directly
+        // Return a placeholder indicating this needs external processing
+        Ok(ImageAnalysis {
+            description: "Ollama does not support image analysis natively".to_string(),
+            caption: "Image analysis unavailable".to_string(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -636,6 +880,37 @@ mod tests {
         );
         assert_eq!(client.model, "claude-3-opus-20240229");
         assert_eq!(client.base_url, "https://custom.anthropic.com/v1");
+    }
+
+    #[test]
+    fn test_ollama_client_default() {
+        let client = OllamaClient::new();
+        assert_eq!(client.model, "llama2");
+        assert_eq!(client.embedding_model, "nomic-embed-text");
+        assert_eq!(client.base_url, "http://localhost:11434");
+    }
+
+    #[test]
+    fn test_ollama_client_custom_config() {
+        let client = OllamaClient::with_config(
+            "mistral".to_string(),
+            "mxbai-embed-large".to_string(),
+            Some("http://192.168.1.100:11434".to_string()),
+        );
+        assert_eq!(client.model, "mistral");
+        assert_eq!(client.embedding_model, "mxbai-embed-large");
+        assert_eq!(client.base_url, "http://192.168.1.100:11434");
+    }
+
+    #[test]
+    fn test_ollama_client_model_accessors() {
+        let client = OllamaClient::with_config(
+            "codellama".to_string(),
+            "snowflake-arctic-embed".to_string(),
+            None,
+        );
+        assert_eq!(client.model(), "codellama");
+        assert_eq!(client.embedding_model(), "snowflake-arctic-embed");
     }
 
     // Note: Integration tests with real API calls should be in tests/ directory
