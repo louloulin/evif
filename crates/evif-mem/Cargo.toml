@@ -43,6 +43,8 @@ evif-core = { path = "../evif-core", optional = true }
 [dev-dependencies]
 tokio-test = { workspace = true }
 tempfile = { workspace = true }
+rand = "0.8"
+criterion = { workspace = true, features = ["async_tokio"] }
 
 [features]
 default = []
@@ -51,3 +53,8 @@ postgres = ["dep:sqlx"]
 plugin = ["dep:evif-core"]
 faiss = ["dep:faiss"]
 qdrant = ["dep:qdrant-client"]
+
+[[bench]]
+name = "vector_bench"
+harness = false
+path = "benches/vector_bench.rs"

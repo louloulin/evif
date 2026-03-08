@@ -2,7 +2,7 @@
 
 > **版本**: 4.1
 > **日期**: 2026-03-08
-> **状态**: Phase 2.1 完成 - 工作流动态配置已实现
+> **状态**: Phase 2.2 完成 - 向量索引性能优化已实现
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -1265,6 +1265,31 @@ qdrant = ["dep:qdrant-client"]
 ```
 
 **代码统计**: 新增 faiss.rs, qdrant.rs; 157 tests 通过
+
+**基准测试结果** (2026-03-08):
+
+| 操作 | 维度 | 数据集大小 | 延迟 |
+|------|------|------------|------|
+| add_single | 128 | 100 | ~1.46 µs |
+| add_single | 384 | 1000 | ~1.57 µs |
+| add_batch | 128 | 1000 | ~110 µs |
+| add_batch | 384 | 1000 | ~120 µs |
+| search | 128 | 100 | ~30 µs |
+| search | 128 | 1000 | ~316 µs |
+| search | 128 | 5000 | ~1.79 ms |
+| search | 384 | 1000 | ~1.02 ms |
+| search | 384 | 5000 | ~5.21 ms |
+
+**基准测试覆盖**:
+- `vector_index_add`: 单条向量添加性能
+- `vector_index_add_batch`: 批量向量添加性能
+- `vector_index_search`: 搜索性能 (不同维度/数据集大小/k值)
+- `vector_index_metrics`: 不同相似度度量对比 (Cosine/Euclidean/DotProduct)
+
+**运行基准测试**:
+```bash
+cargo bench -p evif-mem --bench vector_bench
+```
 
 **下一步**: Phase 2.3 企业级集成
 

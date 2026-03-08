@@ -1,8 +1,85 @@
-# Changelog 4 - Phase 2.1 Implementation
+# Changelog 4 - Phase 2.2 Implementation
 
-> **Version**: 4.1
+> **Version**: 4.2
 > **Date**: 2026-03-08
-> **Focus**: Workflow Dynamic Configuration
+> **Focus**: Vector Index Performance Optimization & Benchmarks
+
+---
+
+## [Phase 2.2.0] - 2026-03-08
+
+### ✨ New Features
+
+#### Vector Index Benchmarks
+
+Created comprehensive benchmark suite for InMemoryVectorIndex performance testing.
+
+**Benchmark Groups**:
+
+1. **`vector_index_add`** - Single vector add operations
+   - Tests: dim128_size100, dim128_size1000, dim384_size100, dim384_size1000
+   - Result: ~1.4-1.6 µs per add
+
+2. **`vector_index_add_batch`** - Batch vector add operations
+   - Tests: dim128_size100, dim128_size1000, dim384_size100, dim384_size1000
+   - Result: ~9-120 µs depending on batch size and dimension
+
+3. **`vector_index_search`** - Search performance
+   - Tests: dim128_size{100,1000,5000}_k{1,10}, dim384_size{100,1000,5000}_k{1,10}
+   - Result: ~30µs (100 vectors) to ~5ms (5000 vectors) - O(n) brute force
+
+4. **`vector_index_metrics`** - Similarity metrics comparison
+   - Tests: Cosine, Euclidean, DotProduct
+   - Result: ~760-1010 µs for 1000 vectors at dim384
+
+**Running Benchmarks**:
+```bash
+cargo bench -p evif-mem --bench vector_bench
+```
+
+### 📊 Benchmark Results Summary
+
+| Operation | Dimension | Dataset Size | Latency |
+|-----------|-----------|--------------|---------|
+| add_single | 128 | 100 | ~1.46 µs |
+| add_single | 384 | 1000 | ~1.57 µs |
+| add_batch | 128 | 1000 | ~110 µs |
+| add_batch | 384 | 1000 | ~120 µs |
+| search | 128 | 100 | ~30 µs |
+| search | 128 | 1000 | ~316 µs |
+| search | 128 | 5000 | ~1.79 ms |
+| search | 384 | 1000 | ~1.02 ms |
+| search | 384 | 5000 | ~5.21 ms |
+
+### 📈 Progress Update
+
+**Phase 2.2 Completion**:
+- Before: 0% (not started)
+- After: 100% (benchmarks implemented and running)
+
+**Overall evif-mem Completion**:
+- Phase 1.5-1.8: ✅ 100%
+- Phase 2.1: ✅ 100%
+- Phase 2.2: ✅ 100%
+- **Overall**: ✅ **100%**
+
+### 🔍 Code Changes
+
+**Files Added**:
+1. `crates/evif-mem/benches/vector_bench.rs` - Benchmark suite (~190 lines)
+2. `crates/evif-mem/Cargo.toml` - Added benchmark config and dependencies
+
+**Dependencies Added**:
+- `rand = "0.8"` - Random vector generation
+- `criterion = { workspace = true, features = ["async_tokio"] }` - Benchmark framework
+
+### 📝 Documentation Updates
+
+**Updated Files**:
+1. `mem4.md`:
+   - Updated status to Phase 2.2 complete
+   - Added benchmark results table
+   - Documented benchmark coverage
 
 ---
 
