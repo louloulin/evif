@@ -2,7 +2,7 @@
 //!
 //! Provides trait-based vector index with multiple backend implementations:
 //! - InMemoryVectorIndex: Simple in-memory implementation for development
-//! - FaissVectorIndex: Faiss-based high-performance search (optional)
+//! - FaissVectorIndex: Faiss-based high-performance search (optional, requires "faiss" feature)
 //!
 //! # Usage
 //! ```rust
@@ -11,8 +11,17 @@
 //! let config = VectorIndexConfig::default();
 //! let index = InMemoryVectorIndex::new(128, config).unwrap();
 //! ```
+//!
+//! # Feature Flags
+//! - `faiss`: Enable FAISS-based vector index for production workloads
 
 pub mod memory;
+
+#[cfg(feature = "faiss")]
+pub mod faiss;
+
+#[cfg(feature = "qdrant")]
+pub mod qdrant;
 
 use crate::error::MemResult;
 use async_trait::async_trait;

@@ -22,6 +22,9 @@ pub enum MemError {
     #[error("LLM error: {0}")]
     Llm(String),
 
+    #[error("Vector error: {0}")]
+    Vector(String),
+
     #[error("Parse error: {0}")]
     Parse(String),
 

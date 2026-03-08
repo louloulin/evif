@@ -34,6 +34,8 @@ base64 = "0.22"
 # Optional dependencies
 rusqlite = { version = "0.32", optional = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono", "uuid"], optional = true }
+faiss = { version = "0.12", optional = true }
+qdrant-client = { version = "1.7", optional = true }
 
 # EVIF core for plugin integration
 evif-core = { path = "../evif-core", optional = true }
@@ -47,3 +49,5 @@ default = []
 sqlite = ["dep:rusqlite"]
 postgres = ["dep:sqlx"]
 plugin = ["dep:evif-core"]
+faiss = ["dep:faiss"]
+qdrant = ["dep:qdrant-client"]
