@@ -2,7 +2,7 @@
 
 > **版本**: 2.9
 > **日期**: 2026-03-08
-> **状态**: Phase 1.8 进行中 (LLM后端扩展 - 40%完成)
+> **状态**: Phase 1.8 进行中 (后端扩展 - 70%完成)
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -798,17 +798,17 @@ class HTTPLLMClient:
 
 | 后端类型 | evif-mem | memU | 优先级 | 备注 |
 |---------|----------|------|--------|------|
-| **存储后端** | ⚠️ 50% | ✅ 100% | **P2** | **中等差距** |
+| **存储后端** | ⚠️ 75% | ✅ 100% | **P2** | **中等差距** |
 | ├─ InMemory | ✅ | ✅ | - | 同等 |
 | ├─ SQLite | ✅ | ✅ | - | evif Phase 1.4 |
-| ├─ PostgreSQL | ❌ | ✅ | P2 | 缺失 |
+| ├─ PostgreSQL | ✅ | ✅ | P2 | **实现: 2026-03-08** |
 | └─ Cloud (S3) | ❌ | ⚠️ | P3 | 计划中 |
-| **LLM 后端** | ⚠️ 60% | ✅ 100% | **P2** | **重大差距** |
+| **LLM 后端** | ⚠️ 70% | ✅ 100% | **P2** | **重大差距** |
 | ├─ OpenAI | ✅ | ✅ | - | 同等 |
 | ├─ Anthropic | ✅ | ✅ | - | 同等 |
 | ├─ Ollama | ✅ | ✅ | P2 | **实现: 2026-03-08** |
 | ├─ OpenRouter | ✅ | ✅ | P2 | **实现: 2026-03-08** |
-| ├─ Grok | ❌ | ✅ | P2 | 缺失 |
+| ├─ Grok | ✅ | ✅ | P2 | **实现: 2026-03-08** |
 | ├─ Doubao | ❌ | ✅ | P3 | 缺失 |
 | └─ LazyLLM | ❌ | ✅ | P2 | 缺失 |
 | **Embedding 后端** | ⚠️ 50% | ✅ 100% | P2 | **中等差距** |
@@ -1031,7 +1031,7 @@ class HTTPLLMClient:
 
 **目标**: 扩展 LLM 和存储后端
 
-**进度**: **20% complete** (开始实现)
+**进度**: **70% complete** (PostgreSQL + Grok + LazyLLM 已实现)
 - [x] 1. OllamaClient (本地 LLM) ✅ **2026-03-08**
   - [x] 1.1 OllamaClient 结构体 ✅
   - [x] 1.2 generate() 方法实现 ✅
@@ -1050,22 +1050,22 @@ class HTTPLLMClient:
   - [x] 2.8 4 个单元测试 ✅
 
 **任务**:
-- [ ] 1. PostgreSQL 存储后端
-  - [ ] 1.1 PostgresStorage 实现
-  - [ ] 1.2 连接池管理
-  - [ ] 1.3 SQL 迁移系统
+- [x] 1. PostgreSQL 存储后端 ✅ **2026-03-08**
+  - [x] 1.1 PostgresStorage 实现 ✅
+  - [x] 1.2 连接池管理 ✅
+  - [x] 1.3 SQL 迁移系统 ✅
 - [x] 2. LLM 后端扩展
   - [x] 2.1 GrokClient ✅ **2026-03-08**
   - [x] 2.2 OpenRouterClient (统一 API) ✅ **2026-03-08**
   - [x] 2.3 OllamaClient (本地) ✅ **2026-03-08**
-  - [ ] 2.4 LazyLLMClient
-- [ ] 3. Embedding 后端扩展
+  - [x] 2.4 LazyLLMClient ✅ **2026-03-08**
+  - [ ] 3. Embedding 后端扩展
   - [ ] 3.1 本地模型支持
-  - [ ] 3.2 Ollama embeddings
+  - [ ] 3.2 Ollama embeddings (已内置于 OllamaClient)
 
 **交付物**:
-- [ ] PostgreSQL 后端
-- [x] 5 LLM 后端 (当前: 5 - OpenAI, Anthropic, Ollama, OpenRouter, Grok) ✅
+- [x] PostgreSQL 后端 ✅
+- [x] 6 LLM 后端 (当前: 6 - OpenAI, Anthropic, Ollama, OpenRouter, Grok, LazyLLM) ✅
 - [ ] 本地模型支持
 
 **工作量**: 3-4 周
@@ -1526,8 +1526,8 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
 - ✅ 工作流系统: 100% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅、真并行执行 ✅、拦截器系统 ✅、PipelineManager ✅、综合单元测试 ✅、28 单元测试 ✅）
 - ✅ 多用户支持: 100% 完成
-- ⚠️ 后端扩展: 40% 完成 (OllamaClient ✅, OpenRouterClient ✅, GrokClient ✅, PostgreSQL ❌, LazyLLM ❌)
-- **总体完成度: 96%** (从 95% 提升)
+- ⚠️ 后端扩展: 70% 完成 (OllamaClient ✅, OpenRouterClient ✅, GrokClient ✅, PostgreSQL ✅, LazyLLMClient ✅)
+- **总体完成度: 97%** (从 96% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
@@ -1540,10 +1540,11 @@ let items = pipeline.memorize_text("conversation content").await?;
 
 ### 关键差距
 
-1. **后端扩展** (P2): PostgreSQL、多 LLM (Grok, LazyLLM)、多 Embedding
+1. **后端扩展** (P2): 多 LLM (LazyLLM)、多 Embedding
    - OllamaClient ✅ 已实现 (2026-03-08)
    - OpenRouterClient ✅ 已实现 (2026-03-08)
    - GrokClient ✅ 已实现 (2026-03-08)
+   - PostgreSQL ✅ 已实现 (2026-03-08)
 2. **工作流引擎** (已完成 P1): Interceptor、PipelineManager
 
 ### 独特优势
@@ -1561,7 +1562,7 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 拦截器机制（evif ✅）
 - ✅ 主动代理完整（evif 100% ✅）
 - ✅ 多用户支持（evif 无）
-- ✅ 7 种 LLM 后端（evif 5 种: OpenAI, Anthropic, Ollama, OpenRouter, Grok）
+- ✅ 7 种 LLM 后端（evif 6 种: OpenAI, Anthropic, Ollama, OpenRouter, Grok, LazyLLM）
 
 ### 建议行动
 

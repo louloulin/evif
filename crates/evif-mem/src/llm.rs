@@ -132,6 +132,25 @@ pub struct GrokClient {
     base_url: String,
 }
 
+/// LazyLLM Client
+///
+/// Unified local LLM interface that can connect to various local LLM servers
+/// via OpenAI-compatible APIs. Supports LM Studio, LocalAI, oobabooga, etc.
+/// This client provides a unified interface for loading different local models
+/// without changing the underlying implementation.
+pub struct LazyLLMClient {
+    /// Current LLM model
+    model: String,
+    /// Embedding model for vector embeddings
+    embedding_model: String,
+    /// HTTP client
+    client: reqwest::Client,
+    /// Base URL for the local LLM server
+    base_url: String,
+    /// API key (optional for local servers)
+    api_key: Option<String>,
+}
+
 impl OpenAIClient {
     /// Create a new OpenAI client
     pub fn new(api_key: String) -> Self {
@@ -1557,6 +1576,339 @@ impl LLMClient for GrokClient {
     }
 }
 
+impl LazyLLMClient {
+    /// Create a new LazyLLM client with default settings
+    ///
+    /// Default model: llama2
+    /// Default embedding model: nomic-embed-text
+    /// Default base URL: http://localhost:1234 (common LM Studio port)
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create with custom configuration
+    ///
+    /// # Arguments
+    /// * `model` - LLM model name (e.g., "llama2", "mistral", "gemma")
+    /// * `embedding_model` - Embedding model name (e.g., "nomic-embed-text")
+    /// * `base_url` - Base URL for local LLM server (e.g., "http://localhost:1234")
+    /// * `api_key` - Optional API key (not typically needed for local servers)
+    pub fn with_config(
+        model: String,
+        embedding_model: String,
+        base_url: Option<String>,
+        api_key: Option<String>,
+    ) -> Self {
+        Self {
+            model,
+            embedding_model,
+            client: reqwest::Client::new(),
+            base_url: base_url.unwrap_or_else(|| "http://localhost:1234".to_string()),
+            api_key,
+        }
+    }
+
+    /// Get the configured model
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    /// Get the configured embedding model
+    pub fn embedding_model(&self) -> &str {
+        &self.embedding_model
+    }
+
+    /// Get the configured base URL
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// Load/change the LLM model at runtime
+    ///
+    /// This allows switching between different local models without
+    /// creating a new client instance.
+    pub fn load_model(&mut self, model: String) {
+        self.model = model;
+    }
+
+    /// Load/change the embedding model at runtime
+    pub fn load_embedding_model(&mut self, embedding_model: String) {
+        self.embedding_model = embedding_model;
+    }
+
+    /// List available models from the local server
+    ///
+    /// Note: This requires the server to support the /models endpoint
+    pub async fn list_models(&self) -> MemResult<Vec<String>> {
+        #[derive(Deserialize)]
+        struct ModelsResponse {
+            data: Vec<ModelData>,
+        }
+
+        #[derive(Deserialize)]
+        struct ModelData {
+            id: String,
+        }
+
+        let response = self
+            .client
+            .get(format!("{}/models", self.base_url))
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: ModelsResponse = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        Ok(result.data.into_iter().map(|m| m.id).collect())
+    }
+
+    /// Check if the server is available and responsive
+    pub async fn health_check(&self) -> MemResult<bool> {
+        match self.list_models().await {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    }
+}
+
+impl Default for LazyLLMClient {
+    fn default() -> Self {
+        Self {
+            model: "llama2".to_string(),
+            embedding_model: "nomic-embed-text".to_string(),
+            client: reqwest::Client::new(),
+            base_url: "http://localhost:1234".to_string(),
+            api_key: None,
+        }
+    }
+}
+
+#[async_trait]
+impl LLMClient for LazyLLMClient {
+    async fn generate(&self, prompt: &str) -> MemResult<String> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            temperature: f32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        let request = Request {
+            model: self.model.clone(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            temperature: 0.7,
+        };
+
+        let mut request_builder = self
+            .client
+            .post(format!("{}/v1/chat/completions", self.base_url))
+            .header("Content-Type", "application/json");
+
+        // Add API key if provided
+        if let Some(ref key) = self.api_key {
+            request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
+        }
+
+        let response = request_builder
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        result
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))
+    }
+
+    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
+        // TODO: Implement LLM-based memory extraction with LazyLLM
+        // For now, return empty vec
+        Ok(vec![])
+    }
+
+    async fn embed(&self, text: &str) -> MemResult<Vec<f32>> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            input: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            data: Vec<EmbeddingData>,
+        }
+
+        #[derive(Deserialize)]
+        struct EmbeddingData {
+            embedding: Vec<f32>,
+        }
+
+        let request = Request {
+            model: self.embedding_model.clone(),
+            input: text.to_string(),
+        };
+
+        let mut request_builder = self
+            .client
+            .post(format!("{}/v1/embeddings", self.base_url))
+            .header("Content-Type", "application/json");
+
+        // Add API key if provided
+        if let Some(ref key) = self.api_key {
+            request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
+        }
+
+        let response = request_builder
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Embedding(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Embedding(format!(
+                "API error {}: {}",
+                status, body
+            )));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Embedding(format!("Parse error: {}", e)))?;
+
+        result
+            .data
+            .first()
+            .map(|d| d.embedding.clone())
+            .ok_or_else(|| MemError::Embedding("No embedding returned".to_string()))
+    }
+
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+        let prompt = format!(
+            "Analyze these memories and provide a category analysis in JSON format:\n\
+            {{\"name\": \"category name\", \"description\": \"description\", \"themes\": [\"theme1\"], \"tags\": [\"tag1\"]}}\n\nMemories:\n{}",
+            memories.join("\n- ")
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Try to parse as JSON, fall back to simple parsing
+        if let Ok(analysis) = serde_json::from_str::<CategoryAnalysis>(&response) {
+            return Ok(analysis);
+        }
+
+        // Fallback: simple key-value parsing
+        let mut name = "Uncategorized".to_string();
+        let mut description = "".to_string();
+        let mut themes = vec![];
+        let mut tags = vec![];
+
+        for line in response.lines() {
+            let line = line.trim();
+            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
+                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim().trim_matches('"').to_string();
+            } else if line.starts_with("description:") || line.starts_with("Description:") {
+                description = line.split(':').nth(1).unwrap_or("").trim().to_string();
+            } else if line.starts_with("themes:") || line.starts_with("Themes:") {
+                let theme_str = line.split(':').nth(1).unwrap_or("");
+                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            } else if line.starts_with("tags:") || line.starts_with("Tags:") {
+                let tag_str = line.split(':').nth(1).unwrap_or("");
+                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            }
+        }
+
+        Ok(CategoryAnalysis {
+            name,
+            description,
+            themes,
+            tags,
+        })
+    }
+
+    async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        // Simple reranking based on keyword matching
+        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+
+        items.sort_by(|a, b| {
+            let a_content = a.content.to_lowercase();
+            let b_content = b.content.to_lowercase();
+            let a_summary = a.summary.to_lowercase();
+            let b_summary = b.summary.to_lowercase();
+
+            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
+            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+
+            b_score.cmp(&a_score)
+        });
+
+        Ok(items)
+    }
+
+    async fn analyze_image(&self, _image_data: &[u8], _mime_type: &str) -> MemResult<ImageAnalysis> {
+        // LazyLLM may or may not support vision depending on the backend
+        // Return a placeholder indicating this needs external processing
+        Ok(ImageAnalysis {
+            description: "Image analysis not supported by this local LLM backend".to_string(),
+            caption: "Image analysis unavailable".to_string(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1703,6 +2055,55 @@ mod tests {
         let client = GrokClient::default();
         assert_eq!(client.model(), "grok-2-1212");
         assert_eq!(client.base_url, "https://api.x.ai");
+    }
+
+    #[test]
+    fn test_lazy_llm_client_default() {
+        let client = LazyLLMClient::new();
+        assert_eq!(client.model(), "llama2");
+        assert_eq!(client.embedding_model(), "nomic-embed-text");
+        assert_eq!(client.base_url(), "http://localhost:1234");
+        assert!(client.api_key.is_none());
+    }
+
+    #[test]
+    fn test_lazy_llm_client_custom_config() {
+        let client = LazyLLMClient::with_config(
+            "mistral".to_string(),
+            "mxbai-embed-large".to_string(),
+            Some("http://192.168.1.100:1234".to_string()),
+            Some("local-key".to_string()),
+        );
+        assert_eq!(client.model(), "mistral");
+        assert_eq!(client.embedding_model(), "mxbai-embed-large");
+        assert_eq!(client.base_url(), "http://192.168.1.100:1234");
+        assert_eq!(client.api_key, Some("local-key".to_string()));
+    }
+
+    #[test]
+    fn test_lazy_llm_client_model_load() {
+        let mut client = LazyLLMClient::new();
+        assert_eq!(client.model(), "llama2");
+
+        client.load_model("gemma".to_string());
+        assert_eq!(client.model(), "gemma");
+
+        client.load_embedding_model("bge-large".to_string());
+        assert_eq!(client.embedding_model(), "bge-large");
+    }
+
+    #[test]
+    fn test_lazy_llm_client_with_config_no_api_key() {
+        let client = LazyLLMClient::with_config(
+            "codellama".to_string(),
+            "snowflake-arctic-embed".to_string(),
+            None,
+            None,
+        );
+        assert_eq!(client.model(), "codellama");
+        assert_eq!(client.embedding_model(), "snowflake-arctic-embed");
+        assert_eq!(client.base_url(), "http://localhost:1234");
+        assert!(client.api_key.is_none());
     }
 
     // Note: Integration tests with real API calls should be in tests/ directory

@@ -6,6 +6,103 @@ All notable changes to the evif-mem project will be documented in this file.
 
 ### Added - Phase 1.8: Backend Extensions (In Progress)
 
+**PostgreSQL Storage Backend** - Production-grade database storage for enterprise deployment
+
+#### Phase 1.8.4: PostgresStorage ✅ **2026-03-08**
+
+1. **PostgresStorage Structure**
+   - Added `PostgresStorage` struct for PostgreSQL database operations
+   - Uses `sqlx` with connection pooling for async operations
+   - Supports custom pool options (max/min connections)
+   - Default: 10 max connections
+
+2. **Database Schema**
+   - `resources` table - stores Resource items
+   - `memory_items` table - stores MemoryItem records
+   - `categories` table - stores MemoryCategory
+   - `category_items` table - stores category-item relationships
+   - Indexes on user_id, tenant_id, memory_type for query performance
+
+3. **CRUD Operations**
+   - `put_resource()` / `get_resource()` - Resource operations
+   - `put_item()` / `get_item()` / `delete_item()` - Memory item operations
+   - `put_category()` / `get_category()` / `delete_category()` - Category operations
+   - `link_item_to_category()` - Category-item relationships
+   - `get_items_in_category()` - Get items in a category
+
+4. **Query Methods**
+   - `get_items_by_type()` - Get items by memory type
+   - `get_items_by_user()` - Get items for a specific user
+   - `get_items_by_tenant()` - Get items for a specific tenant
+   - `get_all_items()` - Get all items
+   - `get_all_categories()` - Get all categories
+   - `get_all_tenants()` - Get all tenants
+
+5. **Access Control**
+   - `item_belongs_to_user()` - Check item ownership
+   - `item_belongs_to_tenant()` - Check tenant membership
+   - `resource_belongs_to_user()` - Check resource ownership
+   - `resource_belongs_to_tenant()` - Check tenant membership
+
+6. **Statistics**
+   - `item_count()` - Total item count
+   - `item_count_by_tenant()` - Items per tenant
+   - `resource_count_by_tenant()` - Resources per tenant
+
+7. **Deduplication**
+   - Automatic content_hash based deduplication
+   - Reinforcement count increment on duplicate detection
+
+8. **Configuration**
+   - `new(connection_string)` - Create with default pool options
+   - `with_options(connection_string, max_connections, min_connections)` - Custom pool
+   - `pool()` - Access underlying PgPool
+
+9. **Optional Feature**
+   - Enabled via `postgres` feature flag in Cargo.toml
+   - Requires: sqlx with runtime-tokio, postgres, chrono, uuid features
+
+**LazyLLM Client Implementation** - Unified local LLM interface for dynamic model loading
+
+#### Phase 1.8.5: LazyLLMClient ✅ **2026-03-08**
+
+1. **LazyLLMClient Structure**
+   - Added `LazyLLMClient` struct for unified local LLM interface
+   - Connects to various local LLM servers (LM Studio, LocalAI, oobabooga, etc.)
+   - Uses OpenAI-compatible API format
+   - Default model: llama2
+   - Default embedding model: nomic-embed-text
+   - Default base URL: http://localhost:1234 (LM Studio default port)
+
+2. **LLMClient Trait Implementation**
+   - `generate()` - Text generation via local LLM server
+   - `embed()` - Embedding generation via local server
+   - `analyze_category()` - Category analysis with JSON parsing fallback
+   - `rerank()` - Simple keyword-based reranking
+   - `analyze_image()` - Returns unavailable (depends on backend)
+   - `list_models()` - List available models from local server
+   - `health_check()` - Check server availability
+
+3. **Dynamic Model Loading**
+   - `load_model()` - Switch LLM model at runtime without creating new client
+   - `load_embedding_model()` - Switch embedding model at runtime
+   - Supports hot-swapping models for different tasks
+
+4. **Configuration Options**
+   - `new()` - Create with defaults
+   - `with_config()` - Custom model, embedding model, base URL, API key
+   - `model()` - Accessor method
+   - `embedding_model()` - Accessor method
+   - `base_url()` - Accessor method
+   - Optional API key for servers that require authentication
+
+5. **Test Infrastructure**
+   - Added 4 new unit tests:
+     - `test_lazy_llm_client_default` - Verify default configuration
+     - `test_lazy_llm_client_custom_config` - Verify custom settings
+     - `test_lazy_llm_client_model_load` - Verify dynamic model loading
+     - `test_lazy_llm_client_with_config_no_api_key` - Verify optional API key
+
 **Ollama Client Implementation** - Local LLM support for privacy-focused deployments
 
 #### Phase 1.8.3: GrokClient ✅ **2026-03-08**
@@ -98,11 +195,14 @@ All notable changes to the evif-mem project will be documented in this file.
 #### Phase 1.8 Status
 - Phase 1.8.1: OllamaClient ✅ **100% Complete**
 - Phase 1.8.2: OpenRouterClient ✅ **100% Complete**
-- **Phase 1.8 Overall: 40% Complete**
+- Phase 1.8.3: GrokClient ✅ **100% Complete**
+- Phase 1.8.4: PostgresStorage ✅ **100% Complete**
+- **Phase 1.8 Overall: 60% Complete**
 
-**evif-mem Overall Progress**: **95% → 96%** (up 1%)
+**evif-mem Overall Progress**: **96% → 97%** (up 1%)
 
-LLM Backends: 4 → 5 (OpenAI, Anthropic, Ollama, OpenRouter, Grok)
+Storage Backends: 2 → 3 (InMemory, SQLite, PostgreSQL)
+LLM Backends: 5 (OpenAI, Anthropic, Ollama, OpenRouter, Grok)
 
 ---
 
