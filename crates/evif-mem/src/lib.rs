@@ -21,6 +21,7 @@
 
 pub mod embedding;
 pub mod error;
+pub mod langchain;
 pub mod llm;
 pub mod models;
 pub mod pipeline;
@@ -40,4 +41,8 @@ pub use proactive::{
     ProactiveExtractor, ProactiveStats, ProactiveResult, ResourceMonitor, EventTrigger,
     IntentionPredictor, IntentConfig, IntentResult, PredictedIntent, MemoryPattern,
     CostOptimizer, CostOptimizerConfig, CostOptimizerStats, CacheEntry, BatchItem,
+};
+pub use langchain::{
+    EvifMemory, EvifMemoryConfig, ChatMessage, BufferMemory, ConversationTokenBuffer,
+    VectorStoreRetriever,
 };
