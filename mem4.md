@@ -1241,18 +1241,106 @@ impl langchain::MemoryBackend for EvifMemoryBackend {
 
 **下一步**: Phase 2.2 向量索引性能优化
 
-### Phase 2.2: 向量索引性能优化 (Q2 2026, P1)
+### Phase 2.2: 向量索引性能优化 ⏳ **规划中** (Q2 2026, P1)
 
 **目标**: 替换 InMemoryVectorIndex 为生产级索引
 
-**任务**:
-1. FAISS 集成（CPU 版本）
-2. Qdrant 客户端集成
-3. 向量索引 benchmark
-4. 性能对比报告
-5. 文档更新
+**当前状态分析** (2026-03-08):
 
-**预期成果**: 向量检索性能提升 10-100x
+**现有实现** (`crates/evif-mem/src/vector/`):
+- `VectorIndex` trait: 统一向量索引接口
+- `InMemoryVectorIndex`: 基于哈希表的内存索引
+- 支持三种相似度度量: Cosine, Euclidean, DotProduct
+- 暴力搜索 O(n) 复杂度
+
+**现有局限性**:
+1. 无 HNSW 或其他近似最近邻算法
+2. 无 GPU 加速
+3. 不支持大规模数据集 (1M+ 向量)
+4. 无持久化能力
+5. 无分布式搜索
+
+**任务规划**:
+
+| 子任务 | 优先级 | 复杂度 | 依赖 | 预期成果 |
+|--------|--------|--------|------|----------|
+| 2.2.1 FAISS CPU 集成 | P1 | 高 | libfaiss C++ | 10-100x 大数据集加速 |
+| 2.2.2 Qdrant 客户端集成 | P1 | 中 | Qdrant server | 分布式搜索、持久化 |
+| 2.2.3 性能基准测试 | P1 | 中 | 2.2.1, 2.2.2 | 对比报告 |
+| 2.2.4 文档更新 | P1 | 低 | 2.2.3 | API 文档 |
+
+**技术选型**:
+
+**FAISS (Facebook AI Similarity Search)**:
+- 优势: 成熟稳定、CPU/GPU 支持、HNSW 算法
+- 劣势: 需要 C++ 库安装、编译复杂
+- Rust crate: `faiss` (0.12+)
+- 支持索引: IndexFlatL2, IndexFlatIP, IndexHNSW, IndexIVF
+
+**Qdrant**:
+- 优势: 云原生、持久化、分布式、过滤查询
+- 劣势: 需要运行 Qdrant server
+- Rust crate: `qdrant-client` (1.7+)
+- 支持功能: Collection 管理、Payload 过滤、快照
+
+**实现计划**:
+
+```rust
+// Phase 2.2.1: FAISS 集成
+pub struct FaissVectorIndex {
+    index: RwLock<faiss::Index>,  // CPU index
+    id_map: RwLock<HashMap<String, usize>>,
+    dimension: usize,
+    config: VectorIndexConfig,
+}
+
+#[cfg(feature = "faiss")]
+impl VectorIndex for FaissVectorIndex {
+    // 实现 VectorIndex trait
+}
+
+// Phase 2.2.2: Qdrant 集成
+pub struct QdrantVectorIndex {
+    client: QdrantClient,
+    collection_name: String,
+    dimension: usize,
+    config: VectorIndexConfig,
+}
+
+#[cfg(feature = "qdrant")]
+impl VectorIndex for QdrantVectorIndex {
+    // 实现 VectorIndex trait
+}
+```
+
+**Cargo.toml 配置**:
+```toml
+[features]
+default = ["memory"]
+memory = []
+faiss = ["dep:faiss"]
+qdrant = ["dep:qdrant-client"]
+
+[dependencies]
+faiss = { version = "0.12", optional = true }
+qdrant-client = { version = "1.7", optional = true }
+```
+
+**性能基准预期**:
+
+| 数据集规模 | InMemory | FAISS CPU | Qdrant | 提升 |
+|-----------|----------|-----------|--------|------|
+| 1K 向量 | 1ms | 0.5ms | 2ms | 2x |
+| 10K 向量 | 10ms | 1ms | 5ms | 10x |
+| 100K 向量 | 100ms | 5ms | 20ms | 20x |
+| 1M 向量 | 1000ms | 20ms | 50ms | 50x |
+
+**风险评估**:
+- 信心度: 70%
+- 依赖风险: FAISS Rust bindings 可能编译失败
+- 缓解措施: 保留 InMemoryVectorIndex 作为 fallback
+
+**预期成果**: 向量检索性能提升 10-100x，支持大规模生产环境
 
 ### Phase 2.3: 企业级集成 (Q2-Q3 2026, P2)
 
