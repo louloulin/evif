@@ -607,6 +607,191 @@ impl PipelineManager {
     pub async fn is_empty(&self) -> bool {
         self.pipelines.read().await.is_empty()
     }
+
+    /// Configure a specific step in a pipeline
+    ///
+    /// Updates the configuration of a step without replacing it entirely.
+    /// Returns the number of steps modified (0 if step not found).
+    pub async fn config_step(
+        &self,
+        pipeline_name: &str,
+        step_id: &str,
+        configs: HashMap<String, serde_json::Value>,
+    ) -> MemResult<usize> {
+        let mut pipelines = self.pipelines.write().await;
+
+        let steps = pipelines
+            .get_mut(pipeline_name)
+            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+
+        let mut modified = 0;
+        for step in steps.iter_mut() {
+            if step.step_id == step_id {
+                // Apply configurations
+                if let Some(prompt) = configs.get("prompt_template") {
+                    if let Ok(prompt_str) = serde_json::from_value(prompt.clone()) {
+                        step.prompt_template = Some(prompt_str);
+                    }
+                }
+                if let Some(profile) = configs.get("llm_profile") {
+                    if let Ok(profile_str) = serde_json::from_value(profile.clone()) {
+                        // Validate LLM profile
+                        if !self.llm_profiles.contains(&profile_str) {
+                            return Err(MemError::WorkflowError(format!(
+                                "Unknown LLM profile '{}'",
+                                profile_str
+                            )));
+                        }
+                        step.llm_profile = Some(profile_str);
+                    }
+                }
+                if let Some(parallel) = configs.get("parallel") {
+                    if let Ok(parallel_bool) = serde_json::from_value(parallel.clone()) {
+                        step.parallel = parallel_bool;
+                    }
+                }
+                modified = 1;
+                break;
+            }
+        }
+
+        Ok(modified)
+    }
+
+    /// Insert a new step after a target step
+    ///
+    /// Returns Ok(1) if successful, Ok(0) if target step not found.
+    pub async fn insert_after(
+        &self,
+        pipeline_name: &str,
+        target_step_id: &str,
+        new_step: WorkflowStep,
+    ) -> MemResult<usize> {
+        // Validate new step
+        self.validate_step(&new_step)?;
+
+        let mut pipelines = self.pipelines.write().await;
+
+        let steps = pipelines
+            .get_mut(pipeline_name)
+            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+
+        // Find target step index
+        let target_index = steps
+            .iter()
+            .position(|s| s.step_id == target_step_id);
+
+        match target_index {
+            Some(index) => {
+                steps.insert(index + 1, new_step);
+                Ok(1)
+            }
+            None => Ok(0),
+        }
+    }
+
+    /// Insert a new step before a target step
+    ///
+    /// Returns Ok(1) if successful, Ok(0) if target step not found.
+    pub async fn insert_before(
+        &self,
+        pipeline_name: &str,
+        target_step_id: &str,
+        new_step: WorkflowStep,
+    ) -> MemResult<usize> {
+        // Validate new step
+        self.validate_step(&new_step)?;
+
+        let mut pipelines = self.pipelines.write().await;
+
+        let steps = pipelines
+            .get_mut(pipeline_name)
+            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+
+        // Find target step index
+        let target_index = steps
+            .iter()
+            .position(|s| s.step_id == target_step_id);
+
+        match target_index {
+            Some(index) => {
+                steps.insert(index, new_step);
+                Ok(1)
+            }
+            None => Ok(0),
+        }
+    }
+
+    /// Replace an existing step with a new one
+    ///
+    /// Returns Ok(1) if successful, Ok(0) if target step not found.
+    pub async fn replace_step(
+        &self,
+        pipeline_name: &str,
+        target_step_id: &str,
+        new_step: WorkflowStep,
+    ) -> MemResult<usize> {
+        // Validate new step
+        self.validate_step(&new_step)?;
+
+        let mut pipelines = self.pipelines.write().await;
+
+        let steps = pipelines
+            .get_mut(pipeline_name)
+            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+
+        // Find target step index
+        let target_index = steps
+            .iter()
+            .position(|s| s.step_id == target_step_id);
+
+        match target_index {
+            Some(index) => {
+                steps[index] = new_step;
+                Ok(1)
+            }
+            None => Ok(0),
+        }
+    }
+
+    /// Validate a single step
+    fn validate_step(&self, step: &WorkflowStep) -> MemResult<()> {
+        // Validate capabilities
+        let missing: Vec<_> = step
+            .capabilities
+            .difference(&self.capabilities)
+            .collect();
+
+        if !missing.is_empty() {
+            let missing_str: Vec<_> = missing.iter().map(|c| c.to_string()).collect();
+            return Err(MemError::WorkflowError(format!(
+                "Step '{}' requires missing capabilities: {}",
+                step.step_id,
+                missing_str.join(", ")
+            )));
+        }
+
+        // Validate LLM profile for LLM steps
+        if step.step_type == StepType::LLM {
+            if let Some(profile) = &step.llm_profile {
+                if !self.llm_profiles.contains(profile) {
+                    return Err(MemError::WorkflowError(format!(
+                        "Step '{}' uses unknown LLM profile '{}'",
+                        step.step_id, profile
+                    )));
+                }
+            }
+        }
+
+        // Recursively validate sub-steps
+        if let Some(sub_steps) = &step.sub_steps {
+            for sub_step in sub_steps {
+                self.validate_step(sub_step)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Default Workflow Runner Implementation
@@ -1626,5 +1811,283 @@ mod tests {
         assert!(err.to_string().contains("missing capabilities"));
         // The error uses lowercase "vector" due to Display impl
         assert!(err.to_string().contains("vector"));
+    }
+
+    // === Dynamic Configuration Tests ===
+
+    #[tokio::test]
+    async fn test_config_step() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string(), "claude-3".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![
+            WorkflowStep::llm("step1", "Original prompt").with_llm_profile("gpt-4"),
+        ];
+
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Configure step - change prompt and llm_profile
+        let mut configs = HashMap::new();
+        configs.insert("prompt_template".to_string(), serde_json::json!("New prompt"));
+        configs.insert("llm_profile".to_string(), serde_json::json!("claude-3"));
+
+        let modified = manager.config_step("test_pipeline", "step1", configs).await.unwrap();
+        assert_eq!(modified, 1);
+
+        // Verify configuration was applied (we'd need to inspect the pipeline to verify)
+        assert!(manager.has_pipeline("test_pipeline").await);
+    }
+
+    #[tokio::test]
+    async fn test_config_step_not_found() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![WorkflowStep::llm("step1", "Test")];
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Try to configure non-existent step
+        let configs = HashMap::new();
+        let modified = manager.config_step("test_pipeline", "nonexistent", configs).await.unwrap();
+        assert_eq!(modified, 0);
+    }
+
+    #[tokio::test]
+    async fn test_config_step_invalid_llm_profile() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![WorkflowStep::llm("step1", "Test")];
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Try to configure with invalid LLM profile
+        let mut configs = HashMap::new();
+        configs.insert("llm_profile".to_string(), serde_json::json!("invalid-profile"));
+
+        let result = manager.config_step("test_pipeline", "step1", configs).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Unknown LLM profile") || err_msg.contains("unknown LLM profile"));
+    }
+
+    #[tokio::test]
+    async fn test_insert_after() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline with two steps
+        let steps = vec![
+            WorkflowStep::llm("step1", "First"),
+            WorkflowStep::llm("step3", "Third"),
+        ];
+
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Insert step2 after step1
+        let new_step = WorkflowStep::llm("step2", "Second");
+        let inserted = manager.insert_after("test_pipeline", "step1", new_step).await.unwrap();
+        assert_eq!(inserted, 1);
+
+        // Verify insertion by running the pipeline
+        let state = WorkflowState::new();
+        let (final_state, _) = manager.run("test_pipeline", state).await.unwrap();
+
+        // Check execution order: step1 -> step2 -> step3
+        assert!(final_state.get_step_output("step1").is_some());
+        assert!(final_state.get_step_output("step2").is_some());
+        assert!(final_state.get_step_output("step3").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_insert_after_not_found() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![WorkflowStep::llm("step1", "First")];
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Try to insert after non-existent step
+        let new_step = WorkflowStep::llm("step2", "Second");
+        let inserted = manager.insert_after("test_pipeline", "nonexistent", new_step).await.unwrap();
+        assert_eq!(inserted, 0);
+    }
+
+    #[tokio::test]
+    async fn test_insert_before() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline with two steps
+        let steps = vec![
+            WorkflowStep::llm("step1", "First"),
+            WorkflowStep::llm("step3", "Third"),
+        ];
+
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Insert step2 before step3
+        let new_step = WorkflowStep::llm("step2", "Second");
+        let inserted = manager.insert_before("test_pipeline", "step3", new_step).await.unwrap();
+        assert_eq!(inserted, 1);
+
+        // Verify insertion by running the pipeline
+        let state = WorkflowState::new();
+        let (final_state, _) = manager.run("test_pipeline", state).await.unwrap();
+
+        // Check execution order: step1 -> step2 -> step3
+        assert!(final_state.get_step_output("step1").is_some());
+        assert!(final_state.get_step_output("step2").is_some());
+        assert!(final_state.get_step_output("step3").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_insert_before_not_found() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![WorkflowStep::llm("step1", "First")];
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Try to insert before non-existent step
+        let new_step = WorkflowStep::llm("step2", "Second");
+        let inserted = manager.insert_before("test_pipeline", "nonexistent", new_step).await.unwrap();
+        assert_eq!(inserted, 0);
+    }
+
+    #[tokio::test]
+    async fn test_replace_step() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![
+            WorkflowStep::llm("step1", "Original prompt"),
+        ];
+
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Replace step1 with new version
+        let new_step = WorkflowStep::llm("step1", "Replaced prompt").with_llm_profile("gpt-4");
+        let replaced = manager.replace_step("test_pipeline", "step1", new_step).await.unwrap();
+        assert_eq!(replaced, 1);
+
+        // Verify replacement by running the pipeline
+        let state = WorkflowState::new();
+        let (final_state, _) = manager.run("test_pipeline", state).await.unwrap();
+        assert!(final_state.get_step_output("step1").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_replace_step_not_found() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![WorkflowStep::llm("step1", "First")];
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Try to replace non-existent step
+        let new_step = WorkflowStep::llm("step2", "Second");
+        let replaced = manager.replace_step("test_pipeline", "nonexistent", new_step).await.unwrap();
+        assert_eq!(replaced, 0);
+    }
+
+    #[tokio::test]
+    async fn test_insert_with_missing_capability() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        // Only LLM capability available
+        let capabilities = HashSet::from([Capability::LLM]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![WorkflowStep::llm("step1", "First")];
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Try to insert a step requiring Vector capability (not available)
+        let new_step = WorkflowStep::function(
+            "step2",
+            |state| async move { Ok(state) },
+            vec![Capability::Vector], // Missing capability
+        );
+
+        let result = manager.insert_after("test_pipeline", "step1", new_step).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("missing capabilities"));
+    }
+
+    #[tokio::test]
+    async fn test_insert_with_invalid_llm_profile() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
+
+        let capabilities = HashSet::from([Capability::LLM]);
+        let llm_profiles = HashSet::from(["gpt-4".to_string()]);
+
+        let manager = PipelineManager::new(capabilities, llm_profiles, runner);
+
+        // Register a pipeline
+        let steps = vec![WorkflowStep::llm("step1", "First")];
+        manager.register("test_pipeline", steps).await.unwrap();
+
+        // Try to insert a step with invalid LLM profile
+        let new_step = WorkflowStep::llm("step2", "Second").with_llm_profile("invalid-profile");
+
+        let result = manager.insert_after("test_pipeline", "step1", new_step).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unknown LLM profile"));
     }
 }
