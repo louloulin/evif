@@ -1483,4 +1483,148 @@ mod tests {
         assert!(list.contains(&"pipeline2".to_string()));
         assert!(list.contains(&"pipeline3".to_string()));
     }
+
+    // === Phase 1.6.6: Comprehensive Workflow Unit Tests ===
+
+    #[tokio::test]
+    async fn test_workflow_error_propagation() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let runner = DefaultWorkflowRunner::with_llm(llm_provider);
+
+        let steps = vec![
+            WorkflowStep::function(
+                "step1",
+                |state| async move { Ok(state) },
+                vec![Capability::DB],
+            ),
+            WorkflowStep::function(
+                "step2_failing",
+                |_| async { Err(MemError::WorkflowError("Step failed".to_string())) },
+                vec![Capability::DB],
+            ),
+            WorkflowStep::function(
+                "step3_never_reached",
+                |state| async move { Ok(state) },
+                vec![Capability::DB],
+            ),
+        ];
+
+        let result = runner.run(&steps, WorkflowState::new()).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Step failed"));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_config_stop_on_error_false() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let config = WorkflowConfig {
+            max_parallel: 10,
+            enable_logging: true,
+            stop_on_error: false,
+        };
+        let capabilities = HashSet::from([Capability::LLM, Capability::DB, Capability::IO]);
+        let runner = DefaultWorkflowRunner::new(llm_provider, config, capabilities);
+
+        let steps = vec![
+            WorkflowStep::function(
+                "step1",
+                |state| async move { Ok(state) },
+                vec![Capability::DB],
+            ),
+            WorkflowStep::function(
+                "step2_failing",
+                |_| async { Err(MemError::WorkflowError("Step failed".to_string())) },
+                vec![Capability::DB],
+            ),
+            WorkflowStep::function(
+                "step3_continues",
+                |state| async move { Ok(state) },
+                vec![Capability::DB],
+            ),
+        ];
+
+        // With stop_on_error=false, should continue after failure
+        let (final_state, stats) = runner.run(&steps, WorkflowState::new()).await.unwrap();
+        assert_eq!(stats.steps_executed, 3);
+        assert_eq!(stats.steps_succeeded, 2);
+        assert_eq!(stats.steps_failed, 1);
+        assert!(final_state.get_step_output("step1").is_some());
+        assert!(final_state.get_step_output("step3_continues").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_workflow_multiple_parallel_steps() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("parallel")) as Box<dyn WorkflowLLMProvider>));
+        let runner = DefaultWorkflowRunner::with_llm(llm_provider);
+
+        let steps = vec![
+            WorkflowStep::parallel(
+                "first_parallel",
+                vec![
+                    WorkflowStep::llm("p1_1", "Task 1").with_llm_profile("gpt-4"),
+                    WorkflowStep::llm("p1_2", "Task 2").with_llm_profile("gpt-4"),
+                ],
+            ),
+            WorkflowStep::parallel(
+                "second_parallel",
+                vec![
+                    WorkflowStep::llm("p2_1", "Task 3").with_llm_profile("gpt-4"),
+                    WorkflowStep::llm("p2_2", "Task 4").with_llm_profile("gpt-4"),
+                ],
+            ),
+        ];
+
+        let (final_state, stats) = runner.run(&steps, WorkflowState::new()).await.unwrap();
+
+        // Each parallel step counts as 1 container + sub-steps
+        // first_parallel: 1 container + 2 sub-steps = 3
+        // second_parallel: 1 container + 2 sub-steps = 3
+        // Total: 6
+        assert_eq!(stats.steps_executed, 6);
+        assert_eq!(stats.steps_succeeded, 6);
+
+        // Sub-step outputs are nested inside the parallel step output
+        let first_parallel_output = final_state.get_step_output("first_parallel").unwrap();
+        assert!(first_parallel_output.get("p1_1").is_some());
+        assert!(first_parallel_output.get("p1_2").is_some());
+
+        let second_parallel_output = final_state.get_step_output("second_parallel").unwrap();
+        assert!(second_parallel_output.get("p2_1").is_some());
+        assert!(second_parallel_output.get("p2_2").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_workflow_capability_validation_deep_nested() {
+        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+
+        // Runner with only LLM capability
+        let capabilities = HashSet::from([Capability::LLM]);
+        let config = WorkflowConfig::default();
+        let runner = DefaultWorkflowRunner::new(llm_provider, config, capabilities);
+
+        // Parallel step with deeply nested step requiring Vector capability
+        // Note: Cannot have nested parallel (not supported), so we use a flat parallel with nested capability
+        let steps = vec![
+            WorkflowStep::llm("step1", "First").with_llm_profile("gpt-4"),
+            WorkflowStep::parallel(
+                "parallel_outer",
+                vec![
+                    WorkflowStep::llm("inner1", "Inner 1").with_llm_profile("gpt-4"),
+                    WorkflowStep::function(
+                        "deep_nested",
+                        |state| async move { Ok(state) },
+                        vec![Capability::Vector], // Missing capability
+                    ),
+                ],
+            ),
+        ];
+
+        let result = runner.run(&steps, WorkflowState::new()).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("missing capabilities"));
+        // The error uses lowercase "vector" due to Display impl
+        assert!(err.to_string().contains("vector"));
+    }
 }

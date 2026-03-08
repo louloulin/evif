@@ -1,7 +1,7 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.3
-> **日期**: 2026-03-07
+> **版本**: 2.4
+> **日期**: 2026-03-08
 > **状态**: Phase 1.6 完成 ✅ (100%)
 > **作者**: Ralph Loop Analysis
 
@@ -922,7 +922,7 @@ class HTTPLLMClient:
 
 **目标**: 实现可配置的工作流引擎
 
-**进度**: **87% complete** ⚠️ (Phase 1.6.1-1.6.5 完成: WorkflowStep, WorkflowRunner, 真并行执行, 拦截器系统, PipelineManager)
+**进度**: **100% complete** ✅ (Phase 1.6.1-1.6.6 完成: WorkflowStep, WorkflowRunner, 真并行执行, 拦截器系统, PipelineManager, 综合测试)
 - [x] 1. 设计工作流核心 ✅ **2026-03-07**
   - [x] 1.1 WorkflowStep 结构 ✅
   - [x] 1.2 WorkflowState 状态管理 ✅
@@ -955,6 +955,12 @@ class HTTPLLMClient:
   - [x] 4.2 管道验证 (capability + LLM profile) ✅
   - [x] 4.3 运行时配置 ✅
   - [x] 4.4 8 unit tests for PipelineManager ✅
+- [x] 5. 综合单元测试 ✅ **2026-03-08**
+  - [x] 5.1 错误传播测试 ✅
+  - [x] 5.2 错误处理配置测试 (stop_on_error=false) ✅
+  - [x] 5.3 多并行步骤测试 ✅
+  - [x] 5.4 深度嵌套能力验证测试 ✅
+  - [x] 5.5 28个单元测试全部通过 ✅
 
 - ✅ 工作流引擎 (含真并行执行)
 - ✅ 拦截器系统
