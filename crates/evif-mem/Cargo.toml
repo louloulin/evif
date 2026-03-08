@@ -33,6 +33,7 @@ base64 = "0.22"
 
 # Optional dependencies
 rusqlite = { version = "0.32", optional = true }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono", "uuid"], optional = true }
 
 # EVIF core for plugin integration
 evif-core = { path = "../evif-core", optional = true }
@@ -44,4 +45,5 @@ tempfile = { workspace = true }
 [features]
 default = []
 sqlite = ["dep:rusqlite"]
+postgres = ["dep:sqlx"]
 plugin = ["dep:evif-core"]

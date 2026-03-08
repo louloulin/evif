@@ -3,7 +3,7 @@
 //! Provides different storage options:
 //! - In-memory storage (for development/testing)
 //! - SQLite storage (persistent, with optional vector support)
-//! - RocksDB storage (for high performance)
+//! - PostgreSQL storage (production-grade with connection pooling)
 
 pub mod memory;
 
@@ -14,3 +14,9 @@ pub mod sqlite;
 
 #[cfg(feature = "sqlite")]
 pub use sqlite::SQLiteStorage;
+
+#[cfg(feature = "postgres")]
+pub mod postgres;
+
+#[cfg(feature = "postgres")]
+pub use postgres::PostgresStorage;
