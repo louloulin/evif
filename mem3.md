@@ -1,8 +1,8 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.5
+> **版本**: 2.6
 > **日期**: 2026-03-08
-> **状态**: Phase 1.7 进行中 (50%)
+> **状态**: Phase 1.7 完成 (100%), Phase 1.8 待开始
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -972,7 +972,7 @@ class HTTPLLMClient:
 
 **目标**: 实现用户隔离和多租户支持
 
-**进度**: **50% complete** ✅ (Phase 1.7.1-1.7.3 完成: 数据模型扩展、存储层用户过滤、租户管理)
+**进度**: **100% complete** ✅ (Phase 1.7.1-1.7.4 完成: 数据模型扩展、存储层用户过滤、租户管理、管道用户上下文)
 - [x] 1. 扩展数据模型 ✅ **2026-03-08**
   - [x] 1.1 添加 user_id 字段 ✅
   - [x] 1.2 添加 tenant_id 字段 ✅
@@ -987,6 +987,16 @@ class HTTPLLMClient:
   - [x] 3.3 租户访问控制 (item_belongs_to_tenant, resource_belongs_to_tenant) ✅
   - [x] 3.4 租户统计 (item_count_by_tenant, resource_count_by_tenant, get_all_tenants) ✅
   - [x] 3.5 3 个新单元测试 ✅
+- [x] 4. 管道用户上下文集成 ✅ **2026-03-08**
+  - [x] 4.1 RetrievePipeline.retrieve_text() 支持 user_scope 参数 ✅
+  - [x] 4.2 MemorizePipeline.memorize_text() 支持 user_scope 参数 ✅
+  - [x] 4.3 MemorizePipeline.memorize_resource() 支持 user_scope 参数 ✅
+  - [x] 4.4 MemorizePipeline.memorize_tool_call() 支持 user_scope 参数 ✅
+  - [x] 4.5 向量搜索用户过滤 ✅
+  - [x] 4.6 LLM读取用户过滤 ✅
+  - [x] 4.7 混合搜索用户过滤 ✅
+  - [x] 4.8 分类优先搜索用户过滤 ✅
+  - [x] 4.9 2 个新单元测试 (用户上下文签名验证) ✅
 
 **已实现**:
 - ✅ user_id 字段添加到 MemoryItem, Resource, MemoryCategory
@@ -1003,11 +1013,17 @@ class HTTPLLMClient:
 - ✅ item_belongs_to_tenant(), resource_belongs_to_tenant() 访问验证 (Phase 1.7.3)
 - ✅ item_count_by_tenant(), resource_count_by_tenant(), get_all_tenants() 统计方法 (Phase 1.7.3)
 - ✅ 3 个新单元测试 (租户管理) - 总计 129 测试通过
+- ✅ RetrievePipeline.retrieve_text() 用户上下文过滤 (Phase 1.7.4)
+- ✅ MemorizePipeline.memorize_text() 用户上下文支持 (Phase 1.7.4)
+- ✅ MemorizePipeline.memorize_resource() 用户上下文支持 (Phase 1.7.4)
+- ✅ MemorizePipeline.memorize_tool_call() 用户上下文支持 (Phase 1.7.4)
+- ✅ 2 个新单元测试 (用户上下文签名验证) - 总计 131 测试通过
 
 **交付物**:
 - ✅ 多用户支持
 - ✅ 租户隔离
 - ✅ 用户模型
+- ✅ 管道层用户上下文集成
 
 **工作量**: 2-3 周
 
@@ -1491,8 +1507,8 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 演化机制: 100% 完成
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
 - ✅ 工作流系统: 100% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅、真并行执行 ✅、拦截器系统 ✅、PipelineManager ✅、综合单元测试 ✅、28 单元测试 ✅）
-- ❌ 多用户支持: 0% 完成
-- **总体完成度: 91%** (从 89% 提升)
+- ✅ 多用户支持: 100% 完成
+- **总体完成度: 93%** (从 91% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成

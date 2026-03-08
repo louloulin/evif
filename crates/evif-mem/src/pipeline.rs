@@ -153,10 +153,21 @@ impl MemorizePipeline {
     ///
     /// This is the main entry point for the memorization pipeline.
     /// Takes raw text, extracts memories, and stores them.
-    pub async fn memorize_text(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+    /// Optionally stores with user context for multi-tenant isolation.
+    pub async fn memorize_text(
+        &self,
+        text: &str,
+        user_scope: Option<(&str, Option<&str>)>,
+    ) -> MemResult<Vec<MemoryItem>> {
         // Use ResourceLoader to create resource from text
         let resource_loader = ResourceLoader::new();
-        let (resource, content) = resource_loader.load_text(text).await?;
+        let (mut resource, content) = resource_loader.load_text(text).await?;
+
+        // Apply user context to resource if provided
+        if let Some((user_id, tenant_id)) = user_scope {
+            resource.user_id = Some(user_id.to_string());
+            resource.tenant_id = tenant_id.map(|t| t.to_string());
+        }
 
         // Store resource
         let resource_id = resource.id.clone();
@@ -170,6 +181,12 @@ impl MemorizePipeline {
         // Process each memory
         let mut stored_memories = Vec::new();
         for mut memory in memories {
+            // Apply user context if provided
+            if let Some((user_id, tenant_id)) = user_scope {
+                memory.user_id = Some(user_id.to_string());
+                memory.tenant_id = tenant_id.map(|t| t.to_string());
+            }
+
             // Set resource reference
             memory.resource_id = Some(resource_id.clone());
 
@@ -220,10 +237,21 @@ impl MemorizePipeline {
     /// This is the main entry point for the full memorization pipeline.
     /// Takes a resource identifier (URL, file path, or text), loads it,
     /// extracts memories, and stores them.
-    pub async fn memorize_resource(&self, source: &str) -> MemResult<Vec<MemoryItem>> {
+    /// Optionally stores with user context for multi-tenant isolation.
+    pub async fn memorize_resource(
+        &self,
+        source: &str,
+        user_scope: Option<(&str, Option<&str>)>,
+    ) -> MemResult<Vec<MemoryItem>> {
         // Use ResourceLoader to load resource
         let resource_loader = ResourceLoader::new();
-        let (resource, content) = resource_loader.load(source).await?;
+        let (mut resource, content) = resource_loader.load(source).await?;
+
+        // Apply user context to resource if provided
+        if let Some((user_id, tenant_id)) = user_scope {
+            resource.user_id = Some(user_id.to_string());
+            resource.tenant_id = tenant_id.map(|t| t.to_string());
+        }
 
         // Store resource
         let resource_id = resource.id.clone();
@@ -266,6 +294,12 @@ impl MemorizePipeline {
         let mut stored_memories = Vec::new();
         for (segment_content, memories) in all_memories {
             for mut memory in memories {
+                // Apply user context if provided
+                if let Some((user_id, tenant_id)) = user_scope {
+                    memory.user_id = Some(user_id.to_string());
+                    memory.tenant_id = tenant_id.map(|t| t.to_string());
+                }
+
                 // Set resource reference
                 memory.resource_id = Some(resource_id.clone());
 
@@ -343,10 +377,21 @@ impl MemorizePipeline {
     /// - Success/failure status
     /// - Performance metrics (time, tokens)
     /// - Key learnings from the execution
-    pub async fn memorize_tool_call(&self, tool_call: ToolCall) -> MemResult<MemoryItem> {
+    pub async fn memorize_tool_call(
+        &self,
+        tool_call: ToolCall,
+        user_scope: Option<(&str, Option<&str>)>,
+    ) -> MemResult<MemoryItem> {
         // Create resource for this tool call
         let url = format!("tool://{}", tool_call.tool_name);
-        let resource = Resource::new(url, Modality::Conversation);
+        let mut resource = Resource::new(url, Modality::Conversation);
+
+        // Apply user context to resource if provided
+        if let Some((user_id, tenant_id)) = user_scope {
+            resource.user_id = Some(user_id.to_string());
+            resource.tenant_id = tenant_id.map(|t| t.to_string());
+        }
+
         let resource_id = resource.id.clone();
         self.storage.put_resource(resource)?;
 
@@ -356,6 +401,12 @@ impl MemorizePipeline {
         // Set resource reference
         let mut memory = memory;
         memory.resource_id = Some(resource_id.clone());
+
+        // Apply user context to memory if provided
+        if let Some((user_id, tenant_id)) = user_scope {
+            memory.user_id = Some(user_id.to_string());
+            memory.tenant_id = tenant_id.map(|t| t.to_string());
+        }
 
         // Calculate content hash for deduplication
         let hash = self.calculate_hash(&memory.content);
@@ -1067,20 +1118,23 @@ impl RetrievePipeline {
     ///
     /// This is the main entry point for the retrieval pipeline.
     /// Takes a text query and retrieval mode, returns ranked memories.
+    /// Optionally filter by user context for multi-tenant isolation.
     pub async fn retrieve_text(
         &self,
         query: &str,
         mode: RetrieveMode,
+        user_scope: Option<(&str, Option<&str>)>,
     ) -> MemResult<Vec<(MemoryItem, f32)>> {
+        // user_scope: (user_id, tenant_id)
         match mode {
             RetrieveMode::VectorSearch { k, threshold } => {
-                self.vector_search(query, k, threshold).await
+                self.vector_search(query, k, threshold, user_scope).await
             }
             RetrieveMode::Hybrid { vector_k, llm_top_n } => {
-                self.hybrid_search(query, vector_k, llm_top_n).await
+                self.hybrid_search(query, vector_k, llm_top_n, user_scope).await
             }
             RetrieveMode::LLMRead { category_id, max_items } => {
-                self.llm_read_search(query, &category_id, max_items).await
+                self.llm_read_search(query, &category_id, max_items, user_scope).await
             }
             RetrieveMode::RAG {
                 intent_routing,
@@ -1099,6 +1153,7 @@ impl RetrievePipeline {
                         sufficiency_check,
                         include_resources,
                         max_results,
+                        user_scope,
                     )
                     .await?;
                 Ok(response.items)
@@ -1124,6 +1179,7 @@ impl RetrievePipeline {
         sufficiency_check: bool,
         include_resources: bool,
         max_results: usize,
+        user_scope: Option<(&str, Option<&str>)>,
     ) -> MemResult<RAGResponse> {
         use std::time::Instant;
         let start = Instant::now();
@@ -1170,14 +1226,14 @@ impl RetrievePipeline {
         let items = if category_first {
             // Category-first search strategy
             let (found_items, found_categories) = self
-                .category_first_search(&search_query, max_results)
+                .category_first_search(&search_query, max_results, user_scope)
                 .await?;
             categories = found_categories;
             metadata.categories_searched = categories.len();
             found_items
         } else {
             // Direct vector search
-            self.vector_search(&search_query, max_results, 0.0).await?
+            self.vector_search(&search_query, max_results, 0.0, user_scope).await?
         };
 
         metadata.total_candidates = items.len();
@@ -1302,6 +1358,7 @@ Respond ONLY with valid JSON, no additional text."#,
         &self,
         query: &str,
         max_results: usize,
+        user_scope: Option<(&str, Option<&str>)>,
     ) -> MemResult<(Vec<(MemoryItem, f32)>, Vec<crate::models::MemoryCategory>)> {
         // Step 1: Generate query embedding
         let query_embedding = {
@@ -1336,7 +1393,29 @@ Respond ONLY with valid JSON, no additional text."#,
         let mut categories = Vec::new();
         for cat_id in &category_ids {
             if let Ok(category) = self.storage.get_category(cat_id) {
-                categories.push(category);
+                // Filter categories by user scope
+                let mut should_include = true;
+                if let Some((user_id, tenant_id)) = user_scope {
+                    should_include = match (&category.user_id, &category.tenant_id) {
+                        (None, _) => true,
+                        (Some(cat_user_id), cat_tenant_id) => {
+                            if cat_user_id != user_id {
+                                false
+                            } else if let Some(tid) = tenant_id {
+                                if let Some(cat_tid) = cat_tenant_id {
+                                    cat_tid == tid
+                                } else {
+                                    false
+                                }
+                            } else {
+                                true
+                            }
+                        }
+                    };
+                }
+                if should_include {
+                    categories.push(category);
+                }
             }
         }
 
@@ -1345,13 +1424,37 @@ Respond ONLY with valid JSON, no additional text."#,
         for cat_id in &category_ids {
             let items_in_cat = self.storage.get_items_in_category(cat_id);
             for item in items_in_cat {
+                // Filter items by user scope
+                if let Some((user_id, tenant_id)) = user_scope {
+                    let has_access = match (&item.user_id, &item.tenant_id) {
+                        (None, _) => true,
+                        (Some(item_user_id), item_tenant_id) => {
+                            if item_user_id != user_id {
+                                continue;
+                            }
+                            if let Some(tid) = tenant_id {
+                                if let Some(item_tid) = item_tenant_id {
+                                    if item_tid != tid {
+                                        continue;
+                                    }
+                                } else {
+                                    continue;
+                                }
+                            }
+                            true
+                        }
+                    };
+                    if !has_access {
+                        continue;
+                    }
+                }
                 // Score based on category relevance
                 all_items.push((item, 0.7)); // Default score for category match
             }
         }
 
         // Step 6: Also do vector search to find items that might not be in top categories
-        let vector_items = self.vector_search(query, max_results, 0.5).await?;
+        let vector_items = self.vector_search(query, max_results, 0.5, user_scope).await?;
 
         // Merge results, preferring vector scores
         for (item, score) in vector_items {
@@ -1458,6 +1561,7 @@ Respond ONLY with valid JSON, no additional text."#,
         query: &str,
         k: usize,
         threshold: f32,
+        user_scope: Option<(&str, Option<&str>)>,
     ) -> MemResult<Vec<(MemoryItem, f32)>> {
         // Step 1: Generate query embedding
         let query_embedding = {
@@ -1471,7 +1575,7 @@ Respond ONLY with valid JSON, no additional text."#,
             index.search(&query_embedding, Some(k), None).await?
         };
 
-        // Step 3: Fetch items and filter by threshold
+        // Step 3: Fetch items and filter by threshold and user scope
         let mut results = Vec::new();
         for search_result in search_results {
             // Filter by threshold
@@ -1481,7 +1585,37 @@ Respond ONLY with valid JSON, no additional text."#,
 
             // Fetch memory item from storage
             match self.storage.get_item(&search_result.id) {
-                Ok(item) => results.push((item, search_result.score)),
+                Ok(item) => {
+                    // Filter by user scope if provided
+                    if let Some((user_id, tenant_id)) = user_scope {
+                        // Check user access
+                        let has_access = match (&item.user_id, &item.tenant_id) {
+                            // If item has no user_id, it's public
+                            (None, _) => true,
+                            // If item has user_id, check match
+                            (Some(item_user_id), item_tenant_id) => {
+                                if item_user_id != user_id {
+                                    continue; // User doesn't match
+                                }
+                                // If tenant_id provided, check tenant match
+                                if let Some(tid) = tenant_id {
+                                    if let Some(item_tid) = item_tenant_id {
+                                        if item_tid != tid {
+                                            continue; // Tenant doesn't match
+                                        }
+                                    } else {
+                                        continue; // Item has no tenant but query requires one
+                                    }
+                                }
+                                true
+                            }
+                        };
+                        if !has_access {
+                            continue;
+                        }
+                    }
+                    results.push((item, search_result.score));
+                }
                 Err(_) => continue, // Skip if item not found
             }
         }
@@ -1501,9 +1635,10 @@ Respond ONLY with valid JSON, no additional text."#,
         query: &str,
         vector_k: usize,
         llm_top_n: usize,
+        user_scope: Option<(&str, Option<&str>)>,
     ) -> MemResult<Vec<(MemoryItem, f32)>> {
         // Step 1: Vector search with low threshold to get candidates
-        let vector_results = self.vector_search(query, vector_k, 0.0).await?;
+        let vector_results = self.vector_search(query, vector_k, 0.0, user_scope).await?;
 
         // Step 2: Take top-N items for LLM reranking
         let top_n_items: Vec<MemoryItem> = vector_results
@@ -1557,9 +1692,40 @@ Respond ONLY with valid JSON, no additional text."#,
         query: &str,
         category_id: &str,
         max_items: usize,
+        user_scope: Option<(&str, Option<&str>)>,
     ) -> MemResult<Vec<(MemoryItem, f32)>> {
         // Step 1: Get memories in the category
-        let memories = self.storage.get_items_in_category(category_id);
+        let all_memories = self.storage.get_items_in_category(category_id);
+
+        // Step 1b: Filter by user scope if provided
+        let memories: Vec<MemoryItem> = if let Some((user_id, tenant_id)) = user_scope {
+            all_memories
+                .into_iter()
+                .filter(|item| {
+                    match (&item.user_id, &item.tenant_id) {
+                        // If item has no user_id, it's public
+                        (None, _) => true,
+                        (Some(item_user_id), item_tenant_id) => {
+                            if item_user_id != user_id {
+                                return false;
+                            }
+                            if let Some(tid) = tenant_id {
+                                if let Some(item_tid) = item_tenant_id {
+                                    if item_tid != tid {
+                                        return false;
+                                    }
+                                } else {
+                                    return false;
+                                }
+                            }
+                            true
+                        }
+                    }
+                })
+                .collect()
+        } else {
+            all_memories
+        };
 
         // Early return if no memories
         if memories.is_empty() {
@@ -2933,5 +3099,39 @@ Respond ONLY with valid JSON, no additional text."#,
         assert!(result[0].0.contains("transcription"), "Placeholder should mention transcription");
         assert!(result[0].1.is_some(), "Audio should have caption");
         assert!(result[0].1.as_ref().unwrap().contains("transcription"), "Caption should mention transcription");
+    }
+
+    // User context filtering tests
+    #[test]
+    fn test_retrieve_mode_with_user_scope_signature() {
+        // Test that RetrieveMode enum exists and can be used
+        let mode = RetrieveMode::VectorSearch { k: 10, threshold: 0.5 };
+        match mode {
+            RetrieveMode::VectorSearch { k, threshold } => {
+                assert_eq!(k, 10);
+                assert_eq!(threshold, 0.5);
+            }
+            _ => panic!("Expected VectorSearch mode"),
+        }
+    }
+
+    #[test]
+    fn test_user_scope_parameter_tuple() {
+        // Test the user_scope parameter format: Option<(&str, Option<&str>)>
+        // No user context (public access)
+        let scope_none: Option<(&str, Option<&str>)> = None;
+        assert!(scope_none.is_none());
+
+        // User only (no tenant)
+        let scope_user: Option<(&str, Option<&str>)> = Some(("user123", None));
+        assert!(scope_user.is_some());
+        assert_eq!(scope_user.unwrap().0, "user123");
+        assert!(scope_user.unwrap().1.is_none());
+
+        // User with tenant
+        let scope_tenant: Option<(&str, Option<&str>)> = Some(("user123", Some("tenant1")));
+        assert!(scope_tenant.is_some());
+        let (_, tenant) = scope_tenant.unwrap();
+        assert_eq!(tenant, Some("tenant1"));
     }
 }

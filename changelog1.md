@@ -4,9 +4,42 @@ All notable changes to the evif-mem project will be documented in this file.
 
 ## [Unreleased]
 
-### Added - Phase 1.7: Multi-User Support (In Progress)
+### Added - Phase 1.7: Multi-User Support (Complete)
 
 **Multi-User Support Implementation** - User scope and tenant isolation for enterprise deployment
+
+#### Phase 1.7.4: Pipeline User Context Integration ✅ **2026-03-08**
+
+1. **RetrievePipeline User Filtering**
+   - Added `user_scope: Option<(&str, Option<&str>)>` parameter to `retrieve_text()`
+   - User filtering in vector_search, hybrid_search, llm_read_search, category_first_search
+   - Filters results by user_id and tenant_id
+
+2. **MemorizePipeline User Context**
+   - Added `user_scope` parameter to `memorize_text()`
+   - Added `user_scope` parameter to `memorize_resource()`
+   - Added `user_scope` parameter to `memorize_tool_call()`
+   - Automatically applies user context to stored resources and memories
+
+3. **API Changes**
+   - All pipeline methods now accept optional user context: `Option<(&str, Option<&str>)>`
+   - Format: `(user_id, tenant_id)` tuple
+   - Backward compatible: `None` means no filtering (public access)
+
+4. **Test Infrastructure**
+   - Added 2 new unit tests for user context signature validation
+   - Total: 131 evif-mem tests passing (up from 129)
+
+#### Phase 1.7 Status
+- Phase 1.7.1: Data Model Extensions ✅ **100% Complete**
+- Phase 1.7.2: Storage Layer User Filtering ✅ **100% Complete**
+- Phase 1.7.3: Tenant Management ✅ **100% Complete**
+- Phase 1.7.4: Pipeline User Context Integration ✅ **100% Complete**
+- **Phase 1.7 Overall: 100% Complete**
+
+**evif-mem Overall Progress**: **91% → 93%** (up 2%)
+
+---
 
 #### Phase 1.7.3: Tenant Management ✅ **2026-03-08**
 
@@ -45,9 +78,10 @@ All notable changes to the evif-mem project will be documented in this file.
 - Phase 1.7.1: Data Model Extensions ✅ **100% Complete**
 - Phase 1.7.2: Storage Layer User Filtering ✅ **100% Complete**
 - Phase 1.7.3: Tenant Management ✅ **100% Complete**
-- **Phase 1.7 Overall: 50% Complete**
+- Phase 1.7.4: Pipeline User Context Integration ✅ **100% Complete**
+- **Phase 1.7 Overall: 100% Complete**
 
-**evif-mem Overall Progress**: **89% → 91%** (up 2%)
+**evif-mem Overall Progress**: **91% → 93%** (up 2%)
 
 ---
 

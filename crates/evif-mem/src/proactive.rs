@@ -223,7 +223,7 @@ impl ProactiveExtractor {
 
         // Use memorize pipeline to extract
         let items = self.memorize_pipeline
-            .memorize_resource(&source)
+            .memorize_resource(&source, None)
             .await?;
 
         // Limit items per extraction
