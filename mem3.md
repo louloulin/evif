@@ -2,7 +2,7 @@
 
 > **版本**: 2.5
 > **日期**: 2026-03-08
-> **状态**: Phase 1.7 进行中 (25%)
+> **状态**: Phase 1.7 进行中 (50%)
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -972,7 +972,7 @@ class HTTPLLMClient:
 
 **目标**: 实现用户隔离和多租户支持
 
-**进度**: **25% complete** ✅ (Phase 1.7.1-1.7.2 完成: 数据模型扩展、存储层用户过滤)
+**进度**: **50% complete** ✅ (Phase 1.7.1-1.7.3 完成: 数据模型扩展、存储层用户过滤、租户管理)
 - [x] 1. 扩展数据模型 ✅ **2026-03-08**
   - [x] 1.1 添加 user_id 字段 ✅
   - [x] 1.2 添加 tenant_id 字段 ✅
@@ -981,6 +981,12 @@ class HTTPLLMClient:
   - [x] 2.1 存储接口添加 user_id 索引 ✅
   - [x] 2.2 查询自动按 user_id 过滤 ✅
   - [x] 2.3 用户隔离验证 (7 unit tests) ✅
+- [x] 3. 租户管理 ✅ **2026-03-08**
+  - [x] 3.1 租户作用域索引 (items_by_tenant, resources_by_tenant, categories_by_tenant) ✅
+  - [x] 3.2 租户查询方法 (get_items_by_tenant, get_resources_by_tenant, get_categories_by_tenant) ✅
+  - [x] 3.3 租户访问控制 (item_belongs_to_tenant, resource_belongs_to_tenant) ✅
+  - [x] 3.4 租户统计 (item_count_by_tenant, resource_count_by_tenant, get_all_tenants) ✅
+  - [x] 3.5 3 个新单元测试 ✅
 
 **已实现**:
 - ✅ user_id 字段添加到 MemoryItem, Resource, MemoryCategory
@@ -991,7 +997,12 @@ class HTTPLLMClient:
 - ✅ items_by_user, resources_by_user, categories_by_user 索引
 - ✅ get_items_by_user(), get_resources_by_user(), get_categories_by_user() 方法
 - ✅ item_belongs_to_user(), resource_belongs_to_user() 访问验证
-- ✅ 7 个新单元测试
+- ✅ 7 个新单元测试 (用户过滤)
+- ✅ items_by_tenant, resources_by_tenant, categories_by_tenant 索引 (Phase 1.7.3)
+- ✅ get_items_by_tenant(), get_resources_by_tenant(), get_categories_by_tenant() 方法 (Phase 1.7.3)
+- ✅ item_belongs_to_tenant(), resource_belongs_to_tenant() 访问验证 (Phase 1.7.3)
+- ✅ item_count_by_tenant(), resource_count_by_tenant(), get_all_tenants() 统计方法 (Phase 1.7.3)
+- ✅ 3 个新单元测试 (租户管理) - 总计 129 测试通过
 
 **交付物**:
 - ✅ 多用户支持
@@ -1481,7 +1492,7 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
 - ✅ 工作流系统: 100% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅、真并行执行 ✅、拦截器系统 ✅、PipelineManager ✅、综合单元测试 ✅、28 单元测试 ✅）
 - ❌ 多用户支持: 0% 完成
-- **总体完成度: 89%** (从 87% 提升)
+- **总体完成度: 91%** (从 89% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成

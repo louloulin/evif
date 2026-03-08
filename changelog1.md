@@ -8,6 +8,49 @@ All notable changes to the evif-mem project will be documented in this file.
 
 **Multi-User Support Implementation** - User scope and tenant isolation for enterprise deployment
 
+#### Phase 1.7.3: Tenant Management ✅ **2026-03-08**
+
+1. **Tenant-scoped Indexes**
+   - Added `items_by_tenant: Arc<DashMap<String, Vec<String>>>` - tenant_id -> item_ids
+   - Added `resources_by_tenant: Arc<DashMap<String, Vec<String>>>` - tenant_id -> resource_ids
+   - Added `categories_by_tenant: Arc<DashMap<String, Vec<String>>>` - tenant_id -> category_ids
+
+2. **Tenant-scoped Query Methods**
+   - `get_items_by_tenant(tenant_id: &str) -> Vec<MemoryItem>` - Get all items for a tenant
+   - `get_resources_by_tenant(tenant_id: &str) -> Vec<Resource>` - Get all resources for a tenant
+   - `get_categories_by_tenant(tenant_id: &str) -> Vec<MemoryCategory>` - Get all categories for a tenant
+
+3. **Tenant Access Control Methods**
+   - `item_belongs_to_tenant(item_id: &str, tenant_id: &str) -> bool` - Check item ownership
+   - `resource_belongs_to_tenant(resource_id: &str, tenant_id: &str) -> bool` - Check resource ownership
+
+4. **Tenant Statistics Methods**
+   - `item_count_by_tenant(tenant_id: &str) -> usize` - Get item count for tenant
+   - `resource_count_by_tenant(tenant_id: &str) -> usize` - Get resource count for tenant
+   - `get_all_tenants() -> Vec<String>` - List all tenants (admin)
+
+5. **Storage Layer Integration**
+   - Updated `put_item()` to index by tenant_id
+   - Updated `put_resource()` to index by tenant_id
+   - Updated `put_category()` to index by tenant_id
+
+#### Tests Added
+- 3 new tenant management tests:
+  - test_tenant_scoped_items
+  - test_tenant_scoped_resources
+  - test_tenant_counts
+- Total: 129 evif-mem tests passing (up from 126)
+
+#### Phase 1.7 Status
+- Phase 1.7.1: Data Model Extensions ✅ **100% Complete**
+- Phase 1.7.2: Storage Layer User Filtering ✅ **100% Complete**
+- Phase 1.7.3: Tenant Management ✅ **100% Complete**
+- **Phase 1.7 Overall: 50% Complete**
+
+**evif-mem Overall Progress**: **89% → 91%** (up 2%)
+
+---
+
 #### Phase 1.7.1: Data Model Extensions
 
 1. **User and Tenant Fields**
@@ -35,7 +78,7 @@ All notable changes to the evif-mem project will be documented in this file.
   - test_item_belongs_to_user
   - test_tenant_isolation
   - test_user_scope_can_access
-- Total: 126 evif-mem tests passing (up from 120)
+- Total: 129 evif-mem tests passing (up from 126)
 
 #### Phase 1.7 Status
 - Phase 1.7.1: Data Model Extensions ✅ **100% Complete**
