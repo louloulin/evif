@@ -120,6 +120,18 @@ pub struct OpenRouterClient {
     base_url: String,
 }
 
+/// Grok Client
+///
+/// LLM client implementation using xAI's Grok API.
+/// Grok is OpenAI-compatible, so this uses similar patterns.
+/// Default model: grok-2-1212
+pub struct GrokClient {
+    api_key: String,
+    model: String,
+    client: reqwest::Client,
+    base_url: String,
+}
+
 impl OpenAIClient {
     /// Create a new OpenAI client
     pub fn new(api_key: String) -> Self {
@@ -1249,6 +1261,302 @@ impl LLMClient for OpenRouterClient {
     }
 }
 
+impl GrokClient {
+    /// Create a new Grok client with default settings
+    ///
+    /// Default model: grok-2-1212
+    /// Default base URL: https://api.x.ai
+    pub fn new(api_key: String) -> Self {
+        Self::with_config(
+            api_key,
+            "grok-2-1212".to_string(),
+            None,
+        )
+    }
+
+    /// Create with custom configuration
+    pub fn with_config(
+        api_key: String,
+        model: String,
+        base_url: Option<String>,
+    ) -> Self {
+        Self {
+            api_key,
+            model,
+            client: reqwest::Client::new(),
+            base_url: base_url.unwrap_or_else(|| "https://api.x.ai".to_string()),
+        }
+    }
+
+    /// Get the configured model
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+}
+
+impl Default for GrokClient {
+    fn default() -> Self {
+        Self {
+            api_key: String::new(),
+            model: "grok-2-1212".to_string(),
+            client: reqwest::Client::new(),
+            base_url: "https://api.x.ai".to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl LLMClient for GrokClient {
+    async fn generate(&self, prompt: &str) -> MemResult<String> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            temperature: f32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        let request = Request {
+            model: self.model.clone(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            temperature: 0.7,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/v1/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        result
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))
+    }
+
+    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
+        // TODO: Implement LLM-based memory extraction with Grok
+        // For now, return empty vec
+        Ok(vec![])
+    }
+
+    async fn embed(&self, _text: &str) -> MemResult<Vec<f32>> {
+        // Grok does not provide an embeddings API
+        // Users should use OpenAI or other embedding services
+        Err(MemError::Embedding(
+            "Grok does not provide embeddings API. Use OpenAI or other embedding services.".to_string()
+        ))
+    }
+
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+        let prompt = format!(
+            "Analyze these memories and provide a category analysis in JSON format:\n\
+            {{\"name\": \"category name\", \"description\": \"description\", \"themes\": [\"theme1\"], \"tags\": [\"tag1\"]}}\n\nMemories:\n{}",
+            memories.join("\n- ")
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Try to parse as JSON, fall back to simple parsing
+        if let Ok(analysis) = serde_json::from_str::<CategoryAnalysis>(&response) {
+            return Ok(analysis);
+        }
+
+        // Fallback: simple key-value parsing
+        let mut name = "Uncategorized".to_string();
+        let mut description = "".to_string();
+        let mut themes = vec![];
+        let mut tags = vec![];
+
+        for line in response.lines() {
+            let line = line.trim();
+            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
+                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim().trim_matches('"').to_string();
+            } else if line.starts_with("description:") || line.starts_with("Description:") {
+                description = line.split(':').nth(1).unwrap_or("").trim().to_string();
+            } else if line.starts_with("themes:") || line.starts_with("Themes:") {
+                let theme_str = line.split(':').nth(1).unwrap_or("");
+                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            } else if line.starts_with("tags:") || line.starts_with("Tags:") {
+                let tag_str = line.split(':').nth(1).unwrap_or("");
+                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            }
+        }
+
+        Ok(CategoryAnalysis {
+            name,
+            description,
+            themes,
+            tags,
+        })
+    }
+
+    async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        // Simple reranking based on keyword matching
+        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+
+        items.sort_by(|a, b| {
+            let a_content = a.content.to_lowercase();
+            let b_content = b.content.to_lowercase();
+            let a_summary = a.summary.to_lowercase();
+            let b_summary = b.summary.to_lowercase();
+
+            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
+            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+
+            b_score.cmp(&a_score)
+        });
+
+        Ok(items)
+    }
+
+    async fn analyze_image(&self, image_data: &[u8], mime_type: &str) -> MemResult<ImageAnalysis> {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        // Grok supports vision through specific models
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            max_tokens: u32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: Vec<Content>,
+        }
+
+        #[derive(Serialize)]
+        struct Content {
+            #[serde(rename = "type")]
+            content_type: String,
+            text: Option<String>,
+            image_url: Option<ImageUrl>,
+        }
+
+        #[derive(Serialize)]
+        struct ImageUrl {
+            url: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        let base64_image = STANDARD.encode(image_data);
+        let data_url = format!("data:{};base64,{}", mime_type, base64_image);
+
+        let request = Request {
+            model: self.model.clone(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: vec![
+                    Content {
+                        content_type: "text".to_string(),
+                        text: Some("Analyze this image and provide a detailed description and a short caption. Format your response as JSON: {\"description\": \"<detailed description>\", \"caption\": \"<short caption>\"}".to_string()),
+                        image_url: None,
+                    },
+                    Content {
+                        content_type: "image_url".to_string(),
+                        text: None,
+                        image_url: Some(ImageUrl { url: data_url }),
+                    },
+                ],
+            }],
+            max_tokens: 1024,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/v1/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        let content = result
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))?;
+
+        // Parse JSON response
+        let analysis: ImageAnalysis = serde_json::from_str(&content)
+            .map_err(|e| MemError::Llm(format!("Failed to parse image analysis: {}", e)))?;
+
+        Ok(analysis)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1360,6 +1668,41 @@ mod tests {
         assert_eq!(client.model(), "openai/gpt-4o-mini");
         assert_eq!(client.embedding_model(), "intfloat/e5-base-v2");
         assert_eq!(client.base_url, "https://openrouter.ai/api/v1");
+    }
+
+    #[test]
+    fn test_grok_client_creation() {
+        let client = GrokClient::new("test-key".to_string());
+        assert_eq!(client.model(), "grok-2-1212");
+        assert_eq!(client.base_url, "https://api.x.ai");
+    }
+
+    #[test]
+    fn test_grok_client_custom_config() {
+        let client = GrokClient::with_config(
+            "test-key".to_string(),
+            "grok-2".to_string(),
+            Some("https://custom.x.ai".to_string()),
+        );
+        assert_eq!(client.model(), "grok-2");
+        assert_eq!(client.base_url, "https://custom.x.ai");
+    }
+
+    #[test]
+    fn test_grok_client_model_accessor() {
+        let client = GrokClient::with_config(
+            "test-key".to_string(),
+            "grok-vision-beta".to_string(),
+            None,
+        );
+        assert_eq!(client.model(), "grok-vision-beta");
+    }
+
+    #[test]
+    fn test_grok_client_default() {
+        let client = GrokClient::default();
+        assert_eq!(client.model(), "grok-2-1212");
+        assert_eq!(client.base_url, "https://api.x.ai");
     }
 
     // Note: Integration tests with real API calls should be in tests/ directory

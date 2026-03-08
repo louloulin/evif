@@ -1,8 +1,8 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.8
+> **版本**: 2.9
 > **日期**: 2026-03-08
-> **状态**: Phase 1.8 进行中 (LLM后端扩展 - 20%完成)
+> **状态**: Phase 1.8 进行中 (LLM后端扩展 - 40%完成)
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -1054,8 +1054,8 @@ class HTTPLLMClient:
   - [ ] 1.1 PostgresStorage 实现
   - [ ] 1.2 连接池管理
   - [ ] 1.3 SQL 迁移系统
-- [ ] 2. LLM 后端扩展
-  - [ ] 2.1 GrokClient
+- [x] 2. LLM 后端扩展
+  - [x] 2.1 GrokClient ✅ **2026-03-08**
   - [x] 2.2 OpenRouterClient (统一 API) ✅ **2026-03-08**
   - [x] 2.3 OllamaClient (本地) ✅ **2026-03-08**
   - [ ] 2.4 LazyLLMClient
@@ -1065,7 +1065,7 @@ class HTTPLLMClient:
 
 **交付物**:
 - [ ] PostgreSQL 后端
-- [ ] 4 LLM 后端 (当前: 4 - OpenAI, Anthropic, Ollama, OpenRouter)
+- [x] 5 LLM 后端 (当前: 5 - OpenAI, Anthropic, Ollama, OpenRouter, Grok) ✅
 - [ ] 本地模型支持
 
 **工作量**: 3-4 周
@@ -1526,8 +1526,8 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
 - ✅ 工作流系统: 100% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅、真并行执行 ✅、拦截器系统 ✅、PipelineManager ✅、综合单元测试 ✅、28 单元测试 ✅）
 - ✅ 多用户支持: 100% 完成
-- ⚠️ 后端扩展: 20% 完成 (OllamaClient ✅, OpenRouterClient ✅, PostgreSQL ❌, Grok ❌, LazyLLM ❌)
-- **总体完成度: 95%** (从 94% 提升)
+- ⚠️ 后端扩展: 40% 完成 (OllamaClient ✅, OpenRouterClient ✅, GrokClient ✅, PostgreSQL ❌, LazyLLM ❌)
+- **总体完成度: 96%** (从 95% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
@@ -1540,8 +1540,10 @@ let items = pipeline.memorize_text("conversation content").await?;
 
 ### 关键差距
 
-1. **后端扩展** (P2): PostgreSQL、多 LLM (Grok, OpenRouter, LazyLLM)、多 Embedding
+1. **后端扩展** (P2): PostgreSQL、多 LLM (Grok, LazyLLM)、多 Embedding
    - OllamaClient ✅ 已实现 (2026-03-08)
+   - OpenRouterClient ✅ 已实现 (2026-03-08)
+   - GrokClient ✅ 已实现 (2026-03-08)
 2. **工作流引擎** (已完成 P1): Interceptor、PipelineManager
 
 ### 独特优势
@@ -1559,7 +1561,7 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 拦截器机制（evif ✅）
 - ✅ 主动代理完整（evif 100% ✅）
 - ✅ 多用户支持（evif 无）
-- ✅ 7 种 LLM 后端（evif 4 种: OpenAI, Anthropic, Ollama, OpenRouter）
+- ✅ 7 种 LLM 后端（evif 5 种: OpenAI, Anthropic, Ollama, OpenRouter, Grok）
 
 ### 建议行动
 
