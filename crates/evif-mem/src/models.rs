@@ -102,6 +102,9 @@ pub struct Resource {
     pub local_path: Option<String>,
     pub caption: Option<String>,
     pub embedding_id: Option<String>,
+    // User and tenant for multi-tenant support
+    pub user_id: Option<String>,
+    pub tenant_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -116,9 +119,18 @@ impl Resource {
             local_path: None,
             caption: None,
             embedding_id: None,
+            user_id: None,
+            tenant_id: None,
             created_at: now,
             updated_at: now,
         }
+    }
+
+    /// Create a resource with user context
+    pub fn with_user_context(mut self, user_id: String, tenant_id: Option<String>) -> Self {
+        self.user_id = Some(user_id);
+        self.tenant_id = tenant_id;
+        self
     }
 }
 
@@ -138,6 +150,9 @@ pub struct MemoryItem {
     pub last_reinforced_at: Option<DateTime<Utc>>,
     pub ref_id: Option<String>,
     pub category_id: Option<String>,
+    // User and tenant for multi-tenant support
+    pub user_id: Option<String>,
+    pub tenant_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -158,9 +173,18 @@ impl MemoryItem {
             last_reinforced_at: None,
             ref_id: None,
             category_id: None,
+            user_id: None,
+            tenant_id: None,
             created_at: now,
             updated_at: now,
         }
+    }
+
+    /// Create a memory item with user context
+    pub fn with_user_context(mut self, user_id: String, tenant_id: Option<String>) -> Self {
+        self.user_id = Some(user_id);
+        self.tenant_id = tenant_id;
+        self
     }
 
     /// Generate short reference ID for cross-referencing
@@ -180,6 +204,9 @@ pub struct MemoryCategory {
     pub embedding_id: Option<String>,
     pub summary: Option<String>,
     pub item_count: u32,
+    // User and tenant for multi-tenant support
+    pub user_id: Option<String>,
+    pub tenant_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -194,9 +221,18 @@ impl MemoryCategory {
             embedding_id: None,
             summary: None,
             item_count: 0,
+            user_id: None,
+            tenant_id: None,
             created_at: now,
             updated_at: now,
         }
+    }
+
+    /// Create a category with user context
+    pub fn with_user_context(mut self, user_id: String, tenant_id: Option<String>) -> Self {
+        self.user_id = Some(user_id);
+        self.tenant_id = tenant_id;
+        self
     }
 }
 
@@ -286,4 +322,80 @@ pub fn compute_content_hash(summary: &str, memory_type: &MemoryType) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     hex::encode(&hasher.finalize()[..8])
+}
+
+/// User scope - represents user context for multi-tenant support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserScope {
+    pub user_id: String,
+    pub tenant_id: Option<String>,
+    pub role: Option<String>,
+}
+
+impl UserScope {
+    /// Create a new user scope
+    pub fn new(user_id: String) -> Self {
+        Self {
+            user_id,
+            tenant_id: None,
+            role: None,
+        }
+    }
+
+    /// Create a new user scope with tenant
+    pub fn with_tenant(mut self, tenant_id: String) -> Self {
+        self.tenant_id = Some(tenant_id);
+        self
+    }
+
+    /// Create a new user scope with role
+    pub fn with_role(mut self, role: String) -> Self {
+        self.role = Some(role);
+        self
+    }
+
+    /// Check if user has access to a resource
+    pub fn can_access(&self, resource_user_id: &Option<String>, resource_tenant_id: &Option<String>) -> bool {
+        // If no user_id on resource, it's public
+        if resource_user_id.is_none() {
+            return true;
+        }
+
+        // Check user_id match
+        if let Some(ref ruid) = resource_user_id {
+            if ruid != &self.user_id {
+                return false;
+            }
+        }
+
+        // If resource has tenant, check tenant match
+        if let Some(ref rtid) = resource_tenant_id {
+            if let Some(ref ttid) = self.tenant_id {
+                if rtid != ttid {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+}
+
+/// User role enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UserRole {
+    Admin,
+    User,
+    Guest,
+}
+
+impl UserRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            UserRole::Admin => "admin",
+            UserRole::User => "user",
+            UserRole::Guest => "guest",
+        }
+    }
 }

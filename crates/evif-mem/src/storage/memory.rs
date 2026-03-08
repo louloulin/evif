@@ -16,6 +16,10 @@ pub struct MemoryStorage {
     items_by_type: Arc<DashMap<String, Vec<String>>>,
     items_by_category: Arc<DashMap<String, Vec<String>>>,
     items_by_hash: Arc<DashMap<String, String>>, // content_hash -> item_id
+    // User-scoped indexes
+    items_by_user: Arc<DashMap<String, Vec<String>>>, // user_id -> item_ids
+    resources_by_user: Arc<DashMap<String, Vec<String>>>, // user_id -> resource_ids
+    categories_by_user: Arc<DashMap<String, Vec<String>>>, // user_id -> category_ids
 }
 
 impl MemoryStorage {
@@ -28,11 +32,23 @@ impl MemoryStorage {
             items_by_type: Arc::new(DashMap::new()),
             items_by_category: Arc::new(DashMap::new()),
             items_by_hash: Arc::new(DashMap::new()),
+            // User-scoped indexes
+            items_by_user: Arc::new(DashMap::new()),
+            resources_by_user: Arc::new(DashMap::new()),
+            categories_by_user: Arc::new(DashMap::new()),
         }
     }
 
     // Resource operations
     pub fn put_resource(&self, resource: Resource) -> MemResult<()> {
+        // Index by user if user_id is set
+        if let Some(ref user_id) = resource.user_id {
+            self.resources_by_user
+                .entry(user_id.clone())
+                .or_insert_with(Vec::new)
+                .push(resource.id.clone());
+        }
+
         self.resources.insert(resource.id.clone(), resource);
         Ok(())
     }
@@ -75,6 +91,14 @@ impl MemoryStorage {
             self.items_by_hash.insert(hash.clone(), item.id.clone());
         }
 
+        // Index by user if user_id is set
+        if let Some(ref user_id) = item.user_id {
+            self.items_by_user
+                .entry(user_id.clone())
+                .or_insert_with(Vec::new)
+                .push(item.id.clone());
+        }
+
         self.items.insert(item.id.clone(), item);
         Ok(())
     }
@@ -115,6 +139,62 @@ impl MemoryStorage {
         self.items.iter().map(|i| i.clone()).collect()
     }
 
+    /// Get all items for a specific user (user-scoped)
+    pub fn get_items_by_user(&self, user_id: &str) -> Vec<MemoryItem> {
+        self.items_by_user
+            .get(user_id)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.items.get(id).map(|i| i.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get all resources for a specific user (user-scoped)
+    pub fn get_resources_by_user(&self, user_id: &str) -> Vec<Resource> {
+        self.resources_by_user
+            .get(user_id)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.resources.get(id).map(|r| r.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get all categories for a specific user (user-scoped)
+    pub fn get_categories_by_user(&self, user_id: &str) -> Vec<MemoryCategory> {
+        self.categories_by_user
+            .get(user_id)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.categories.get(id).map(|c| c.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Check if an item belongs to a user
+    pub fn item_belongs_to_user(&self, item_id: &str, user_id: &str) -> bool {
+        if let Some(item) = self.items.get(item_id) {
+            if let Some(ref item_user_id) = item.user_id {
+                return item_user_id == user_id;
+            }
+        }
+        false
+    }
+
+    /// Check if a resource belongs to a user
+    pub fn resource_belongs_to_user(&self, resource_id: &str, user_id: &str) -> bool {
+        if let Some(resource) = self.resources.get(resource_id) {
+            if let Some(ref resource_user_id) = resource.user_id {
+                return resource_user_id == user_id;
+            }
+        }
+        false
+    }
+
     pub fn item_count(&self) -> MemResult<usize> {
         Ok(self.items.len())
     }
@@ -133,6 +213,14 @@ impl MemoryStorage {
             .get(&category.id)
             .map(|v| v.len() as u32)
             .unwrap_or(0);
+
+        // Index by user if user_id is set
+        if let Some(ref user_id) = category.user_id {
+            self.categories_by_user
+                .entry(user_id.clone())
+                .or_insert_with(Vec::new)
+                .push(category.id.clone());
+        }
 
         self.categories.insert(category.id.clone(), category);
         Ok(())
@@ -342,5 +430,153 @@ mod tests {
         assert!(!ref_id.is_empty());
         assert_eq!(ref_id.len(), 6);
         assert_eq!(item.ref_id, Some(ref_id));
+    }
+
+    // Multi-user tests
+    #[test]
+    fn test_user_scoped_items() {
+        let storage = MemoryStorage::new();
+
+        // Create items for different users
+        let item1 = MemoryItem::new(
+            MemoryType::Profile,
+            "User1 profile".to_string(),
+            "Content".to_string(),
+        )
+        .with_user_context("user1".to_string(), None);
+
+        let item2 = MemoryItem::new(
+            MemoryType::Profile,
+            "User2 profile".to_string(),
+            "Content".to_string(),
+        )
+        .with_user_context("user2".to_string(), None);
+
+        let item3 = MemoryItem::new(
+            MemoryType::Event,
+            "User1 event".to_string(),
+            "Content".to_string(),
+        )
+        .with_user_context("user1".to_string(), None);
+
+        storage.put_item(item1.clone()).unwrap();
+        storage.put_item(item2.clone()).unwrap();
+        storage.put_item(item3.clone()).unwrap();
+
+        // Get items for user1
+        let user1_items = storage.get_items_by_user("user1");
+        assert_eq!(user1_items.len(), 2);
+
+        // Get items for user2
+        let user2_items = storage.get_items_by_user("user2");
+        assert_eq!(user2_items.len(), 1);
+    }
+
+    #[test]
+    fn test_user_scoped_resources() {
+        let storage = MemoryStorage::new();
+
+        let resource1 = Resource::new("http://example.com/1".to_string(), Modality::Document)
+            .with_user_context("user1".to_string(), None);
+
+        let resource2 = Resource::new("http://example.com/2".to_string(), Modality::Document)
+            .with_user_context("user2".to_string(), None);
+
+        storage.put_resource(resource1.clone()).unwrap();
+        storage.put_resource(resource2.clone()).unwrap();
+
+        let user1_resources = storage.get_resources_by_user("user1");
+        assert_eq!(user1_resources.len(), 1);
+
+        let user2_resources = storage.get_resources_by_user("user2");
+        assert_eq!(user2_resources.len(), 1);
+    }
+
+    #[test]
+    fn test_user_scoped_categories() {
+        let storage = MemoryStorage::new();
+
+        let cat1 = MemoryCategory::new("User1 category".to_string(), "Description".to_string())
+            .with_user_context("user1".to_string(), None);
+
+        let cat2 = MemoryCategory::new("User2 category".to_string(), "Description".to_string())
+            .with_user_context("user2".to_string(), None);
+
+        storage.put_category(cat1.clone()).unwrap();
+        storage.put_category(cat2.clone()).unwrap();
+
+        let user1_categories = storage.get_categories_by_user("user1");
+        assert_eq!(user1_categories.len(), 1);
+
+        let user2_categories = storage.get_categories_by_user("user2");
+        assert_eq!(user2_categories.len(), 1);
+    }
+
+    #[test]
+    fn test_item_belongs_to_user() {
+        let storage = MemoryStorage::new();
+
+        let item = MemoryItem::new(
+            MemoryType::Profile,
+            "Test".to_string(),
+            "Content".to_string(),
+        )
+        .with_user_context("user1".to_string(), None);
+
+        storage.put_item(item.clone()).unwrap();
+
+        assert!(storage.item_belongs_to_user(&item.id, "user1"));
+        assert!(!storage.item_belongs_to_user(&item.id, "user2"));
+    }
+
+    #[test]
+    fn test_tenant_isolation() {
+        let storage = MemoryStorage::new();
+
+        // Create items with same user_id but different tenant_id
+        let item1 = MemoryItem::new(
+            MemoryType::Profile,
+            "Tenant1 profile".to_string(),
+            "Content".to_string(),
+        )
+        .with_user_context("user1".to_string(), Some("tenant1".to_string()));
+
+        let item2 = MemoryItem::new(
+            MemoryType::Profile,
+            "Tenant2 profile".to_string(),
+            "Content".to_string(),
+        )
+        .with_user_context("user1".to_string(), Some("tenant2".to_string()));
+
+        storage.put_item(item1.clone()).unwrap();
+        storage.put_item(item2.clone()).unwrap();
+
+        // Both should be accessible by user1
+        let user1_items = storage.get_items_by_user("user1");
+        assert_eq!(user1_items.len(), 2);
+
+        // Check tenant isolation in item
+        assert_eq!(item1.tenant_id, Some("tenant1".to_string()));
+        assert_eq!(item2.tenant_id, Some("tenant2".to_string()));
+    }
+
+    #[test]
+    fn test_user_scope_can_access() {
+        use crate::models::UserScope;
+
+        // Test public resource (no user_id)
+        let scope = UserScope::new("user1".to_string());
+        assert!(scope.can_access(&None, &None)); // Public resource
+
+        // Test user's own resource
+        assert!(scope.can_access(&Some("user1".to_string()), &None));
+
+        // Test another user's resource
+        assert!(!scope.can_access(&Some("user2".to_string()), &None));
+
+        // Test tenant isolation
+        let scope_with_tenant = UserScope::new("user1".to_string()).with_tenant("tenant1".to_string());
+        assert!(scope_with_tenant.can_access(&Some("user1".to_string()), &Some("tenant1".to_string())));
+        assert!(!scope_with_tenant.can_access(&Some("user1".to_string()), &Some("tenant2".to_string())));
     }
 }

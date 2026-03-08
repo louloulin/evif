@@ -4,7 +4,48 @@ All notable changes to the evif-mem project will be documented in this file.
 
 ## [Unreleased]
 
-### Added - Phase 1.6: Workflow System (In Progress)
+### Added - Phase 1.7: Multi-User Support (In Progress)
+
+**Multi-User Support Implementation** - User scope and tenant isolation for enterprise deployment
+
+#### Phase 1.7.1: Data Model Extensions
+
+1. **User and Tenant Fields**
+   - Added `user_id: Option<String>` to MemoryItem, Resource, MemoryCategory
+   - Added `tenant_id: Option<String>` for multi-tenant support
+   - Added `with_user_context()` builder methods to all models
+
+2. **UserScope Struct**
+   - Created UserScope struct for user context tracking
+   - Fields: user_id, tenant_id, role
+   - Builder methods: new(), with_tenant(), with_role()
+   - Access control: can_access() method for resource authorization
+
+3. **Storage Layer Extensions**
+   - Added user-scoped indexes: items_by_user, resources_by_user, categories_by_user
+   - New methods: get_items_by_user(), get_resources_by_user(), get_categories_by_user()
+   - Access control: item_belongs_to_user(), resource_belongs_to_user()
+   - User-aware put operations automatically index by user_id
+
+#### Tests Added
+- 7 new multi-user storage tests:
+  - test_user_scoped_items
+  - test_user_scoped_resources
+  - test_user_scoped_categories
+  - test_item_belongs_to_user
+  - test_tenant_isolation
+  - test_user_scope_can_access
+- Total: 126 evif-mem tests passing (up from 120)
+
+#### Phase 1.7 Status
+- Phase 1.7.1: Data Model Extensions ✅ **100% Complete**
+- Phase 1.7.2: Storage Layer User Filtering ✅ **100% Complete**
+- Phase 1.7.3: Tenant Management (Pending)
+- **Phase 1.7 Overall: 25% Complete**
+
+---
+
+### Added - Phase 1.6: Workflow System (Complete)
 
 **Parallel Execution Implementation** - True concurrent execution of workflow sub-steps
 

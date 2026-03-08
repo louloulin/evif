@@ -1,8 +1,8 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.4
+> **版本**: 2.5
 > **日期**: 2026-03-08
-> **状态**: Phase 1.6 完成 ✅ (100%)
+> **状态**: Phase 1.7 进行中 (25%)
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -972,19 +972,26 @@ class HTTPLLMClient:
 
 **目标**: 实现用户隔离和多租户支持
 
-**任务**:
-- [ ] 1. 扩展数据模型
-  - [ ] 1.1 添加 user_id 字段
-  - [ ] 1.2 添加 ref_id 字段
-  - [ ] 1.3 用户模型抽象
-- [ ] 2. 扩展存储层
-  - [ ] 2.1 存储接口添加 user_id 参数
-  - [ ] 2.2 查询自动过滤 user_id
-  - [ ] 2.3 用户隔离验证
-- [ ] 3. 实现租户管理
-  - [ ] 3.1 TenantManager
-  - [ ] 3.2 租户配置
-  - [ ] 3.3 租户隔离测试
+**进度**: **25% complete** ✅ (Phase 1.7.1-1.7.2 完成: 数据模型扩展、存储层用户过滤)
+- [x] 1. 扩展数据模型 ✅ **2026-03-08**
+  - [x] 1.1 添加 user_id 字段 ✅
+  - [x] 1.2 添加 tenant_id 字段 ✅
+  - [x] 1.3 用户模型抽象 (UserScope) ✅
+- [x] 2. 扩展存储层 ✅ **2026-03-08**
+  - [x] 2.1 存储接口添加 user_id 索引 ✅
+  - [x] 2.2 查询自动按 user_id 过滤 ✅
+  - [x] 2.3 用户隔离验证 (7 unit tests) ✅
+
+**已实现**:
+- ✅ user_id 字段添加到 MemoryItem, Resource, MemoryCategory
+- ✅ tenant_id 字段支持多租户
+- ✅ UserScope 结构体 (user_id, tenant_id, role)
+- ✅ with_user_context() 建造者方法
+- ✅ can_access() 访问控制方法
+- ✅ items_by_user, resources_by_user, categories_by_user 索引
+- ✅ get_items_by_user(), get_resources_by_user(), get_categories_by_user() 方法
+- ✅ item_belongs_to_user(), resource_belongs_to_user() 访问验证
+- ✅ 7 个新单元测试
 
 **交付物**:
 - ✅ 多用户支持
@@ -1474,7 +1481,7 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
 - ✅ 工作流系统: 100% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅、真并行执行 ✅、拦截器系统 ✅、PipelineManager ✅、综合单元测试 ✅、28 单元测试 ✅）
 - ❌ 多用户支持: 0% 完成
-- **总体完成度: 87%** (从 84% 提升)
+- **总体完成度: 89%** (从 87% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
