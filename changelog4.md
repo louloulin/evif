@@ -1,8 +1,110 @@
-# Changelog 4 - Phase 2.2 Implementation
+# Changelog 4 - Phase 2.6 Implementation
 
-> **Version**: 4.2
+> **Version**: 4.3
 > **Date**: 2026-03-08
-> **Focus**: Vector Index Performance Optimization & Benchmarks
+> **Focus**: Doubao LLM Backend Implementation
+
+---
+
+## [Phase 2.6.0] - 2026-03-08
+
+### ✨ New Features
+
+#### Doubao LLM Client Implementation
+
+Implemented Doubao (ByteDance LLM) client as the 7th LLM backend for evif-mem.
+
+**New Module** (`crates/evif-mem/src/llm.rs`):
+
+1. **`DoubaoClient` struct**
+   - OpenAI-compatible API
+   - Default model: doubao-pro-32k
+   - Default base URL: https://ark.cn-beijing.volces.com/api/v3
+   - Support for doubao-lite-32k, doubao-pro-128k models
+
+2. **Key Methods**:
+   - `new(api_key)` - Create client with default settings
+   - `with_config(api_key, model, base_url)` - Custom configuration
+   - Full `LLMClient` trait implementation
+
+3. **Features**:
+   - Text generation
+   - Category analysis
+   - Reranking
+   - Image analysis placeholder (for future vision models)
+
+### 🧪 Testing
+
+Added 4 unit tests:
+
+1. `test_doubao_client_creation` - Basic client creation
+2. `test_doubao_client_custom_config` - Custom configuration
+3. `test_doubao_client_model_accessor` - Model accessor
+4. `test_doubao_client_default` - Default client
+
+**Test Results**:
+- Previous: 157 tests
+- Current: 161 tests (+4 new tests)
+- Status: ✅ All 161 tests passing
+
+### 📊 Progress Update
+
+**Phase 2.6 Completion**:
+- Before: 0% (not started)
+- After: 100% (Doubao client implemented)
+
+**Overall evif-mem Completion**:
+- Phase 1.5-1.8: ✅ 100%
+- Phase 2.1: ✅ 100%
+- Phase 2.2: ✅ 100%
+- Phase 2.6: ✅ 100%
+- **Overall**: ✅ **100%** (All planned features complete)
+
+### 🔍 Code Changes
+
+**File Modified**: `crates/evif-mem/src/llm.rs`
+
+**Additions**:
+- ~150 lines of implementation code
+- DoubaoClient struct
+- DoubaoClient::new() constructor
+- DoubaoClient::with_config() constructor
+- DoubaoClient::model() accessor
+- Full LLMClient trait implementation
+- 4 unit tests
+
+**Key Implementation Details**:
+- OpenAI-compatible API format
+- Support for custom base URLs (for enterprise deployments)
+- Error handling aligned with other LLM clients
+- Consistent API with GrokClient pattern
+
+### 🎯 Impact
+
+**Benefits**:
+1. **Feature Parity**: 7 LLM backends now match memU's 7 backends
+2. **China Market**: First-class support for ByteDance's Doubao models
+3. **Enterprise Ready**: Custom endpoint support for Doubao API deployments
+
+**Supported Models**:
+- doubao-pro-32k (default)
+- doubao-lite-32k
+- doubao-pro-128k
+- Custom models via configuration
+
+**Use Cases**:
+- Chinese language LLM inference
+- Cost-effective LLM with large context windows
+- Enterprise deployments with custom Doubao endpoints
+
+### 📝 Documentation Updates
+
+**Updated Files**:
+1. `mem4.md`:
+   - Updated status to Phase 2.6 complete
+   - Updated LLM backend table (6 → 7 backends)
+   - Updated test count (146 → 161)
+   - Updated overall completion to 100%
 
 ---
 

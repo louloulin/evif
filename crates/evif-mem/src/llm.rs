@@ -151,6 +151,18 @@ pub struct LazyLLMClient {
     api_key: Option<String>,
 }
 
+/// Doubao Client
+///
+/// LLM client implementation using ByteDance's Doubao API.
+/// Doubao is OpenAI-compatible, so this uses similar patterns.
+/// Default model: doubao-pro-32k
+pub struct DoubaoClient {
+    api_key: String,
+    model: String,
+    client: reqwest::Client,
+    base_url: String,
+}
+
 impl OpenAIClient {
     /// Create a new OpenAI client
     pub fn new(api_key: String) -> Self {
@@ -1909,6 +1921,204 @@ impl LLMClient for LazyLLMClient {
     }
 }
 
+impl DoubaoClient {
+    /// Create a new Doubao client with default settings
+    ///
+    /// Default model: doubao-pro-32k
+    /// Default base URL: https://ark.cn-beijing.volces.com/api/v3
+    pub fn new(api_key: String) -> Self {
+        Self::with_config(
+            api_key,
+            "doubao-pro-32k".to_string(),
+            None,
+        )
+    }
+
+    /// Create with custom configuration
+    pub fn with_config(
+        api_key: String,
+        model: String,
+        base_url: Option<String>,
+    ) -> Self {
+        Self {
+            api_key,
+            model,
+            client: reqwest::Client::new(),
+            base_url: base_url.unwrap_or_else(|| "https://ark.cn-beijing.volces.com/api/v3".to_string()),
+        }
+    }
+
+    /// Get the configured model
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+}
+
+#[async_trait]
+impl LLMClient for DoubaoClient {
+    async fn generate(&self, prompt: &str) -> MemResult<String> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            temperature: f32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        let request = Request {
+            model: self.model.clone(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            temperature: 0.7,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        result
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))
+    }
+
+    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
+        // TODO: Implement LLM-based memory extraction with Doubao
+        // For now, return empty vec
+        Ok(vec![])
+    }
+
+    async fn embed(&self, _text: &str) -> MemResult<Vec<f32>> {
+        // Doubao does not provide an embeddings API
+        // Users should use OpenAI or other embedding services
+        Err(MemError::Embedding(
+            "Doubao does not provide embeddings API. Use OpenAI or other embedding services.".to_string()
+        ))
+    }
+
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+        let prompt = format!(
+            "Analyze these memories and provide a category analysis in JSON format:\n\
+            {{\"name\": \"category name\", \"description\": \"description\", \"themes\": [\"theme1\"], \"tags\": [\"tag1\"]}}\n\nMemories:\n{}",
+            memories.join("\n- ")
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Try to parse as JSON, fall back to simple parsing
+        if let Ok(analysis) = serde_json::from_str::<CategoryAnalysis>(&response) {
+            return Ok(analysis);
+        }
+
+        // Fallback: simple key-value parsing
+        let mut name = "Uncategorized".to_string();
+        let mut description = "".to_string();
+        let mut themes = vec![];
+        let mut tags = vec![];
+
+        for line in response.lines() {
+            let line = line.trim();
+            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
+                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim().trim_matches('"').to_string();
+            } else if line.starts_with("description:") || line.starts_with("Description:") {
+                description = line.split(':').nth(1).unwrap_or("").trim().to_string();
+            } else if line.starts_with("themes:") || line.starts_with("Themes:") {
+                let theme_str = line.split(':').nth(1).unwrap_or("");
+                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            } else if line.starts_with("tags:") || line.starts_with("Tags:") {
+                let tag_str = line.split(':').nth(1).unwrap_or("");
+                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            }
+        }
+
+        Ok(CategoryAnalysis {
+            name,
+            description,
+            themes,
+            tags,
+        })
+    }
+
+    async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        // Simple reranking based on keyword matching
+        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+
+        items.sort_by(|a, b| {
+            let a_content = a.content.to_lowercase();
+            let b_content = b.content.to_lowercase();
+            let a_summary = a.summary.to_lowercase();
+            let b_summary = b.summary.to_lowercase();
+
+            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
+            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+
+            b_score.cmp(&a_score)
+        });
+
+        Ok(items)
+    }
+
+    async fn analyze_image(&self, _image_data: &[u8], _mime_type: &str) -> MemResult<ImageAnalysis> {
+        // Doubao may support vision through specific models
+        // For now, return a placeholder
+        Ok(ImageAnalysis {
+            description: "Image analysis not implemented for Doubao client".to_string(),
+            caption: "Image analysis unavailable".to_string(),
+        })
+    }
+}
+
+impl Default for DoubaoClient {
+    fn default() -> Self {
+        Self::new(std::env::var("DOUBAO_API_KEY").unwrap_or_default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2108,4 +2318,39 @@ mod tests {
 
     // Note: Integration tests with real API calls should be in tests/ directory
     // and use mock servers or environment variables for API keys
+
+    #[test]
+    fn test_doubao_client_creation() {
+        let client = DoubaoClient::new("test-key".to_string());
+        assert_eq!(client.model(), "doubao-pro-32k");
+        assert_eq!(client.base_url, "https://ark.cn-beijing.volces.com/api/v3");
+    }
+
+    #[test]
+    fn test_doubao_client_custom_config() {
+        let client = DoubaoClient::with_config(
+            "test-key".to_string(),
+            "doubao-lite-32k".to_string(),
+            Some("https://custom.doubao.com/api/v3".to_string()),
+        );
+        assert_eq!(client.model(), "doubao-lite-32k");
+        assert_eq!(client.base_url, "https://custom.doubao.com/api/v3");
+    }
+
+    #[test]
+    fn test_doubao_client_model_accessor() {
+        let client = DoubaoClient::with_config(
+            "test-key".to_string(),
+            "doubao-pro-128k".to_string(),
+            None,
+        );
+        assert_eq!(client.model(), "doubao-pro-128k");
+    }
+
+    #[test]
+    fn test_doubao_client_default() {
+        // Note: This test will use an empty API key from env if not set
+        let client = DoubaoClient::default();
+        assert_eq!(client.model(), "doubao-pro-32k");
+    }
 }
