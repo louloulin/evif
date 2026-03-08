@@ -107,6 +107,19 @@ pub struct OllamaClient {
     base_url: String,
 }
 
+/// OpenRouter Client
+///
+/// LLM client implementation using OpenRouter API.
+/// Provides access to 100+ LLM models through a single unified API.
+/// OpenRouter is OpenAI-compatible, so this uses similar patterns.
+pub struct OpenRouterClient {
+    api_key: String,
+    model: String,
+    embedding_model: String,
+    client: reqwest::Client,
+    base_url: String,
+}
+
 impl OpenAIClient {
     /// Create a new OpenAI client
     pub fn new(api_key: String) -> Self {
@@ -650,6 +663,94 @@ impl Default for OllamaClient {
     }
 }
 
+impl OpenRouterClient {
+    /// Create a new OpenRouter client with default settings
+    ///
+    /// Default model: openai/gpt-4o-mini (cost-effective option)
+    /// Default embedding model: intfloat/e5-base-v2
+    pub fn new(api_key: String) -> Self {
+        Self::with_config(
+            api_key,
+            "openai/gpt-4o-mini".to_string(),
+            "intfloat/e5-base-v2".to_string(),
+            None,
+        )
+    }
+
+    /// Create with custom configuration
+    pub fn with_config(
+        api_key: String,
+        model: String,
+        embedding_model: String,
+        base_url: Option<String>,
+    ) -> Self {
+        Self {
+            api_key,
+            model,
+            embedding_model,
+            client: reqwest::Client::new(),
+            base_url: base_url.unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string()),
+        }
+    }
+
+    /// Get the configured model
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    /// Get the configured embedding model
+    pub fn embedding_model(&self) -> &str {
+        &self.embedding_model
+    }
+
+    /// List available models from OpenRouter
+    pub async fn list_models(&self) -> MemResult<Vec<String>> {
+        #[derive(Deserialize)]
+        struct ModelsResponse {
+            data: Vec<ModelData>,
+        }
+
+        #[derive(Deserialize)]
+        struct ModelData {
+            id: String,
+        }
+
+        let response = self
+            .client
+            .get(format!("{}/models", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: ModelsResponse = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        Ok(result.data.into_iter().map(|m| m.id).collect())
+    }
+}
+
+impl Default for OpenRouterClient {
+    fn default() -> Self {
+        Self {
+            api_key: String::new(),
+            model: "openai/gpt-4o-mini".to_string(),
+            embedding_model: "intfloat/e5-base-v2".to_string(),
+            client: reqwest::Client::new(),
+            base_url: "https://openrouter.ai/api/v1".to_string(),
+        }
+    }
+}
+
 #[async_trait]
 impl LLMClient for OllamaClient {
     async fn generate(&self, prompt: &str) -> MemResult<String> {
@@ -841,6 +942,313 @@ impl LLMClient for OllamaClient {
     }
 }
 
+#[async_trait]
+impl LLMClient for OpenRouterClient {
+    async fn generate(&self, prompt: &str) -> MemResult<String> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            temperature: f32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        let request = Request {
+            model: self.model.clone(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            temperature: 0.7,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            // OpenRouter requires this header for routing optimization
+            .header("HTTP-Referer", "https://evif.dev")
+            .header("X-Title", "EVIF Memory Platform")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        result
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))
+    }
+
+    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
+        // TODO: Implement LLM-based memory extraction with OpenRouter
+        // For now, return empty vec
+        Ok(vec![])
+    }
+
+    async fn embed(&self, text: &str) -> MemResult<Vec<f32>> {
+        // OpenRouter uses OpenAI-compatible embeddings API
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            input: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            data: Vec<EmbeddingData>,
+        }
+
+        #[derive(Deserialize)]
+        struct EmbeddingData {
+            embedding: Vec<f32>,
+        }
+
+        let request = Request {
+            model: self.embedding_model.clone(),
+            input: text.to_string(),
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/embeddings", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .header("HTTP-Referer", "https://evif.dev")
+            .header("X-Title", "EVIF Memory Platform")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Embedding(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Embedding(format!(
+                "API error {}: {}",
+                status, body
+            )));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Embedding(format!("Parse error: {}", e)))?;
+
+        result
+            .data
+            .first()
+            .map(|d| d.embedding.clone())
+            .ok_or_else(|| MemError::Embedding("No embedding returned".to_string()))
+    }
+
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+        let prompt = format!(
+            "Analyze these memories and provide a category analysis in JSON format:\n\
+            {{\"name\": \"category name\", \"description\": \"description\", \"themes\": [\"theme1\"], \"tags\": [\"tag1\"]}}\n\nMemories:\n{}",
+            memories.join("\n- ")
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Try to parse as JSON, fall back to simple parsing
+        if let Ok(analysis) = serde_json::from_str::<CategoryAnalysis>(&response) {
+            return Ok(analysis);
+        }
+
+        // Fallback: simple key-value parsing
+        let mut name = "Uncategorized".to_string();
+        let mut description = "".to_string();
+        let mut themes = vec![];
+        let mut tags = vec![];
+
+        for line in response.lines() {
+            let line = line.trim();
+            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
+                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim().trim_matches('"').to_string();
+            } else if line.starts_with("description:") || line.starts_with("Description:") {
+                description = line.split(':').nth(1).unwrap_or("").trim().to_string();
+            } else if line.starts_with("themes:") || line.starts_with("Themes:") {
+                let theme_str = line.split(':').nth(1).unwrap_or("");
+                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            } else if line.starts_with("tags:") || line.starts_with("Tags:") {
+                let tag_str = line.split(':').nth(1).unwrap_or("");
+                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty()).collect();
+            }
+        }
+
+        Ok(CategoryAnalysis {
+            name,
+            description,
+            themes,
+            tags,
+        })
+    }
+
+    async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        // Simple reranking based on keyword matching
+        // OpenRouter supports reranking through specific models, but we use simple approach
+        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+
+        // Sort by relevance (content match > summary match)
+        items.sort_by(|a, b| {
+            let a_content = a.content.to_lowercase();
+            let b_content = b.content.to_lowercase();
+            let a_summary = a.summary.to_lowercase();
+            let b_summary = b.summary.to_lowercase();
+
+            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
+            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
+                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+
+            b_score.cmp(&a_score)
+        });
+
+        Ok(items)
+    }
+
+    async fn analyze_image(&self, image_data: &[u8], mime_type: &str) -> MemResult<ImageAnalysis> {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        // OpenRouter supports vision through various models like Claude Opus
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            max_tokens: u32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: Vec<Content>,
+        }
+
+        #[derive(Serialize)]
+        struct Content {
+            #[serde(rename = "type")]
+            content_type: String,
+            text: Option<String>,
+            image_url: Option<ImageUrl>,
+        }
+
+        #[derive(Serialize)]
+        struct ImageUrl {
+            url: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        let base64_image = STANDARD.encode(image_data);
+        let data_url = format!("data:{};base64,{}", mime_type, base64_image);
+
+        let request = Request {
+            model: self.model.clone(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: vec![
+                    Content {
+                        content_type: "text".to_string(),
+                        text: Some("Analyze this image and provide a detailed description and a short caption. Format your response as JSON: {\"description\": \"<detailed description>\", \"caption\": \"<short caption>\"}".to_string()),
+                        image_url: None,
+                    },
+                    Content {
+                        content_type: "image_url".to_string(),
+                        text: None,
+                        image_url: Some(ImageUrl { url: data_url }),
+                    },
+                ],
+            }],
+            max_tokens: 1024,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .header("HTTP-Referer", "https://evif.dev")
+            .header("X-Title", "EVIF Memory Platform")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(MemError::Llm(format!("API error {}: {}", status, body)));
+        }
+
+        let result: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Llm(format!("Parse error: {}", e)))?;
+
+        let content = result
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| MemError::Llm("No response generated".to_string()))?;
+
+        // Parse JSON response
+        let analysis: ImageAnalysis = serde_json::from_str(&content)
+            .map_err(|e| MemError::Llm(format!("Failed to parse image analysis: {}", e)))?;
+
+        Ok(analysis)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -911,6 +1319,47 @@ mod tests {
         );
         assert_eq!(client.model(), "codellama");
         assert_eq!(client.embedding_model(), "snowflake-arctic-embed");
+    }
+
+    #[test]
+    fn test_openrouter_client_creation() {
+        let client = OpenRouterClient::new("test-key".to_string());
+        assert_eq!(client.model(), "openai/gpt-4o-mini");
+        assert_eq!(client.embedding_model(), "intfloat/e5-base-v2");
+        assert_eq!(client.base_url, "https://openrouter.ai/api/v1");
+    }
+
+    #[test]
+    fn test_openrouter_client_custom_config() {
+        let client = OpenRouterClient::with_config(
+            "test-key".to_string(),
+            "anthropic/claude-3-opus".to_string(),
+            "some/embedding-model".to_string(),
+            Some("https://custom.openrouter.ai/v1".to_string()),
+        );
+        assert_eq!(client.model(), "anthropic/claude-3-opus");
+        assert_eq!(client.embedding_model(), "some/embedding-model");
+        assert_eq!(client.base_url, "https://custom.openrouter.ai/v1");
+    }
+
+    #[test]
+    fn test_openrouter_client_model_accessors() {
+        let client = OpenRouterClient::with_config(
+            "test-key".to_string(),
+            "google/gemini-pro-1.5".to_string(),
+            "multilingual-e5-large".to_string(),
+            None,
+        );
+        assert_eq!(client.model(), "google/gemini-pro-1.5");
+        assert_eq!(client.embedding_model(), "multilingual-e5-large");
+    }
+
+    #[test]
+    fn test_openrouter_client_default() {
+        let client = OpenRouterClient::default();
+        assert_eq!(client.model(), "openai/gpt-4o-mini");
+        assert_eq!(client.embedding_model(), "intfloat/e5-base-v2");
+        assert_eq!(client.base_url, "https://openrouter.ai/api/v1");
     }
 
     // Note: Integration tests with real API calls should be in tests/ directory

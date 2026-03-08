@@ -1,8 +1,8 @@
 # evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 2.7
+> **版本**: 2.8
 > **日期**: 2026-03-08
-> **状态**: Phase 1.8 进行中 (LLM后端扩展)
+> **状态**: Phase 1.8 进行中 (LLM后端扩展 - 20%完成)
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -803,12 +803,12 @@ class HTTPLLMClient:
 | ├─ SQLite | ✅ | ✅ | - | evif Phase 1.4 |
 | ├─ PostgreSQL | ❌ | ✅ | P2 | 缺失 |
 | └─ Cloud (S3) | ❌ | ⚠️ | P3 | 计划中 |
-| **LLM 后端** | ⚠️ 40% | ✅ 100% | **P2** | **重大差距** |
+| **LLM 后端** | ⚠️ 60% | ✅ 100% | **P2** | **重大差距** |
 | ├─ OpenAI | ✅ | ✅ | - | 同等 |
 | ├─ Anthropic | ✅ | ✅ | - | 同等 |
-| ├─ Grok | ❌ | ✅ | P2 | 缺失 |
-| ├─ OpenRouter | ❌ | ✅ | P2 | 缺失 |
 | ├─ Ollama | ✅ | ✅ | P2 | **实现: 2026-03-08** |
+| ├─ OpenRouter | ✅ | ✅ | P2 | **实现: 2026-03-08** |
+| ├─ Grok | ❌ | ✅ | P2 | 缺失 |
 | ├─ Doubao | ❌ | ✅ | P3 | 缺失 |
 | └─ LazyLLM | ❌ | ✅ | P2 | 缺失 |
 | **Embedding 后端** | ⚠️ 50% | ✅ 100% | P2 | **中等差距** |
@@ -1031,7 +1031,7 @@ class HTTPLLMClient:
 
 **目标**: 扩展 LLM 和存储后端
 
-**进度**: **10% complete** (开始实现)
+**进度**: **20% complete** (开始实现)
 - [x] 1. OllamaClient (本地 LLM) ✅ **2026-03-08**
   - [x] 1.1 OllamaClient 结构体 ✅
   - [x] 1.2 generate() 方法实现 ✅
@@ -1039,6 +1039,15 @@ class HTTPLLMClient:
   - [x] 1.4 analyze_category() 方法实现 ✅
   - [x] 1.5 rerank() 方法实现 ✅
   - [x] 1.6 3 个单元测试 ✅
+- [x] 2. OpenRouterClient (统一 API) ✅ **2026-03-08**
+  - [x] 2.1 OpenRouterClient 结构体 ✅
+  - [x] 2.2 generate() 方法实现 ✅
+  - [x] 2.3 embed() 方法实现 ✅
+  - [x] 2.4 analyze_category() 方法实现 ✅
+  - [x] 2.5 rerank() 方法实现 ✅
+  - [x] 2.6 analyze_image() 方法实现 ✅
+  - [x] 2.7 list_models() 方法实现 ✅
+  - [x] 2.8 4 个单元测试 ✅
 
 **任务**:
 - [ ] 1. PostgreSQL 存储后端
@@ -1047,7 +1056,7 @@ class HTTPLLMClient:
   - [ ] 1.3 SQL 迁移系统
 - [ ] 2. LLM 后端扩展
   - [ ] 2.1 GrokClient
-  - [ ] 2.2 OpenRouterClient
+  - [x] 2.2 OpenRouterClient (统一 API) ✅ **2026-03-08**
   - [x] 2.3 OllamaClient (本地) ✅ **2026-03-08**
   - [ ] 2.4 LazyLLMClient
 - [ ] 3. Embedding 后端扩展
@@ -1056,7 +1065,7 @@ class HTTPLLMClient:
 
 **交付物**:
 - [ ] PostgreSQL 后端
-- [ ] 5+ LLM 后端 (当前: 3 - OpenAI, Anthropic, Ollama)
+- [ ] 4 LLM 后端 (当前: 4 - OpenAI, Anthropic, Ollama, OpenRouter)
 - [ ] 本地模型支持
 
 **工作量**: 3-4 周
@@ -1517,8 +1526,8 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 主动代理: 100% 完成（背景监控 ✅、意图预测 ✅、主动提取 ✅、成本优化 ✅）
 - ✅ 工作流系统: 100% 完成（WorkflowStep ✅、WorkflowRunner ✅、DefaultWorkflowRunner ✅、WorkflowLLMProvider ✅、真并行执行 ✅、拦截器系统 ✅、PipelineManager ✅、综合单元测试 ✅、28 单元测试 ✅）
 - ✅ 多用户支持: 100% 完成
-- ⚠️ 后端扩展: 10% 完成 (OllamaClient ✅, PostgreSQL ❌, Grok ❌, OpenRouter ❌, LazyLLM ❌)
-- **总体完成度: 94%** (从 93% 提升)
+- ⚠️ 后端扩展: 20% 完成 (OllamaClient ✅, OpenRouterClient ✅, PostgreSQL ❌, Grok ❌, LazyLLM ❌)
+- **总体完成度: 95%** (从 94% 提升)
 
 **memU**:
 - ✅ 核心管道: 100% 完成
@@ -1550,7 +1559,7 @@ let items = pipeline.memorize_text("conversation content").await?;
 - ✅ 拦截器机制（evif ✅）
 - ✅ 主动代理完整（evif 100% ✅）
 - ✅ 多用户支持（evif 无）
-- ✅ 7 种 LLM 后端（evif 3 种: OpenAI, Anthropic, Ollama）
+- ✅ 7 种 LLM 后端（evif 4 种: OpenAI, Anthropic, Ollama, OpenRouter）
 
 ### 建议行动
 

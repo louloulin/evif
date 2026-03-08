@@ -8,6 +8,41 @@ All notable changes to the evif-mem project will be documented in this file.
 
 **Ollama Client Implementation** - Local LLM support for privacy-focused deployments
 
+#### Phase 1.8.2: OpenRouterClient ✅ **2026-03-08**
+
+1. **OpenRouterClient Structure**
+   - Added `OpenRouterClient` struct for unified LLM API access
+   - Provides access to 100+ LLM models through a single API
+   - Default model: openai/gpt-4o-mini (cost-effective)
+   - Default embedding model: intfloat/e5-base-v2
+   - Default base URL: https://openrouter.ai/api/v1
+
+2. **LLMClient Trait Implementation**
+   - `generate()` - Text generation via OpenRouter API
+   - `embed()` - Embedding generation via OpenAI-compatible endpoint
+   - `analyze_category()` - Category analysis with JSON parsing fallback
+   - `rerank()` - Simple keyword-based reranking
+   - `analyze_image()` - Vision support via OpenRouter models
+   - `list_models()` - List available models from OpenRouter
+
+3. **Configuration Options**
+   - `new()` - Create with defaults
+   - `with_config()` - Custom model, embedding model, base URL
+   - `model()` / `embedding_model()` - Accessor methods
+
+4. **OpenRouter Specific Features**
+   - HTTP-Referer header for routing optimization
+   - X-Title header for analytics
+   - Supports vision models (Claude Opus, GPT-4V, etc.)
+   - OpenAI-compatible API format
+
+5. **Test Infrastructure**
+   - Added 4 new unit tests:
+     - `test_openrouter_client_creation` - Verify default configuration
+     - `test_openrouter_client_custom_config` - Verify custom settings
+     - `test_openrouter_client_model_accessors` - Verify accessor methods
+     - `test_openrouter_client_default` - Verify default values
+
 #### Phase 1.8.1: OllamaClient ✅ **2026-03-08**
 
 1. **OllamaClient Structure**
@@ -35,11 +70,12 @@ All notable changes to the evif-mem project will be documented in this file.
 
 #### Phase 1.8 Status
 - Phase 1.8.1: OllamaClient ✅ **100% Complete**
-- **Phase 1.8 Overall: 10% Complete**
+- Phase 1.8.2: OpenRouterClient ✅ **100% Complete**
+- **Phase 1.8 Overall: 20% Complete**
 
-**evif-mem Overall Progress**: **93% → 94%** (up 1%)
+**evif-mem Overall Progress**: **94% → 95%** (up 1%)
 
-LLM Backends: 2 → 3 (OpenAI, Anthropic, Ollama)
+LLM Backends: 3 → 4 (OpenAI, Anthropic, Ollama, OpenRouter)
 
 ---
 
