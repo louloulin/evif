@@ -42,6 +42,15 @@ pub enum MemError {
 
     #[error("Workflow error: {0}")]
     WorkflowError(String),
+
+    #[error("Security error: {0}")]
+    Security(String),
+
+    #[error("Authentication error: {0}")]
+    Authentication(String),
+
+    #[error("Authorization error: {0}")]
+    Authorization(String),
 }
 
 pub type MemResult<T> = Result<T, MemError>;

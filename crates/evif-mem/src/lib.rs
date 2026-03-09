@@ -28,6 +28,7 @@ pub mod metrics;
 pub mod models;
 pub mod pipeline;
 pub mod proactive;
+pub mod security;
 pub mod storage;
 pub mod vector;
 pub mod workflow;
@@ -53,3 +54,11 @@ pub use llamaindex::{
     EvifKVStore, QueryResult,
 };
 pub use metrics::{Metrics, MetricsConfig, MetricsRegistry, MetricsError};
+
+#[cfg(feature = "security")]
+pub use security::{
+    Encryption, EncryptionConfig,
+    Rbac, RbacConfig, Role, Permission, Resource, Action,
+    AuditLogger, AuditConfig, AuditEvent, AuditLevel,
+    mask_sensitive_data, MaskConfig, SensitiveField,
+};
