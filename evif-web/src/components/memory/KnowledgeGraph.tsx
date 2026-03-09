@@ -1,11 +1,24 @@
 /**
  * KnowledgeGraph 组件
  * 知识图谱可视化 - 展示记忆节点和关系
+ * 支持图查询 UI: 因果链、时间线、时序 BFS、时序路径
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { queryGraph, type GraphNode, type TimelineEvent } from '@/services/memory-api'
-import { Network, GitBranch, Clock, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { queryGraph, type GraphNode, type TimelineEvent, type GraphQueryResponse } from '@/services/memory-api'
+import { Network, GitBranch, Clock, ChevronRight, ZoomIn, ZoomOut, RotateCcw, Search, Play, X } from 'lucide-react'
+
+// 查询类型
+type QueryType = 'timeline' | 'causal_chain' | 'temporal_bfs' | 'temporal_path'
+
+interface QueryParams {
+  startNode: string
+  endNode: string
+  maxDepth: number
+  eventType: string
+  startTime: string
+  endTime: string
+}
 
 interface GraphData {
   nodes: GraphNode[]
@@ -25,6 +38,21 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+
+  // 图查询 UI 状态
+  const [showQueryPanel, setShowQueryPanel] = useState(false)
+  const [queryType, setQueryType] = useState<QueryType>('timeline')
+  const [queryParams, setQueryParams] = useState<QueryParams>({
+    startNode: '',
+    endNode: '',
+    maxDepth: 3,
+    eventType: '',
+    startTime: '',
+    endTime: ''
+  })
+  const [queryResult, setQueryResult] = useState<GraphQueryResponse | null>(null)
+  const [queryLoading, setQueryLoading] = useState(false)
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 加载图数据
@@ -56,6 +84,45 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
       setLoading(false)
     }
   }, [])
+
+  // 执行图查询
+  const executeQuery = useCallback(async () => {
+    setQueryLoading(true)
+    setError(null)
+    try {
+      const result = await queryGraph(queryType, {
+        startNode: queryParams.startNode || undefined,
+        endNode: queryParams.endNode || undefined,
+        maxDepth: queryParams.maxDepth,
+        eventType: queryParams.eventType || undefined,
+        startTime: queryParams.startTime || undefined,
+        endTime: queryParams.endTime || undefined
+      })
+      setQueryResult(result)
+
+      // 如果是 timeline 查询，更新图数据
+      if (queryType === 'timeline' && result.timeline) {
+        const nodes = result.nodes || []
+        const edges: { source: string; target: string; type: string }[] = []
+
+        // 构建时间顺序边
+        for (let i = 0; i < nodes.length - 1; i++) {
+          edges.push({
+            source: nodes[i].id,
+            target: nodes[i + 1].id,
+            type: 'temporal'
+          })
+        }
+
+        setGraphData({ nodes, edges })
+      }
+    } catch (err) {
+      console.error('Failed to execute query:', err)
+      setError('查询执行失败，请检查参数')
+    } finally {
+      setQueryLoading(false)
+    }
+  }, [queryType, queryParams])
 
   useEffect(() => {
     loadGraphData()
@@ -219,10 +286,202 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
         >
           <RotateCcw className="w-4 h-4" />
         </button>
+        <div className="w-px h-5 bg-gray-300 mx-1"></div>
+        <button
+          onClick={() => setShowQueryPanel(!showQueryPanel)}
+          className={`p-1.5 rounded ${showQueryPanel ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-200'}`}
+          title="图查询"
+        >
+          <Search className="w-4 h-4" />
+        </button>
         <span className="ml-auto text-xs text-gray-500">
           {graphData.nodes.length} 节点 · {graphData.edges.length} 关系
         </span>
       </div>
+
+      {/* 图查询面板 */}
+      {showQueryPanel && (
+        <div className="query-panel absolute top-12 left-2 right-2 bg-white rounded-lg shadow-lg border border-gray-200 p-3 z-10">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-medium text-gray-900 flex items-center gap-2">
+              <Search className="w-4 h-4" />
+              图查询
+            </h3>
+            <button
+              onClick={() => setShowQueryPanel(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* 查询类型选择 */}
+          <div className="mb-3">
+            <label className="block text-xs text-gray-600 mb-1">查询类型</label>
+            <div className="flex flex-wrap gap-1">
+              {[
+                { value: 'timeline', label: '时间线' },
+                { value: 'causal_chain', label: '因果链' },
+                { value: 'temporal_bfs', label: '时序 BFS' },
+                { value: 'temporal_path', label: '时序路径' }
+              ].map((type) => (
+                <button
+                  key={type.value}
+                  onClick={() => setQueryType(type.value as QueryType)}
+                  className={`px-2 py-1 text-xs rounded ${
+                    queryType === type.value
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 参数输入 */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">起始节点 ID</label>
+              <input
+                type="text"
+                value={queryParams.startNode}
+                onChange={(e) => setQueryParams({ ...queryParams, startNode: e.target.value })}
+                placeholder="可选"
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">目标节点 ID</label>
+              <input
+                type="text"
+                value={queryParams.endNode}
+                onChange={(e) => setQueryParams({ ...queryParams, endNode: e.target.value })}
+                placeholder="可选"
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">最大深度</label>
+              <input
+                type="number"
+                value={queryParams.maxDepth}
+                onChange={(e) => setQueryParams({ ...queryParams, maxDepth: parseInt(e.target.value) || 3 })}
+                min={1}
+                max={10}
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">事件类型</label>
+              <input
+                type="text"
+                value={queryParams.eventType}
+                onChange={(e) => setQueryParams({ ...queryParams, eventType: e.target.value })}
+                placeholder="可选"
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">开始时间</label>
+              <input
+                type="datetime-local"
+                value={queryParams.startTime}
+                onChange={(e) => setQueryParams({ ...queryParams, startTime: e.target.value })}
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">结束时间</label>
+              <input
+                type="datetime-local"
+                value={queryParams.endTime}
+                onChange={(e) => setQueryParams({ ...queryParams, endTime: e.target.value })}
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* 执行按钮 */}
+          <button
+            onClick={executeQuery}
+            disabled={queryLoading}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+          >
+            {queryLoading ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (
+              <Play className="w-4 h-4" />
+            )}
+            执行查询
+          </button>
+
+          {/* 查询结果 */}
+          {queryResult && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                查询结果 ({queryResult.total} 条)
+              </h4>
+              {queryResult.nodes && queryResult.nodes.length > 0 && (
+                <div className="max-h-40 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-gray-500">
+                        <th className="pb-1">ID</th>
+                        <th className="pb-1">类型</th>
+                        <th className="pb-1">标签</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {queryResult.nodes.slice(0, 10).map((node) => (
+                        <tr key={node.id} className="border-t border-gray-100">
+                          <td className="py-1 text-gray-600 truncate max-w-[100px]">{node.id.slice(0, 8)}...</td>
+                          <td className="py-1">
+                            <span className="px-1 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                              {node.type}
+                            </span>
+                          </td>
+                          <td className="py-1 truncate max-w-[120px]">{node.label}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {queryResult.nodes.length > 10 && (
+                    <p className="text-xs text-gray-500 mt-1">...还有 {queryResult.nodes.length - 10} 条</p>
+                  )}
+                </div>
+              )}
+              {queryResult.timeline && queryResult.timeline.length > 0 && (
+                <div className="max-h-40 overflow-y-auto">
+                  <div className="space-y-1">
+                    {queryResult.timeline.slice(0, 5).map((event, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs p-1 bg-gray-50 rounded">
+                        <span className="px-1 py-0.5 bg-purple-100 text-purple-700 rounded">
+                          {event.event_type}
+                        </span>
+                        <span className="text-gray-600 truncate flex-1">
+                          {event.node_id.slice(0, 12)}...
+                        </span>
+                        <span className="text-gray-400">
+                          {new Date(event.timestamp).toLocaleString('zh-CN')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {queryResult.timeline.length > 5 && (
+                    <p className="text-xs text-gray-500 mt-1">...还有 {queryResult.timeline.length - 5} 条</p>
+                  )}
+                </div>
+              )}
+              {((!queryResult.nodes || queryResult.nodes.length === 0) &&
+                (!queryResult.timeline || queryResult.timeline.length === 0)) && (
+                <p className="text-xs text-gray-500">无查询结果</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 图画布 */}
       <div

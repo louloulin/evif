@@ -1,18 +1,51 @@
 # Changelog 8 - 记忆平台 UI 功能实现
 
 > **日期**: 2026-03-09
-> **版本**: 2.3.0
-> **主题**: 记忆专用 UI 组件实现
+> **版本**: 2.4.0
+> **主题**: 知识图谱查询 UI 实现
 
 ---
 
 ## 执行摘要
 
-本版本实现了 mem6.md 规划的记忆专用 UI 基础功能，包括 MemoryExplorer、CategoryView 和 MemoryTimeline 三个核心组件。
+本版本实现了 mem6.md 规划的图查询 UI 功能，在 KnowledgeGraph 组件中集成了因果链、时间线、时序 BFS、时序路径四种查询类型。
 
 ---
 
 ## 新增功能
+
+### 10. 图查询 UI ✅
+
+**功能**:
+- 查询类型选择: 时间线 (timeline) / 因果链 (causal_chain) / 时序 BFS (temporal_bfs) / 时序路径 (temporal_path)
+- 参数输入:
+  - 起始节点 ID
+  - 目标节点 ID
+  - 最大深度 (1-10)
+  - 事件类型
+  - 开始时间 / 结束时间
+- 执行查询按钮 (带加载状态)
+- 查询结果展示:
+  - 节点表格 (ID、类型、标签)
+  - 时间线事件 (事件类型、节点 ID、时间戳)
+- 查询面板可展开/收起
+
+**API 集成**:
+- `POST /api/v1/graph/query` - 支持四种查询类型
+
+**文件**:
+- `evif-web/src/components/memory/KnowledgeGraph.tsx` - 添加图查询 UI
+
+---
+
+## 文件变更
+
+### 修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `evif-web/src/components/memory/KnowledgeGraph.tsx` | 添加图查询 UI (约 200 行) |
+| `mem6.md` | 更新 Phase 2 完成度至 85% |
 
 ### 1. MemoryExplorer 组件 ✅
 
@@ -164,21 +197,31 @@
 
 ## 实现进度
 
-### Phase 1 & 2: 记忆专用 UI + 知识图谱 (Q2 2026) - 75% 完成
+### Phase 2: 知识图谱可视化 (Q2 2026) - 85% 完成
 
 | 任务 | 优先级 | 状态 | 完成度 |
 |------|--------|------|--------|
-| MemoryExplorer 组件 | P0 | ✅ | 100% |
-| CategoryView 组件 | P0 | ✅ | 100% |
-| MemoryTimeline 组件 | P1 | ✅ | 100% |
 | KnowledgeGraph 组件 | P1 | ✅ | 100% |
-| 记忆搜索增强 | P1 | ✅ | 100% |
-| 单元测试 | P0 | ⏳ 待完成 | 0% |
-| E2E 测试 | P1 | ⏳ 待完成 | 0% |
+| 图谱布局算法 | P1 | ✅ | 100% |
+| 节点交互 | P1 | ✅ | 100% |
+| 图查询 UI | P2 | ✅ | 100% |
+
+### Phase 3: FUSE 状态可视化 (Q3 2026) - 0% 完成
+
+| 任务 | 优先级 | 状态 | 完成度 |
+|------|--------|------|--------|
+| FUSEStatusPanel 组件 | P1 | ⏳ 待实现 | 0% |
+| OperationLog 组件 | P1 | ⏳ 待实现 | 0% |
+
+### Phase 4: AI 辅助功能 (Q3-Q4 2026) - 0% 完成
+
+| 任务 | 优先级 | 状态 | 完成度 |
+|------|--------|------|--------|
+| AIChatPanel 组件 | P2 | ⏳ 待实现 | 0% |
+| MemoryInsights 组件 | P2 | ⏳ 待实现 | 0% |
 
 ### 后续计划
 
-- **Phase 2.1**: 图谱布局算法增强 (D3.js/React Flow)
 - **Phase 3**: FUSE 状态可视化 (FUSEStatusPanel 组件)
 - **Phase 4**: AI 辅助功能 (AIChatPanel, MemoryInsights)
 
@@ -226,18 +269,16 @@ transforming...
 
 ## 总结
 
-本版本成功实现了 mem6.md Phase 1 + Phase 2 的核心功能:
+本版本成功实现了 mem6.md Phase 2 的图查询 UI 功能:
 
-1. ✅ 四个核心 UI 组件 (MemoryExplorer, CategoryView, MemoryTimeline, KnowledgeGraph)
-2. ✅ 完整的 API 服务层
-3. ✅ ActivityBar 集成
-4. ✅ 知识图谱可视化 (SVG 实现，无外部依赖)
-5. ✅ 搜索增强功能 (多模式搜索、分类过滤、日期范围)
-6. ✅ 构建验证通过
+1. ✅ 四种查询类型 (时间线/因果链/时序 BFS/时序路径)
+2. ✅ 灵活的参数输入 (起始节点、目标节点、深度、时间范围)
+3. ✅ 查询结果可视化展示
+4. ✅ 构建验证通过
 
-**完成度**: Phase 1 & 2 完成约 75% (测试待完成)
+**完成度**: Phase 2 完成约 85%
 
 ---
 
-**文档版本**: 1.0.0
+**文档版本**: 2.4.0
 **最后更新**: 2026-03-09
