@@ -1032,10 +1032,13 @@
 .memory-search {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .memory-search .search-input {
-  width: 100%;
+  flex: 1;
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1047,6 +1050,79 @@
 .memory-search .search-input:focus {
   outline: none;
   border-color: var(--primary);
+}
+
+.advanced-search-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.advanced-search-toggle:hover {
+  background: var(--accent);
+}
+
+/* Advanced Search Panel */
+.memory-search-advanced {
+  padding: 8px 12px;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-mode-selector,
+.search-param {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.search-mode-selector label,
+.search-param label {
+  color: var(--muted-foreground);
+  min-width: 70px;
+}
+
+.search-mode-select,
+.search-category-select {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.search-k-input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.search-date-input {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.date-separator {
+  color: var(--muted-foreground);
+  font-size: 12px;
 }
 
 .memory-search-results {

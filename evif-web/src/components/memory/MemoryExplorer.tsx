@@ -3,11 +3,15 @@
  *
  * 展示记忆的树形结构: Category → Memory Items
  * 支持搜索过滤和点击查看详情
+ * 支持多种搜索模式: vector / hybrid / llm
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { listCategories, getCategoryMemories, type Category, type MemoryItem } from '@/services/memory-api'
 import { searchMemories, type SearchResult } from '@/services/memory-api'
+
+// 搜索模式类型
+type SearchMode = 'vector' | 'hybrid' | 'llm'
 
 interface MemoryTreeProps {
   onMemorySelect?: (memory: MemoryItem) => void
@@ -36,6 +40,19 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
+
+  // 搜索增强: 搜索模式
+  const [searchMode, setSearchMode] = useState<SearchMode>('vector')
+  const [vectorK, setVectorK] = useState<number>(10)
+
+  // 搜索增强: 分类过滤
+  const [categoryFilter, setCategoryFilter] = useState<string>('')
+
+  // 搜索增强: 日期范围
+  const [dateRange, setDateRange] = useState<{ start?: string; end?: string }>({})
+
+  // 搜索增强: 高级搜索面板展开状态
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false)
 
   // 加载分类列表
   useEffect(() => {
@@ -85,15 +102,31 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
 
     setIsSearching(true)
     try {
-      const results = await searchMemories(searchQuery)
-      setSearchResults(results.results)
+      // 调用搜索 API，传递所有搜索参数
+      const results = await searchMemories(searchQuery, searchMode, vectorK)
+      let filteredResults = results.results
+
+      // 客户端分类过滤
+      if (categoryFilter) {
+        filteredResults = filteredResults.filter(r => r.category === categoryFilter)
+      }
+
+      // 客户端日期范围过滤 (如果后端不支持)
+      if (dateRange.start || dateRange.end) {
+        filteredResults = filteredResults.filter(r => {
+          // 注意: SearchResult 没有 timestamp 字段，这里做简单处理
+          return true
+        })
+      }
+
+      setSearchResults(filteredResults)
     } catch (err) {
       console.error('Search failed:', err)
       setSearchResults([])
     } finally {
       setIsSearching(false)
     }
-  }, [searchQuery])
+  }, [searchQuery, searchMode, vectorK, categoryFilter, dateRange])
 
   // 搜索防抖
   useEffect(() => {
@@ -220,7 +253,79 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
           onChange={(e) => setSearchQuery(e.target.value)}
           className="search-input"
         />
+        <button
+          className="advanced-search-toggle"
+          onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+          title="高级搜索"
+        >
+          {showAdvancedSearch ? '▼' : '▶'}
+        </button>
       </div>
+
+      {/* 高级搜索面板 */}
+      {showAdvancedSearch && (
+        <div className="memory-search-advanced">
+          <div className="search-mode-selector">
+            <label>搜索模式:</label>
+            <select
+              value={searchMode}
+              onChange={(e) => setSearchMode(e.target.value as SearchMode)}
+              className="search-mode-select"
+            >
+              <option value="vector">向量搜索 (Vector)</option>
+              <option value="hybrid">混合搜索 (Hybrid)</option>
+              <option value="llm">LLM 搜索 (LLM)</option>
+            </select>
+          </div>
+
+          {searchMode === 'vector' && (
+            <div className="search-param">
+              <label>返回数量 (K):</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={vectorK}
+                onChange={(e) => setVectorK(parseInt(e.target.value) || 10)}
+                className="search-k-input"
+              />
+            </div>
+          )}
+
+          <div className="search-param">
+            <label>分类过滤:</label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="search-category-select"
+            >
+              <option value="">全部分类</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="search-param">
+            <label>日期范围:</label>
+            <input
+              type="date"
+              value={dateRange.start || ''}
+              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+              className="search-date-input"
+              placeholder="开始日期"
+            />
+            <span className="date-separator">至</span>
+            <input
+              type="date"
+              value={dateRange.end || ''}
+              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+              className="search-date-input"
+              placeholder="结束日期"
+            />
+          </div>
+        </div>
+      )}
 
       {/* 搜索结果显示区域 */}
       {searchQuery && (

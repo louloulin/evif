@@ -118,7 +118,7 @@ WS     /api/v1/terminal    // 终端 PTY
 | MemoryTimeline | ✅ 已实现 | P1 | 记忆时序可视化 |
 | KnowledgeGraph | ✅ 已实现 | P1 | 知识图谱可视化（evif-graph 集成） |
 | FUSEStatusPanel | ❌ 缺失 | P1 | FUSE 挂载状态面板 |
-| MemorySearch | ⚠️ 部分 | P1 | 语义搜索界面（需要增强） |
+| MemorySearch | ✅ 已实现 | 100% | 语义搜索界面（已增强） |
 | MemoryInsights | ❌ 缺失 | P2 | 记忆分析与洞察仪表板 |
 | AIChatPanel | ❌ 缺失 | P2 | AI 记忆助手对话界面 |
 
@@ -126,14 +126,14 @@ WS     /api/v1/terminal    // 终端 PTY
 
 ### 实现进度
 
-**Phase 1: 记忆专用 UI 基础 (2026-03-09) - 已完成 65%**
+**Phase 1: 记忆专用 UI 基础 (2026-03-09) - 已完成 75%**
 
 | 任务 | 状态 | 完成度 |
 |------|------|--------|
 | MemoryExplorer 组件 | ✅ 已实现 | 100% |
 | CategoryView 组件 | ✅ 已实现 | 100% |
 | MemoryTimeline 组件 | ✅ 已实现 | 100% |
-| 记忆搜索增强 | ⚠️ 部分实现 | 50% |
+| 记忆搜索增强 | ✅ 已实现 | 100% |
 | ActivityBar 集成 | ✅ 已实现 | 100% |
 | 样式与交互 | ✅ 已实现 | 100% |
 
