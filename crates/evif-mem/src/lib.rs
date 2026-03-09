@@ -22,6 +22,7 @@
 pub mod embedding;
 pub mod error;
 pub mod langchain;
+pub mod llamaindex;
 pub mod llm;
 pub mod metrics;
 pub mod models;
@@ -46,5 +47,9 @@ pub use proactive::{
 pub use langchain::{
     EvifMemory, EvifMemoryConfig, ChatMessage, BufferMemory, ConversationTokenBuffer,
     VectorStoreRetriever,
+};
+pub use llamaindex::{
+    LlamaIndexConfig, ChatMessageLLM, EvifChatStore, EvifVectorStore, EvifDocument,
+    EvifKVStore, QueryResult,
 };
 pub use metrics::{Metrics, MetricsConfig, MetricsRegistry, MetricsError};

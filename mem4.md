@@ -1,8 +1,8 @@
 # mem4.md - evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 4.2
+> **版本**: 4.3
 > **日期**: 2026-03-09
-> **状态**: Phase 2.4 完成 - Prometheus 监控已实现
+> **状态**: Phase 2.3 完成 - LlamaIndex 集成已实现
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -600,7 +600,7 @@ def build_scoped_models(
 | FAISS 向量索引集成 | P1 | ✅ 已完成 |
 | Qdrant 向量数据库集成 | P1 | ✅ 已完成 |
 | LangChain 集成 | P2 | ✅ 已完成 |
-| LlamaIndex 集成 | P2 | ⏳ |
+| LlamaIndex 集成 | P2 | ✅ 已完成 |
 | Doubao LLM 后端 | P3 | ✅ 已完成 |
 | 云存储后端 (S3/Azure) | P2 | ⏳ |
 | **Prometheus 监控指标** | **P1** | **✅ 已完成** |
@@ -1175,7 +1175,7 @@ pub struct DoubaoClient {
 ### 差距 3: 企业级集成 (P2 优先级)
 
 **当前状态**:
-- evif-mem: 无 LangChain/LlamaIndex 集成
+- evif-mem: ✅ LangChain/LlamaIndex 集成已完成
 - memU: 规划中
 
 **影响**: 中等（企业客户需求）
@@ -1300,7 +1300,7 @@ cargo bench -p evif-mem --bench vector_bench
 
 **任务**:
 1. ✅ LangChain Memory Backend 实现
-2. ⏳ LlamaIndex Memory Store 实现
+2. ✅ LlamaIndex Memory Store 实现
 3. ⏳ Python SDK 封装
 4. ⏳ TypeScript SDK 封装
 5. ⏳ 集成测试
@@ -1337,10 +1337,42 @@ cargo bench -p evif-mem --bench vector_bench
 
 **代码统计**: 新增 langchain.rs (~470 行); 7 个单元测试全部通过
 
+**新增模块** (`crates/evif-mem/src/llamaindex.rs`):
+
+1. **`EvifChatStore` struct**
+   - LlamaIndex 兼容的聊天存储
+   - 支持 add_message/add_user_message/add_assistant_message
+   - 支持 get_messages/get_messages_json
+   - 支持 session 隔离
+   - delete_message/clear 接口
+
+2. **`EvifVectorStore` struct**
+   - RAG 向量存储实现
+   - add_document/query 接口
+   - 与 LlamaIndex VectorStore 兼容
+
+3. **`EvifKVStore` struct**
+   - 键值存储实现
+   - set/get/delete/exists 接口
+   - 用于缓存和临时存储
+
+4. **`EvifDocument` struct**
+   - 文档结构
+   - text/metadata 访问器
+
+5. **`ChatMessageLLM` struct**
+   - LlamaIndex 兼容的消息结构
+   - user/assistant/system 工厂方法
+
+6. **`LlamaIndexConfig` struct**
+   - 配置选项：session_id, store_messages, max_messages
+
+**代码统计**: 新增 llamaindex.rs (~360 行); 6 个单元测试全部通过
+
 **测试结果**:
-- Previous: 161 tests
-- Current: 168 tests (+7 new tests)
-- Status: ✅ All 168 tests passing
+- Previous: 170 tests
+- Current: 176 tests (+6 new tests)
+- Status: ✅ All 176 tests passing
 
 **下一步**: Phase 2.4 监控与可观测性
 
@@ -1462,7 +1494,7 @@ evif-mem 已实现 memU 的所有核心功能，并在以下方面超越：
 
 1. **工作流动态配置** (P2): ✅ Phase 2.1 已完成 - 运行时修改管道步骤
 2. **Doubao 后端** (P3): ✅ Phase 2.6 已完成 - 字节跳动 LLM 支持
-3. **企业级集成** (P2): 计划中 - LangChain/LlamaIndex 集成
+3. **企业级集成** (P2): ✅ 已完成 - LangChain/LlamaIndex 集成
 
 ### 推荐行动
 
