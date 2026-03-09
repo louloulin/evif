@@ -2328,6 +2328,7 @@ dependencies = [
  "faiss",
  "hex",
  "lru",
+ "prometheus",
  "qdrant-client",
  "rand 0.8.5",
  "regex-lite",
