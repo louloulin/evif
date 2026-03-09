@@ -1,33 +1,60 @@
 /**
  * FUSE Status Panel Component
- * Displays FUSE mount status and mount points
+ * Displays FUSE mount status, mount points, and operation logs
  */
 
 import React, { useState, useEffect } from 'react';
-import { listMounts, type MountInfo } from '@/services/monitor-api';
+import { listMounts, getMetricsOperations, type MountInfo, type OperationStats } from '@/services/monitor-api';
+
+interface OperationLog {
+  id: string;
+  type: 'read' | 'write' | 'list' | 'delete' | 'other';
+  count: number;
+  bytes: number;
+  errors: number;
+  timestamp: string;
+}
 
 export const FUSEStatusPanel: React.FC = () => {
   const [mounts, setMounts] = useState<MountInfo[]>([]);
+  const [operations, setOperations] = useState<OperationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
 
   useEffect(() => {
-    const fetchMounts = async () => {
+    const fetchData = async () => {
       try {
-        const data = await listMounts();
-        setMounts(data.mounts || []);
+        const [mountsData, opsData] = await Promise.all([
+          listMounts(),
+          getMetricsOperations().catch(() => [])
+        ]);
+
+        setMounts(mountsData.mounts || []);
+
+        // Convert operation stats to operation logs
+        const logs: OperationLog[] = (opsData as OperationStats[]).map((op, index) => ({
+          id: `op-${index}-${Date.now()}`,
+          type: op.operation as OperationLog['type'],
+          count: op.count,
+          bytes: op.bytes,
+          errors: op.errors,
+          timestamp: new Date().toISOString()
+        }));
+
+        setOperations(logs);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch mounts');
+        setError(err instanceof Error ? err.message : 'Failed to fetch data');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMounts();
+    fetchData();
 
     // Refresh every 10 seconds
-    const interval = setInterval(fetchMounts, 10000);
+    const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -161,21 +188,126 @@ export const FUSEStatusPanel: React.FC = () => {
             onClick={() => {
               // Refresh mounts
               setLoading(true);
-              listMounts()
-                .then((data) => {
-                  setMounts(data.mounts || []);
+              Promise.all([listMounts(), getMetricsOperations()])
+                .then(([mountsData, opsData]) => {
+                  setMounts(mountsData.mounts || []);
+                  const logs: OperationLog[] = ((opsData as OperationStats[]) || []).map((op, index) => ({
+                    id: `op-${index}-${Date.now()}`,
+                    type: op.operation as OperationLog['type'],
+                    count: op.count,
+                    bytes: op.bytes,
+                    errors: op.errors,
+                    timestamp: new Date().toISOString()
+                  }));
+                  setOperations(logs);
                   setError(null);
                 })
                 .catch((err) => {
-                  setError(err instanceof Error ? err.message : 'Failed to fetch mounts');
+                  setError(err instanceof Error ? err.message : 'Failed to fetch data');
                 })
                 .finally(() => setLoading(false));
             }}
           >
             刷新
           </button>
+          <button
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              showLogs
+                ? 'bg-secondary text-secondary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+            onClick={() => setShowLogs(!showLogs)}
+          >
+            {showLogs ? '隐藏日志' : '操作日志'}
+          </button>
+        </div>
+      )}
+
+      {/* Operation Logs */}
+      {showLogs && (
+        <div className="border-t">
+          <div className="flex items-center justify-between px-4 py-2 bg-muted/50">
+            <h4 className="text-sm font-medium">操作日志</h4>
+            <span className="text-xs text-muted-foreground">{operations.length} 条记录</span>
+          </div>
+          <div className="max-h-64 overflow-auto">
+            {operations.length === 0 ? (
+              <div className="px-4 py-6 text-center text-muted-foreground">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mx-auto mb-2 opacity-50"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                <p className="text-xs">暂无操作记录</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {operations.map((op) => (
+                  <div key={op.id} className="px-4 py-2 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            op.type === 'read'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                              : op.type === 'write'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                              : op.type === 'delete'
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                          }`}
+                        >
+                          {op.type === 'read' && '📖'}
+                          {op.type === 'write' && '📝'}
+                          {op.type === 'delete' && '🗑️'}
+                          {op.type === 'list' && '📋'}
+                          {op.type === 'other' && '⚙️'}
+                          {op.type.toUpperCase()}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {op.count} 次操作
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="text-muted-foreground">
+                          {formatBytes(op.bytes)}
+                        </span>
+                        {op.errors > 0 && (
+                          <span className="text-destructive">
+                            {op.errors} 错误
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
+};
+
+// Helper function to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };

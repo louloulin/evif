@@ -51,9 +51,14 @@ export async function getMetricsTraffic(): Promise<{
   return res.json()
 }
 
-export async function getMetricsOperations(): Promise<
-  Array<{ operation: string; count: number; bytes: number; errors: number }>
-> {
+export interface OperationStats {
+  operation: string
+  count: number
+  bytes: number
+  errors: number
+}
+
+export async function getMetricsOperations(): Promise<OperationStats[]> {
   const res = await httpFetch('/api/v1/metrics/operations')
   if (!res.ok) throw new Error('Failed to fetch operations')
   return res.json()

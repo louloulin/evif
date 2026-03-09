@@ -1,20 +1,33 @@
 # Changelog 8 - 记忆平台 UI 功能实现
 
 > **日期**: 2026-03-09
-> **版本**: 2.4.0
-> **主题**: 知识图谱查询 UI 实现
+> **版本**: 2.5.0
+> **主题**: FUSE OperationLog 组件实现
 
 ---
 
 ## 执行摘要
 
-本版本实现了 mem6.md 规划的图查询 UI 功能，在 KnowledgeGraph 组件中集成了因果链、时间线、时序 BFS、时序路径四种查询类型。
+本版本实现了 mem6.md Phase 3 的 OperationLog 组件，在 FUSEStatusPanel 中集成了操作日志展示功能。
 
 ---
 
 ## 新增功能
 
-### 10. 图查询 UI ✅
+### 12. OperationLog 组件 ✅
+
+**功能**:
+- 操作日志展示面板，可展开/收起
+- 操作类型图标: read (📖) / write (📝) / delete (🗑️) / list (📋) / other (⚙️)
+- 操作计数显示
+- 数据传输量显示 (自动格式化 B/KB/MB/GB)
+- 错误计数显示
+- 10 秒自动刷新
+- 使用 /api/v1/metrics/operations API
+
+**文件**:
+- `evif-web/src/components/monitor/FUSEStatusPanel.tsx` - 添加操作日志展示
+- `evif-web/src/services/monitor-api.ts` - 导出 OperationStats 类型
 
 **功能**:
 - 查询类型选择: 时间线 (timeline) / 因果链 (causal_chain) / 时序 BFS (temporal_bfs) / 时序路径 (temporal_path)
@@ -222,7 +235,7 @@
 
 ## 实现进度
 
-### Phase 3: FUSE 状态可视化 (Q3 2026) - 20% 完成
+### Phase 3: FUSE 状态可视化 (Q3 2026) - 40% 完成
 
 | 任务 | 优先级 | 状态 | 完成度 |
 |------|--------|------|--------|
@@ -230,6 +243,8 @@
 | 挂载列表展示 | P1 | ✅ | 100% |
 | 挂载状态指示 | P1 | ✅ | 100% |
 | 刷新功能 | P1 | ✅ | 100% |
+| OperationLog 组件 | P1 | ✅ | 100% |
+| 操作日志展示 | P1 | ✅ | 100% |
 
 ### Phase 2: 知识图谱可视化 (Q2 2026) - 85% 完成
 
