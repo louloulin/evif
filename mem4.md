@@ -1,8 +1,8 @@
 # mem4.md - evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 4.8
+> **版本**: 5.1
 > **日期**: 2026-03-09
-> **状态**: Phase 3.3 Complete - Python SDK Implemented
+> **状态**: Phase 3.4 Complete - TypeScript SDK Implemented
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -13,7 +13,7 @@
 
 ### 关键发现
 
-1. **evif-mem 完成度**: **100%** - 所有 Phase 1.5-1.8 + Phase 3.3 功能已完成实现
+1. **evif-mem 完成度**: **100%** - 所有 Phase 1.5-1.8 + Phase 3.4 功能已完成实现
 2. **架构差异**: evif-mem 使用 MD+YAML 格式（AI/Git/FUSE 友好），memU 使用 JSON+SQL
 3. **功能对等**: evif-mem 已实现 memU 的所有核心功能
 4. **独特优势**: evif-mem 拥有 evif-graph 时序图谱、FUSE 文件系统集成、高性能 Rust 异步
@@ -618,7 +618,7 @@ def build_scoped_models(
 | 访问控制增强 | P1 | ✅ 已完成 (Phase 2.5) |
 | OpenTelemetry 追踪 | P1 | ✅ 已完成 (Phase 3.2) |
 | **Python SDK** | **P1** | **✅ 已完成 (Phase 3.3)** |
-| TypeScript SDK | P2 | ⏳ |
+| **TypeScript SDK** | **P2** | **✅ 已完成 (Phase 3.4)** |
 | 云端托管服务 | P2 | ⏳ |
 
 ---
@@ -1304,9 +1304,9 @@ cargo bench -p evif-mem --bench vector_bench
 **任务**:
 1. ✅ LangChain Memory Backend 实现
 2. ✅ LlamaIndex Memory Store 实现
-3. ⏳ Python SDK 封装
-4. ⏳ TypeScript SDK 封装
-5. ⏳ 集成测试
+3. ✅ Python SDK 封装
+4. ✅ TypeScript SDK 封装
+5. ✅ 集成测试
 
 **实现成果** (2026-03-08):
 
@@ -1616,7 +1616,100 @@ let span = registry.start_span("memorize_text", Some("user123"), None).await;
 span.end();
 ```
 
-**下一步**: Phase 3.4 TypeScript SDK
+**下一步**: Phase 3.5 云端托管服务
+
+---
+
+### Phase 3.4: TypeScript SDK ✅ **已完成** (2026-03-09, P2)
+
+**目标**: TypeScript 语言 SDK 支持
+
+**任务**:
+1. ✅ TypeScript 包创建
+2. ✅ EvifMemoryClient 客户端实现
+3. ✅ 数据模型定义
+4. ✅ 单元测试
+5. ✅ 文档
+
+**实现成果** (2026-03-09):
+
+**新增模块** (`crates/evif-mem-ts/`):
+
+1. **`src/client.ts`** - 主客户端
+   - `EvifMemoryClient` 类：异步 API 客户端
+   - `createMemory()`: 创建记忆
+   - `searchMemories()`: 语义搜索
+   - `listMemories()`: 列出记忆
+   - `getMemory()`: 获取记忆
+   - `deleteMemory()`: 删除记忆
+   - `listCategories()`: 列出分类
+   - `getCategory()`: 获取分类
+   - `getCategoryMemories()`: 获取分类记忆
+   - `queryGraph()`: 知识图谱查询
+
+2. **`src/models.ts`** - 数据模型
+   - `Memory`: 记忆模型
+   - `MemoryType`: 记忆类型枚举
+   - `Modality`: 模态枚举
+   - `Category`: 分类模型
+   - `MemorySearchResult`: 搜索结果
+   - `GraphResult`: 图查询结果
+   - `GraphNode`, `GraphEdge`: 图节点和边
+   - `GraphQueryType`: 图查询类型枚举
+
+3. **`src/config.ts`** - 配置
+   - `MemoryConfig`: 客户端配置
+   - `MemoryConfigOptions`: 配置选项接口
+
+4. **`src/index.ts`** - 导出
+   - 统一导出所有公共 API
+
+5. **`tests/client.test.ts`** - 测试
+   - 9 个单元测试全部通过
+
+6. **`README.md`** - 文档
+   - 完整使用指南
+   - API 参考
+   - 开发说明
+
+**代码统计**: 新增 TypeScript 包 (~500 行); 9 tests 通过
+
+**运行方式**:
+```bash
+cd crates/evif-mem-ts
+npm install
+npm run build
+npm test
+```
+
+**使用示例**:
+```typescript
+import { EvifMemoryClient, MemoryConfig, MemoryType } from 'evif-mem';
+
+const config = new MemoryConfig({
+  apiUrl: 'http://localhost:8080',
+  apiKey: 'your-api-key',
+});
+
+const client = new EvifMemoryClient(config);
+
+// 创建记忆
+const memory = await client.createMemory(
+  'User prefers dark mode',
+  {
+    memoryType: MemoryType.PROFILE,
+    tags: ['ui', 'preferences'],
+  }
+);
+
+// 搜索记忆
+const results = await client.searchMemories('user preferences', {
+  k: 5,
+  threshold: 0.5,
+});
+```
+
+**下一步**: Phase 3.5 云端托管服务
 
 ---
 
@@ -1743,10 +1836,10 @@ evif-mem 已实现 memU 的所有核心功能，并在以下方面超越：
 1. Phase 2.1-2.6 全部完成
 
 **已完成 (Phase 3.0)**:
-1. Phase 3.1-3.3 全部完成
+1. Phase 3.1-3.4 全部完成
 
-**下一步 (Phase 3.4)**:
-1. TypeScript SDK
+**已完成 (Phase 3.4)**:
+1. ✅ TypeScript SDK
 
 **长期 (Q4 2026+)**:
 1. 云端托管服务
