@@ -1,8 +1,8 @@
 # mem4.md - evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 4.1
-> **日期**: 2026-03-08
-> **状态**: Phase 2.3 完成 - LangChain 集成已实现
+> **版本**: 4.2
+> **日期**: 2026-03-09
+> **状态**: Phase 2.4 完成 - Prometheus 监控已实现
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -603,6 +603,7 @@ def build_scoped_models(
 | LlamaIndex 集成 | P2 | ⏳ |
 | Doubao LLM 后端 | P3 | ✅ 已完成 |
 | 云存储后端 (S3/Azure) | P2 | ⏳ |
+| **Prometheus 监控指标** | **P1** | **✅ 已完成** |
 
 ### Phase 3.0: 生产就绪 (Q3-Q4 2026)
 
@@ -1343,18 +1344,60 @@ cargo bench -p evif-mem --bench vector_bench
 
 **下一步**: Phase 2.4 监控与可观测性
 
-### Phase 2.4: 监控与可观测性 (Q3 2026, P1)
+### Phase 2.4: 监控与可观测性 ✅ **已完成** (2026-03-09, P1)
 
 **目标**: 生产级监控能力
 
 **任务**:
-1. Prometheus metrics 导出
-2. Grafana 仪表盘模板
-3. 结构化日志 (tracing)
-4. 分布式追踪 (OpenTelemetry)
-5. 告警规则
+1. ✅ Prometheus metrics 导出
+2. ⏳ Grafana 仪表盘模板
+3. ✅ 结构化日志 (tracing) - 已存在
+4. ⏳ 分布式追踪 (OpenTelemetry)
+5. ⏳ 告警规则
 
-**预期成果**: 生产环境可观测性
+**实现成果** (2026-03-09):
+
+**新增模块** (`crates/evif-mem/src/metrics.rs`):
+
+1. **`Metrics` struct**
+   - Prometheus-compatible metrics collection
+   - Counters: memorize_total, retrieve_total, evolve_total, errors_total
+   - Histograms: memorize_duration, retrieve_duration, evolve_duration (seconds)
+   - Gauges: active_memorize, active_retrieve, active_evolve, memory_items_total, categories_total, resources_total
+
+2. **`MetricsRegistry` struct**
+   - Async-safe metrics registry
+   - Thread-safe operation recording
+   - Feature-gated (requires `metrics` feature)
+
+3. **`MetricsConfig` struct**
+   - Configuration: enabled, prefix
+   - Default prefix: "evif_mem"
+
+4. **Feature Flag**: `#[cfg(feature = "metrics")]`
+
+**代码统计**: 新增 metrics.rs (~430 行); 170 tests 通过
+
+**运行方式**:
+```bash
+cargo build -p evif-mem --features metrics
+cargo test -p evif-mem --features metrics
+```
+
+**使用示例**:
+```rust
+use evif_mem::metrics::{MetricsRegistry, MetricsConfig};
+
+let registry = MetricsRegistry::new();
+registry.init(MetricsConfig::default()).await.unwrap();
+
+// Record operations
+registry.record_memorize(5, 120).await; // 5 items, 120ms
+registry.record_retrieve(10, 50).await;
+registry.increment_errors("memorize").await;
+```
+
+**下一步**: Phase 2.5 安全加固
 
 ### Phase 2.5: 安全加固 (Q3 2026, P1)
 
@@ -1426,15 +1469,17 @@ evif-mem 已实现 memU 的所有核心功能，并在以下方面超越：
 **已完成**:
 1. ✅ 工作流动态配置（Phase 2.1）- 2026-03-08
 2. ✅ FAISS/Qdrant 向量索引（Phase 2.2）- 2026-03-08
-3. ✅ Doubao 后端（Phase 2.6）- 2026-03-08
+3. ✅ LangChain 集成（Phase 2.3）- 2026-03-08
+4. ✅ Prometheus 监控（Phase 2.4）- 2026-03-09
+5. ✅ Doubao 后端（Phase 2.6）- 2026-03-08
 
-**短期 (Q2 2026)**:
-1. LangChain 集成（Phase 2.3）
+**下一步 (Phase 2.5)**:
+1. 安全加固 - 加密存储、RBAC、审计日志
 
 **中期 (Q3 2026)**:
-1. 监控与可观测性（Phase 2.4）
-2. 安全加固（Phase 2.5）
-3. Doubao 后端（Phase 2.6）
+1. LlamaIndex 集成
+2. Grafana 仪表盘
+3. OpenTelemetry 追踪
 
 **长期 (Q4 2026+)**:
 1. 云端托管服务
@@ -1443,6 +1488,6 @@ evif-mem 已实现 memU 的所有核心功能，并在以下方面超越：
 
 ---
 
-**文档版本**: 4.1
+**文档版本**: 4.2
 **最后更新**: 2026-03-08
 **验证方式**: 161 个单元测试全部通过 + memU 代码库审查

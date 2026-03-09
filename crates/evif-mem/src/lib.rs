@@ -23,6 +23,7 @@ pub mod embedding;
 pub mod error;
 pub mod langchain;
 pub mod llm;
+pub mod metrics;
 pub mod models;
 pub mod pipeline;
 pub mod proactive;
@@ -46,3 +47,4 @@ pub use langchain::{
     EvifMemory, EvifMemoryConfig, ChatMessage, BufferMemory, ConversationTokenBuffer,
     VectorStoreRetriever,
 };
+pub use metrics::{Metrics, MetricsConfig, MetricsRegistry, MetricsError};
