@@ -38,6 +38,13 @@ faiss = { version = "0.12", optional = true }
 qdrant-client = { version = "1.7", optional = true }
 prometheus = { version = "0.13", optional = true }
 
+# Telemetry dependencies
+tracing-subscriber = { version = "0.3", optional = true }
+tracing-opentelemetry = { version = "0.22", optional = true }
+opentelemetry = { version = "0.22", optional = true }
+opentelemetry-otlp = { version = "0.15", optional = true }
+opentelemetry_sdk = { version = "0.22", optional = true }
+
 # Security dependencies
 rand = "0.8"
 
@@ -58,6 +65,7 @@ plugin = ["dep:evif-core"]
 faiss = ["dep:faiss"]
 qdrant = ["dep:qdrant-client"]
 metrics = ["dep:prometheus"]
+telemetry = ["dep:tracing-subscriber", "dep:tracing-opentelemetry", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk"]
 security = []
 
 [[bench]]

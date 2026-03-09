@@ -1,8 +1,8 @@
 # mem4.md - evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 4.6
+> **版本**: 4.7
 > **日期**: 2026-03-09
-> **状态**: Phase 3.1 Complete - Grafana Dashboard Implemented
+> **状态**: Phase 3.2 Complete - OpenTelemetry Tracing Implemented
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -616,7 +616,7 @@ def build_scoped_models(
 | Grafana 仪表盘 | P1 | ✅ 已完成 (Phase 3.1) |
 | 加密存储 | P1 | ✅ 已完成 (Phase 2.5) |
 | 访问控制增强 | P1 | ✅ 已完成 (Phase 2.5) |
-| OpenTelemetry 追踪 | P1 | ⏳ |
+| OpenTelemetry 追踪 | P1 | ✅ 已完成 (Phase 3.2) |
 | 多语言 SDK (Python/JS) | P2 | ⏳ |
 | 云端托管服务 | P2 | ⏳ |
 
@@ -1555,7 +1555,67 @@ docker-compose up -d
 # 用户名: admin, 密码: admin
 ```
 
-**下一步**: Phase 3.2 OpenTelemetry 追踪
+### Phase 3.2: OpenTelemetry 追踪 ✅ **已完成** (2026-03-09, P1)
+
+**目标**: 分布式追踪能力
+
+**任务**:
+1. ✅ Telemetry 模块实现
+2. ✅ Span 创建与管理
+3. ✅ 用户/租户上下文追踪
+4. ✅ 多种导出器支持 (stdout, OTLP)
+5. ✅ Feature-gated 实现
+
+**实现成果** (2026-03-09):
+
+**新增模块** (`crates/evif-mem/src/telemetry.rs`):
+
+1. **`Telemetry` struct**
+   - 主遥测数据结构
+   - 支持初始化、Span 创建、操作类型推断
+   - 支持配置: enabled, service_name, exporter, sample_rate
+
+2. **`TelemetrySpan` struct**
+   - 追踪操作 Span
+   - 自动用户/租户上下文
+   - 操作类型自动推断 (memorize/retrieve/evolve/workflow/extract)
+
+3. **`TelemetryRegistry` struct**
+   - 线程安全的注册表
+   - Arc + RwLock 实现
+   - 异步初始化和 Span 创建
+
+4. **`TelemetryConfig` struct**
+   - 配置选项: enabled, service_name, exporter, otlp_endpoint, sample_rate
+   - 默认值: service_name="evif-mem", exporter="stdout"
+
+5. **`trace_operation!` macro**
+   - 便捷宏: 自动创建和管理 Span
+
+**Feature Flag**: `#[cfg(feature = "telemetry")]`
+
+**代码统计**: 新增 telemetry.rs (~370 行); 189 tests 通过
+
+**运行方式**:
+```bash
+cargo build -p evif-mem --features telemetry
+cargo test -p evif-mem --features telemetry
+```
+
+**使用示例**:
+```rust
+use evif_mem::telemetry::{TelemetryRegistry, TelemetryConfig};
+
+let registry = TelemetryRegistry::new();
+registry.init(TelemetryConfig::default()).await.unwrap();
+
+// 创建 Span
+let span = registry.start_span("memorize_text", Some("user123"), None).await;
+// ... 执行操作
+span.end();
+```
+
+**下一步**: Phase 3.3 Python SDK
 
 ---
 

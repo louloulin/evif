@@ -1,8 +1,89 @@
-# Changelog 4 - Phase 3.1 Complete
+# Changelog 4 - Phase 3.2 Complete
 
-> **Version**: 4.9
+> **Version**: 5.0
 > **Date**: 2026-03-09
-> **Focus**: Phase 3.1 Complete - Grafana Dashboard Implemented
+> **Focus**: Phase 3.2 Complete - OpenTelemetry Tracing Implemented
+
+---
+
+## [Phase 3.2 Complete] - 2026-03-09
+
+### 🎉 Phase 3.2 OpenTelemetry Tracing Implementation
+
+Implemented distributed tracing capabilities for evif-mem operations.
+
+### 📊 Status
+
+**Phase 3.x Progress**:
+
+| Phase | Feature | Status | Date |
+|-------|---------|--------|------|
+| 3.1 | Grafana Dashboard Templates | ✅ Complete | 2026-03-09 |
+| 3.2 | OpenTelemetry Tracing | ✅ Complete | 2026-03-09 |
+| 3.3 | Python SDK | ⏳ Pending | - |
+| 3.4 | TypeScript SDK | ⏳ Pending | - |
+
+### 🆕 New Features
+
+**New Module**: `crates/evif-mem/src/telemetry.rs`
+
+1. **`Telemetry` struct**
+   - Main telemetry data structure
+   - Initialization, Span creation, operation type inference
+   - Configurable: enabled, service_name, exporter, sample_rate
+
+2. **`TelemetrySpan` struct**
+   - Trace operation spans
+   - Automatic user/tenant context
+   - Auto-infer operation types (memorize/retrieve/evolve/workflow/extract)
+
+3. **`TelemetryRegistry` struct**
+   - Thread-safe registry
+   - Arc + RwLock implementation
+   - Async initialization and Span creation
+
+4. **`TelemetryConfig` struct**
+   - Options: enabled, service_name, exporter, otlp_endpoint, sample_rate
+   - Default: service_name="evif-mem", exporter="stdout"
+
+5. **`trace_operation!` macro**
+   - Convenient macro: automatic Span creation and management
+
+**Feature Flag**: `#[cfg(feature = "telemetry")]`
+
+### 🚀 Quick Start
+
+```bash
+cargo build -p evif-mem --features telemetry
+cargo test -p evif-mem --features telemetry
+```
+
+### 📈 Overall Progress
+
+| Phase | Features | Completion |
+|-------|----------|------------|
+| Phase 1.x | Core + Proactive + Workflow + Multi-user | ✅ 100% |
+| Phase 2.x | Performance + Enterprise + Monitoring + Security | ✅ 100% |
+| Phase 3.x | Grafana Dashboard + OpenTelemetry | ✅ 30% |
+| **Overall** | **All Planned Features** | **~97%** |
+
+### 🔄 Documentation Updates
+
+**Updated Files**:
+1. `mem4.md`:
+   - Version: 4.6 → 4.7
+   - Status: Phase 3.1 → Phase 3.2 Complete
+   - Added Phase 3.2 OpenTelemetry section
+
+2. `changelog4.md`:
+   - Version: 4.9 → 5.0
+   - Added Phase 3.2 Complete summary entry
+
+### 🧪 Test Results
+
+- **Total Tests**: 189
+- **Passed**: 189 (100%)
+- **Status**: All tests passing ✅
 
 ---
 

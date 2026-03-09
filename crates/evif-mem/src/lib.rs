@@ -30,6 +30,7 @@ pub mod pipeline;
 pub mod proactive;
 pub mod security;
 pub mod storage;
+pub mod telemetry;
 pub mod vector;
 pub mod workflow;
 
@@ -54,6 +55,9 @@ pub use llamaindex::{
     EvifKVStore, QueryResult,
 };
 pub use metrics::{Metrics, MetricsConfig, MetricsRegistry, MetricsError};
+
+#[cfg(feature = "telemetry")]
+pub use telemetry::{Telemetry, TelemetryConfig, TelemetrySpan, TelemetryRegistry, TelemetryError, create_telemetry_registry};
 
 #[cfg(feature = "security")]
 pub use security::{
