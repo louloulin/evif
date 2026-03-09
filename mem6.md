@@ -113,14 +113,44 @@ WS     /api/v1/terminal    // 终端 PTY
 
 | 功能 | 状态 | 优先级 | 描述 |
 |------|------|--------|------|
-| MemoryExplorer | ❌ 缺失 | P0 | 记忆浏览器（分类/项目树形视图） |
-| CategoryView | ❌ 缺失 | P0 | 分类详情视图（统计/时间线） |
-| MemoryTimeline | ❌ 缺失 | P1 | 记忆时序可视化 |
+| MemoryExplorer | ✅ 已实现 | P0 | 记忆浏览器（分类/项目树形视图） |
+| CategoryView | ✅ 已实现 | P0 | 分类详情视图（统计/时间线） |
+| MemoryTimeline | ✅ 已实现 | P1 | 记忆时序可视化 |
 | KnowledgeGraph | ❌ 缺失 | P1 | 知识图谱可视化（evif-graph 集成） |
 | FUSEStatusPanel | ❌ 缺失 | P1 | FUSE 挂载状态面板 |
 | MemorySearch | ⚠️ 部分 | P1 | 语义搜索界面（需要增强） |
 | MemoryInsights | ❌ 缺失 | P2 | 记忆分析与洞察仪表板 |
 | AIChatPanel | ❌ 缺失 | P2 | AI 记忆助手对话界面 |
+
+---
+
+### 实现进度
+
+**Phase 1: 记忆专用 UI 基础 (2026-03-09) - 已完成 60%**
+
+| 任务 | 状态 | 完成度 |
+|------|------|--------|
+| MemoryExplorer 组件 | ✅ 已实现 | 100% |
+| CategoryView 组件 | ✅ 已实现 | 100% |
+| MemoryTimeline 组件 | ✅ 已实现 | 100% |
+| 记忆搜索增强 | ⚠️ 部分实现 | 50% |
+| ActivityBar 集成 | ✅ 已实现 | 100% |
+| 样式与交互 | ✅ 已实现 | 100% |
+
+**新增文件:**
+- `evif-web/src/services/memory-api.ts` - Memory API 服务
+- `evif-web/src/components/memory/MemoryExplorer.tsx` - 记忆浏览器组件
+- `evif-web/src/components/memory/CategoryView.tsx` - 分类详情视图
+- `evif-web/src/components/memory/MemoryTimeline.tsx` - 记忆时间线组件
+- `evif-web/src/components/memory/MemoryView.tsx` - 记忆视图主容器
+- `evif-web/src/components/memory/index.ts` - 组件导出
+
+**技术实现:**
+- 集成现有 API: `/api/v1/memories`, `/api/v1/categories`, `/api/v1/graph/query`
+- 树形结构展示: Category → Memory Items
+- 搜索过滤功能 (语义搜索)
+- 时间线视图 (Graph API timeline 查询)
+- 完整的 CSS 样式
 
 ---
 

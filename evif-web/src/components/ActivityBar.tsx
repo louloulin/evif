@@ -41,7 +41,15 @@ const IconMonitor = () => (
   </svg>
 );
 
-export type ActivityView = 'explorer' | 'terminal' | 'problems' | 'plugins' | 'search' | 'monitor';
+const IconMemory = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2a10 10 0 1 0 10 10" />
+    <path d="M12 12l8-8" />
+    <circle cx="12" cy="12" r="4" />
+  </svg>
+);
+
+export type ActivityView = 'explorer' | 'terminal' | 'problems' | 'plugins' | 'search' | 'monitor' | 'memory';
 
 interface ActivityBarProps {
   activeView: ActivityView | null;
@@ -75,6 +83,9 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   };
   const handleMonitor = () => {
     onViewChange('monitor');
+  };
+  const handleMemory = () => {
+    onViewChange('memory');
   };
 
   return (
@@ -130,6 +141,14 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
           title="系统监控"
         >
           <IconMonitor />
+        </button>
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'memory' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleMemory}
+          title="记忆管理"
+        >
+          <IconMemory />
         </button>
       </div>
     </div>

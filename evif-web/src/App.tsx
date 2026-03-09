@@ -11,6 +11,7 @@ import ContextMenu from './components/ContextMenu';
 import PluginManagerView from './components/PluginManagerView';
 import SearchUploadView from './components/SearchUploadView';
 import { MonitorView } from './components/MonitorView';
+import MemoryView from './components/memory/MemoryView';
 import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog';
 import { EditorTabs } from './components/editor/EditorTabs';
 import { Breadcrumb } from './components/Breadcrumb';
@@ -906,6 +907,8 @@ function App() {
               <SearchUploadView />
             ) : activeView === 'monitor' ? (
               <MonitorView />
+            ) : activeView === 'memory' ? (
+              <MemoryView />
             ) : (
             <FileTree
               files={files}
