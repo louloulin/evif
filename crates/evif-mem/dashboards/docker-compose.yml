@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: evif-mem-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - evif-mem-network
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: evif-mem-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dashboards:/etc/grafana/provisioning/dashboards
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - evif-mem-network
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  evif-mem-network:
+    driver: bridge

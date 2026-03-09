@@ -1,8 +1,8 @@
 # mem4.md - evif-mem 与 memU 完整功能对比分析与实施计划
 
-> **版本**: 4.5
+> **版本**: 4.6
 > **日期**: 2026-03-09
-> **状态**: Phase 2.0 完成 - 所有功能已实现
+> **状态**: Phase 3.1 Complete - Grafana Dashboard Implemented
 > **作者**: Ralph Loop Analysis
 
 ---
@@ -613,9 +613,10 @@ def build_scoped_models(
 | 任务 | 优先级 | 状态 |
 |------|--------|------|
 | Prometheus 监控指标 | P1 | ✅ 已完成 (Phase 2.4) |
-| Grafana 仪表盘 | P1 | ⏳ |
+| Grafana 仪表盘 | P1 | ✅ 已完成 (Phase 3.1) |
 | 加密存储 | P1 | ✅ 已完成 (Phase 2.5) |
 | 访问控制增强 | P1 | ✅ 已完成 (Phase 2.5) |
+| OpenTelemetry 追踪 | P1 | ⏳ |
 | 多语言 SDK (Python/JS) | P2 | ⏳ |
 | 云端托管服务 | P2 | ⏳ |
 
@@ -1515,6 +1516,49 @@ let masked = mask_sensitive_data("test@example.com", SensitiveField::Email);
 
 ---
 
+### Phase 3.1: Grafana 仪表盘 ✅ **已完成** (2026-03-09, P1)
+
+**目标**: 生产级可观测性可视化
+
+**任务**:
+1. ✅ Grafana dashboard JSON 配置
+2. ✅ Prometheus 抓取配置
+3. ✅ Docker Compose 一键启动
+4. ✅ 监控面板文档
+
+**实现成果** (2026-03-09):
+
+**新增文件** (`crates/evif-mem/dashboards/`):
+
+1. **`evif-mem-overview.json`** - Grafana 仪表盘
+   - Overview 面板: 总操作数、错误计数
+   - Storage Metrics 面板: 记忆项、分类、资源统计
+   - Operation Latency 面板: 平均延迟、p95/p99 分布
+   - Operation Rates 面板: 操作速率、错误率
+
+2. **`docker-compose.yml`** - 一键启动
+   - Prometheus + Grafana 栈
+   - 自动配置抓取
+
+3. **`prometheus.yml`** - Prometheus 配置
+   - evif-mem metrics 端点抓取
+
+4. **`README.md`** - 使用文档
+   - 快速开始指南
+   - Metrics 参考表
+
+**运行方式**:
+```bash
+cd crates/evif-mem/dashboards
+docker-compose up -d
+# 访问 http://localhost:3000
+# 用户名: admin, 密码: admin
+```
+
+**下一步**: Phase 3.2 OpenTelemetry 追踪
+
+---
+
 ## 📈 关键指标对比
 
 ### 性能指标
@@ -1562,6 +1606,7 @@ evif-mem 已实现 memU 的所有核心功能，并在以下方面超越：
 4. ✅ Prometheus 监控（Phase 2.4）- 2026-03-09
 5. ✅ 安全加固（Phase 2.5）- 2026-03-09
 6. ✅ Doubao 后端（Phase 2.6）- 2026-03-08
+7. ✅ Grafana 仪表盘（Phase 3.1）- 2026-03-09
 
 **已完成 (Phase 2.0)**:
 1. Phase 2.1-2.6 全部完成
