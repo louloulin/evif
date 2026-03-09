@@ -58,3 +58,20 @@ export async function getMetricsOperations(): Promise<
   if (!res.ok) throw new Error('Failed to fetch operations')
   return res.json()
 }
+
+// FUSE Mount API
+
+export interface MountInfo {
+  plugin: string
+  path: string
+}
+
+export interface ListMountsResponse {
+  mounts: MountInfo[]
+}
+
+export async function listMounts(): Promise<ListMountsResponse> {
+  const res = await httpFetch('/api/v1/mounts')
+  if (!res.ok) throw new Error('Failed to fetch mounts')
+  return res.json()
+}

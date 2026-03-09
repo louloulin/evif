@@ -10,6 +10,7 @@ import { TrafficChart } from './monitor/TrafficChart';
 import { OperationChart } from './monitor/OperationChart';
 import { LogViewer } from './monitor/LogViewer';
 import { AlertPanel } from './monitor/AlertPanel';
+import { FUSEStatusPanel } from './monitor/FUSEStatusPanel';
 import { ErrorBoundary } from './ErrorBoundary';
 import { getMetricsStatus, getMetricsTraffic, getMetricsOperations } from '@/services/monitor-api';
 import type { MetricData, LogEntry, Alert } from '@/types/monitor';
@@ -156,6 +157,11 @@ export const MonitorView: React.FC = () => {
             {/* System Status */}
             <ErrorBoundary>
               <SystemStatus />
+            </ErrorBoundary>
+
+            {/* FUSE Status Panel */}
+            <ErrorBoundary>
+              <FUSEStatusPanel />
             </ErrorBoundary>
 
             {/* Metric Cards - 响应式网格: 移动1列 → 平板2列 → 桌面4列 */}

@@ -38,6 +38,27 @@
 
 ---
 
+### 11. FUSEStatusPanel 组件 ✅
+
+**功能**:
+- FUSE 挂载状态展示 (已挂载/未挂载)
+- 挂载点列表显示 (路径 + 插件名称)
+- 挂载状态指示器 (活跃/未活跃)
+- 刷新按钮 (手动刷新挂载列表)
+- 10 秒自动刷新
+- 错误状态处理
+
+**API 集成**:
+- `GET /api/v1/mounts` - 获取挂载列表
+- `GET /api/v1/metrics/status` - 获取系统状态
+
+**文件**:
+- `evif-web/src/components/monitor/FUSEStatusPanel.tsx` - 新增
+- `evif-web/src/services/monitor-api.ts` - 添加 listMounts API
+- `evif-web/src/components/MonitorView.tsx` - 集成 FUSE 状态面板
+
+---
+
 ## 文件变更
 
 ### 修改文件
@@ -45,7 +66,10 @@
 | 文件 | 变更 |
 |------|------|
 | `evif-web/src/components/memory/KnowledgeGraph.tsx` | 添加图查询 UI (约 200 行) |
-| `mem6.md` | 更新 Phase 2 完成度至 85% |
+| `evif-web/src/components/monitor/FUSEStatusPanel.tsx` | 新增 FUSE 状态面板 |
+| `evif-web/src/services/monitor-api.ts` | 添加 listMounts API |
+| `evif-web/src/components/MonitorView.tsx` | 集成 FUSE 状态面板 |
+| `mem6.md` | 更新 Phase 2 完成度至 85%，Phase 3 20% |
 
 ### 1. MemoryExplorer 组件 ✅
 
@@ -182,6 +206,7 @@
 | `evif-web/src/components/memory/KnowledgeGraph.tsx` | 知识图谱组件 | ~8KB |
 | `evif-web/src/components/memory/MemoryView.tsx` | 记忆视图主容器 | ~4KB |
 | `evif-web/src/components/memory/index.ts` | 组件导出 | ~200B |
+| `evif-web/src/components/monitor/FUSEStatusPanel.tsx` | FUSE 状态面板 | ~4KB |
 
 ### 修改文件
 
@@ -196,6 +221,15 @@
 ---
 
 ## 实现进度
+
+### Phase 3: FUSE 状态可视化 (Q3 2026) - 20% 完成
+
+| 任务 | 优先级 | 状态 | 完成度 |
+|------|--------|------|--------|
+| FUSEStatusPanel 组件 | P1 | ✅ | 100% |
+| 挂载列表展示 | P1 | ✅ | 100% |
+| 挂载状态指示 | P1 | ✅ | 100% |
+| 刷新功能 | P1 | ✅ | 100% |
 
 ### Phase 2: 知识图谱可视化 (Q2 2026) - 85% 完成
 
