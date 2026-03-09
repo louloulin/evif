@@ -1,7 +1,8 @@
 /**
  * MemoryView - 记忆管理视图
  *
- * 主容器组件，包含 MemoryExplorer、CategoryView 和 MemoryTimeline
+ * 主容器组件，包含 MemoryExplorer、CategoryView、MemoryTimeline、
+ * KnowledgeGraph、AIChatPanel 和 MemoryInsights
  */
 
 import React, { useState } from 'react'
@@ -9,9 +10,11 @@ import MemoryExplorer from './MemoryExplorer'
 import CategoryView from './CategoryView'
 import MemoryTimeline from './MemoryTimeline'
 import KnowledgeGraph from './KnowledgeGraph'
+import AIChatPanel from './AIChatPanel'
+import MemoryInsights from './MemoryInsights'
 import type { MemoryItem, Category } from '@/services/memory-api'
 
-type MemoryViewTab = 'explorer' | 'timeline' | 'graph'
+type MemoryViewTab = 'explorer' | 'timeline' | 'graph' | 'ai-chat' | 'insights'
 
 const MemoryView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MemoryViewTab>('explorer')
@@ -66,6 +69,18 @@ const MemoryView: React.FC = () => {
         >
           知识图谱
         </button>
+        <button
+          className={`tab-button ${activeTab === 'ai-chat' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ai-chat')}
+        >
+          AI 助手
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'insights' ? 'active' : ''}`}
+          onClick={() => setActiveTab('insights')}
+        >
+          洞察分析
+        </button>
       </div>
 
       {/* Tab 内容 */}
@@ -81,6 +96,12 @@ const MemoryView: React.FC = () => {
         )}
         {activeTab === 'graph' && (
           <KnowledgeGraph onNodeClick={(nodeId) => console.log('Node clicked:', nodeId)} />
+        )}
+        {activeTab === 'ai-chat' && (
+          <AIChatPanel />
+        )}
+        {activeTab === 'insights' && (
+          <MemoryInsights />
         )}
       </div>
 
