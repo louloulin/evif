@@ -91,6 +91,32 @@
 **文件**:
 - `evif-web/src/services/memory-api.ts`
 
+### 7. KnowledgeGraph 组件 ✅
+
+**功能**:
+- SVG 图谱可视化（无外部依赖）
+- 节点类型: memory / category / resource / event
+- 节点颜色区分
+- 点击节点查看详情
+- 缩放/平移/重置视图
+- 拖拽导航
+
+**API 集成**:
+- `POST /api/v1/graph/query` - 获取图数据
+
+**文件**:
+- `evif-web/src/components/memory/KnowledgeGraph.tsx`
+
+### 8. MemoryView 图谱 Tab ✅
+
+**功能**:
+- 新增 "知识图谱" Tab
+- 集成 KnowledgeGraph 组件
+- 节点点击回调
+
+**文件**:
+- `evif-web/src/components/memory/MemoryView.tsx`
+
 ---
 
 ## 文件变更
@@ -103,6 +129,7 @@
 | `evif-web/src/components/memory/MemoryExplorer.tsx` | 记忆浏览器组件 | ~8KB |
 | `evif-web/src/components/memory/CategoryView.tsx` | 分类详情视图 | ~5KB |
 | `evif-web/src/components/memory/MemoryTimeline.tsx` | 记忆时间线组件 | ~6KB |
+| `evif-web/src/components/memory/KnowledgeGraph.tsx` | 知识图谱组件 | ~8KB |
 | `evif-web/src/components/memory/MemoryView.tsx` | 记忆视图主容器 | ~4KB |
 | `evif-web/src/components/memory/index.ts` | 组件导出 | ~200B |
 
@@ -113,26 +140,28 @@
 | `evif-web/src/components/ActivityBar.tsx` | 添加 Memory 图标和视图 |
 | `evif-web/src/App.tsx` | 集成 MemoryView 组件 |
 | `evif-web/src/App.css` | 添加 memory 组件样式 |
+| `evif-web/src/components/memory/MemoryView.tsx` | 添加知识图谱 Tab |
 | `mem6.md` | 更新实现状态 |
 
 ---
 
 ## 实现进度
 
-### Phase 1: 记忆专用 UI (Q2 2026) - 60% 完成
+### Phase 1 & 2: 记忆专用 UI + 知识图谱 (Q2 2026) - 70% 完成
 
 | 任务 | 优先级 | 状态 | 完成度 |
 |------|--------|------|--------|
 | MemoryExplorer 组件 | P0 | ✅ | 100% |
 | CategoryView 组件 | P0 | ✅ | 100% |
 | MemoryTimeline 组件 | P1 | ✅ | 100% |
+| KnowledgeGraph 组件 | P1 | ✅ | 100% |
 | 记忆搜索增强 | P1 | ⚠️ 部分 | 50% |
 | 单元测试 | P0 | ⏳ 待完成 | 0% |
 | E2E 测试 | P1 | ⏳ 待完成 | 0% |
 
 ### 后续计划
 
-- **Phase 2**: 知识图谱可视化 (KnowledgeGraph 组件)
+- **Phase 2.1**: 图谱布局算法增强 (D3.js/React Flow)
 - **Phase 3**: FUSE 状态可视化 (FUSEStatusPanel 组件)
 - **Phase 4**: AI 辅助功能 (AIChatPanel, MemoryInsights)
 
@@ -144,14 +173,16 @@
 $ cd evif-web
 $ npm run build
 
-✓ 1859 modules transformed.
-✓ built in 1.64s
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 1860 modules transformed.
+✓ built in 3.95s
 ```
 
 **输出**:
 - `dist/index.html` - 1.05 kB
-- `dist/assets/index-yz6pOeNf.css` - 68.55 kB
-- `dist/assets/index-CBABjc1f.js` - 178.54 kB
+- `dist/assets/index-CDlon0eh.css` - 69.43 kB
+- `dist/assets/index-D3mFbL3q.js` - 185.00 kB
 
 ---
 
@@ -178,14 +209,15 @@ $ npm run build
 
 ## 总结
 
-本版本成功实现了 mem6.md Phase 1 的核心功能:
+本版本成功实现了 mem6.md Phase 1 + Phase 2 的核心功能:
 
-1. ✅ 三个核心 UI 组件 (MemoryExplorer, CategoryView, MemoryTimeline)
+1. ✅ 四个核心 UI 组件 (MemoryExplorer, CategoryView, MemoryTimeline, KnowledgeGraph)
 2. ✅ 完整的 API 服务层
 3. ✅ ActivityBar 集成
-4. ✅ 构建验证通过
+4. ✅ 知识图谱可视化 (SVG 实现，无外部依赖)
+5. ✅ 构建验证通过
 
-**完成度**: Phase 1 完成约 60% (搜索功能部分实现，测试待完成)
+**完成度**: Phase 1 & 2 完成约 70% (搜索功能部分实现，测试待完成)
 
 ---
 

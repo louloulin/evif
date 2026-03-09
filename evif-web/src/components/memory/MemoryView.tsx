@@ -8,9 +8,10 @@ import React, { useState } from 'react'
 import MemoryExplorer from './MemoryExplorer'
 import CategoryView from './CategoryView'
 import MemoryTimeline from './MemoryTimeline'
+import KnowledgeGraph from './KnowledgeGraph'
 import type { MemoryItem, Category } from '@/services/memory-api'
 
-type MemoryViewTab = 'explorer' | 'timeline'
+type MemoryViewTab = 'explorer' | 'timeline' | 'graph'
 
 const MemoryView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MemoryViewTab>('explorer')
@@ -59,6 +60,12 @@ const MemoryView: React.FC = () => {
         >
           时间线
         </button>
+        <button
+          className={`tab-button ${activeTab === 'graph' ? 'active' : ''}`}
+          onClick={() => setActiveTab('graph')}
+        >
+          知识图谱
+        </button>
       </div>
 
       {/* Tab 内容 */}
@@ -71,6 +78,9 @@ const MemoryView: React.FC = () => {
         )}
         {activeTab === 'timeline' && (
           <MemoryTimeline />
+        )}
+        {activeTab === 'graph' && (
+          <KnowledgeGraph onNodeClick={(nodeId) => console.log('Node clicked:', nodeId)} />
         )}
       </div>
 
