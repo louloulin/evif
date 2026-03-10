@@ -1,8 +1,8 @@
 # mem7.md - EVIF Web UI 问题分析与改进规划
 
-> **版本**: 1.3
+> **版本**: 1.4
 > **日期**: 2026-03-10
-> **状态**: API 验证完成
+> **状态**: shadcn/ui 改造计划已完成
 > **作者**: Ralph Loop Analysis
 > **目标**: 分析 evif-web UI 现状，识别样式/功能问题，验证前后端接口，制定完善改进计划
 
@@ -604,6 +604,157 @@ export async function listMemories(
 
 ---
 
-**文档版本**: 1.3
-**最后更新**: 2026-03-10
-**下次评审**: Phase 1 完成后
+## 10. shadcn/ui 统一改造计划
+
+### 10.1 当前状态
+
+**已实现的 shadcn/ui 组件** (16 个):
+
+| 组件 | 位置 | 状态 | 说明 |
+|------|------|------|------|
+| Button | `components/ui/button.tsx` | ✅ 完整 | 已扩展 success/warning/info 变体 |
+| Card | `components/ui/card.tsx` | ✅ 完整 | |
+| Input | `components/ui/input.tsx` | ✅ 完整 | |
+| Textarea | `components/ui/textarea.tsx` | ✅ 完整 | |
+| Dialog | `components/ui/dialog.tsx` | ✅ 完整 | |
+| Badge | `components/ui/badge.tsx` | ✅ 完整 | |
+| Tabs | `components/ui/tabs.tsx` | ✅ 完整 | |
+| Progress | `components/ui/progress.tsx` | ✅ 完整 | |
+| Switch | `components/ui/switch.tsx` | ✅ 完整 | |
+| ScrollArea | `components/ui/scroll-area.tsx` | ✅ 完整 | |
+| Skeleton | `components/ui/skeleton.tsx` | ✅ 完整 | |
+| Toast | `components/ui/toast.tsx` | ✅ 完整 | |
+| Toaster | `components/ui/toaster.tsx` | ✅ 完整 | |
+| Label | `components/ui/label.tsx` | ✅ 完整 | |
+| Pagination | `components/ui/pagination.tsx` | ✅ 完整 | |
+| Command | `components/ui/command.tsx` | ✅ 完整 | |
+
+**技术栈**:
+- Radix UI 作为基础组件库
+- class-variance-authority (CVA) 管理变体
+- Tailwind CSS 进行样式设计
+- CSS 变量支持暗色模式
+- Lucide React 图标库
+
+### 10.2 改造策略
+
+#### 10.2.1 组件分层
+
+```
+┌─────────────────────────────────────────────┐
+│  页面级组件 (Page Components)                │
+│  MemoryView, MonitorView, SearchUploadView   │
+├─────────────────────────────────────────────┤
+│  功能组件 (Feature Components)               │
+│  MemoryExplorer, KnowledgeGraph, AIChatPanel │
+├─────────────────────────────────────────────┤
+│  业务组件 (Business Components)              │
+│  CategoryView, MemoryTimeline, FUSEStatus   │
+├─────────────────────────────────────────────┤
+│  基础 UI 组件 (Primitive Components)        │
+│  Button, Card, Input, Dialog (shadcn/ui)   │
+└─────────────────────────────────────────────┘
+```
+
+#### 10.2.2 改造原则
+
+1. **渐进式迁移**: 不重写现有代码，逐步替换
+2. **保持兼容性**: 确保迁移过程中功能正常
+3. **统一设计系统**: 使用 CSS 变量定义设计 tokens
+4. **类型安全**: 充分利用 TypeScript 类型
+
+### 10.3 组件迁移计划
+
+#### Phase 1: 核心 UI 组件统一 (本周)
+
+| 组件 | 当前实现 | 目标实现 | 优先级 |
+|------|---------|---------|--------|
+| 按钮 | 自定义类 + 内联样式 | 使用 Button 组件 | P1 |
+| 输入框 | 原生 input | 使用 Input 组件 | P1 |
+| 卡片 | 自定义 CSS | 使用 Card 组件 | P1 |
+| 对话框 | 原生 dialog | 使用 Dialog 组件 | P1 |
+| 标签页 | 自定义 Tabs | 使用 Tabs 组件 | P1 |
+
+#### Phase 2: 业务组件重构 (下周)
+
+| 组件 | 改造内容 | 优先级 |
+|------|---------|--------|
+| MemoryExplorer | 使用 Card + ScrollArea | P2 |
+| CategoryView | 使用 Card + Badge | P2 |
+| KnowledgeGraph | 使用 SVG + ScrollArea | P2 |
+| AIChatPanel | 使用 Card + ScrollArea | P2 |
+| FUSEStatusPanel | 使用 Card + Progress | P2 |
+
+#### Phase 3: 设计系统完善 (下月)
+
+1. **Design Tokens 统一**
+   ```css
+   /* 统一使用 CSS 变量 */
+   :root {
+     --color-primary: hsl(var(--primary));
+     --color-success: hsl(var(--success));
+     --color-warning: hsl(var(--warning));
+     --radius-sm: calc(var(--radius) - 4px);
+     --radius-md: calc(var(--radius) - 2px);
+   }
+   ```
+
+2. **暗色模式完整支持**
+   - 所有组件支持 `dark:` 模式
+   - 使用 `hsl(var(--background))` 替代硬编码颜色
+
+3. **动画系统**
+   - 使用 Tailwind transition 类
+   - 定义动画 keyframes
+
+### 10.4 迁移示例
+
+#### Before (当前)
+```tsx
+<div className="bg-card rounded-lg border p-4">
+  <div className="memory-search-result">
+    <h3 className="text-lg font-semibold">{title}</h3>
+  </div>
+</div>
+```
+
+#### After (目标)
+```tsx
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+
+<Card>
+  <CardHeader>
+    <CardTitle>{title}</CardTitle>
+  </CardHeader>
+  <CardContent>
+    {/* content */}
+  </CardContent>
+</Card>
+```
+
+### 10.5 待添加的 shadcn/ui 组件
+
+| 组件 | 用途 | 优先级 |
+|------|------|--------|
+| Select | 搜索模式选择 | P1 |
+| DropdownMenu | 右键菜单 | P1 |
+| Popover | 工具提示 | P2 |
+| Tooltip | 按钮提示 | P2 |
+| Accordion | 折叠面板 | P2 |
+| Calendar | 日期选择 | P2 |
+| Table | 数据表格 | P2 |
+| Form | 表单验证 | P2 |
+
+### 10.6 验证清单
+
+- [ ] 现有 16 个 UI 组件构建正常
+- [ ] 暗色模式切换正常
+- [ ] 所有 CSS 变量正确定义
+- [ ] 组件变体 (variant) 统一使用
+- [ ] TypeScript 类型检查通过
+
+---
+
+**文档版本**: 1.4
+**更新日期**: 2026-03-10
+**新增内容**: shadcn/ui 统一改造计划 (第 10 章)
