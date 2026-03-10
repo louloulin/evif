@@ -1,8 +1,8 @@
 # mem7.md - EVIF Web UI 问题分析与改进规划
 
-> **版本**: 1.1.2
+> **版本**: 1.2
 > **日期**: 2026-03-10
-> **状态**: 分析报告 (更新)
+> **状态**: 功能分析完成
 > **作者**: Ralph Loop Analysis
 > **目标**: 分析 evif-web UI 现状，识别样式/功能问题，验证前后端接口，制定完善改进计划
 
@@ -134,8 +134,11 @@ style={{ paddingLeft: `${level * 16 + 24}px` }}  // 固定像素值
 
 ### 1.2 功能问题
 
+> **功能问题验证状态**: 2026-03-10 通过代码审查验证
+
 #### 问题 1.2.1 错误处理不完善
-**位置**: `MemoryExplorer.tsx:66`
+**位置**: `MemoryExplorer.tsx:65-66`
+**验证状态**: ✅ 已确认
 **描述**: 错误信息不够友好
 ```typescript
 // 当前
@@ -147,6 +150,7 @@ setError(err instanceof Error ? err.message : '无法加载记忆数据，请检
 
 #### 问题 1.2.2 搜索结果日期过滤无效
 **位置**: `MemoryExplorer.tsx:115-120`
+**验证状态**: ✅ 已确认 - 代码确实总是返回 true
 **描述**: 日期范围过滤代码为空
 ```typescript
 // 当前
@@ -162,12 +166,14 @@ if (dateRange.start || dateRange.end) {
 
 #### 问题 1.2.3 缺少记忆创建功能
 **位置**: `MemoryExplorer.tsx`
+**验证状态**: ✅ 已确认 - 组件仅提供浏览和搜索，无创建 UI
 **描述**: 只有浏览功能，无法创建新记忆
 **影响**: 用户无法通过 UI 添加记忆
 **优先级**: P1
 
 #### 问题 1.2.4 记忆详情查看功能缺失
-**位置**: `MemoryExplorer.tsx`
+**位置**: `MemoryExplorer.tsx:140-143`
+**验证状态**: ✅ 已确认 - 仅设置 selectedMemoryId 状态
 **描述**: 点击记忆项后未实现完整查看/编辑功能
 **当前行为**: 仅设置 selectedMemoryId 状态
 ```typescript
@@ -180,7 +186,8 @@ const handleMemoryClick = useCallback((memory: MemoryItem) => {
 **优先级**: P1
 
 #### 问题 1.2.5 分类统计信息显示不完整
-**位置**: `CategoryView.tsx`
+**位置**: `CategoryView.tsx:116-129`
+**验证状态**: ✅ 已确认 - 仅显示 item_count、创建时间、更新时间
 **描述**: 只显示 item_count，缺少更多统计
 **建议显示**:
 - 记忆类型分布
@@ -191,6 +198,7 @@ const handleMemoryClick = useCallback((memory: MemoryItem) => {
 
 #### 问题 1.2.6 知识图谱交互功能有限
 **位置**: `KnowledgeGraph.tsx`
+**验证状态**: ✅ 已确认 - 基础功能已实现，高级功能缺失
 **描述**: 基础交互已实现，高级功能缺失
 **缺失功能**:
 - 节点拖拽布局
@@ -222,6 +230,7 @@ const handleMemoryClick = useCallback((memory: MemoryItem) => {
 
 #### 问题 2.2.1 SearchResult 缺少时间戳
 **位置**: `memory-api.ts:33-39`
+**验证状态**: ✅ 已确认 - 接口确实缺少 timestamp 字段
 ```typescript
 // 前端定义
 export interface SearchResult {
@@ -263,7 +272,8 @@ export interface GraphQueryResponse {
 ### 2.3 API 调用问题
 
 #### 问题 2.3.1 缺少 API 超时处理
-**位置**: `memory-api.ts`
+**位置**: `memory-api.ts` + `http.ts`
+**验证状态**: ✅ 已确认 - httpFetch 无超时，API 函数无 AbortSignal 支持
 **描述**: 所有 API 调用无超时设置
 ```typescript
 // 当前
@@ -282,7 +292,8 @@ export async function listMemories(
 **优先级**: P2
 
 #### 问题 2.3.2 缺少请求重试机制
-**位置**: `memory-api.ts`
+**位置**: `memory-api.ts` + `http.ts`
+**验证状态**: ✅ 已确认 - 无重试逻辑
 **描述**: 网络错误时无重试逻辑
 **优先级**: P3
 
