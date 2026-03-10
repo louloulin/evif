@@ -61,7 +61,7 @@ export interface TimelineEvent {
 export interface GraphPathInfo {
   nodes: string[]
   edges: string[]
-  length: number
+  narrative: string
 }
 
 export interface GraphQueryResponse {
@@ -90,8 +90,9 @@ export async function getMemory(id: string): Promise<MemoryItem> {
 }
 
 export interface ExtractedMemoryItem {
-  content: string
-  memory_type: string
+  id: string
+  type: string
+  summary: string
   category?: string
 }
 

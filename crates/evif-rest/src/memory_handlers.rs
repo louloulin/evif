@@ -120,6 +120,8 @@ pub struct MemorySearchResult {
     pub content: String,
     pub score: f32,
     pub category: Option<String>,
+    pub created: String,
+    pub updated: String,
 }
 
 /// Memory item response
@@ -220,6 +222,8 @@ impl MemoryHandlers {
                     content: item.content,
                     score: score.max(0.0),
                     category: item.category_id,
+                    created: item.created_at.to_rfc3339(),
+                    updated: item.updated_at.to_rfc3339(),
                 }
             })
             .collect();
