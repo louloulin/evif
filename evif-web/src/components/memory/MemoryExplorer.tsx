@@ -4,12 +4,24 @@
  * 展示记忆的树形结构: Category → Memory Items
  * 支持搜索过滤和点击查看详情
  * 支持多种搜索模式: vector / hybrid / llm
+ * 支持创建新记忆
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { listCategories, getCategoryMemories, type Category, type MemoryItem } from '@/services/memory-api'
+import { listCategories, getCategoryMemories, createMemory, type Category, type MemoryItem } from '@/services/memory-api'
 import { searchMemories, type SearchResult } from '@/services/memory-api'
 import { Skeleton, SkeletonTreeItem, SkeletonText } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Plus, Loader2 } from 'lucide-react'
 
 // 搜索模式类型
 type SearchMode = 'vector' | 'hybrid' | 'llm'
@@ -54,6 +66,12 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
 
   // 搜索增强: 高级搜索面板展开状态
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false)
+
+  // 记忆创建状态
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [newMemoryContent, setNewMemoryContent] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   // 加载分类列表
   useEffect(() => {
@@ -173,6 +191,41 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
     setSelectedMemoryId(memory.id)
     onMemorySelect?.(memory)
   }, [onMemorySelect])
+
+  // 创建新记忆
+  const handleCreateMemory = useCallback(async () => {
+    if (!newMemoryContent.trim()) {
+      setCreateError('请输入记忆内容')
+      return
+    }
+
+    setIsCreating(true)
+    setCreateError(null)
+    try {
+      const result = await createMemory(newMemoryContent.trim())
+      console.log('Memory created:', result)
+
+      // 关闭对话框
+      setShowCreateDialog(false)
+      setNewMemoryContent('')
+
+      // 刷新分类列表
+      const cats = await listCategories()
+      setCategories(cats)
+    } catch (err) {
+      let errorMessage = '创建失败'
+      if (err instanceof Error) {
+        if (err.message.includes('Failed to fetch') || err.message.includes('network')) {
+          errorMessage = '网络连接失败，请检查后端服务'
+        } else {
+          errorMessage = `创建失败: ${err.message}`
+        }
+      }
+      setCreateError(errorMessage)
+    } finally {
+      setIsCreating(false)
+    }
+  }, [newMemoryContent])
 
   // 渲染记忆项
   const renderMemoryItem = (memory: MemoryItem, level: number = 1) => {
@@ -312,6 +365,15 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
       {/* 头部标题 */}
       <div className="memory-explorer-header">
         <span className="header-title">MEMORY</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowCreateDialog(true)}
+          className="h-7 px-2"
+          title="创建新记忆"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* 搜索框 */}
@@ -450,6 +512,58 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
           )}
         </div>
       )}
+
+      {/* 创建记忆对话框 */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>创建新记忆</DialogTitle>
+            <DialogDescription>
+              输入要记忆的内容，系统将自动提取结构化信息并进行分类。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Textarea
+              placeholder="输入记忆内容...&#10;&#10;例如: 今天和 Alice 讨论了项目架构，决定采用微服务方案，使用 Rust 作为后端语言。"
+              value={newMemoryContent}
+              onChange={(e) => setNewMemoryContent(e.target.value)}
+              className="min-h-[150px] resize-none"
+              disabled={isCreating}
+            />
+            {createError && (
+              <div className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+                {createError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateDialog(false)
+                setNewMemoryContent('')
+                setCreateError(null)
+              }}
+              disabled={isCreating}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleCreateMemory}
+              disabled={isCreating || !newMemoryContent.trim()}
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  创建中...
+                </>
+              ) : (
+                '创建记忆'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
