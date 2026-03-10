@@ -36,6 +36,8 @@ export interface SearchResult {
   content: string
   score: number
   category?: string
+  created: string
+  updated: string
 }
 
 export interface SearchResponse {
@@ -56,10 +58,17 @@ export interface TimelineEvent {
   event_type: string
 }
 
+export interface GraphPathInfo {
+  nodes: string[]
+  edges: string[]
+  length: number
+}
+
 export interface GraphQueryResponse {
   query_type: string
   nodes?: GraphNode[]
   timeline?: TimelineEvent[]
+  paths?: GraphPathInfo[]
   total: number
 }
 
@@ -80,7 +89,18 @@ export async function getMemory(id: string): Promise<MemoryItem> {
   return res.json()
 }
 
-export async function createMemory(content: string, modality: string = 'text'): Promise<{ memory_id: string }> {
+export interface ExtractedMemoryItem {
+  content: string
+  memory_type: string
+  category?: string
+}
+
+export interface CreateMemoryResponse {
+  memory_id: string
+  extracted_items: ExtractedMemoryItem[]
+}
+
+export async function createMemory(content: string, modality: string = 'text'): Promise<CreateMemoryResponse> {
   const res = await httpFetch('/api/v1/memories', {
     method: 'POST',
     body: JSON.stringify({ content, modality }),
