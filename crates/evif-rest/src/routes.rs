@@ -224,10 +224,10 @@ pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_route_creation() {
+    #[tokio::test]
+    async fn test_route_creation() {
         let mount_table = Arc::new(RadixMountTable::new());
-        let app = create_routes(mount_table);
+        let _app = create_routes(mount_table);
         // Router creation successful
         assert!(true);
     }
