@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2, FileText, FolderOpen, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
 
 // 搜索模式类型
 type SearchMode = 'vector' | 'hybrid' | 'llm'
@@ -240,7 +240,7 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
         tabIndex={0}
         aria-selected={isSelected}
       >
-        <span className="memory-icon">📝</span>
+        <span className="memory-icon"><FileText className="h-3.5 w-3.5" /></span>
         <span className="memory-name">{memory.summary || memory.id}</span>
         <span className="memory-type">{memory.type}</span>
       </div>
@@ -285,7 +285,7 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
         tabIndex={0}
       >
         <div className="search-result-header">
-          <span className="memory-icon">📝</span>
+          <span className="memory-icon"><FileText className="h-3.5 w-3.5" /></span>
           <span className="memory-name">{result.id.substring(0, 8)}...</span>
           <span className="memory-score">{(result.score * 100).toFixed(1)}%</span>
         </div>
@@ -325,7 +325,7 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
           <span className="header-title">MEMORY</span>
         </div>
         <div className="memory-explorer-error">
-          <div className="error-icon">⚠️</div>
+          <div className="error-icon"><AlertTriangle className="h-5 w-5 text-destructive" /></div>
           <div className="error-message">{error}</div>
           <div className="error-actions">
             <button
@@ -490,7 +490,7 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
                   <span className={`folder-icon ${expandedCategories.has(category.id) ? 'open' : ''}`}>
                     {expandedCategories.has(category.id) ? '▼' : '▶'}
                   </span>
-                  <span className="category-icon">📁</span>
+                  <span className="category-icon"><FolderOpen className="h-3.5 w-3.5" /></span>
                   <span className="category-name">{category.name}</span>
                   <span className="category-count">{category.item_count}</span>
                 </div>

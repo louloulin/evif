@@ -10,6 +10,19 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { httpFetch } from '@/lib/http'
+import {
+  Search,
+  BarChart3,
+  RefreshCw,
+  Lightbulb,
+  MessageSquare,
+  Bot,
+  User,
+  BookOpen,
+  Send,
+  Loader2,
+  AlertTriangle
+} from 'lucide-react'
 
 // 消息类型
 interface ChatMessage {
@@ -80,11 +93,21 @@ const AIChatPanel: React.FC = () => {
     } catch (err) {
       // 如果 API 不可用，使用默认建议
       setSuggestedActions([
-        { id: '1', label: '搜索最近关于项目的记忆', icon: '🔍', action: () => handleSuggestionClick('搜索最近关于项目的记忆') },
-        { id: '2', label: '总结我的偏好设置', icon: '📊', action: () => handleSuggestionClick('总结我的偏好设置') },
-        { id: '3', label: '查找重复的记忆', icon: '🔄', action: () => handleSuggestionClick('查找重复的记忆') },
-        { id: '4', label: '建议需要更新的记忆', icon: '💡', action: () => handleSuggestionClick('建议需要更新的记忆') },
+        { id: '1', label: '搜索最近关于项目的记忆', icon: 'search', action: () => handleSuggestionClick('搜索最近关于项目的记忆') },
+        { id: '2', label: '总结我的偏好设置', icon: 'chart', action: () => handleSuggestionClick('总结我的偏好设置') },
+        { id: '3', label: '查找重复的记忆', icon: 'refresh', action: () => handleSuggestionClick('查找重复的记忆') },
+        { id: '4', label: '建议需要更新的记忆', icon: 'lightbulb', action: () => handleSuggestionClick('建议需要更新的记忆') },
       ])
+    }
+  }
+
+  const renderIcon = (iconName: string) => {
+    switch (iconName) {
+      case 'search': return <Search className="h-4 w-4" />
+      case 'chart': return <BarChart3 className="h-4 w-4" />
+      case 'refresh': return <RefreshCw className="h-4 w-4" />
+      case 'lightbulb': return <Lightbulb className="h-4 w-4" />
+      default: return <Search className="h-4 w-4" />
     }
   }
 
@@ -183,7 +206,7 @@ const AIChatPanel: React.FC = () => {
     <div className="ai-chat-panel">
       {/* 头部 */}
       <div className="chat-header">
-        <h3>🤖 AI 记忆助手</h3>
+        <h3><Bot className="h-5 w-5 mr-2" />AI 记忆助手</h3>
         <span className="chat-subtitle">自然语言查询与管理记忆</span>
       </div>
 
@@ -191,7 +214,7 @@ const AIChatPanel: React.FC = () => {
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="chat-welcome">
-            <div className="welcome-icon">💬</div>
+            <div className="welcome-icon"><MessageSquare className="h-12 w-12" /></div>
             <h4>欢迎使用 AI 记忆助手</h4>
             <p>您可以用自然语言查询、整理和管理您的记忆。</p>
             <p>例如："查找关于 API 设计的记忆" 或 "总结我的偏好设置"</p>
@@ -205,7 +228,7 @@ const AIChatPanel: React.FC = () => {
           >
             <div className="message-header">
               <span className="message-role">
-                {message.role === 'user' ? '👤 您' : '🤖 助手'}
+                {message.role === 'user' ? <><User className="h-4 w-4 mr-1" />您</> : <><Bot className="h-4 w-4 mr-1" />助手</>}
               </span>
               <span className="message-time">{formatTime(message.timestamp)}</span>
             </div>
@@ -216,7 +239,7 @@ const AIChatPanel: React.FC = () => {
             {/* 相关记忆 */}
             {message.relatedMemories && message.relatedMemories.length > 0 && (
               <div className="related-memories">
-                <div className="related-header">📚 相关记忆:</div>
+                <div className="related-header"><BookOpen className="h-4 w-4 mr-1" />相关记忆:</div>
                 {message.relatedMemories.map(memory => (
                   <div key={memory.id} className="related-memory-item">
                     <span className="memory-type">{memory.type}</span>
@@ -247,7 +270,7 @@ const AIChatPanel: React.FC = () => {
       {/* 建议操作 */}
       {suggestedActions.length > 0 && (
         <div className="suggested-actions">
-          <div className="suggestions-header">💡 建议操作:</div>
+          <div className="suggestions-header"><Lightbulb className="h-4 w-4 mr-1" />建议操作:</div>
           <div className="suggestions-list">
             {suggestedActions.slice(0, 4).map(action => (
               <button
@@ -256,7 +279,7 @@ const AIChatPanel: React.FC = () => {
                 onClick={action.action}
                 disabled={loading}
               >
-                <span className="suggestion-icon">{action.icon}</span>
+                <span className="suggestion-icon">{renderIcon(action.icon)}</span>
                 <span className="suggestion-label">{action.label}</span>
               </button>
             ))}
@@ -281,14 +304,14 @@ const AIChatPanel: React.FC = () => {
           className="chat-send-button"
           disabled={!input.trim() || loading}
         >
-          {loading ? '⏳' : '📤'} 发送
+          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />} 发送
         </button>
       </form>
 
       {/* 错误提示 */}
       {error && (
         <div className="chat-error">
-          ⚠️ {error}
+          <AlertTriangle className="h-4 w-4 mr-2" /> {error}
         </div>
       )}
     </div>

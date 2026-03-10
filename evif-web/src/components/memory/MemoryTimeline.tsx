@@ -7,6 +7,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { queryGraph, type TimelineEvent } from '@/services/memory-api'
+import {
+  FileText,
+  Link,
+  Trash2,
+  Star,
+  TrendingDown,
+  Bookmark,
+  Sparkles
+} from 'lucide-react'
 
 interface MemoryTimelineProps {
   categoryId?: string
@@ -56,14 +65,14 @@ const MemoryTimeline: React.FC<MemoryTimelineProps> = ({
 
   // 获取事件类型图标
   const getEventIcon = (eventType: string) => {
-    const iconMap: Record<string, string> = {
-      'created': '✨',
-      'updated': '📝',
-      'deleted': '🗑️',
-      'merged': '🔗',
-      'reinforced': '⭐',
-      'decayed': '📉',
-      'default': '📌',
+    const iconMap: Record<string, React.ReactNode> = {
+      'created': <Sparkles className="h-4 w-4 text-yellow-500" />,
+      'updated': <FileText className="h-4 w-4" />,
+      'deleted': <Trash2 className="h-4 w-4 text-red-500" />,
+      'merged': <Link className="h-4 w-4 text-blue-500" />,
+      'reinforced': <Star className="h-4 w-4 text-yellow-500" />,
+      'decayed': <TrendingDown className="h-4 w-4 text-gray-500" />,
+      'default': <Bookmark className="h-4 w-4" />,
     }
     return iconMap[eventType] || iconMap['default']
   }

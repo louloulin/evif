@@ -10,6 +10,23 @@
 
 import React, { useState, useEffect } from 'react'
 import { httpFetch } from '@/lib/http'
+import {
+  FileText,
+  FolderOpen,
+  TrendingUp,
+  Search,
+  BarChart3,
+  Link,
+  Trash2,
+  RefreshCw,
+  FolderInput,
+  Lightbulb,
+  Heart,
+  Flame,
+  RefreshCw as RefreshIcon,
+  AlertTriangle,
+  Inbox
+} from 'lucide-react'
 
 // 统计数据类型
 interface UsageStats {
@@ -177,18 +194,18 @@ const MemoryInsights: React.FC = () => {
   // 获取建议图标
   const getSuggestionIcon = (type: string) => {
     switch (type) {
-      case 'merge': return '🔗'
-      case 'cleanup': return '🧹'
-      case 'update': return '🔄'
-      case 'categorize': return '📁'
-      default: return '💡'
+      case 'merge': return <Link className="h-4 w-4" />
+      case 'cleanup': return <Trash2 className="h-4 w-4" />
+      case 'update': return <RefreshCw className="h-4 w-4" />
+      case 'categorize': return <FolderInput className="h-4 w-4" />
+      default: return <Lightbulb className="h-4 w-4" />
     }
   }
 
   if (loading) {
     return (
       <div className="memory-insights loading">
-        <div className="loading-spinner">⏳ 加载中...</div>
+        <div className="loading-spinner"><RefreshCw className="h-4 w-4 animate-spin mr-2" />加载中...</div>
       </div>
     )
   }
@@ -197,15 +214,15 @@ const MemoryInsights: React.FC = () => {
     <div className="memory-insights">
       {/* 头部 */}
       <div className="insights-header">
-        <h3>📊 记忆洞察仪表板</h3>
+        <h3><BarChart3 className="h-5 w-5 mr-2" />记忆洞察仪表板</h3>
         <button className="refresh-button" onClick={loadInsights}>
-          🔄 刷新
+          <RefreshCw className="h-4 w-4 mr-1" /> 刷新
         </button>
       </div>
 
       {error && (
         <div className="insights-error">
-          ⚠️ {error}
+          <AlertTriangle className="h-4 w-4 mr-2" /> {error}
         </div>
       )}
 
@@ -213,22 +230,22 @@ const MemoryInsights: React.FC = () => {
       {stats && (
         <div className="stats-overview">
           <div className="stat-card">
-            <div className="stat-icon">📝</div>
+            <div className="stat-icon"><FileText className="h-5 w-5" /></div>
             <div className="stat-value">{stats.total_memories}</div>
             <div className="stat-label">总记忆数</div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon">📁</div>
+            <div className="stat-icon"><FolderOpen className="h-5 w-5" /></div>
             <div className="stat-value">{stats.total_categories}</div>
             <div className="stat-label">分类数</div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon">📈</div>
+            <div className="stat-icon"><TrendingUp className="h-5 w-5" /></div>
             <div className="stat-value">{stats.memories_this_week}</div>
             <div className="stat-label">本周新增</div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon">🔍</div>
+            <div className="stat-icon"><Search className="h-5 w-5" /></div>
             <div className="stat-value">{stats.queries_this_week}</div>
             <div className="stat-label">本周查询</div>
           </div>
@@ -238,7 +255,7 @@ const MemoryInsights: React.FC = () => {
       {/* 健康度指标 */}
       {healthMetrics && (
         <div className="health-section">
-          <h4>💚 记忆健康度</h4>
+          <h4><Heart className="h-4 w-4 mr-2" />记忆健康度</h4>
           <div className="health-metrics">
             <div className="health-item">
               <div className="health-label">总体健康度</div>
@@ -302,7 +319,7 @@ const MemoryInsights: React.FC = () => {
       {/* 分类分布 */}
       {categoryDistribution.length > 0 && (
         <div className="distribution-section">
-          <h4>📊 分类分布</h4>
+          <h4><BarChart3 className="h-4 w-4 mr-2" />分类分布</h4>
           <div className="distribution-list">
             {categoryDistribution.map(cat => (
               <div key={cat.category_id} className="distribution-item">
@@ -323,7 +340,7 @@ const MemoryInsights: React.FC = () => {
       {/* 热点记忆 */}
       {hotMemories.length > 0 && (
         <div className="hot-memories-section">
-          <h4>🔥 热点记忆</h4>
+          <h4><Flame className="h-4 w-4 mr-2" />热点记忆</h4>
           <div className="hot-memories-list">
             {hotMemories.slice(0, 5).map(memory => (
               <div key={memory.id} className="hot-memory-item">
@@ -373,7 +390,7 @@ const MemoryInsights: React.FC = () => {
       {/* 趋势图表 (简化版) */}
       {trends.length > 0 && (
         <div className="trends-section">
-          <h4>📈 趋势分析</h4>
+          <h4><TrendingUp className="h-4 w-4 mr-2" />趋势分析</h4>
           <div className="trends-chart">
             <div className="trends-header">
               <span>日期</span>
@@ -394,7 +411,7 @@ const MemoryInsights: React.FC = () => {
       {/* 空状态 */}
       {!stats && !error && (
         <div className="insights-empty">
-          <div className="empty-icon">📭</div>
+          <div className="empty-icon"><Inbox className="h-12 w-12 text-muted-foreground" /></div>
           <p>暂无洞察数据</p>
           <p className="empty-hint">开始添加记忆后，这里将显示分析结果</p>
         </div>
