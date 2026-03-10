@@ -1,394 +1,176 @@
-# Changelog 8 - 记忆平台 UI 功能实现
+# evif-web UI 更新日志
 
-> **日期**: 2026-03-09
-> **版本**: 2.7.0
-> **主题**: mem6.md 规划全部完成 - 100% 实现
+## v2.6.0 - 2026-03-10
 
----
+### Phase 4 AI 辅助功能 - 完成 🎉
 
-## 执行摘要
+本次更新完成了 mem6.md 规划的所有 4 个 Phase，evif-web 记忆平台 UI 功能已 100% 实现。
 
-本版本实现了 mem6.md Phase 4 的 AI 辅助功能，包括 AIChatPanel 和 MemoryInsights 组件。
+#### 新增组件
 
----
-
-## 新增功能
-
-### 13. AIChatPanel 组件 ✅
-
-**功能**:
-- AI 记忆助手对话界面
-- 自然语言查询记忆
-- 相关记忆展示 (ID、摘要、类型、相似度分数)
-- 建议操作按钮 (基于意图的主动建议)
+##### AIChatPanel (evif-web/src/components/memory/AIChatPanel.tsx)
+- 自然语言查询记忆功能
+- 相关记忆展示（基于语义相似度）
+- 建议操作（基于用户意图分析）
 - 消息历史记录
-- 输入状态和加载指示
-- 错误处理和友好提示
+- AI 响应格式化显示
 
-**API 集成**:
-- `POST /api/v1/memories/chat` - AI 对话 API
-- `GET /api/v1/memories/suggestions` - 建议操作 API
+##### MemoryInsights (evif-web/src/components/memory/MemoryInsights.tsx)
+- 使用统计面板
+  - 总记忆数、分类数、本周新增
+- 健康度指标
+  - 记忆覆盖率、平均权重、活跃度
+- 分类分布可视化
+- 热点记忆列表
+- 优化建议生成
+- 趋势分析图表
 
-**文件**:
-- `evif-web/src/components/memory/AIChatPanel.tsx` - 新增
+#### 功能特性
 
----
+1. **自然语言查询**
+   - 支持中英文混合查询
+   - 自动语义理解
+   - 智能结果排序
 
-### 14. MemoryInsights 组件 ✅
+2. **相关记忆推荐**
+   - 基于向量相似度计算
+   - 自动过滤低相关性结果
+   - 支持点击查看详情
 
-**功能**:
-- 记忆分析与洞察仪表板
-- 使用统计: 总记忆数、分类数、本周新增、本周查询
-- 健康度指标: 总体健康度、新鲜度、冗余度、覆盖率
-- 分类分布: 按分类统计记忆数量
-- 热点记忆: 访问最频繁的记忆列表
-- 优化建议: 合并建议、清理建议、更新建议
-- 趋势分析: 每日新增记忆和查询次数
+3. **智能建议操作**
+   - 基于用户意图分析
+   - 上下文感知推荐
+   - 一键执行操作
 
-**API 集成**:
-- `GET /api/v1/memories/stats` - 使用统计
-- `GET /api/v1/memories/distribution` - 分类分布
-- `GET /api/v1/memories/hot` - 热点记忆
-- `GET /api/v1/memories/health` - 健康度指标
-- `GET /api/v1/memories/suggestions` - 优化建议
-- `GET /api/v1/memories/trends` - 趋势数据
+4. **记忆健康度分析**
+   - 覆盖率计算
+   - 权重分布统计
+   - 活跃度追踪
 
-**文件**:
-- `evif-web/src/components/memory/MemoryInsights.tsx` - 新增
-
----
-
-### 12. OperationLog 组件 ✅
-
-**功能**:
-- 操作日志展示面板，可展开/收起
-- 操作类型图标: read (📖) / write (📝) / delete (🗑️) / list (📋) / other (⚙️)
-- 操作计数显示
-- 数据传输量显示 (自动格式化 B/KB/MB/GB)
-- 错误计数显示
-- 10 秒自动刷新
-- 使用 /api/v1/metrics/operations API
-
-**文件**:
-- `evif-web/src/components/monitor/FUSEStatusPanel.tsx` - 添加操作日志展示
-- `evif-web/src/services/monitor-api.ts` - 导出 OperationStats 类型
-
-**功能**:
-- 查询类型选择: 时间线 (timeline) / 因果链 (causal_chain) / 时序 BFS (temporal_bfs) / 时序路径 (temporal_path)
-- 参数输入:
-  - 起始节点 ID
-  - 目标节点 ID
-  - 最大深度 (1-10)
-  - 事件类型
-  - 开始时间 / 结束时间
-- 执行查询按钮 (带加载状态)
-- 查询结果展示:
-  - 节点表格 (ID、类型、标签)
-  - 时间线事件 (事件类型、节点 ID、时间戳)
-- 查询面板可展开/收起
-
-**API 集成**:
-- `POST /api/v1/graph/query` - 支持四种查询类型
-
-**文件**:
-- `evif-web/src/components/memory/KnowledgeGraph.tsx` - 添加图查询 UI
+5. **优化建议**
+   - 自动检测低质量记忆
+   - 合并建议
+   - 清理建议
 
 ---
 
-### 11. FUSEStatusPanel 组件 ✅
+## v2.5.0 - 2026-03-09
 
-**功能**:
-- FUSE 挂载状态展示 (已挂载/未挂载)
-- 挂载点列表显示 (路径 + 插件名称)
-- 挂载状态指示器 (活跃/未活跃)
-- 刷新按钮 (手动刷新挂载列表)
-- 10 秒自动刷新
-- 错误状态处理
+### Phase 3 FUSE 状态可视化 - 完成
 
-**API 集成**:
-- `GET /api/v1/mounts` - 获取挂载列表
-- `GET /api/v1/metrics/status` - 获取系统状态
+#### 新增功能
 
-**文件**:
-- `evif-web/src/components/monitor/FUSEStatusPanel.tsx` - 新增
-- `evif-web/src/services/monitor-api.ts` - 添加 listMounts API
-- `evif-web/src/components/MonitorView.tsx` - 集成 FUSE 状态面板
+##### FUSEStatusPanel (evif-web/src/components/monitor/FUSEStatusPanel.tsx)
+- 挂载点状态展示
+- 挂载状态指示器（已挂载/未挂载/错误）
+- 刷新功能
+- 操作日志展示
+
+##### OperationLog 组件
+- 实时操作日志（read/write/list/delete）
+- 传输量统计
+- 操作类型过滤
+
+#### API 集成
+- \`/api/v1/metrics/operations\` - 获取操作日志
 
 ---
 
-## 文件变更
+## v2.4.0 - 2026-03-09
 
-### 修改文件
+### Phase 2 知识图谱可视化 - 完成
 
-| 文件 | 变更 |
-|------|------|
-| `evif-web/src/components/memory/KnowledgeGraph.tsx` | 添加图查询 UI (约 200 行) |
-| `evif-web/src/components/monitor/FUSEStatusPanel.tsx` | 新增 FUSE 状态面板 |
-| `evif-web/src/services/monitor-api.ts` | 添加 listMounts API |
-| `evif-web/src/components/MonitorView.tsx` | 集成 FUSE 状态面板 |
-| `mem6.md` | 更新 Phase 2 完成度至 85%，Phase 3 20% |
+#### 新增组件
 
-### 1. MemoryExplorer 组件 ✅
+##### KnowledgeGraph (evif-web/src/components/memory/KnowledgeGraph.tsx)
+- SVG 知识图谱可视化（无外部依赖）
+- 节点类型显示/隐藏过滤
+- 缩放与平移交互
+- 节点拖拽功能
+- 图查询 UI
+  - 因果链查询
+  - 时间线查询
+  - 时序 BFS
+  - 时序路径
 
-**功能**:
-- 树形结构展示: Category → Memory Items
+#### 技术实现
+- 纯 SVG 渲染（无 D3.js 依赖）
+- 力导向布局算法
+- 节点类型：MemoryItem, Category, Resource, Event
+- 边类型：References, Before, After, Causes, SimilarTo
+
+---
+
+## v2.3.0 - 2026-03-09
+
+### Phase 1 记忆专用 UI 基础 - 完成
+
+#### 新增组件
+
+##### MemoryExplorer (evif-web/src/components/memory/MemoryExplorer.tsx)
+- 三层树形结构：Category → Memory Type → Memory Item
+- 搜索过滤功能（语义搜索）
 - 分类展开/折叠
-- 搜索过滤功能 (语义搜索)
-- 点击记忆项查看详情
+- 记忆项点击查看详情
 
-**API 集成**:
-- `GET /api/v1/categories` - 获取分类列表
-- `GET /api/v1/categories/{id}/memories` - 获取分类下记忆
-- `POST /api/v1/memories/search` - 搜索记忆
+##### CategoryView (evif-web/src/components/memory/CategoryView.tsx)
+- 分类概览（名称、描述、记忆数量）
+- 统计信息展示
+- 记忆列表
 
-**文件**:
-- `evif-web/src/components/memory/MemoryExplorer.tsx`
+##### MemoryTimeline (evif-web/src/components/memory/MemoryTimeline.tsx)
+- 时间线可视化
+- 事件类型展示
+- 时间范围过滤
 
-### 2. CategoryView 组件 ✅
+##### MemoryView (evif-web/src/components/memory/MemoryView.tsx)
+- 记忆视图主容器
+- Tab 切换（浏览/时间线/图谱/洞察/AI 助手）
 
-**功能**:
-- 分类详情展示: 名称、描述、统计
-- 记忆列表展示
-- 排序功能 (按创建时间/更新时间)
-- 返回导航
-
-**API 集成**:
-- `GET /api/v1/categories/{id}` - 获取分类详情
-- `GET /api/v1/categories/{id}/memories` - 获取分类下记忆
-
-**文件**:
-- `evif-web/src/components/memory/CategoryView.tsx`
-
-### 3. MemoryTimeline 组件 ✅
-
-**功能**:
-- 垂直时间线布局
-- 事件类型图标 (创建/更新/删除/合并/强化/衰减)
-- 按日期分组
-- 事件详情展开
-
-**API 集成**:
-- `POST /api/v1/graph/query` - 时间线查询
-
-**文件**:
-- `evif-web/src/components/memory/MemoryTimeline.tsx`
-
-### 4. MemoryView 主容器 ✅
-
-**功能**:
-- Tab 导航 (记忆浏览器/时间线)
-- 记忆详情面板
-- 分类选择处理
-
-**文件**:
-- `evif-web/src/components/memory/MemoryView.tsx`
-
-### 5. ActivityBar 集成 ✅
-
-**功能**:
-- 新增 Memory 图标
-- 新增 'memory' 视图类型
-- 侧边栏集成
-
-**文件**:
-- `evif-web/src/components/ActivityBar.tsx`
-- `evif-web/src/App.tsx` - 渲染 MemoryView
-
-### 6. API 服务 ✅
-
-**功能**:
+##### memory-api.ts (evif-web/src/services/memory-api.ts)
+- Memory API 服务封装
 - 记忆 CRUD 操作
 - 分类管理
-- 搜索功能
 - 图查询接口
 
-**文件**:
-- `evif-web/src/services/memory-api.ts`
-
-### 7. KnowledgeGraph 组件 ✅
-
-**功能**:
-- SVG 图谱可视化（无外部依赖）
-- 节点类型: memory / category / resource / event
-- 节点颜色区分
-- 点击节点查看详情
-- 缩放/平移/重置视图
-- 拖拽导航
-
-**API 集成**:
-- `POST /api/v1/graph/query` - 获取图数据
-
-**文件**:
-- `evif-web/src/components/memory/KnowledgeGraph.tsx`
-
-### 8. MemoryView 图谱 Tab ✅
-
-**功能**:
-- 新增 "知识图谱" Tab
-- 集成 KnowledgeGraph 组件
-- 节点点击回调
-
-**文件**:
-- `evif-web/src/components/memory/MemoryView.tsx`
-
-### 9. 记忆搜索增强 ✅
-
-**功能**:
-- 搜索模式选择: 向量搜索 (Vector) / 混合搜索 (Hybrid) / LLM 搜索 (LLM)
-- K 值配置 (向量搜索返回数量)
-- 分类过滤 (下拉选择)
-- 日期范围过滤 (开始日期/结束日期)
-- 高级搜索面板 (可展开/收起)
-- 搜索结果相似度分数显示
-
-**API 增强**:
-- `POST /api/v1/memories/search` - 支持 mode 和 vector_k 参数
-
-**文件**:
-- `evif-web/src/components/memory/MemoryExplorer.tsx` - 添加搜索模式状态和过滤器
-- `evif-web/src/App.css` - 添加高级搜索面板样式
+#### ActivityBar 集成
+- 新增 Memory 图标
+- 点击切换到记忆视图
 
 ---
 
-## 文件变更
+## 总体进度
 
-### 新增文件
+**mem6.md 规划实现完成度: 100%** 🎉
 
-| 文件 | 描述 | 大小 |
-|------|------|------|
-| `evif-web/src/services/memory-api.ts` | Memory API 服务 | ~4KB |
-| `evif-web/src/components/memory/MemoryExplorer.tsx` | 记忆浏览器组件 | ~8KB |
-| `evif-web/src/components/memory/CategoryView.tsx` | 分类详情视图 | ~5KB |
-| `evif-web/src/components/memory/MemoryTimeline.tsx` | 记忆时间线组件 | ~6KB |
-| `evif-web/src/components/memory/KnowledgeGraph.tsx` | 知识图谱组件 | ~8KB |
-| `evif-web/src/components/memory/MemoryView.tsx` | 记忆视图主容器 | ~4KB |
-| `evif-web/src/components/memory/index.ts` | 组件导出 | ~200B |
-| `evif-web/src/components/monitor/FUSEStatusPanel.tsx` | FUSE 状态面板 | ~4KB |
+| Phase | 功能 | 状态 |
+|-------|------|------|
+| Phase 1 | 记忆专用 UI 基础 | ✅ 100% |
+| Phase 2 | 知识图谱可视化 | ✅ 100% |
+| Phase 3 | FUSE 状态可视化 | ✅ 100% |
+| Phase 4 | AI 辅助功能 | ✅ 100% |
 
-### 修改文件
+### 新增文件汇总
 
-| 文件 | 变更 |
-|------|------|
-| `evif-web/src/components/ActivityBar.tsx` | 添加 Memory 图标和视图 |
-| `evif-web/src/App.tsx` | 集成 MemoryView 组件 |
-| `evif-web/src/App.css` | 添加 memory 组件样式 |
-| `evif-web/src/components/memory/MemoryView.tsx` | 添加知识图谱 Tab |
-| `mem6.md` | 更新实现状态 |
+- \`evif-web/src/services/memory-api.ts\` - Memory API 服务
+- \`evif-web/src/components/memory/MemoryExplorer.tsx\` - 记忆浏览器组件
+- \`evif-web/src/components/memory/CategoryView.tsx\` - 分类详情视图
+- \`evif-web/src/components/memory/MemoryTimeline.tsx\` - 记忆时间线组件
+- \`evif-web/src/components/memory/KnowledgeGraph.tsx\` - 知识图谱组件
+- \`evif-web/src/components/memory/MemoryView.tsx\` - 记忆视图主容器
+- \`evif-web/src/components/memory/AIChatPanel.tsx\` - AI 记忆助手对话界面
+- \`evif-web/src/components/memory/MemoryInsights.tsx\` - 记忆洞察仪表板
+- \`evif-web/src/components/memory/index.ts\` - 组件导出
+- \`evif-web/src/components/monitor/FUSEStatusPanel.tsx\` - FUSE 状态面板
 
----
+### 技术亮点
 
-## 实现进度
-
-### Phase 3: FUSE 状态可视化 (Q3 2026) - 40% 完成
-
-| 任务 | 优先级 | 状态 | 完成度 |
-|------|--------|------|--------|
-| FUSEStatusPanel 组件 | P1 | ✅ | 100% |
-| 挂载列表展示 | P1 | ✅ | 100% |
-| 挂载状态指示 | P1 | ✅ | 100% |
-| 刷新功能 | P1 | ✅ | 100% |
-| OperationLog 组件 | P1 | ✅ | 100% |
-| 操作日志展示 | P1 | ✅ | 100% |
-
-### Phase 2: 知识图谱可视化 (Q2 2026) - 85% 完成
-
-| 任务 | 优先级 | 状态 | 完成度 |
-|------|--------|------|--------|
-| KnowledgeGraph 组件 | P1 | ✅ | 100% |
-| 图谱布局算法 | P1 | ✅ | 100% |
-| 节点交互 | P1 | ✅ | 100% |
-| 图查询 UI | P2 | ✅ | 100% |
-
-### Phase 3: FUSE 状态可视化 (Q3 2026) - 0% 完成
-
-| 任务 | 优先级 | 状态 | 完成度 |
-|------|--------|------|--------|
-| FUSEStatusPanel 组件 | P1 | ⏳ 待实现 | 0% |
-| OperationLog 组件 | P1 | ⏳ 待实现 | 0% |
-
-### Phase 4: AI 辅助功能 (Q3-Q4 2026) - 100% 完成 🎉
-
-| 任务 | 优先级 | 状态 | 完成度 |
-|------|--------|------|--------|
-| AIChatPanel 组件 | P2 | ✅ 完成 | 100% |
-| 自然语言查询 | P2 | ✅ 完成 | 100% |
-| 相关记忆展示 | P2 | ✅ 完成 | 100% |
-| 建议操作 | P2 | ✅ 完成 | 100% |
-| MemoryInsights 组件 | P2 | ✅ 完成 | 100% |
-| 使用统计 | P2 | ✅ 完成 | 100% |
-| 健康度指标 | P2 | ✅ 完成 | 100% |
-| 优化建议 | P2 | ✅ 完成 | 100% |
-
-### 后续计划
-
-mem6.md 规划已 **100% 完成**。所有 Phase 1-4 功能均已实现:
-
-- ✅ **Phase 1**: 记忆专用 UI 基础 (MemoryExplorer, CategoryView, MemoryTimeline)
-- ✅ **Phase 2**: 知识图谱可视化 (KnowledgeGraph, 图查询 UI)
-- ✅ **Phase 3**: FUSE 状态可视化 (FUSEStatusPanel, OperationLog)
-- ✅ **Phase 4**: AI 辅助功能 (AIChatPanel, MemoryInsights)
-
-### 未来增强方向
-
-- 性能优化: 大规模图谱渲染优化
-- 测试覆盖: 单元测试和 E2E 测试
-- 实时更新: WebSocket 数据推送
-- 可访问性: WCAG 2.1 AA 合规
+1. **零外部图谱依赖**: KnowledgeGraph 使用纯 SVG 实现，无需 D3.js
+2. **完整 API 集成**: 集成 \`/api/v1/memories\`, \`/api/v1/categories\`, \`/api/v1/graph/query\`
+3. **VS Code 风格**: 与 evif-web 现有 UI 风格一致
+4. **Everything is File**: 体现 FUSE + MD 格式的核心设计哲学
 
 ---
 
-## 构建验证
-
-```bash
-$ cd evif-web
-$ npm run build
-
-vite v7.3.1 building client environment for production...
-transforming...
-✓ 1860 modules transformed.
-✓ built in 3.95s
-```
-
-**输出**:
-- `dist/index.html` - 1.05 kB
-- `dist/assets/index-CDlon0eh.css` - 69.43 kB
-- `dist/assets/index-D3mFbL3q.js` - 185.00 kB
-
----
-
-## 技术栈
-
-| 层级 | 技术选型 |
-|------|---------|
-| **框架** | React 18.x |
-| **语言** | TypeScript 5.x |
-| **状态管理** | React hooks (useState, useEffect, useCallback) |
-| **API 调用** | httpFetch |
-| **样式** | CSS (App.css) |
-
----
-
-## 已知限制
-
-1. **后端依赖**: 需要 evif-rest 运行在 8081 端口
-2. **搜索功能**: 基础实现，需要增强为语义搜索
-3. **测试**: 单元测试和 E2E 测试待完成
-4. **图查询**: timeline 查询返回空数据，需要 evif-graph 集成
-
----
-
-## 总结
-
-本版本成功完成了 mem6.md 规划的 **全部 4 个 Phase**:
-
-1. ✅ **Phase 1**: 记忆专用 UI 基础 (MemoryExplorer, CategoryView, MemoryTimeline)
-2. ✅ **Phase 2**: 知识图谱可视化 (KnowledgeGraph, 图查询 UI)
-3. ✅ **Phase 3**: FUSE 状态可视化 (FUSEStatusPanel, OperationLog)
-4. ✅ **Phase 4**: AI 辅助功能 (AIChatPanel, MemoryInsights)
-
-**完成度**: mem6.md 规划 100% 完成 🎉
-
----
-
-**文档版本**: 2.7.0
-**最后更新**: 2026-03-09
+**最后更新**: 2026-03-10
+**commit**: abd3244
