@@ -266,10 +266,11 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
       )
     }
 
-    return searchResults.map(result => (
+    return searchResults.map((result, index) => (
       <div
         key={result.id}
-        className="memory-search-result"
+        className="memory-search-result animate-fade-in list-item-hover"
+        style={{ animationDelay: `${index * 50}ms` }}
         onClick={() => {
           const memory: MemoryItem = {
             id: result.id,
@@ -483,14 +484,14 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
           ) : (
             categories.map(category => (
               <div key={category.id} className="memory-category">
-                {/* 分类标题 */}
+                {/* 分类标题 - 添加动画效果 */}
                 <div
-                  className={`memory-category-header ${expandedCategories.has(category.id) ? 'expanded' : ''}`}
+                  className={`memory-category-header transition-all-fast ${expandedCategories.has(category.id) ? 'expanded' : ''}`}
                   onClick={() => toggleCategory(category.id)}
                   role="button"
                   tabIndex={0}
                 >
-                  <span className={`folder-icon ${expandedCategories.has(category.id) ? 'open' : ''}`}>
+                  <span className={`folder-icon transition-transform-fast ${expandedCategories.has(category.id) ? 'open' : ''}`}>
                     {expandedCategories.has(category.id) ? '▼' : '▶'}
                   </span>
                   <span className="category-icon"><FolderOpen className="h-3.5 w-3.5" /></span>
@@ -498,9 +499,9 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
                   <span className="category-count">{category.item_count}</span>
                 </div>
 
-                {/* 分类下的记忆列表 */}
+                {/* 分类下的记忆列表 - 添加动画效果 */}
                 {expandedCategories.has(category.id) && (
-                  <div className="memory-category-items">
+                  <div className="memory-category-items animate-fade-in-up">
                     {categoryMemories[category.id]?.map(memory =>
                       renderMemoryItem(memory)
                     ) ?? (
