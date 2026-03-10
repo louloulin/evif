@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { queryGraph, type GraphNode, type TimelineEvent, type GraphQueryResponse } from '@/services/memory-api'
-import { Network, GitBranch, Clock, ChevronRight, ZoomIn, ZoomOut, RotateCcw, Search, Play, X } from 'lucide-react'
+import { Network, GitBranch, Clock, ChevronRight, ZoomIn, ZoomOut, RotateCcw, Search, Play, X, Filter, CheckSquare, Square } from 'lucide-react'
 
 // 查询类型
 type QueryType = 'timeline' | 'causal_chain' | 'temporal_bfs' | 'temporal_path'
@@ -52,6 +52,14 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
   })
   const [queryResult, setQueryResult] = useState<GraphQueryResponse | null>(null)
   const [queryLoading, setQueryLoading] = useState(false)
+
+  // 边类型过滤状态
+  const [edgeTypeFilter, setEdgeTypeFilter] = useState<string[]>(['temporal', 'causal', 'reference'])
+  const [showEdgeFilter, setShowEdgeFilter] = useState(false)
+
+  // 批量选择状态
+  const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set())
+  const [isBatchMode, setIsBatchMode] = useState(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -127,6 +135,47 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
   useEffect(() => {
     loadGraphData()
   }, [loadGraphData])
+
+  // 过滤边数据
+  const filteredEdges = graphData?.edges.filter(edge =>
+    edgeTypeFilter.length === 0 || edgeTypeFilter.includes(edge.type)
+  ) || []
+
+  // 获取所有边类型
+  const allEdgeTypes = Array.from(new Set(graphData?.edges.map(e => e.type) || []))
+
+  // 切换边类型过滤
+  const toggleEdgeType = (type: string) => {
+    setEdgeTypeFilter(prev =>
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    )
+  }
+
+  // 切换节点选择（批量模式）
+  const toggleNodeSelection = (nodeId: string) => {
+    if (!isBatchMode) return
+    setSelectedNodes(prev => {
+      const next = new Set(prev)
+      if (next.has(nodeId)) {
+        next.delete(nodeId)
+      } else {
+        next.add(nodeId)
+      }
+      return next
+    })
+  }
+
+  // 全选节点
+  const selectAllNodes = () => {
+    setSelectedNodes(new Set(graphData?.nodes.map(n => n.id) || []))
+  }
+
+  // 取消全选
+  const deselectAllNodes = () => {
+    setSelectedNodes(new Set())
+  }
 
   // 处理节点点击
   const handleNodeClick = (node: GraphNode) => {
@@ -294,8 +343,43 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
         >
           <Search className="w-4 h-4" />
         </button>
+        <button
+          onClick={() => setShowEdgeFilter(!showEdgeFilter)}
+          className={`p-1.5 rounded ${showEdgeFilter ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-200'}`}
+          title="边类型过滤"
+        >
+          <Filter className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => { setIsBatchMode(!isBatchMode); setSelectedNodes(new Set()) }}
+          className={`p-1.5 rounded ${isBatchMode ? 'bg-green-100 text-green-600' : 'hover:bg-gray-200'}`}
+          title="批量选择模式"
+        >
+          <CheckSquare className="w-4 h-4" />
+        </button>
+        {isBatchMode && (
+          <>
+            <button
+              onClick={selectAllNodes}
+              className="p-1.5 rounded hover:bg-gray-200 text-xs"
+              title="全选"
+            >
+              全选
+            </button>
+            <button
+              onClick={deselectAllNodes}
+              className="p-1.5 rounded hover:bg-gray-200 text-xs"
+              title="取消全选"
+            >
+              清除
+            </button>
+            <span className="text-xs text-green-600">
+              已选 {selectedNodes.size} 个
+            </span>
+          </>
+        )}
         <span className="ml-auto text-xs text-gray-500">
-          {graphData.nodes.length} 节点 · {graphData.edges.length} 关系
+          {graphData.nodes.length} 节点 · {filteredEdges.length} 关系
         </span>
       </div>
 
@@ -483,6 +567,58 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
         </div>
       )}
 
+      {/* 边类型过滤面板 */}
+      {showEdgeFilter && (
+        <div className="edge-filter-panel absolute top-12 left-2 bg-white rounded-lg shadow-lg border border-gray-200 p-3 z-10">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-medium text-gray-900 flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              边类型过滤
+            </h3>
+            <button
+              onClick={() => setShowEdgeFilter(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-1">
+            {allEdgeTypes.length === 0 ? (
+              <span className="text-xs text-gray-500">暂无边数据</span>
+            ) : (
+              allEdgeTypes.map(type => (
+                <label
+                  key={type}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                >
+                  <input
+                    type="checkbox"
+                    checked={edgeTypeFilter.includes(type)}
+                    onChange={() => toggleEdgeType(type)}
+                    className="rounded text-blue-500"
+                  />
+                  <span className="text-sm capitalize">{type}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <div className="mt-2 pt-2 border-t border-gray-200">
+            <button
+              onClick={() => setEdgeTypeFilter(allEdgeTypes)}
+              className="text-xs text-blue-500 hover:underline mr-2"
+            >
+              全选
+            </button>
+            <button
+              onClick={() => setEdgeTypeFilter([])}
+              className="text-xs text-gray-500 hover:underline"
+            >
+              清除
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 图画布 */}
       <div
         ref={containerRef}
@@ -501,7 +637,7 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
           }}
         >
           {/* 边 */}
-          {graphData.edges.map((edge, index) => {
+          {filteredEdges.map((edge, index) => {
             const sourcePos = nodePositions[edge.source]
             const targetPos = nodePositions[edge.target]
             if (!sourcePos || !targetPos) return null
@@ -526,14 +662,24 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
             if (!pos) return null
 
             const isSelected = selectedNode?.id === node.id
+            const isBatchSelected = selectedNodes.has(node.id)
 
             return (
               <g
                 key={node.id}
                 transform={`translate(${pos.x}, ${pos.y})`}
-                onClick={() => handleNodeClick(node)}
-                style={{ cursor: 'pointer' }}
+                onClick={() => isBatchMode ? toggleNodeSelection(node.id) : handleNodeClick(node)}
+                style={{ cursor: isBatchMode ? 'pointer' : 'pointer' }}
               >
+                {/* 批量选择指示器 */}
+                {isBatchMode && (
+                  <g transform="translate(-12, -28)">
+                    <rect x="0" y="0" width="24" height="24" rx="4" fill={isBatchSelected ? '#22c55e' : 'white'} stroke={isBatchSelected ? '#22c55e' : '#d1d5db'} strokeWidth="2" />
+                    {isBatchSelected && (
+                      <path d="M6 12l4 4 8-8" stroke="white" strokeWidth="2" fill="none" />
+                    )}
+                  </g>
+                )}
                 {/* 节点圆圈 */}
                 <circle
                   r={isSelected ? 28 : 24}

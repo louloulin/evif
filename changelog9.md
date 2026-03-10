@@ -1,5 +1,116 @@
 # evif-web UI 更新日志
 
+## v2.12.0 - 2026-03-10
+
+### Phase 3 功能增强 - 100% 完成 🎉
+
+本次更新完成了 mem7.md Phase 3 的所有 4 个功能增强任务，显著提升了 evif-web 记忆管理和知识图谱功能。
+
+#### 已完成任务清单
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| 记忆详情面板 | P2 | ✅ 已完成 |
+| 分类统计增强 | P2 | ✅ 已完成 |
+| 知识图谱增强 | P2 | ✅ 已完成 |
+| API 优化 | P2 | ✅ 已完成 |
+
+---
+
+### 新增功能
+
+#### 1. 分类统计增强 - CategoryView
+
+**文件**: `evif-web/src/components/memory/CategoryView.tsx`
+
+**功能描述**:
+- 显示总字符数统计
+- 显示记忆类型分布饼图
+- 显示热点记忆列表（最近更新的前5个）
+- 使用 Lucide React 图标 (PieChart, TrendingUp)
+- 数字格式化支持（k, 万）
+
+**技术实现**:
+- 使用 `useMemo` 计算统计数据，避免重复计算
+- 热点记忆按更新时间排序
+- 记忆类型分布用标签显示
+
+---
+
+#### 2. 知识图谱增强 - KnowledgeGraph
+
+**文件**: `evif-web/src/components/memory/KnowledgeGraph.tsx`
+
+**功能描述**:
+- 边类型过滤功能（支持 temporal, causal, reference 等类型）
+- 批量选择节点模式
+- 全选/取消全选功能
+- 批量选择指示器（复选框样式）
+
+**技术实现**:
+- 添加 `edgeTypeFilter` 状态管理过滤类型
+- 添加 `selectedNodes` Set 管理批量选择
+- 添加 `isBatchMode` 切换批量选择模式
+- 过滤后的边使用 `filteredEdges` 渲染
+
+---
+
+#### 3. API 优化 - http.ts
+
+**文件**: `evif-web/src/lib/http.ts`
+
+**功能描述**:
+- 超时处理（默认 30 秒，可配置）
+- 自动重试机制（默认 3 次，指数退避）
+- 可取消的请求 `createCancellableFetch`
+- 友好的超时错误信息
+
+**技术实现**:
+- 使用 `AbortController` 实现超时控制
+- 使用指数退避策略（1s, 2s, 4s...）
+- 支持网络错误自动重试
+- 导出 `FetchOptions` 接口用于配置
+
+**配置选项**:
+```typescript
+interface FetchOptions extends RequestInit {
+  timeout?: number    // 默认 30000ms
+  retries?: number   // 默认 3 次
+  retryDelay?: number // 默认 1000ms
+  verbose?: boolean   // 是否显示重试日志
+}
+```
+
+---
+
+### 代码统计
+
+| 文件 | 变更 | 说明 |
+|------|------|------|
+| CategoryView.tsx | +60 行 | 分类统计增强 |
+| KnowledgeGraph.tsx | +80 行 | 知识图谱增强 |
+| http.ts | +120 行 | API 优化 |
+| mem7.md | 更新 | 任务状态 100% |
+
+---
+
+### 构建验证
+
+- ✅ `bun run typecheck` - 通过
+- ✅ `bun run build` - 通过
+
+---
+
+### 进度更新
+
+- Phase 1: 7/7 任务 (100%) ✅
+- Phase 2: 4/4 任务 (100%) ✅
+- Phase 3: 4/4 任务 (100%) ✅
+
+**mem7.md 完成度: 100% 🎉**
+
+---
+
 ## v2.11.0 - 2026-03-10
 
 ### Phase 3.1 记忆详情面板 - 已完成 ✅

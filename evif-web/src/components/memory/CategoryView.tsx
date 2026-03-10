@@ -5,8 +5,9 @@
  * 以及该分类下的记忆列表
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { getCategory, getCategoryMemories, type Category, type MemoryItem } from '@/services/memory-api'
+import { PieChart, TrendingUp } from 'lucide-react'
 
 interface CategoryViewProps {
   categoryId: string
@@ -47,6 +48,32 @@ const CategoryView: React.FC<CategoryViewProps> = ({
     fetchData()
   }, [categoryId])
 
+  // 计算增强统计信息
+  const stats = useMemo(() => {
+    const typeDistribution: Record<string, number> = {}
+    let totalChars = 0
+
+    memories.forEach(memory => {
+      // 记忆类型分布
+      const type = memory.type || 'unknown'
+      typeDistribution[type] = (typeDistribution[type] || 0) + 1
+
+      // 总字符数
+      totalChars += (memory.content?.length || 0) + (memory.summary?.length || 0)
+    })
+
+    // 热点记忆（最近更新的前5个）
+    const hotMemories = [...memories]
+      .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime())
+      .slice(0, 5)
+
+    return {
+      typeDistribution,
+      totalChars,
+      hotMemories
+    }
+  }, [memories])
+
   // 排序记忆
   const sortedMemories = [...memories].sort((a, b) => {
     if (sortBy === 'created') {
@@ -67,6 +94,13 @@ const CategoryView: React.FC<CategoryViewProps> = ({
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  // 格式化数字
+  const formatNumber = (num: number) => {
+    if (num >= 10000) return (num / 10000).toFixed(1) + '万'
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k'
+    return num.toString()
   }
 
   // 加载状态
@@ -112,11 +146,15 @@ const CategoryView: React.FC<CategoryViewProps> = ({
         </div>
       </div>
 
-      {/* 统计信息 */}
+      {/* 统计信息 - 增强版 */}
       <div className="category-stats">
         <div className="stat-card">
           <span className="stat-value">{category.item_count}</span>
           <span className="stat-label">记忆总数</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-value">{formatNumber(stats.totalChars)}</span>
+          <span className="stat-label">总字符数</span>
         </div>
         <div className="stat-card">
           <span className="stat-value">{formatDate(category.created)}</span>
@@ -125,6 +163,55 @@ const CategoryView: React.FC<CategoryViewProps> = ({
         <div className="stat-card">
           <span className="stat-value">{formatDate(category.updated)}</span>
           <span className="stat-label">更新时间</span>
+        </div>
+      </div>
+
+      {/* 记忆类型分布 */}
+      <div className="category-stats mt-4">
+        <div className="stat-card flex-row items-center gap-3">
+          <PieChart className="w-5 h-5 text-blue-500" />
+          <div className="flex-1">
+            <div className="text-xs text-muted-foreground mb-1">记忆类型分布</div>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(stats.typeDistribution).map(([type, count]) => (
+                <span
+                  key={type}
+                  className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700"
+                >
+                  {type}: {count}
+                </span>
+              ))}
+              {Object.keys(stats.typeDistribution).length === 0 && (
+                <span className="text-xs text-muted-foreground">暂无数据</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 热点记忆 */}
+      <div className="category-stats mt-4">
+        <div className="stat-card flex-row items-start gap-3">
+          <TrendingUp className="w-5 h-5 text-orange-500 mt-1" />
+          <div className="flex-1">
+            <div className="text-xs text-muted-foreground mb-2">热点记忆 (最近更新)</div>
+            <div className="space-y-1">
+              {stats.hotMemories.map((memory, idx) => (
+                <div
+                  key={memory.id}
+                  className="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-muted cursor-pointer transition-colors"
+                  onClick={() => onMemorySelect?.(memory)}
+                >
+                  <span className="text-orange-500 font-medium">{idx + 1}</span>
+                  <span className="truncate flex-1">{memory.summary || memory.content.substring(0, 30)}</span>
+                  <span className="text-muted-foreground">{formatDate(memory.updated)}</span>
+                </div>
+              ))}
+              {stats.hotMemories.length === 0 && (
+                <span className="text-xs text-muted-foreground">暂无热点记忆</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
