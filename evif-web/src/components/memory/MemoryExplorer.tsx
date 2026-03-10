@@ -227,22 +227,23 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
     }
   }, [newMemoryContent])
 
-  // 渲染记忆项
+  // 渲染记忆项 - 响应式缩进
   const renderMemoryItem = (memory: MemoryItem, level: number = 1) => {
     const isSelected = selectedMemoryId === memory.id
+    // 使用响应式缩进：小屏幕减少缩进量
+    const indentClass = level === 1 ? '' : level === 2 ? 'pl-4 md:pl-6' : 'pl-6 md:pl-8 lg:pl-10'
     return (
       <div
         key={memory.id}
-        className={`memory-item ${isSelected ? 'selected' : ''}`}
-        style={{ paddingLeft: `${level * 16 + 24}px` }}
+        className={`memory-item ${isSelected ? 'selected' : ''} ${indentClass}`}
         onClick={() => handleMemoryClick(memory)}
         role="button"
         tabIndex={0}
         aria-selected={isSelected}
       >
         <span className="memory-icon"><FileText className="h-3.5 w-3.5" /></span>
-        <span className="memory-name">{memory.summary || memory.id}</span>
-        <span className="memory-type">{memory.type}</span>
+        <span className="memory-name truncate">{memory.summary || memory.id}</span>
+        <span className="memory-type text-[10px]">{memory.type}</span>
       </div>
     )
   }
@@ -363,7 +364,7 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
   return (
     <div className="memory-explorer">
       {/* 头部标题 */}
-      <div className="memory-explorer-header">
+      <div className="memory-explorer-header flex items-center justify-between">
         <span className="header-title">MEMORY</span>
         <Button
           variant="ghost"
@@ -376,17 +377,17 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
         </Button>
       </div>
 
-      {/* 搜索框 */}
-      <div className="memory-search">
+      {/* 搜索框 - 响应式布局 */}
+      <div className="memory-search px-2 md:px-3">
         <input
           type="text"
           placeholder="搜索记忆..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="search-input"
+          className="search-input w-full"
         />
         <button
-          className="advanced-search-toggle"
+          className="advanced-search-toggle flex-shrink-0"
           onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
           title="高级搜索"
         >
@@ -394,15 +395,15 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
         </button>
       </div>
 
-      {/* 高级搜索面板 */}
+      {/* 高级搜索面板 - 响应式布局 */}
       {showAdvancedSearch && (
-        <div className="memory-search-advanced">
-          <div className="search-mode-selector">
-            <label>搜索模式:</label>
+        <div className="memory-search-advanced px-2 md:px-3">
+          <div className="search-mode-selector flex flex-col sm:flex-row sm:items-center gap-2">
+            <label className="text-xs sm:text-sm whitespace-nowrap">搜索模式:</label>
             <select
               value={searchMode}
               onChange={(e) => setSearchMode(e.target.value as SearchMode)}
-              className="search-mode-select"
+              className="search-mode-select w-full sm:flex-1"
             >
               <option value="vector">向量搜索 (Vector)</option>
               <option value="hybrid">混合搜索 (Hybrid)</option>
@@ -411,25 +412,25 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
           </div>
 
           {searchMode === 'vector' && (
-            <div className="search-param">
-              <label>返回数量 (K):</label>
+            <div className="search-param flex flex-col sm:flex-row sm:items-center gap-2">
+              <label className="text-xs sm:text-sm whitespace-nowrap">返回数量 (K):</label>
               <input
                 type="number"
                 min={1}
                 max={50}
                 value={vectorK}
                 onChange={(e) => setVectorK(parseInt(e.target.value) || 10)}
-                className="search-k-input"
+                className="search-k-input w-full sm:w-16"
               />
             </div>
           )}
 
-          <div className="search-param">
-            <label>分类过滤:</label>
+          <div className="search-param flex flex-col sm:flex-row sm:items-center gap-2">
+            <label className="text-xs sm:text-sm whitespace-nowrap">分类过滤:</label>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="search-category-select"
+              className="search-category-select w-full sm:flex-1"
             >
               <option value="">全部分类</option>
               {categories.map(cat => (
@@ -438,23 +439,25 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
             </select>
           </div>
 
-          <div className="search-param">
-            <label>日期范围:</label>
-            <input
-              type="date"
-              value={dateRange.start || ''}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="search-date-input"
-              placeholder="开始日期"
-            />
-            <span className="date-separator">至</span>
-            <input
-              type="date"
-              value={dateRange.end || ''}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="search-date-input"
-              placeholder="结束日期"
-            />
+          <div className="search-param flex flex-col gap-2">
+            <label className="text-xs sm:text-sm">日期范围:</label>
+            <div className="flex flex-col sm:flex-row gap-2 items-center">
+              <input
+                type="date"
+                value={dateRange.start || ''}
+                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                className="search-date-input w-full"
+                placeholder="开始日期"
+              />
+              <span className="date-separator text-xs">至</span>
+              <input
+                type="date"
+                value={dateRange.end || ''}
+                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                className="search-date-input w-full"
+                placeholder="结束日期"
+              />
+            </div>
           </div>
         </div>
       )}
