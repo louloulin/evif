@@ -1028,6 +1028,62 @@
   color: var(--muted-foreground);
 }
 
+.memory-explorer-error {
+  padding: 24px;
+  text-align: center;
+}
+
+.memory-explorer-error .error-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.memory-explorer-error .error-message {
+  color: var(--destructive);
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+.memory-explorer-error .error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.memory-explorer-error .btn-retry {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.memory-explorer-error .btn-retry:hover {
+  background: var(--accent);
+}
+
+.memory-explorer-error .btn-retry.primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.memory-explorer-error .btn-retry.primary:hover {
+  opacity: 0.9;
+}
+
+.memory-explorer-error .error-hint {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
 /* Memory Search */
 .memory-search {
   padding: 8px 12px;

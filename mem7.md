@@ -1,8 +1,8 @@
 # mem7.md - EVIF Web UI 问题分析与改进规划
 
-> **版本**: 1.6
+> **版本**: 1.7
 > **日期**: 2026-03-10
-> **状态**: Phase 1 核心问题修复 - 4/7 任务已完成 (57%)
+> **状态**: Phase 1 核心问题修复 - 5/7 任务已完成 (71%)
 > **作者**: Ralph Loop Analysis
 > **目标**: 分析 evif-web UI 现状，识别样式/功能问题，验证前后端接口，制定完善改进计划
 
@@ -498,11 +498,11 @@ export async function listMemories(
 |------|--------|------|---------|------|
 | 修复日期过滤 | P1 | 后端添加 SearchResult.created/updated 字段 | 2h | ✅ 已完成 |
 | 添加记忆创建 | P1 | 实现 createMemory UI 和 API 集成 | 4h | 待开始 |
-| 完善错误处理 | P1 | 友好的错误提示和重试机制 | 2h | 待开始 |
+| 完善错误处理 | P1 | 友好的错误提示和重试机制 | 2h | ✅ 已完成 |
 | 修复 createMemory 响应 | P1 | 适配后端返回的 extracted_items 字段 | 1h | ✅ 已完成 |
 | 修复 GraphQueryResponse | P2 | 添加 paths 字段到前端类型定义 | 1h | ✅ 已完成 |
-| 添加加载骨架屏 | P1 | 改善加载体验 (Skeleton) | 2h | 待开始 |
-| 实现重试按钮 | P1 | API 失败时的自动重试按钮 | 1h | 待开始 |
+| 添加加载骨架屏 | P1 | 改善加载体验 (Skeleton) | 2h | ✅ 已完成 |
+| 实现重试按钮 | P1 | API 失败时的自动重试按钮 | 1h | ✅ 已完成 |
 
 ### 5.2 Phase 2: UI/UX 优化 (P2)
 

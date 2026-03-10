@@ -1,5 +1,96 @@
 # evif-web UI 更新日志
 
+## v2.9.0 - 2026-03-10
+
+### Phase 1 核心问题修复 - 进行中
+
+本次更新修复了 mem7.md 中识别的错误处理和加载体验问题。
+
+#### 问题修复
+
+##### 1. 完善错误处理
+- **文件**: evif-web/src/components/memory/MemoryExplorer.tsx
+- **问题**: 错误提示不够友好，无法区分不同类型的错误
+- **修复**: 改进错误提示，区分网络错误、服务器错误、认证错误等
+
+```typescript
+// 修复后 - 区分不同类型的错误
+if (err.message.includes('Failed to fetch') || err.message.includes('network')) {
+  errorMessage = '网络连接失败，请检查后端服务是否运行'
+} else if (err.message.includes('500') || err.message.includes('Internal Server')) {
+  errorMessage = '服务器内部错误，请稍后重试'
+} else if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+  errorMessage = '认证失败，请重新登录'
+} else if (err.message.includes('403') || err.message.includes('Forbidden')) {
+  errorMessage = '没有访问权限'
+} else {
+  errorMessage = `加载失败: ${err.message}`
+}
+```
+
+##### 2. 添加加载骨架屏
+- **文件**: evif-web/src/components/memory/MemoryExplorer.tsx
+- **问题**: 加载状态使用简单的 spinner 动画
+- **修复**: 使用 Skeleton 组件提供更好的加载体验
+
+```typescript
+// 修复后 - 使用骨架屏
+return (
+  <div className="memory-explorer">
+    <Skeleton variant="rounded" height={40} className="w-full" />
+    <SkeletonText height={20} className="w-full" />
+    <SkeletonText height={20} className="w-3/4" />
+    <div className="mt-4 space-y-2">
+      <SkeletonTreeItem hasChildren />
+      <SkeletonTreeItem hasChildren />
+      <SkeletonTreeItem hasChildren />
+    </div>
+  </div>
+)
+```
+
+##### 3. 改进重试功能
+- **文件**: evif-web/src/components/memory/MemoryExplorer.tsx, App.css
+- **问题**: 只有简单的刷新页面按钮
+- **修复**: 添加功能更完善的重试按钮，支持点击重新加载数据
+
+```typescript
+// 修复后 - 功能完善的重试按钮
+<button
+  onClick={async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const cats = await listCategories()
+      setCategories(cats)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败，请重试')
+    } finally {
+      setLoading(false)
+    }
+  }}
+  className="btn-retry primary"
+>
+  重试
+</button>
+```
+
+#### 验证结果
+
+- ✅ TypeScript 类型检查通过
+- ✅ 构建通过
+- ✅ mem7.md 已更新至 v1.7
+- ✅ Phase 1 完成进度: 5/7 任务 (71%)
+
+#### 待完成任务
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| 添加记忆创建 UI | P1 | 待开始 |
+| 实现重试按钮 | P1 | ✅ 已完成 |
+
+---
+
 ## v2.8.0 - 2026-03-10
 
 ### Phase 1 核心问题修复 - 进行中

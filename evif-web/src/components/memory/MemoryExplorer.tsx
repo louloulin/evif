@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { listCategories, getCategoryMemories, type Category, type MemoryItem } from '@/services/memory-api'
 import { searchMemories, type SearchResult } from '@/services/memory-api'
+import { Skeleton, SkeletonTreeItem, SkeletonText } from '@/components/ui/skeleton'
 
 // 搜索模式类型
 type SearchMode = 'vector' | 'hybrid' | 'llm'
@@ -63,7 +64,24 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
         const cats = await listCategories()
         setCategories(cats)
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载分类失败')
+        // 改进错误处理：区分不同类型的错误
+        let errorMessage = '无法加载记忆数据'
+        if (err instanceof Error) {
+          if (err.message.includes('Failed to fetch') || err.message.includes('network') || err.message.includes('Network')) {
+            errorMessage = '网络连接失败，请检查后端服务是否运行'
+          } else if (err.message.includes('500') || err.message.includes('Internal Server')) {
+            errorMessage = '服务器内部错误，请稍后重试'
+          } else if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+            errorMessage = '认证失败，请重新登录'
+          } else if (err.message.includes('403') || err.message.includes('Forbidden')) {
+            errorMessage = '没有访问权限'
+          } else {
+            errorMessage = `加载失败: ${err.message}`
+          }
+        } else {
+          errorMessage = '无法加载记忆数据，请检查网络连接'
+        }
+        setError(errorMessage)
       } finally {
         setLoading(false)
       }
@@ -225,27 +243,65 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
     ))
   }
 
-  // 加载状态
+  // 加载状态 - 使用骨架屏
   if (loading) {
     return (
       <div className="memory-explorer">
-        <div className="memory-explorer-loading">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-          <span>加载记忆数据中...</span>
+        <div className="memory-explorer-header">
+          <span className="header-title">MEMORY</span>
+        </div>
+        <div className="p-4 space-y-3">
+          <Skeleton variant="rounded" height={40} className="w-full" />
+          <SkeletonText height={20} className="w-full" />
+          <SkeletonText height={20} className="w-3/4" />
+          <div className="mt-4 space-y-2">
+            <SkeletonTreeItem hasChildren />
+            <SkeletonTreeItem hasChildren />
+            <SkeletonTreeItem hasChildren />
+          </div>
         </div>
       </div>
     )
   }
 
-  // 错误状态
+  // 错误状态 - 改进的错误提示和重试按钮
   if (error) {
     return (
       <div className="memory-explorer">
+        <div className="memory-explorer-header">
+          <span className="header-title">MEMORY</span>
+        </div>
         <div className="memory-explorer-error">
-          <span className="text-destructive">{error}</span>
-          <button onClick={() => window.location.reload()} className="btn-retry">
-            重试
-          </button>
+          <div className="error-icon">⚠️</div>
+          <div className="error-message">{error}</div>
+          <div className="error-actions">
+            <button
+              onClick={() => window.location.reload()}
+              className="btn-retry"
+            >
+              刷新页面
+            </button>
+            <button
+              onClick={async () => {
+                setLoading(true)
+                setError(null)
+                try {
+                  const cats = await listCategories()
+                  setCategories(cats)
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : '加载失败，请重试')
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              className="btn-retry primary"
+            >
+              重试
+            </button>
+          </div>
+          <div className="error-hint">
+            如果问题持续存在，请检查后端服务是否正常运行
+          </div>
         </div>
       </div>
     )
