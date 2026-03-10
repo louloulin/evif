@@ -1,8 +1,8 @@
 # mem7.md - EVIF Web UI 问题分析与改进规划
 
-> **版本**: 1.2
+> **版本**: 1.3
 > **日期**: 2026-03-10
-> **状态**: 功能分析完成
+> **状态**: API 验证完成
 > **作者**: Ralph Loop Analysis
 > **目标**: 分析 evif-web UI 现状，识别样式/功能问题，验证前后端接口，制定完善改进计划
 
@@ -20,7 +20,7 @@
 | **TypeScript** | ✅ 无错误 | 0 |
 | **样式问题** | ⚠️ 需优化 | 7 |
 | **功能问题** | ⚠️ 需完善 | 6 |
-| **API 接口** | ⚠️ 需验证 | 4 |
+| **API 接口** | ✅ 已验证 | 3 |
 
 ### Playwright UI 验证结果
 
@@ -229,8 +229,9 @@ const handleMemoryClick = useCallback((memory: MemoryItem) => {
 ### 2.2 数据模型不一致问题
 
 #### 问题 2.2.1 SearchResult 缺少时间戳
-**位置**: `memory-api.ts:33-39`
-**验证状态**: ✅ 已确认 - 接口确实缺少 timestamp 字段
+**位置**: `memory-api.ts:33-39` + `memory_handlers.rs:114-123`
+**验证状态**: ✅ 已确认 - 前后端都缺少 timestamp 字段
+**描述**: 前端 SearchResult 接口缺少时间戳字段，后端 MemorySearchResult 也没有返回
 ```typescript
 // 前端定义
 export interface SearchResult {
@@ -242,32 +243,62 @@ export interface SearchResult {
   // 缺少: created, updated, timestamp
 }
 ```
-**后端响应**: 需确认是否返回时间戳
-**影响**: 日期过滤功能无法实现
+**后端响应**: 后端 MemorySearchResult 也没有 timestamp 字段
+**影响**: 日期过滤功能无法实现 (问题 1.2.2 根因)
 **优先级**: P1
+**修复方案**: 后端添加 `created` 和 `updated` 字段到 MemorySearchResult
 
 #### 问题 2.2.2 CategoryWithMemories 响应格式
-**位置**: `memory-api.ts:28-31`
+**位置**: `memory-api.ts:28-31` + `memory_handlers.rs:149-153`
+**验证状态**: ✅ 已确认 - 前后端格式一致
 ```typescript
+// 前端
 export interface CategoryWithMemories {
   category: Category
   memories: MemoryItem[]
 }
+
+// 后端
+pub struct CategoryWithMemoriesResponse {
+    pub category: CategoryResponse,
+    pub memories: Vec<MemoryItemResponse>,
+}
 ```
-**验证**: 需确认后端返回格式是否一致
+**结论**: 格式匹配，无需修改
 
 #### 问题 2.2.3 GraphQueryResponse 类型不完整
-**位置**: `memory-api.ts:59-64`
+**位置**: `memory-api.ts:59-64` + `memory_handlers.rs:386-402`
+**验证状态**: ✅ 已确认 - 缺少 paths 字段
 ```typescript
+// 前端 (当前)
 export interface GraphQueryResponse {
   query_type: string
   nodes?: GraphNode[]
   timeline?: TimelineEvent[]
   total: number
-  // 缺少: edges, path 等字段
+  // 缺少: paths 字段
 }
 ```
+**后端响应**: 包含 `paths: Option<Vec<GraphPathInfo>>` 字段
 **优先级**: P2
+**修复方案**: 前端添加 paths 字段定义
+
+#### 问题 2.2.4 createMemory 响应格式不匹配
+**位置**: `memory-api.ts:83-92` + `memory_handlers.rs:66-71`
+**验证状态**: ✅ 已确认 - 响应格式不一致
+```typescript
+// 前端期望
+createMemory(content: string, modality?: string): Promise<{ memory_id: string }>
+
+// 后端实际返回
+pub struct CreateMemoryResponse {
+    pub memory_id: String,
+    pub extracted_items: Vec<ExtractedMemoryItem>,
+}
+```
+**影响**: 前端调用会解析失败
+**优先级**: P1
+**修复方案**: 前端适配实际响应格式，或后端兼容前端格式
 
 ### 2.3 API 调用问题
 
@@ -463,14 +494,15 @@ export async function listMemories(
 
 ### 5.1 Phase 1: 核心问题修复 (P0-P1)
 
-| 任务 | 优先级 | 描述 | 预估工时 |
-|------|--------|------|---------|
-| 修复日期过滤 | P1 | 添加 SearchResult.timestamp 字段，实现日期过滤 | 2h |
-| 添加记忆创建 | P1 | 实现 createMemory UI 和 API 集成 | 4h |
-| 完善错误处理 | P1 | 友好的错误提示和重试机制 | 2h |
-| 验证 API 响应 | P1 | 确认所有 API 端点数据格式 | 2h |
-| 添加加载骨架屏 | P1 | 改善加载体验 (Skeleton) | 2h |
-| 实现重试按钮 | P1 | API 失败时的自动重试按钮 | 1h |
+| 任务 | 优先级 | 描述 | 预估工时 | 状态 |
+|------|--------|------|---------|------|
+| 修复日期过滤 | P1 | 后端添加 SearchResult.created/updated 字段 | 2h | 待开始 |
+| 添加记忆创建 | P1 | 实现 createMemory UI 和 API 集成 | 4h | 待开始 |
+| 完善错误处理 | P1 | 友好的错误提示和重试机制 | 2h | 待开始 |
+| 修复 createMemory 响应 | P1 | 适配后端返回的 extracted_items 字段 | 1h | 待开始 |
+| 修复 GraphQueryResponse | P2 | 添加 paths 字段到前端类型定义 | 1h | 待开始 |
+| 添加加载骨架屏 | P1 | 改善加载体验 (Skeleton) | 2h | 待开始 |
+| 实现重试按钮 | P1 | API 失败时的自动重试按钮 | 1h | 待开始 |
 
 ### 5.2 Phase 2: UI/UX 优化 (P2)
 
@@ -572,6 +604,6 @@ export async function listMemories(
 
 ---
 
-**文档版本**: 1.1.1
+**文档版本**: 1.3
 **最后更新**: 2026-03-10
 **下次评审**: Phase 1 完成后
