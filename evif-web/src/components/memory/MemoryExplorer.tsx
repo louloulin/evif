@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { listCategories, getCategoryMemories, createMemory, type Category, type MemoryItem } from '@/services/memory-api'
+import { listCategories, getCategoryMemories, createMemory, deleteMemory, type Category, type MemoryItem } from '@/services/memory-api'
 import { searchMemories, type SearchResult } from '@/services/memory-api'
 import { Skeleton, SkeletonTreeItem, SkeletonText } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Loader2, FileText, FolderOpen, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
+import { Plus, Loader2, FileText, FolderOpen, AlertTriangle, ChevronRight, ChevronDown, X, Copy, Trash2, Clock, Tag } from 'lucide-react'
 
 // 搜索模式类型
 type SearchMode = 'vector' | 'hybrid' | 'llm'
@@ -53,6 +53,12 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null)
+
+  // 详情面板状态
+  const [selectedMemory, setSelectedMemory] = useState<MemoryItem | null>(null)
+  const [showDetailPanel, setShowDetailPanel] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // 搜索增强: 搜索模式
   const [searchMode, setSearchMode] = useState<SearchMode>('vector')
@@ -186,9 +192,11 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
     return () => clearTimeout(timer)
   }, [handleSearch])
 
-  // 点击记忆项
+  // 点击记忆项 - 显示详情面板
   const handleMemoryClick = useCallback((memory: MemoryItem) => {
     setSelectedMemoryId(memory.id)
+    setSelectedMemory(memory)
+    setShowDetailPanel(true)
     onMemorySelect?.(memory)
   }, [onMemorySelect])
 
@@ -226,6 +234,61 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
       setIsCreating(false)
     }
   }, [newMemoryContent])
+
+  // 删除记忆
+  const handleDeleteMemory = useCallback(async () => {
+    if (!selectedMemory) return
+
+    setIsDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteMemory(selectedMemory.id)
+      console.log('Memory deleted:', selectedMemory.id)
+
+      // 关闭详情面板
+      setShowDetailPanel(false)
+      setSelectedMemory(null)
+      setSelectedMemoryId(null)
+
+      // 刷新分类列表
+      const cats = await listCategories()
+      setCategories(cats)
+
+      // 如果有展开的分类，也需要刷新
+      const expandedIds = Array.from(expandedCategories)
+      for (const catId of expandedIds) {
+        try {
+          const data = await getCategoryMemories(catId)
+          setCategoryMemories(prev => ({ ...prev, [catId]: data.memories }))
+        } catch (err) {
+          console.error('Failed to refresh category memories:', err)
+        }
+      }
+    } catch (err) {
+      let errorMessage = '删除失败'
+      if (err instanceof Error) {
+        if (err.message.includes('Failed to fetch') || err.message.includes('network')) {
+          errorMessage = '网络连接失败，请检查后端服务'
+        } else {
+          errorMessage = `删除失败: ${err.message}`
+        }
+      }
+      setDeleteError(errorMessage)
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [selectedMemory, expandedCategories])
+
+  // 复制内容到剪贴板
+  const handleCopyContent = useCallback(async () => {
+    if (!selectedMemory) return
+    try {
+      await navigator.clipboard.writeText(selectedMemory.content)
+      // 可以添加一个临时的成功提示
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }, [selectedMemory])
 
   // 渲染记忆项 - 响应式缩进
   const renderMemoryItem = (memory: MemoryItem, level: number = 1) => {
@@ -568,6 +631,118 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 记忆详情面板 */}
+      {showDetailPanel && selectedMemory && (
+        <div className="memory-detail-panel animate-fade-in">
+          <div className="detail-panel-header">
+            <div className="detail-panel-title">
+              <FileText className="h-4 w-4" />
+              <span>记忆详情</span>
+            </div>
+            <button
+              className="detail-panel-close"
+              onClick={() => {
+                setShowDetailPanel(false)
+                setSelectedMemory(null)
+              }}
+              title="关闭"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="detail-panel-content">
+            {/* 元信息 */}
+            <div className="detail-meta">
+              <div className="detail-meta-item">
+                <Tag className="h-3 w-3" />
+                <span className="detail-meta-label">类型:</span>
+                <span className="detail-meta-value">{selectedMemory.type}</span>
+              </div>
+              {selectedMemory.category && (
+                <div className="detail-meta-item">
+                  <FolderOpen className="h-3 w-3" />
+                  <span className="detail-meta-label">分类:</span>
+                  <span className="detail-meta-value">{selectedMemory.category}</span>
+                </div>
+              )}
+              {selectedMemory.created && (
+                <div className="detail-meta-item">
+                  <Clock className="h-3 w-3" />
+                  <span className="detail-meta-label">创建时间:</span>
+                  <span className="detail-meta-value">
+                    {new Date(selectedMemory.created).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+              )}
+              {selectedMemory.updated && (
+                <div className="detail-meta-item">
+                  <Clock className="h-3 w-3" />
+                  <span className="detail-meta-label">更新时间:</span>
+                  <span className="detail-meta-value">
+                    {new Date(selectedMemory.updated).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 记忆 ID */}
+            <div className="detail-id">
+              <span className="detail-id-label">ID:</span>
+              <span className="detail-id-value">{selectedMemory.id}</span>
+            </div>
+
+            {/* 摘要 */}
+            {selectedMemory.summary && (
+              <div className="detail-summary">
+                <div className="detail-summary-label">摘要</div>
+                <div className="detail-summary-content">{selectedMemory.summary}</div>
+              </div>
+            )}
+
+            {/* 完整内容 */}
+            <div className="detail-content">
+              <div className="detail-content-label">完整内容</div>
+              <div className="detail-content-text">{selectedMemory.content}</div>
+            </div>
+
+            {/* 错误提示 */}
+            {deleteError && (
+              <div className="detail-error">
+                {deleteError}
+              </div>
+            )}
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="detail-panel-actions">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyContent}
+              title="复制内容"
+            >
+              <Copy className="h-3.5 w-3.5 mr-1" />
+              复制
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteMemory}
+              disabled={isDeleting}
+              title="删除记忆"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+              )}
+              删除
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

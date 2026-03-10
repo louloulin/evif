@@ -1,5 +1,35 @@
 # evif-web UI 更新日志
 
+## v2.11.0 - 2026-03-10
+
+### Phase 3.1 记忆详情面板 - 已完成 ✅
+
+本次更新实现了记忆详情面板功能，用户可以点击记忆查看完整内容和元数据，并支持复制和删除操作。
+
+**修改的文件**:
+- `evif-web/src/components/memory/MemoryExplorer.tsx` - 添加详情面板 UI
+- `evif-web/src/services/memory-api.ts` - 添加 deleteMemory API
+- `evif-web/src/App.css` - 添加详情面板样式
+
+**新增功能**:
+1. 点击记忆项显示详情面板
+2. 显示记忆完整内容、元数据（类型、分类、创建/更新时间）
+3. 显示记忆 ID 和摘要
+4. 复制内容到剪贴板
+5. 删除记忆（删除后自动刷新列表）
+
+**验证结果**:
+- ✅ 构建通过 (`bun run build`)
+- ✅ TypeScript 检查通过 (`bun run typecheck`)
+- ✅ Playwright UI 验证通过
+
+**进度更新**:
+- Phase 1: 7/7 任务 (100%) ✅
+- Phase 2: 4/4 任务 (100%) ✅
+- Phase 3: 1/4 任务 (25%) 🔄
+
+---
+
 ## v2.10.0 - 2026-03-10
 
 ### Phase 2 UI/UX 优化

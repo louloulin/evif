@@ -176,3 +176,12 @@ export async function queryGraph(
   }
   return res.json()
 }
+
+export async function deleteMemory(id: string): Promise<void> {
+  const res = await httpFetch(`/api/v1/memories/${id}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to delete memory: ${id}`)
+  }
+}
