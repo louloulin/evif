@@ -1993,8 +1993,8 @@
 
 .chat-error {
   padding: 8px 16px;
-  background: #fef2f2;
-  color: #dc2626;
+  background: hsl(var(--destructive-dim));
+  color: hsl(var(--destructive));
   font-size: 12px;
   text-align: center;
 }
@@ -2049,8 +2049,8 @@
 
 .insights-error {
   padding: 12px;
-  background: #fef2f2;
-  color: #dc2626;
+  background: hsl(var(--destructive-dim));
+  color: hsl(var(--destructive));
   border-radius: 8px;
   font-size: 12px;
   margin-bottom: 16px;
