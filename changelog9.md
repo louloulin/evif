@@ -1,5 +1,58 @@
 # evif-web UI 更新日志
 
+## v2.8.0 - 2026-03-10
+
+### Phase 1 核心问题修复 - 进行中
+
+本次更新修复了 mem7.md 中识别的日期过滤功能问题。
+
+#### 问题修复
+
+##### 1. 日期过滤功能修复
+- **文件**: evif-web/src/components/memory/MemoryExplorer.tsx
+- **问题**: 日期过滤逻辑总是返回 true，过滤功能无效
+- **修复**: 使用 SearchResult 的 created 字段实现正确的日期范围过滤
+
+```typescript
+// 修复后
+if (dateRange.start || dateRange.end) {
+  filteredResults = filteredResults.filter(r => {
+    const createdDate = r.created ? new Date(r.created) : null
+    if (!createdDate || isNaN(createdDate.getTime())) {
+      return true // 没有日期信息的项目保留
+    }
+
+    const startDate = dateRange.start ? new Date(dateRange.start) : null
+    const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : null
+
+    if (startDate && createdDate < startDate) {
+      return false
+    }
+    if (endDate && createdDate > endDate) {
+      return false
+    }
+    return true
+  })
+}
+```
+
+#### 验证结果
+
+- ✅ TypeScript 类型检查通过
+- ✅ mem7.md 已更新至 v1.6
+- ✅ Phase 1 完成进度: 4/7 任务 (57%)
+
+#### 待完成任务
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| 添加记忆创建 UI | P1 | 待开始 |
+| 完善错误处理 | P1 | 待开始 |
+| 添加加载骨架屏 | P1 | 待开始 |
+| 实现重试按钮 | P1 | 待开始 |
+
+---
+
 ## v2.7.0 - 2026-03-10
 
 ### Phase 1 核心问题修复 - 进行中

@@ -114,7 +114,21 @@ const MemoryExplorer: React.FC<MemoryTreeProps> = ({
       // 客户端日期范围过滤 (如果后端不支持)
       if (dateRange.start || dateRange.end) {
         filteredResults = filteredResults.filter(r => {
-          // 注意: SearchResult 没有 timestamp 字段，这里做简单处理
+          // 使用 created 字段进行日期过滤
+          const createdDate = r.created ? new Date(r.created) : null
+          if (!createdDate || isNaN(createdDate.getTime())) {
+            return true // 没有日期信息的项目保留
+          }
+
+          const startDate = dateRange.start ? new Date(dateRange.start) : null
+          const endDate = dateRange.end ? new Date(dateRange.end + 'T23:59:59') : null // 包含结束日期一整天
+
+          if (startDate && createdDate < startDate) {
+            return false
+          }
+          if (endDate && createdDate > endDate) {
+            return false
+          }
           return true
         })
       }
