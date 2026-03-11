@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { File, FileCode, FileText, Image, Archive, Music, Video, FolderOpen } from 'lucide-react'
+import { File, FileCode, FileText, Image, Archive, Music, Video, FolderOpen, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -159,9 +159,17 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   if (!data || data.results.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <div className="text-center text-muted-foreground">
-            未找到结果
+        <CardContent className="p-12">
+          <div className="flex flex-col items-center justify-center text-center space-y-4">
+            <Search className="h-16 w-16 text-muted-foreground/50" />
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">
+                未找到结果
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                尝试调整搜索关键词或搜索路径
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
