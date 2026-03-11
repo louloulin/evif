@@ -98,7 +98,8 @@ export const TrafficChart: React.FC<TrafficChartProps> = ({
         </div>
 
         {/* Totals */}
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+        {/* Totals */}
+        <div className="grid grid-cols-2 gap-6 pt-4 border-t">
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">总上传</p>
             <p className="text-lg font-semibold">{formatTotal(data.totalUploaded)}</p>
