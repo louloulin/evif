@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useCallback } from 'react'
+import { Search as SearchIcon, Upload as UploadIcon } from 'lucide-react'
 import { SearchBar } from '@/components/search/SearchBar'
 import { SearchResults } from '@/components/search/SearchResults'
 import { UploadDropzone } from '@/components/upload/UploadDropzone'
@@ -108,13 +109,19 @@ export const SearchUploadView: React.FC = () => {
   )
 
   return (
-    <div className="p-4 h-full overflow-auto">
-      <Tabs defaultValue="search" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="search">搜索 (grep)</TabsTrigger>
-          <TabsTrigger value="upload">上传</TabsTrigger>
+    <div className="h-full overflow-auto p-6">
+      <Tabs defaultValue="search" className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="search" className="gap-2">
+            <SearchIcon className="h-4 w-4" />
+            搜索 (grep)
+          </TabsTrigger>
+          <TabsTrigger value="upload" className="gap-2">
+            <UploadIcon className="h-4 w-4" />
+            上传
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="search" className="space-y-4">
+        <TabsContent value="search" className="space-y-6">
           <SearchBar
             onSearch={handleSearch}
             onClear={handleClearSearch}
@@ -128,14 +135,14 @@ export const SearchUploadView: React.FC = () => {
             error={searchError ?? undefined}
           />
         </TabsContent>
-        <TabsContent value="upload" className="space-y-4">
-          <div className="flex items-center gap-2">
+        <TabsContent value="upload" className="space-y-6">
+          <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">上传到目录:</span>
             <input
               type="text"
               value={uploadPath}
               onChange={(e) => setUploadPath(e.target.value)}
-              className="flex-1 max-w-xs px-3 py-1.5 rounded border bg-background text-sm"
+              className="h-10 max-w-xs flex-1 rounded border bg-background px-3 text-sm"
               placeholder="/mem"
             />
           </div>
