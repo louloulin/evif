@@ -353,8 +353,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 0;
-  gap: 2px;
+  padding: 12px 0;
+  gap: 6px;
 }
 
 .activity-bar-item {
