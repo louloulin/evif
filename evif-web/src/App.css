@@ -418,6 +418,12 @@
   }
 }
 
+@media (max-width: 767px) {
+  .activity-bar {
+    display: none;
+  }
+}
+
 /* 侧边栏（资源管理器） */
 .sidebar {
   width: 260px;
