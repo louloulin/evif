@@ -238,7 +238,7 @@
 工作项：
 - 接入认证中间件，保护所有写和管理操作。
 - 统一健康检查与版本输出。
-- 修复 MCP/REST 记忆契约。
+- [x] 修复 MCP/REST 记忆契约。
 - 处理图 API：补实现或下线路由。
 - 去除或保护 `/api/v1/metrics/reset`。
 - 修复 `evif-rest` doctest。
@@ -318,10 +318,15 @@
 ### 4.1 第一批必须立即做
 
 1. 认证中间件接线
-2. MCP/REST 记忆契约修复
+2. [x] MCP/REST 记忆契约修复
 3. `evif-rest` doctest 修复
 4. 统一健康检查和版本输出
 5. 去掉公开占位 API 或补真实实现
+
+状态更新（2026-03-15）：
+- `evif-mcp` 的 `evif_memorize` 现已对齐 REST `content/modality/metadata` 契约，并保留 `text` 兼容别名。
+- `evif-mcp` 的 `evif_retrieve` 现已发送 REST 侧实际消费的 `vector_k/llm_top_n` 字段。
+- `evif-rest` 为旧客户端补充了 `text`、`k`、`top_n` 反序列化兼容层，并新增 focused tests 覆盖。
 
 ### 4.2 第二批必须跟进
 

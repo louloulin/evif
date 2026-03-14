@@ -33,4 +33,5 @@ name = "evif-mcp"
 path = "src/main.rs"
 
 [dev-dependencies]
+axum = { version = "0.7.4", features = ["json"] }
 tokio-test = { workspace = true }

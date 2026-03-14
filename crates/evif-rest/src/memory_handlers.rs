@@ -4,14 +4,14 @@
 // Implements mem.md API design
 
 use axum::{
-    extract::{Path, State, Query},
+    extract::{Path, Query, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use evif_mem::storage::memory::MemoryStorage;
 use evif_mem::models::{MemoryItem, MemoryType};
+use evif_mem::storage::memory::MemoryStorage;
 
 /// Memory state shared across handlers
 #[derive(Clone)]
@@ -53,9 +53,11 @@ pub async fn init_memory_pipelines(
 /// Create memory request
 #[derive(Debug, Deserialize)]
 pub struct CreateMemoryRequest {
+    #[serde(alias = "text")]
     pub content: String,
     #[serde(default = "default_modality")]
     pub modality: String,
+    #[serde(default)]
     pub metadata: Option<serde_json::Value>,
 }
 
@@ -86,9 +88,9 @@ pub struct SearchMemoryRequest {
     pub query: String,
     #[serde(default = "default_mode")]
     pub mode: String,
-    #[serde(default = "default_vector_k")]
+    #[serde(default = "default_vector_k", alias = "k")]
     pub vector_k: usize,
-    #[serde(default = "default_llm_top_n")]
+    #[serde(default = "default_llm_top_n", alias = "top_n")]
     pub llm_top_n: usize,
 }
 
@@ -208,8 +210,8 @@ impl MemoryHandlers {
         let results: Vec<MemorySearchResult> = all_items
             .into_iter()
             .filter(|item| {
-                item.content.to_lowercase().contains(&query_lower) ||
-                item.summary.to_lowercase().contains(&query_lower)
+                item.content.to_lowercase().contains(&query_lower)
+                    || item.summary.to_lowercase().contains(&query_lower)
             })
             .take(req.vector_k)
             .enumerate()
@@ -249,7 +251,10 @@ impl MemoryHandlers {
                 created: item.created_at.to_rfc3339(),
                 updated: item.updated_at.to_rfc3339(),
             })),
-            Err(_) => Err(MemoryError::NotFound(format!("Memory with id '{}' not found", id)))
+            Err(_) => Err(MemoryError::NotFound(format!(
+                "Memory with id '{}' not found",
+                id
+            ))),
         }
     }
 
@@ -316,7 +321,10 @@ impl MemoryHandlers {
                 created: cat.created_at.to_rfc3339(),
                 updated: cat.updated_at.to_rfc3339(),
             })),
-            Err(_) => Err(MemoryError::NotFound(format!("Category with id '{}' not found", id)))
+            Err(_) => Err(MemoryError::NotFound(format!(
+                "Category with id '{}' not found",
+                id
+            ))),
         }
     }
 
@@ -328,7 +336,9 @@ impl MemoryHandlers {
         Path(id): Path<String>,
     ) -> Result<Json<CategoryWithMemoriesResponse>, MemoryError> {
         // Get category
-        let category = state.storage.get_category(&id)
+        let category = state
+            .storage
+            .get_category(&id)
             .map_err(|_| MemoryError::NotFound(format!("Category with id '{}' not found", id)))?;
 
         // Get memories in category
@@ -566,6 +576,35 @@ impl axum::response::IntoResponse for MemoryError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_create_memory_request_accepts_legacy_text_alias() {
+        let json = r#"{
+            "text": "remember this later",
+            "modality": "conversation"
+        }"#;
+
+        let req: CreateMemoryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.content, "remember this later");
+        assert_eq!(req.modality, "conversation");
+        assert!(req.metadata.is_none());
+    }
+
+    #[test]
+    fn test_search_memory_request_accepts_legacy_k_alias() {
+        let json = r#"{
+            "query": "rust",
+            "mode": "hybrid",
+            "k": 7,
+            "top_n": 4
+        }"#;
+
+        let req: SearchMemoryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.query, "rust");
+        assert_eq!(req.mode, "hybrid");
+        assert_eq!(req.vector_k, 7);
+        assert_eq!(req.llm_top_n, 4);
+    }
 
     #[test]
     fn test_graph_query_request_deserialization() {

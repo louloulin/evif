@@ -2,11 +2,11 @@
 //
 // 提供17个工具对等AGFS,支持Claude Desktop和其他MCP客户端
 
-use std::sync::Arc;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio::sync::RwLock;
-use reqwest::Client;
 
 /// MCP 服务器配置
 #[derive(Debug, Clone)]
@@ -376,20 +376,31 @@ impl EvifMcpServer {
             // Memory tools
             Tool {
                 name: "evif_memorize".to_string(),
-                description: "Store text as memories in the memory system".to_string(),
+                description: "Store content as memories in the memory system".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "content": {
+                            "type": "string",
+                            "description": "Content to memorize"
+                        },
                         "text": {
                             "type": "string",
-                            "description": "Text content to memorize"
+                            "description": "Deprecated alias for content"
                         },
                         "modality": {
                             "type": "string",
                             "description": "Modality type (conversation, document, code, etc.)"
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "description": "Optional metadata forwarded to the REST memory API"
                         }
                     },
-                    "required": ["text"]
+                    "oneOf": [
+                        { "required": ["content"] },
+                        { "required": ["text"] }
+                    ]
                 }),
             },
             Tool {
@@ -474,14 +485,12 @@ impl EvifMcpServer {
 
     /// 初始化所有资源
     async fn initialize_resources(self: Arc<Self>) {
-        let resources = vec![
-            Resource {
-                uri: "file:///".to_string(),
-                name: "Root Filesystem".to_string(),
-                description: "Access to the entire EVIF filesystem".to_string(),
-                mime_type: "inode/directory".to_string(),
-            },
-        ];
+        let resources = vec![Resource {
+            uri: "file:///".to_string(),
+            name: "Root Filesystem".to_string(),
+            description: "Access to the entire EVIF filesystem".to_string(),
+            mime_type: "inode/directory".to_string(),
+        }];
 
         *self.resources.write().await = resources;
     }
@@ -494,8 +503,13 @@ impl EvifMcpServer {
                     .as_str()
                     .ok_or("Missing 'path' argument")?;
 
-                let url = format!("{}/api/v1/fs/list?path={}", self.config.evif_url, urlencoding::encode(path));
-                let response = self.client
+                let url = format!(
+                    "{}/api/v1/fs/list?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(path)
+                );
+                let response = self
+                    .client
                     .get(&url)
                     .send()
                     .await
@@ -513,8 +527,13 @@ impl EvifMcpServer {
                     .as_str()
                     .ok_or("Missing 'path' argument")?;
 
-                let url = format!("{}/api/v1/fs/read?path={}", self.config.evif_url, urlencoding::encode(path));
-                let response = self.client
+                let url = format!(
+                    "{}/api/v1/fs/read?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(path)
+                );
+                let response = self
+                    .client
                     .get(&url)
                     .send()
                     .await
@@ -536,8 +555,13 @@ impl EvifMcpServer {
                     .as_str()
                     .ok_or("Missing 'content' argument")?;
 
-                let url = format!("{}/api/v1/fs/write?path={}", self.config.evif_url, urlencoding::encode(path));
-                let response = self.client
+                let url = format!(
+                    "{}/api/v1/fs/write?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(path)
+                );
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({ "content": content }))
                     .send()
@@ -558,7 +582,8 @@ impl EvifMcpServer {
                     .ok_or("Missing 'path' argument")?;
 
                 let url = format!("{}/api/v1/directories", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({ "path": path }))
                     .send()
@@ -580,11 +605,20 @@ impl EvifMcpServer {
                 let recursive = arguments["recursive"].as_bool().unwrap_or(false);
 
                 let url = if recursive {
-                    format!("{}/api/v1/directories?path={}", self.config.evif_url, urlencoding::encode(path))
+                    format!(
+                        "{}/api/v1/directories?path={}",
+                        self.config.evif_url,
+                        urlencoding::encode(path)
+                    )
                 } else {
-                    format!("{}/api/v1/files?path={}", self.config.evif_url, urlencoding::encode(path))
+                    format!(
+                        "{}/api/v1/files?path={}",
+                        self.config.evif_url,
+                        urlencoding::encode(path)
+                    )
                 };
-                let response = self.client
+                let response = self
+                    .client
                     .delete(&url)
                     .send()
                     .await
@@ -603,8 +637,13 @@ impl EvifMcpServer {
                     .as_str()
                     .ok_or("Missing 'path' argument")?;
 
-                let url = format!("{}/api/v1/stat?path={}", self.config.evif_url, urlencoding::encode(path));
-                let response = self.client
+                let url = format!(
+                    "{}/api/v1/stat?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(path)
+                );
+                let response = self
+                    .client
                     .get(&url)
                     .send()
                     .await
@@ -627,7 +666,8 @@ impl EvifMcpServer {
                     .ok_or("Missing 'new_path' argument")?;
 
                 let url = format!("{}/api/v1/rename", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({ "from": old_path, "to": new_path }))
                     .send()
@@ -643,15 +683,16 @@ impl EvifMcpServer {
             }
 
             "evif_cp" => {
-                let src = arguments["src"]
-                    .as_str()
-                    .ok_or("Missing 'src' argument")?;
-                let dst = arguments["dst"]
-                    .as_str()
-                    .ok_or("Missing 'dst' argument")?;
+                let src = arguments["src"].as_str().ok_or("Missing 'src' argument")?;
+                let dst = arguments["dst"].as_str().ok_or("Missing 'dst' argument")?;
 
-                let read_url = format!("{}/api/v1/fs/read?path={}", self.config.evif_url, urlencoding::encode(src));
-                let read_response = self.client
+                let read_url = format!(
+                    "{}/api/v1/fs/read?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(src)
+                );
+                let read_response = self
+                    .client
                     .get(&read_url)
                     .send()
                     .await
@@ -663,8 +704,13 @@ impl EvifMcpServer {
                     .map_err(|e| format!("Failed to parse read response: {}", e))?;
                 let content = read_data["content"].as_str().unwrap_or("");
 
-                let write_url = format!("{}/api/v1/fs/write?path={}", self.config.evif_url, urlencoding::encode(dst));
-                let write_response = self.client
+                let write_url = format!(
+                    "{}/api/v1/fs/write?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(dst)
+                );
+                let write_response = self
+                    .client
                     .post(&write_url)
                     .json(&json!({ "content": content }))
                     .send()
@@ -681,7 +727,8 @@ impl EvifMcpServer {
 
             "evif_mounts" => {
                 let url = format!("{}/api/v1/mounts", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .get(&url)
                     .send()
                     .await
@@ -697,7 +744,8 @@ impl EvifMcpServer {
 
             "evif_health" => {
                 let url = format!("{}/health", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .get(&url)
                     .send()
                     .await
@@ -721,7 +769,8 @@ impl EvifMcpServer {
                 let config = arguments.get("config").cloned().unwrap_or(json!({}));
 
                 let url = format!("{}/api/v1/mount", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({
                         "plugin": plugin,
@@ -746,7 +795,8 @@ impl EvifMcpServer {
                     .ok_or("Missing 'path' argument")?;
 
                 let url = format!("{}/api/v1/unmount", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({ "path": path }))
                     .send()
@@ -770,7 +820,8 @@ impl EvifMcpServer {
                     .ok_or("Missing 'pattern' argument")?;
 
                 let url = format!("{}/api/v1/grep", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({
                         "path": path,
@@ -798,7 +849,8 @@ impl EvifMcpServer {
                 let lease = arguments["lease"].as_u64().unwrap_or(300) as u64;
 
                 let url = format!("{}/api/v1/handles/open", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({
                         "path": path,
@@ -823,8 +875,12 @@ impl EvifMcpServer {
                     .as_i64()
                     .ok_or("Missing or invalid 'handle_id' argument")?;
 
-                let url = format!("{}/api/v1/handles/{}/close", self.config.evif_url, handle_id);
-                let response = self.client
+                let url = format!(
+                    "{}/api/v1/handles/{}/close",
+                    self.config.evif_url, handle_id
+                );
+                let response = self
+                    .client
                     .post(&url)
                     .json(&json!({}))
                     .send()
@@ -841,21 +897,28 @@ impl EvifMcpServer {
 
             // Memory tools - using REST API (requires evif-mem REST endpoints)
             "evif_memorize" => {
-                let text = arguments["text"]
-                    .as_str()
-                    .ok_or("Missing 'text' argument")?;
+                let content = arguments
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .or_else(|| arguments.get("text").and_then(Value::as_str))
+                    .ok_or("Missing 'content' argument")?;
 
-                let modality = arguments["modality"]
-                    .as_str()
-                    .unwrap_or("conversation");
+                let modality = arguments["modality"].as_str().unwrap_or("conversation");
+
+                let mut body = serde_json::Map::from_iter([
+                    ("content".to_string(), json!(content)),
+                    ("modality".to_string(), json!(modality)),
+                ]);
+
+                if let Some(metadata) = arguments.get("metadata").filter(|value| !value.is_null()) {
+                    body.insert("metadata".to_string(), metadata.clone());
+                }
 
                 let url = format!("{}/api/v1/memories", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
-                    .json(&json!({
-                        "text": text,
-                        "modality": modality
-                    }))
+                    .json(&body)
                     .send()
                     .await
                     .map_err(|e| format!("Failed to memorize: {}", e))?;
@@ -877,21 +940,24 @@ impl EvifMcpServer {
                 let k = arguments["k"].as_u64().unwrap_or(10) as usize;
                 let threshold = arguments["threshold"].as_f64().unwrap_or(0.5) as f32;
 
-                // Build mode-specific parameters
-                let (mode_type, mode_params) = if mode == "hybrid" {
-                    ("hybrid", json!({ "vector_k": k, "llm_top_n": 3 }))
-                } else {
-                    ("vector", json!({ "k": k, "threshold": threshold }))
-                };
+                let mut body = serde_json::Map::from_iter([
+                    ("query".to_string(), json!(query)),
+                    ("mode".to_string(), json!(mode)),
+                    ("vector_k".to_string(), json!(k)),
+                ]);
+
+                if mode == "hybrid" {
+                    body.insert("llm_top_n".to_string(), json!(3));
+                }
+
+                // The REST contract currently does not accept threshold explicitly.
+                let _ = threshold;
 
                 let url = format!("{}/api/v1/memories/search", self.config.evif_url);
-                let response = self.client
+                let response = self
+                    .client
                     .post(&url)
-                    .json(&json!({
-                        "query": query,
-                        "mode": mode_type,
-                        "mode_params": mode_params
-                    }))
+                    .json(&body)
                     .send()
                     .await
                     .map_err(|e| format!("Failed to retrieve: {}", e))?;
@@ -1002,13 +1068,11 @@ impl EvifMcpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{extract::State, routing::post, Json, Router};
+    use std::sync::Arc;
+    use tokio::{net::TcpListener, sync::Mutex, task::JoinHandle};
 
-    #[tokio::test]
-    async fn test_mcp_server_creation() {
-        let config = McpServerConfig::default();
-        let server = EvifMcpServer::new(config);
-
-        // 等待异步初始化完成
+    async fn wait_for_tools(server: &Arc<EvifMcpServer>) -> Vec<Tool> {
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         let mut tools = server.list_tools().await;
         for _ in 0..20 {
@@ -1018,10 +1082,188 @@ mod tests {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             tools = server.list_tools().await;
         }
+        tools
+    }
+
+    async fn spawn_json_capture_server(
+        route: &str,
+        response_body: Value,
+    ) -> (String, Arc<Mutex<Option<Value>>>, JoinHandle<()>) {
+        let captured_body = Arc::new(Mutex::new(None));
+        let state = captured_body.clone();
+        let app = Router::new()
+            .route(route, post(capture_json))
+            .with_state((state, response_body));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        (format!("http://{}", address), captured_body, handle)
+    }
+
+    async fn capture_json(
+        State((captured_body, response_body)): State<(Arc<Mutex<Option<Value>>>, Value)>,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        *captured_body.lock().await = Some(body);
+        Json(response_body)
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_creation() {
+        let config = McpServerConfig::default();
+        let server = EvifMcpServer::new(config);
+
+        let tools = wait_for_tools(&server).await;
         assert!(!tools.is_empty());
-        assert!(tools.len() >= 15, "expected at least 15 tools, got {}", tools.len());
+        assert!(
+            tools.len() >= 15,
+            "expected at least 15 tools, got {}",
+            tools.len()
+        );
 
         let prompts = server.list_prompts().await;
         assert_eq!(prompts.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_evif_memorize_schema_prefers_content_with_legacy_alias() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+        let tools = wait_for_tools(&server).await;
+        let memorize_tool = tools
+            .into_iter()
+            .find(|tool| tool.name == "evif_memorize")
+            .expect("evif_memorize tool should exist");
+
+        assert!(memorize_tool.input_schema["properties"]
+            .get("content")
+            .is_some());
+        assert!(memorize_tool.input_schema["properties"]
+            .get("text")
+            .is_some());
+        assert_eq!(
+            memorize_tool.input_schema["properties"]["text"]["description"],
+            "Deprecated alias for content"
+        );
+        let alternatives = memorize_tool.input_schema["oneOf"]
+            .as_array()
+            .expect("schema should define accepted argument alternatives");
+        assert_eq!(alternatives.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_evif_memorize_posts_rest_contract() {
+        let (base_url, captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/memories",
+            json!({
+                "memory_id": "mem-1",
+                "extracted_items": []
+            }),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool(
+                "evif_memorize",
+                json!({
+                    "content": "remember this",
+                    "modality": "document",
+                    "metadata": { "source": "unit-test" }
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result["memory_id"], "mem-1");
+
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert_eq!(captured["content"], "remember this");
+        assert_eq!(captured["modality"], "document");
+        assert_eq!(captured["metadata"]["source"], "unit-test");
+        assert!(captured.get("text").is_none());
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_memorize_accepts_legacy_text_argument() {
+        let (base_url, captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/memories",
+            json!({
+                "memory_id": "mem-legacy",
+                "extracted_items": []
+            }),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool(
+                "evif_memorize",
+                json!({
+                    "text": "legacy payload",
+                    "modality": "conversation"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result["memory_id"], "mem-legacy");
+
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert_eq!(captured["content"], "legacy payload");
+        assert_eq!(captured["modality"], "conversation");
+        assert!(captured.get("text").is_none());
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_retrieve_posts_rest_contract() {
+        let (base_url, captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/memories/search",
+            json!({
+                "results": [],
+                "total": 0
+            }),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool(
+                "evif_retrieve",
+                json!({
+                    "query": "rust memory",
+                    "mode": "hybrid",
+                    "k": 7,
+                    "threshold": 0.8
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result["total"], 0);
+
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert_eq!(captured["query"], "rust memory");
+        assert_eq!(captured["mode"], "hybrid");
+        assert_eq!(captured["vector_k"], 7);
+        assert_eq!(captured["llm_top_n"], 3);
+        assert!(captured.get("mode_params").is_none());
+
+        handle.abort();
     }
 }
