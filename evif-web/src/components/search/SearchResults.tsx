@@ -197,7 +197,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
       {/* 搜索结果列表 */}
       <ScrollArea className="h-[600px]">
-        <div className="space-y-2 pr-4">
+        <div className="space-y-3 pr-4">
           {currentPageFiles.map((filePath) => {
             const results = groupedResults[filePath]
             return (
@@ -211,14 +211,14 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   onResultClick?.(results[0])
                 }}
               >
-              <CardContent className="p-4">
+              <CardContent className="p-5">
                 <div className="flex items-start gap-4">
                   {/* 文件图标 */}
                   <div className="mt-0.5">{getFileIcon(filePath)}</div>
 
                   <div className="flex-1 min-w-0">
                     {/* 文件路径 */}
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="mb-3 flex items-center gap-2">
                       <span className="font-medium text-sm truncate">
                         {filePath}
                       </span>
@@ -230,7 +230,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                     </div>
 
                     {/* 匹配项列表 */}
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {results.slice(0, 5).map((result, index) => (
                         <div
                           key={index}
