@@ -2430,6 +2430,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "digest",
+ "evif-auth",
  "evif-core",
  "evif-graph",
  "evif-mem",

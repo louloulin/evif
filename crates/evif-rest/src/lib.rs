@@ -23,8 +23,8 @@ pub use plugin_handlers::{PluginHandlers, PluginState};
 pub use metrics_handlers::{MetricsHandlers, MetricsState, TrafficStats};
 pub use ws_handlers::{WebSocketHandlers, WebSocketState, WSMessage};
 pub use compat_fs::CompatFsHandlers;
-pub use routes::create_routes;
-pub use middleware::{LoggingMiddleware, AuthMiddleware};
+pub use routes::{create_routes, create_routes_with_auth};
+pub use middleware::{LoggingMiddleware, AuthMiddleware, RestAuthState};
 pub use batch_handlers::{
     BatchOperationManager, BatchOperationInfo, OperationStatus,
     create_batch_routes, BatchCopyRequestJson, BatchDeleteRequestJson

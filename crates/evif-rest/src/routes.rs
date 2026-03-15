@@ -1,7 +1,8 @@
 // REST API 路由 - 增强版，完全对标AGFS
 
 use crate::{handlers, handle_handlers, wasm_handlers, ws_handlers, HandleState, batch_handlers, CompatFsHandlers, metrics_handlers, collab_handlers, memory_handlers};
-use axum::Router;
+use crate::{AuthMiddleware, RestAuthState};
+use axum::{middleware, Router};
 use std::sync::Arc;
 use std::time::Instant;
 use evif_core::{RadixMountTable, GlobalHandleManager, DynamicPluginLoader, PluginRegistry};
@@ -10,6 +11,18 @@ use handlers::AppState;
 
 /// 创建 API 路由
 pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
+    build_routes(mount_table)
+}
+
+/// 创建带认证保护的 API 路由
+pub fn create_routes_with_auth(
+    mount_table: Arc<RadixMountTable>,
+    auth_state: Arc<RestAuthState>,
+) -> Router {
+    build_routes(mount_table).layer(middleware::from_fn_with_state(auth_state, AuthMiddleware))
+}
+
+fn build_routes(mount_table: Arc<RadixMountTable>) -> Router {
     // 创建动态插件加载器
     let dynamic_loader = Arc::new(DynamicPluginLoader::new());
 

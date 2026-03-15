@@ -1,18 +1,219 @@
 // REST API 中间件
 
 use axum::{
-    extract::Request,
-    http::StatusCode,
+    extract::{Request, State},
+    http::{
+        header::{AUTHORIZATION, USER_AGENT},
+        HeaderMap, Method, StatusCode,
+    },
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
+    Json,
 };
-use tracing::info;
+use evif_auth::{
+    AuditEvent, AuditEventType, AuditFilter, AuditLogManager, AuthManager, AuthPolicy, Capability,
+    Permission, Permissions, Principal,
+};
+use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tracing::{info, warn};
+use uuid::Uuid;
+
+fn write_scope_id() -> Uuid {
+    Uuid::from_u128(0x8f53_7321_9f58_4a6f_8d21_3141_0000_0001)
+}
+
+fn admin_scope_id() -> Uuid {
+    Uuid::from_u128(0x8f53_7321_9f58_4a6f_8d21_3141_0000_0002)
+}
+
+#[derive(Clone)]
+struct ApiKeyIdentity {
+    principal: Principal,
+    principal_id: Uuid,
+}
+
+struct RestAuthInner {
+    manager: AuthManager,
+    api_keys: HashMap<String, ApiKeyIdentity>,
+    audit_log: Arc<AuditLogManager>,
+    enforce: bool,
+}
+
+/// REST 认证共享状态
+#[derive(Clone)]
+pub struct RestAuthState {
+    inner: Arc<RestAuthInner>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RouteRequirement {
+    permission: Permission,
+    scope: &'static str,
+    resource_id: Uuid,
+}
+
+enum AuthDecision {
+    Granted(ApiKeyIdentity),
+    MissingCredentials,
+    InvalidCredentials,
+    Forbidden(ApiKeyIdentity),
+    Internal(String),
+}
+
+impl RestAuthState {
+    /// 从环境变量构造 REST 认证配置。
+    ///
+    /// - `EVIF_REST_AUTH_MODE=disabled|off|false` 可关闭鉴权（默认开启）
+    /// - `EVIF_REST_WRITE_API_KEYS=key1,key2`
+    /// - `EVIF_REST_ADMIN_API_KEYS=key3,key4`
+    /// - `EVIF_REST_AUTH_AUDIT_LOG=/path/to/evif-audit.log`
+    pub fn from_env() -> Self {
+        let enforce = std::env::var("EVIF_REST_AUTH_MODE")
+            .map(|value| {
+                !matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "disabled" | "off" | "false"
+                )
+            })
+            .unwrap_or(true);
+
+        let write_keys = parse_key_list("EVIF_REST_WRITE_API_KEYS");
+        let admin_keys = parse_key_list("EVIF_REST_ADMIN_API_KEYS");
+        let audit_log = audit_log_from_env();
+
+        Self::new(write_keys, admin_keys, audit_log, enforce)
+    }
+
+    pub fn disabled() -> Self {
+        Self::new(
+            vec![],
+            vec![],
+            Arc::new(AuditLogManager::from_memory()),
+            false,
+        )
+    }
+
+    pub fn from_api_keys(
+        write_keys: impl IntoIterator<Item = String>,
+        admin_keys: impl IntoIterator<Item = String>,
+    ) -> Self {
+        Self::new(
+            write_keys.into_iter().collect(),
+            admin_keys.into_iter().collect(),
+            Arc::new(AuditLogManager::from_memory()),
+            true,
+        )
+    }
+
+    pub fn audit_events(&self) -> Vec<AuditEvent> {
+        self.inner
+            .audit_log
+            .query(AuditFilter::new())
+            .unwrap_or_default()
+    }
+
+    fn new(
+        write_keys: Vec<String>,
+        admin_keys: Vec<String>,
+        audit_log: Arc<AuditLogManager>,
+        enforce: bool,
+    ) -> Self {
+        let manager = AuthManager::with_policy(AuthPolicy::Strict);
+        let mut api_keys = HashMap::new();
+
+        if enforce {
+            for key in write_keys {
+                register_key(&manager, &mut api_keys, key, false);
+            }
+
+            for key in admin_keys {
+                register_key(&manager, &mut api_keys, key, true);
+            }
+        }
+
+        Self {
+            inner: Arc::new(RestAuthInner {
+                manager,
+                api_keys,
+                audit_log,
+                enforce,
+            }),
+        }
+    }
+
+    fn is_enforced(&self) -> bool {
+        self.inner.enforce
+    }
+
+    fn authorize(&self, headers: &HeaderMap, requirement: RouteRequirement) -> AuthDecision {
+        let Some(api_key) = extract_api_key(headers) else {
+            return AuthDecision::MissingCredentials;
+        };
+
+        let Some(identity) = self.inner.api_keys.get(api_key).cloned() else {
+            return AuthDecision::InvalidCredentials;
+        };
+
+        match self.inner.manager.check(
+            &identity.principal,
+            &requirement.resource_id,
+            requirement.permission,
+        ) {
+            Ok(true) => AuthDecision::Granted(identity),
+            Ok(false) => AuthDecision::Forbidden(identity),
+            Err(err) => AuthDecision::Internal(err.to_string()),
+        }
+    }
+
+    fn record_event(
+        &self,
+        event_type: AuditEventType,
+        principal_id: Option<Uuid>,
+        requirement: RouteRequirement,
+        method: &Method,
+        path: &str,
+        success: bool,
+        headers: &HeaderMap,
+        reason: &str,
+    ) {
+        let mut event = AuditEvent::new(
+            event_type,
+            format!(
+                "action={} path={} scope={} permission={:?} result={} reason={}",
+                method,
+                path,
+                requirement.scope,
+                requirement.permission,
+                if success { "allowed" } else { "denied" },
+                reason
+            ),
+        )
+        .with_resource_id(requirement.resource_id)
+        .with_success(success);
+
+        if let Some(principal_id) = principal_id {
+            event = event.with_principal_id(principal_id);
+        }
+
+        if let Some(user_agent) = header_value(headers, USER_AGENT) {
+            event = event.with_user_agent(user_agent.to_string());
+        }
+
+        if let Some(ip_address) =
+            header_value(headers, "x-forwarded-for").or_else(|| header_value(headers, "x-real-ip"))
+        {
+            event = event.with_ip_address(ip_address.to_string());
+        }
+
+        let _ = self.inner.audit_log.logger().log(event);
+    }
+}
 
 /// 日志中间件
-pub async fn LoggingMiddleware(
-    req: Request,
-    next: Next,
-) -> Response {
+#[allow(non_snake_case)]
+pub async fn LoggingMiddleware(req: Request, next: Next) -> Response {
     let method = req.method().clone();
     let uri = req.uri().clone();
 
@@ -22,15 +223,247 @@ pub async fn LoggingMiddleware(
 }
 
 /// 认证中间件
+#[allow(non_snake_case)]
 pub async fn AuthMiddleware(
-    req: Request,
+    State(auth_state): State<Arc<RestAuthState>>,
+    mut req: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
-    // NOTE: Authentication is currently disabled for development
-    // For production, implement JWT or API key validation here
-    // 检查请求头中的认证信息
+) -> Response {
+    if !auth_state.is_enforced() {
+        return next.run(req).await;
+    }
 
-    Ok(next.run(req).await)
+    let Some(requirement) = route_requirement(req.method(), req.uri().path()) else {
+        return next.run(req).await;
+    };
+
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+
+    match auth_state.authorize(req.headers(), requirement) {
+        AuthDecision::Granted(identity) => {
+            auth_state.record_event(
+                AuditEventType::AccessGranted,
+                Some(identity.principal_id),
+                requirement,
+                &method,
+                &path,
+                true,
+                req.headers(),
+                "authorized",
+            );
+            req.extensions_mut().insert(identity.principal_id);
+            next.run(req).await
+        }
+        AuthDecision::MissingCredentials => {
+            warn!("missing credentials for {} {}", method, path);
+            auth_state.record_event(
+                AuditEventType::AuthenticationFailed,
+                None,
+                requirement,
+                &method,
+                &path,
+                false,
+                req.headers(),
+                "missing credentials",
+            );
+            auth_error_response(
+                StatusCode::UNAUTHORIZED,
+                "Authentication required for protected REST path",
+            )
+        }
+        AuthDecision::InvalidCredentials => {
+            warn!("invalid credentials for {} {}", method, path);
+            auth_state.record_event(
+                AuditEventType::AuthenticationFailed,
+                None,
+                requirement,
+                &method,
+                &path,
+                false,
+                req.headers(),
+                "invalid credentials",
+            );
+            auth_error_response(StatusCode::UNAUTHORIZED, "Invalid API key")
+        }
+        AuthDecision::Forbidden(identity) => {
+            warn!(
+                "forbidden {} {} for {}",
+                method, path, identity.principal_id
+            );
+            auth_state.record_event(
+                AuditEventType::AccessDenied,
+                Some(identity.principal_id),
+                requirement,
+                &method,
+                &path,
+                false,
+                req.headers(),
+                "insufficient permissions",
+            );
+            auth_error_response(StatusCode::FORBIDDEN, "Insufficient permissions")
+        }
+        AuthDecision::Internal(message) => {
+            warn!(
+                "auth middleware internal error on {} {}: {}",
+                method, path, message
+            );
+            auth_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Authentication failed")
+        }
+    }
+}
+
+fn parse_key_list(var_name: &str) -> Vec<String> {
+    std::env::var(var_name)
+        .ok()
+        .map(|value| {
+            value
+                .split(|c| c == ',' || c == '\n')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn audit_log_from_env() -> Arc<AuditLogManager> {
+    match std::env::var("EVIF_REST_AUTH_AUDIT_LOG") {
+        Ok(path) if !path.trim().is_empty() => Arc::new(
+            AuditLogManager::from_file(path.trim())
+                .unwrap_or_else(|_| AuditLogManager::from_memory()),
+        ),
+        _ => Arc::new(AuditLogManager::from_memory()),
+    }
+}
+
+fn register_key(
+    manager: &AuthManager,
+    api_keys: &mut HashMap<String, ApiKeyIdentity>,
+    key: String,
+    admin: bool,
+) {
+    let principal_id = Uuid::new_v4();
+    let identity = ApiKeyIdentity {
+        principal: Principal::Service(principal_id),
+        principal_id,
+    };
+
+    let _ = manager.grant(Capability::new(
+        principal_id,
+        write_scope_id(),
+        Permissions::read_write(),
+    ));
+
+    if admin {
+        let _ = manager.grant(Capability::new(
+            principal_id,
+            admin_scope_id(),
+            Permissions::all(),
+        ));
+    }
+
+    api_keys.insert(key, identity);
+}
+
+fn header_value<'a>(
+    headers: &'a HeaderMap,
+    name: impl axum::http::header::AsHeaderName,
+) -> Option<&'a str> {
+    headers.get(name).and_then(|value| value.to_str().ok())
+}
+
+fn extract_api_key(headers: &HeaderMap) -> Option<&str> {
+    header_value(headers, "x-api-key")
+        .or_else(|| header_value(headers, "x-evif-api-key"))
+        .or_else(|| {
+            header_value(headers, AUTHORIZATION).and_then(|value| {
+                value
+                    .strip_prefix("Bearer ")
+                    .or_else(|| value.strip_prefix("bearer "))
+                    .map(str::trim)
+            })
+        })
+}
+
+fn write_requirement() -> RouteRequirement {
+    RouteRequirement {
+        permission: Permission::Write,
+        scope: "write",
+        resource_id: write_scope_id(),
+    }
+}
+
+fn admin_requirement() -> RouteRequirement {
+    RouteRequirement {
+        permission: Permission::Admin,
+        scope: "admin",
+        resource_id: admin_scope_id(),
+    }
+}
+
+fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
+    let is_write_route = (*method == Method::POST
+        && matches!(
+            path,
+            "/api/v1/fs/write"
+                | "/api/v1/fs/create"
+                | "/api/v1/files"
+                | "/api/v1/directories"
+                | "/api/v1/touch"
+                | "/api/v1/rename"
+                | "/api/v1/memories"
+        ))
+        || (*method == Method::PUT && matches!(path, "/api/v1/files"))
+        || (*method == Method::DELETE
+            && matches!(
+                path,
+                "/api/v1/fs/delete" | "/api/v1/files" | "/api/v1/directories"
+            ))
+        || (*method == Method::POST && path.starts_with("/nodes/create/"))
+        || (*method == Method::DELETE && path.starts_with("/nodes/"))
+        || path.starts_with("/api/v1/handles")
+        || path.starts_with("/api/v1/batch/")
+        || path.starts_with("/api/v1/share/")
+        || path.starts_with("/api/v1/permissions/")
+        || path.starts_with("/api/v1/comments")
+        || path == "/api/v1/activities"
+        || path == "/api/v1/users";
+
+    if is_write_route {
+        return Some(write_requirement());
+    }
+
+    let is_admin_route = (*method == Method::POST
+        && matches!(
+            path,
+            "/api/v1/mount"
+                | "/api/v1/unmount"
+                | "/api/v1/plugins/load"
+                | "/api/v1/plugins/unload"
+                | "/api/v1/plugins/wasm/load"
+                | "/api/v1/metrics/reset"
+        ))
+        || (*method == Method::POST
+            && path.starts_with("/api/v1/plugins/")
+            && path.ends_with("/reload"));
+
+    if is_admin_route {
+        return Some(admin_requirement());
+    }
+
+    None
+}
+
+fn auth_error_response(status: StatusCode, message: &str) -> Response {
+    (
+        status,
+        Json(json!({
+            "error": status.to_string(),
+            "message": message,
+        })),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
@@ -38,8 +471,70 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_middleware_exists() {
-        // 中间件函数存在
-        assert!(true);
+    fn test_write_route_classification() {
+        assert_eq!(
+            route_requirement(&Method::PUT, "/api/v1/files").map(|req| req.permission),
+            Some(Permission::Write)
+        );
+        assert_eq!(
+            route_requirement(&Method::POST, "/api/v1/memories").map(|req| req.permission),
+            Some(Permission::Write)
+        );
+        assert_eq!(route_requirement(&Method::GET, "/api/v1/files"), None);
+    }
+
+    #[test]
+    fn test_admin_route_classification() {
+        assert_eq!(
+            route_requirement(&Method::POST, "/api/v1/mount").map(|req| req.permission),
+            Some(Permission::Admin)
+        );
+        assert_eq!(
+            route_requirement(&Method::POST, "/api/v1/plugins/foo/reload")
+                .map(|req| req.permission),
+            Some(Permission::Admin)
+        );
+        assert_eq!(
+            route_requirement(&Method::GET, "/api/v1/plugins/foo/status"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_extract_api_key_supports_multiple_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", "test-key".parse().unwrap());
+        assert_eq!(extract_api_key(&headers), Some("test-key"));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, "Bearer bearer-key".parse().unwrap());
+        assert_eq!(extract_api_key(&headers), Some("bearer-key"));
+    }
+
+    #[test]
+    fn test_auth_state_records_audit_events() {
+        let state = RestAuthState::from_api_keys(vec!["write-key".to_string()], vec![]);
+        let requirement = write_requirement();
+        let headers = HeaderMap::new();
+
+        match state.authorize(&headers, requirement) {
+            AuthDecision::MissingCredentials => {}
+            _ => panic!("expected missing credentials"),
+        }
+
+        state.record_event(
+            AuditEventType::AuthenticationFailed,
+            None,
+            requirement,
+            &Method::PUT,
+            "/api/v1/files",
+            false,
+            &headers,
+            "missing credentials",
+        );
+
+        let events = state.audit_events();
+        assert_eq!(events.len(), 1);
+        assert!(events[0].details.contains("/api/v1/files"));
     }
 }

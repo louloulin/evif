@@ -3,7 +3,7 @@
 // Phase 7.2: 支持从配置文件或环境变量 EVIF_CONFIG / EVIF_MOUNTS 读取挂载列表
 // Phase 7.3: 支持动态 .so 插件加载（对标 AGFS PluginFactory）
 
-use crate::{RestResult, RestError, create_routes, LoggingMiddleware};
+use crate::{RestResult, RestError, create_routes_with_auth, LoggingMiddleware, RestAuthState};
 use axum::middleware;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -234,7 +234,8 @@ impl EvifServer {
         }
         info!("All plugins loaded successfully");
 
-        let app = create_routes(mount_table).layer(middleware::from_fn(LoggingMiddleware));
+        let app = create_routes_with_auth(mount_table, Arc::new(RestAuthState::from_env()))
+            .layer(middleware::from_fn(LoggingMiddleware));
 
         let addr = format!("{}:{}", self.config.bind_addr, self.config.port);
         let listener = TcpListener::bind(&addr).await?;
