@@ -239,7 +239,7 @@
 - [x] 接入认证中间件，保护所有写和管理操作。
 - [x] 统一健康检查与版本输出。
 - [x] 修复 MCP/REST 记忆契约。
-- 处理图 API：补实现或下线路由。
+- [x] 处理图 API：基于记忆存储提供真实时序查询，并对齐 TypeScript SDK 契约。
 - 去除或保护 `/api/v1/metrics/reset`。
 - 修复 `evif-rest` doctest。
 

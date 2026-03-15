@@ -7,6 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -377,6 +378,7 @@ pub struct GraphQueryRequest {
     #[serde(rename = "query_type")]
     pub query_type: String,
     /// Start node ID for causal_chain, temporal_bfs, timeline queries
+    #[serde(alias = "node_id")]
     pub start_node: Option<String>,
     /// End node ID for temporal_path queries
     pub end_node: Option<String>,
@@ -395,6 +397,97 @@ pub struct GraphQueryRequest {
 
 fn default_max_depth() -> usize {
     5
+}
+
+fn graph_timestamp(item: &MemoryItem) -> DateTime<Utc> {
+    item.happened_at.unwrap_or(item.created_at)
+}
+
+fn graph_node_type(item: &MemoryItem) -> &'static str {
+    match item.memory_type {
+        MemoryType::Event => "event",
+        _ => "memory",
+    }
+}
+
+fn to_graph_node(item: &MemoryItem) -> GraphNodeInfo {
+    GraphNodeInfo {
+        id: item.id.clone(),
+        node_type: graph_node_type(item).to_string(),
+        label: item.summary.clone(),
+        timestamp: Some(graph_timestamp(item).to_rfc3339()),
+    }
+}
+
+fn parse_graph_time(
+    field_name: &str,
+    value: Option<&str>,
+) -> Result<Option<DateTime<Utc>>, MemoryError> {
+    value
+        .map(|raw| {
+            chrono::DateTime::parse_from_rfc3339(raw)
+                .map(|parsed| parsed.with_timezone(&Utc))
+                .map_err(|err| {
+                    MemoryError::BadRequest(format!(
+                        "{} must be RFC3339 timestamp: {}",
+                        field_name, err
+                    ))
+                })
+        })
+        .transpose()
+}
+
+fn filtered_graph_memories(
+    state: &MemoryState,
+    req: &GraphQueryRequest,
+) -> Result<Vec<MemoryItem>, MemoryError> {
+    let start_time = parse_graph_time("start_time", req.start_time.as_deref())?;
+    let end_time = parse_graph_time("end_time", req.end_time.as_deref())?;
+    if let (Some(start), Some(end)) = (start_time, end_time) {
+        if start > end {
+            return Err(MemoryError::BadRequest(
+                "start_time must be before or equal to end_time".to_string(),
+            ));
+        }
+    }
+
+    let event_type_filter = req.event_type.as_ref().map(|value| value.to_lowercase());
+    let category_filter = req.category.as_deref();
+
+    let mut items: Vec<MemoryItem> = state
+        .storage
+        .get_all_items()
+        .into_iter()
+        .filter(|item| {
+            let timestamp = graph_timestamp(item);
+            let category_matches = category_filter
+                .map(|category| item.category_id.as_deref() == Some(category))
+                .unwrap_or(true);
+            let event_matches = event_type_filter
+                .as_ref()
+                .map(|event_type| item.memory_type.as_str() == event_type)
+                .unwrap_or(true);
+            let start_matches = start_time.map(|start| timestamp >= start).unwrap_or(true);
+            let end_matches = end_time.map(|end| timestamp <= end).unwrap_or(true);
+
+            category_matches && event_matches && start_matches && end_matches
+        })
+        .collect();
+
+    items.sort_by(|left, right| {
+        graph_timestamp(left)
+            .cmp(&graph_timestamp(right))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    Ok(items)
+}
+
+fn find_graph_node_index(items: &[MemoryItem], node_id: &str) -> Result<usize, MemoryError> {
+    items
+        .iter()
+        .position(|item| item.id == node_id)
+        .ok_or_else(|| MemoryError::NotFound(format!("Graph node '{}' not found", node_id)))
 }
 
 /// Graph query response
@@ -445,84 +538,133 @@ pub struct TimelineEventInfo {
 impl MemoryHandlers {
     /// Query graph (POST /api/v1/graph/query)
     ///
-    /// Queries the temporal knowledge graph for causal chains, timelines, and paths.
-    /// Uses evif-graph TemporalGraph for time-aware graph operations.
+    /// Projects a temporal graph from stored memories for timeline and traversal queries.
     pub async fn query_graph(
         State(state): State<MemoryState>,
         Json(req): Json<GraphQueryRequest>,
     ) -> Result<Json<GraphQueryResponse>, MemoryError> {
         match req.query_type.as_str() {
             "causal_chain" => {
-                let start_node = req.start_node
-                    .ok_or_else(|| MemoryError::BadRequest("start_node required for causal_chain query".to_string()))?;
+                let start_node = req.start_node.as_deref().ok_or_else(|| {
+                    MemoryError::BadRequest("start_node required for causal_chain query".to_string())
+                })?;
+                let items = filtered_graph_memories(&state, &req)?;
+                let start_index = find_graph_node_index(&items, start_node)?;
+                let chain_start = start_index.saturating_sub(req.max_depth);
+                let nodes = items[chain_start..=start_index]
+                    .iter()
+                    .map(to_graph_node)
+                    .collect::<Vec<_>>();
+                let total = nodes.len();
 
-                // For now, return a placeholder response
-                // Full implementation would use evif-graph TemporalGraph::find_causal_chain
                 Ok(Json(GraphQueryResponse {
                     query_type: req.query_type,
-                    nodes: Some(vec![GraphNodeInfo {
-                        id: start_node.clone(),
-                        node_type: "memory".to_string(),
-                        label: "Start node".to_string(),
-                        timestamp: None,
-                    }]),
+                    nodes: Some(nodes),
                     paths: None,
                     timeline: None,
-                    total: 1,
+                    total,
                 }))
             }
 
             "timeline" => {
-                // Get event_type filter or use default
-                let event_type = req.event_type.unwrap_or_else(|| "event".to_string());
+                let mut items = filtered_graph_memories(&state, &req)?;
 
-                // For now, return an empty timeline
-                // Full implementation would use evif-graph TemporalGraph::get_event_timeline
+                if let Some(start_node) = req.start_node.as_deref() {
+                    let start_index = find_graph_node_index(&items, start_node)?;
+                    let end_index = std::cmp::min(items.len(), start_index + req.max_depth + 1);
+                    items = items[start_index..end_index].to_vec();
+                }
+
+                let nodes = items.iter().map(to_graph_node).collect::<Vec<_>>();
+                let timeline = items
+                    .iter()
+                    .map(|item| TimelineEventInfo {
+                        node_id: item.id.clone(),
+                        timestamp: graph_timestamp(item).to_rfc3339(),
+                        event_type: item.memory_type.as_str().to_string(),
+                    })
+                    .collect::<Vec<_>>();
+                let total = timeline.len();
+
                 Ok(Json(GraphQueryResponse {
                     query_type: req.query_type,
-                    nodes: None,
+                    nodes: Some(nodes),
                     paths: None,
-                    timeline: Some(vec![]),
-                    total: 0,
+                    timeline: Some(timeline),
+                    total,
                 }))
             }
 
             "temporal_bfs" => {
-                let start_node = req.start_node
-                    .ok_or_else(|| MemoryError::BadRequest("start_node required for temporal_bfs query".to_string()))?;
+                let start_node = req.start_node.as_deref().ok_or_else(|| {
+                    MemoryError::BadRequest("start_node required for temporal_bfs query".to_string())
+                })?;
+                let items = filtered_graph_memories(&state, &req)?;
+                let start_index = find_graph_node_index(&items, start_node)?;
+                let end_index = std::cmp::min(items.len(), start_index + req.max_depth + 1);
+                let nodes = items[start_index..end_index]
+                    .iter()
+                    .map(to_graph_node)
+                    .collect::<Vec<_>>();
+                let total = nodes.len();
 
-                // For now, return placeholder response
-                // Full implementation would use evif-graph TemporalGraph::temporal_bfs
                 Ok(Json(GraphQueryResponse {
                     query_type: req.query_type,
-                    nodes: Some(vec![GraphNodeInfo {
-                        id: start_node,
-                        node_type: "memory".to_string(),
-                        label: "BFS start".to_string(),
-                        timestamp: None,
-                    }]),
+                    nodes: Some(nodes),
                     paths: None,
                     timeline: None,
-                    total: 1,
+                    total,
                 }))
             }
 
             "temporal_path" => {
-                let start_node = req.start_node
-                    .ok_or_else(|| MemoryError::BadRequest("start_node required for temporal_path query".to_string()))?;
-                let end_node = req.end_node
-                    .ok_or_else(|| MemoryError::BadRequest("end_node required for temporal_path query".to_string()))?;
+                let start_node = req.start_node.as_deref().ok_or_else(|| {
+                    MemoryError::BadRequest("start_node required for temporal_path query".to_string())
+                })?;
+                let end_node = req.end_node.as_deref().ok_or_else(|| {
+                    MemoryError::BadRequest("end_node required for temporal_path query".to_string())
+                })?;
+                let items = filtered_graph_memories(&state, &req)?;
+                let start_index = find_graph_node_index(&items, start_node)?;
+                let end_index = find_graph_node_index(&items, end_node)?;
 
-                // For now, return placeholder path
-                // Full implementation would use evif-graph TemporalGraph::find_temporal_path
+                let (nodes, edge_name, narrative) = if start_index <= end_index {
+                    (
+                        items[start_index..=end_index]
+                            .iter()
+                            .map(|item| item.id.clone())
+                            .collect::<Vec<_>>(),
+                        "Before",
+                        format!(
+                            "Forward temporal path across {} memories",
+                            end_index - start_index + 1
+                        ),
+                    )
+                } else {
+                    (
+                        items[end_index..=start_index]
+                            .iter()
+                            .rev()
+                            .map(|item| item.id.clone())
+                            .collect::<Vec<_>>(),
+                        "After",
+                        format!(
+                            "Reverse temporal path across {} memories",
+                            start_index - end_index + 1
+                        ),
+                    )
+                };
+                let edges = vec![edge_name.to_string(); nodes.len().saturating_sub(1)];
+                let paths = vec![GraphPathInfo {
+                    nodes,
+                    edges,
+                    narrative,
+                }];
+
                 Ok(Json(GraphQueryResponse {
                     query_type: req.query_type,
                     nodes: None,
-                    paths: Some(vec![GraphPathInfo {
-                        nodes: vec![start_node, end_node],
-                        edges: vec!["Before".to_string()],
-                        narrative: "Direct temporal path".to_string(),
-                    }]),
+                    paths: Some(paths),
                     timeline: None,
                     total: 1,
                 }))
@@ -618,6 +760,19 @@ mod tests {
         assert_eq!(req.query_type, "causal_chain");
         assert_eq!(req.start_node, Some("node-123".to_string()));
         assert_eq!(req.max_depth, 10);
+    }
+
+    #[test]
+    fn test_graph_query_request_accepts_legacy_node_id_alias() {
+        let json = r#"{
+            "query_type": "temporal_bfs",
+            "node_id": "node-legacy"
+        }"#;
+
+        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.query_type, "temporal_bfs");
+        assert_eq!(req.start_node, Some("node-legacy".to_string()));
+        assert_eq!(req.max_depth, 5);
     }
 
     #[test]

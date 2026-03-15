@@ -142,16 +142,18 @@ export class EvifMemoryClient {
     return result.data ?? [];
   }
 
-  async queryGraph(query: string, queryOptions?: GraphQueryOptions): Promise<GraphResult> {
+  async queryGraph(queryType: GraphQueryType | string, queryOptions?: GraphQueryOptions): Promise<GraphResult> {
     const data = {
-      query,
-      query_type: queryOptions?.queryType ?? GraphQueryType.CAUSAL_CHAIN,
-      node_id: queryOptions?.nodeId,
-      max_depth: queryOptions?.maxDepth ?? 3,
-      limit: queryOptions?.limit ?? 10,
+      query_type: queryOptions?.queryType ?? queryType ?? GraphQueryType.CAUSAL_CHAIN,
+      start_node: queryOptions?.startNode ?? queryOptions?.nodeId,
+      end_node: queryOptions?.endNode,
+      max_depth: queryOptions?.maxDepth ?? 5,
+      event_type: queryOptions?.eventType,
+      category: queryOptions?.category,
+      start_time: queryOptions?.startTime,
+      end_time: queryOptions?.endTime,
     };
-    const result = await this.request<{ data: GraphResult }>('POST', '/api/v1/graph/query', data);
-    return result.data;
+    return this.request<GraphResult>('POST', '/api/v1/graph/query', data);
   }
 
   async close(): Promise<void> {

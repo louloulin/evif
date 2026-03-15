@@ -72,32 +72,45 @@ export interface Category {
 }
 
 export interface GraphQuery {
-  query: string;
   query_type: GraphQueryType | string;
-  node_id?: string;
+  start_node?: string;
+  end_node?: string;
   max_depth?: number;
+  event_type?: string;
+  category?: string;
+  start_time?: string;
+  end_time?: string;
+  /** @deprecated Use start_node. */
+  node_id?: string;
+  /** @deprecated The REST graph API ignores this field. */
   limit?: number;
 }
 
 export interface GraphNode {
   id: string;
-  node_type: string;
+  type: string;
   label: string;
-  metadata: Record<string, unknown>;
+  timestamp?: string;
 }
 
-export interface GraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  edge_type: string;
-  metadata: Record<string, unknown>;
+export interface TimelineEvent {
+  node_id: string;
+  timestamp: string;
+  event_type: string;
+}
+
+export interface GraphPathInfo {
+  nodes: string[];
+  edges: string[];
+  narrative: string;
 }
 
 export interface GraphResult {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  metadata: Record<string, unknown>;
+  query_type: string;
+  nodes?: GraphNode[];
+  paths?: GraphPathInfo[];
+  timeline?: TimelineEvent[];
+  total: number;
 }
 
 export interface SearchOptions {
@@ -113,7 +126,15 @@ export interface ListMemoriesOptions {
 
 export interface GraphQueryOptions {
   queryType?: GraphQueryType | string;
-  nodeId?: string;
+  startNode?: string;
+  endNode?: string;
   maxDepth?: number;
+  eventType?: string;
+  category?: string;
+  startTime?: string;
+  endTime?: string;
+  /** @deprecated Use startNode. */
+  nodeId?: string;
+  /** @deprecated The REST graph API ignores this field. */
   limit?: number;
 }

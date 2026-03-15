@@ -2,9 +2,25 @@
  * Unit tests for EvifMemoryClient
  */
 
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import axios from 'axios';
 import { MemoryConfig } from '../src/config';
 import { MemoryType, Modality, GraphQueryType } from '../src/models';
+
+const mockRequest = vi.fn();
+
+vi.mock('axios', () => ({
+  default: {
+    create: vi.fn(() => ({
+      request: mockRequest,
+    })),
+  },
+}));
+
+beforeEach(() => {
+  mockRequest.mockReset();
+  vi.clearAllMocks();
+});
 
 // Simple validation tests without complex mocking
 describe('MemoryConfig', () => {
@@ -84,6 +100,87 @@ describe('Client instantiation', () => {
     const client = new EvifMemoryClient(config);
     expect(client).toBeDefined();
     await client.close();
+  });
+
+  it('should post canonical graph query payloads and return the REST response shape', async () => {
+    const graphResponse = {
+      query_type: 'timeline',
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'memory',
+          label: 'First memory',
+          timestamp: '2026-03-15T00:00:00Z',
+        },
+      ],
+      timeline: [
+        {
+          node_id: 'node-1',
+          timestamp: '2026-03-15T00:00:00Z',
+          event_type: 'knowledge',
+        },
+      ],
+      total: 1,
+    };
+    mockRequest.mockResolvedValueOnce({ data: graphResponse });
+
+    const { EvifMemoryClient } = await import('../src/client');
+    const client = new EvifMemoryClient(new MemoryConfig({ apiUrl: 'http://localhost:8080' }));
+    const result = await client.queryGraph(GraphQueryType.TIMELINE, {
+      startNode: 'node-1',
+      maxDepth: 2,
+      eventType: 'knowledge',
+    });
+
+    expect(axios.create).toHaveBeenCalled();
+    expect(mockRequest).toHaveBeenCalledWith({
+      method: 'POST',
+      url: '/api/v1/graph/query',
+      data: {
+        query_type: 'timeline',
+        start_node: 'node-1',
+        end_node: undefined,
+        max_depth: 2,
+        event_type: 'knowledge',
+        category: undefined,
+        start_time: undefined,
+        end_time: undefined,
+      },
+    });
+    expect(result).toEqual(graphResponse);
+  });
+
+  it('should map legacy nodeId options onto start_node for graph queries', async () => {
+    mockRequest.mockResolvedValueOnce({
+      data: {
+        query_type: 'causal_chain',
+        nodes: [{ id: 'node-2', type: 'memory', label: 'Second memory' }],
+        total: 1,
+      },
+    });
+
+    const { EvifMemoryClient } = await import('../src/client');
+    const client = new EvifMemoryClient(new MemoryConfig({ apiUrl: 'http://localhost:8080' }));
+    await client.queryGraph(GraphQueryType.CAUSAL_CHAIN, {
+      nodeId: 'node-2',
+      maxDepth: 1,
+      limit: 99,
+    });
+
+    expect(mockRequest).toHaveBeenCalledWith({
+      method: 'POST',
+      url: '/api/v1/graph/query',
+      data: {
+        query_type: 'causal_chain',
+        start_node: 'node-2',
+        end_node: undefined,
+        max_depth: 1,
+        event_type: undefined,
+        category: undefined,
+        start_time: undefined,
+        end_time: undefined,
+      },
+    });
   });
 });
 

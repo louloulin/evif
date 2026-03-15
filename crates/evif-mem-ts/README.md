@@ -146,19 +146,20 @@ Get memories in a category.
 const memories = await client.getCategoryMemories('cat-123', 100);
 ```
 
-#### `queryGraph(query, options?)`
+#### `queryGraph(queryType, options?)`
 
 Query the knowledge graph.
 
 ```typescript
-const result = await client.queryGraph('related events', {
-  queryType: GraphQueryType.CAUSAL_CHAIN,
+const result = await client.queryGraph(GraphQueryType.TIMELINE, {
+  startNode: 'mem-123',
   maxDepth: 3,
-  limit: 10,
+  eventType: 'knowledge',
 });
 
 console.log('Nodes:', result.nodes);
-console.log('Edges:', result.edges);
+console.log('Timeline:', result.timeline);
+console.log('Total:', result.total);
 ```
 
 ## Data Models
@@ -242,9 +243,11 @@ interface Category {
 
 ```typescript
 interface GraphResult {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  metadata: Record<string, unknown>;
+  query_type: string;
+  nodes?: GraphNode[];
+  paths?: GraphPathInfo[];
+  timeline?: TimelineEvent[];
+  total: number;
 }
 ```
 
