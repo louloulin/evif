@@ -241,7 +241,7 @@
 - [x] 修复 MCP/REST 记忆契约。
 - [x] 处理图 API：基于记忆存储提供真实时序查询，并对齐 TypeScript SDK 契约。
 - 去除或保护 `/api/v1/metrics/reset`。
-- 修复 `evif-rest` doctest。
+- [x] 修复 `evif-rest` doctest。
 
 交付物：
 - 受保护的 REST API
@@ -319,7 +319,7 @@
 
 1. [x] 认证中间件接线
 2. [x] MCP/REST 记忆契约修复
-3. `evif-rest` doctest 修复
+3. [x] `evif-rest` doctest 修复
 4. [x] 统一健康检查和版本输出
 5. 去掉公开占位 API 或补真实实现
 
@@ -331,6 +331,7 @@
 - `evif-mcp` 的 `evif_retrieve` 现已发送 REST 侧实际消费的 `vector_k/llm_top_n` 字段。
 - `evif-rest` 为旧客户端补充了 `text`、`k`、`top_n` 反序列化兼容层，并新增 focused tests 覆盖。
 - `/health` 与 `/api/v1/health` 现在统一使用 `env!(\"CARGO_PKG_VERSION\")` 作为版本来源；根健康检查同时暴露 `uptime` 和 `timestamp`，并有集成测试保证两个出口版本一致。
+- `evif-rest` 的剩余 doctest 失败已修复：`compat_fs` 中用于说明根路径挂载树的 Unicode 示例现已标记为 `text` 代码块，不再被 rustdoc 当作 Rust 源码编译。
 
 ### 4.2 第二批必须跟进
 
