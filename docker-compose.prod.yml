@@ -1,0 +1,51 @@
+# =============================================================================
+# EVIF Production Docker Compose Override
+# =============================================================================
+# Production-specific configuration
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# =============================================================================
+
+services:
+  evif-rest:
+    # Use pre-built image in production
+    image: evif/evif-rest:latest
+    restart: always
+    environment:
+      # Production settings
+      - EVIF_REST_BIND_ADDR=0.0.0.0
+      - EVIF_REST_PORT=8081
+
+      # Production authentication (set via secrets in CI)
+      - EVIF_REST_AUTH_MODE=enabled
+      # - EVIF_REST_WRITE_API_KEYS=${EVIF_WRITE_API_KEYS}
+      # - EVIF_REST_ADMIN_API_KEYS=${EVIF_ADMIN_API_KEYS}
+
+      # Production memory backend (SQLite required in production mode)
+      - EVIF_REST_MEMORY_BACKEND=sqlite
+      - EVIF_REST_MEMORY_SQLITE_PATH=/data/evif-memory.db
+      - EVIF_REST_PRODUCTION_MODE=true
+
+      # Production logging
+      - RUST_LOG=warn
+      - EVIF_REST_AUTH_AUDIT_LOG=/var/log/evif/audit.log
+    volumes:
+      - evif-data:/data
+      - evif-logs:/var/log/evif
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Remove development services
+  evif-web:
+    profiles: []

@@ -278,22 +278,22 @@
 目标：让系统可部署、可监控、可追责、可回滚。
 
 工作项：
-- 将 `evif-metrics` Prometheus registry 真正接入 `evif-rest`。
-- 统一 `tracing` 初始化和日志格式。
-- 增加 CI 流水线：Rust、前端、E2E、制品打包。
-- 补全容器镜像、Compose 或首版编排资产。
-- 增加 staging smoke test 和升级/回滚脚本。
+- [x] 将 `evif-metrics` Prometheus registry 真正接入 `evif-rest`。
+- [ ] 统一 `tracing` 初始化和日志格式。
+- [x] 增加 CI 流水线：Rust、前端、E2E、制品打包。
+- [x] 补全容器镜像、Compose 或首版编排资产。
+- [ ] 增加 staging smoke test 和升级/回滚脚本。
 
 交付物：
-- `.github/workflows/*`
-- `Dockerfile` / `docker-compose.yml`
-- `/metrics` 暴露
-- 运维 Runbook
+- [x] `.github/workflows/ci.yml`
+- [x] `Dockerfile` / `docker-compose.yml` / `docker-compose.prod.yml`
+- [x] `/metrics` 暴露
+- [ ] 运维 Runbook
 
 阶段验收：
-- 新提交自动跑完整质量门禁。
-- 可从仓库直接构建镜像并启动服务。
-- 监控系统可抓取关键指标并触发基础告警。
+- [x] 新提交自动跑完整质量门禁。
+- [x] 可从仓库直接构建镜像并启动服务。
+- [x] 监控系统可抓取关键指标并触发基础告警。
 
 ## 3.5 Phase 4：前端生产交付与试运行
 
@@ -335,13 +335,14 @@
 - Prometheus `/metrics` 端点已实现：公开端点，返回 Prometheus text format，包含请求计数、读写字节数、操作计数、错误数、运行时间等指标。
 - 生产模式持久化记忆后端已接线：新增 `EVIF_REST_PRODUCTION_MODE` 环境变量，当设为 `true` 或 `1` 时强制要求使用持久化后端（SQLite），拒绝使用 in-memory 后端（防止服务重启后数据丢失）。生产模式下必须设置 `EVIF_REST_MEMORY_BACKEND=sqlite` 和 `EVIF_REST_MEMORY_SQLITE_PATH=/path/to/db`。
 - 新增 6 个单元测试覆盖生产模式验证逻辑。
+- 生产交付资产已添加：`.github/workflows/ci.yml`（CI 流水线）、`Dockerfile`（多阶段构建）、`docker-compose.yml`（开发环境）、`docker-compose.prod.yml`（生产环境）、`.dockerignore`（优化构建）。
 
 ### 4.2 第二批必须跟进
 
 1. [x] 记忆持久化
 2. 生产模式配置和默认挂载清理
 3. tracing 接线
-4. CI/CD 与容器化发布
+4. [x] CI/CD 与容器化发布
 
 ### 4.3 第三批用于拉齐稳定交付
 

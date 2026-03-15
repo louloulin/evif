@@ -1,0 +1,47 @@
+# =============================================================================
+# Docker Ignore
+# =============================================================================
+# Exclude files not needed in Docker builds
+# =============================================================================
+
+# Git
+.git
+.gitignore
+
+# Build artifacts
+target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Documentation
+*.md
+docs/
+
+# Tests
+tests/
+benches/
+
+# Examples
+examples/
+
+# Frontend
+evif-web/
+node_modules/
+ui-analysis/
+
+# Claude/Ralph
+.claude/
+.ralph/
+
+# CI/CD (can be included in build for advanced scenarios)
+.github/
+
+# Development files
+*.local
+.env
+.env.*
