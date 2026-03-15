@@ -537,7 +537,8 @@ impl LLMClient for AnthropicClient {
         // Anthropic doesn't provide an embeddings API
         // Users should use OpenAI or other embedding services
         Err(MemError::Embedding(
-            "Anthropic does not provide embeddings API. Use OpenAI or other embedding services.".to_string()
+            "Anthropic does not provide embeddings API. Use OpenAI or other embedding services."
+                .to_string(),
         ))
     }
 
@@ -671,11 +672,7 @@ impl OllamaClient {
     }
 
     /// Create with custom configuration
-    pub fn with_config(
-        model: String,
-        embedding_model: String,
-        base_url: Option<String>,
-    ) -> Self {
+    pub fn with_config(model: String, embedding_model: String, base_url: Option<String>) -> Self {
         Self {
             model,
             embedding_model,
@@ -904,7 +901,12 @@ impl LLMClient for OllamaClient {
         for line in response.lines() {
             let line = line.trim();
             if line.starts_with("name:") || line.starts_with("Name:") {
-                name = line.split(':').nth(1).unwrap_or("Uncategorized").trim().to_string();
+                name = line
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or("Uncategorized")
+                    .trim()
+                    .to_string();
             } else if line.starts_with("description:") || line.starts_with("Description:") {
                 description = line.split(':').nth(1).unwrap_or("").trim().to_string();
             } else if line.starts_with("themes:") || line.starts_with("Themes:") {
@@ -935,7 +937,11 @@ impl LLMClient for OllamaClient {
     async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
         // Simple reranking based on keyword matching
         // Collect as owned strings to avoid borrow issues
-        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+        let query_terms: Vec<String> = query
+            .to_lowercase()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
 
         for item in items.iter_mut() {
             let content_lower = item.content.to_lowercase();
@@ -964,10 +970,22 @@ impl LLMClient for OllamaClient {
             let a_summary = a.summary.to_lowercase();
             let b_summary = b.summary.to_lowercase();
 
-            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
-            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+            let a_score = query_terms
+                .iter()
+                .filter(|t| a_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| a_summary.contains(t.as_str()))
+                    .count() as i32;
+            let b_score = query_terms
+                .iter()
+                .filter(|t| b_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| b_summary.contains(t.as_str()))
+                    .count() as i32;
 
             b_score.cmp(&a_score)
         });
@@ -975,7 +993,11 @@ impl LLMClient for OllamaClient {
         Ok(items)
     }
 
-    async fn analyze_image(&self, _image_data: &[u8], _mime_type: &str) -> MemResult<ImageAnalysis> {
+    async fn analyze_image(
+        &self,
+        _image_data: &[u8],
+        _mime_type: &str,
+    ) -> MemResult<ImageAnalysis> {
         // Ollama doesn't support vision directly
         // Return a placeholder indicating this needs external processing
         Ok(ImageAnalysis {
@@ -1140,19 +1162,33 @@ impl LLMClient for OpenRouterClient {
 
         for line in response.lines() {
             let line = line.trim();
-            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
-                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
-                    .trim().trim_matches('"').to_string();
+            if line.starts_with("name:")
+                || line.starts_with("Name:")
+                || line.starts_with("\"name\":")
+            {
+                name = line
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
             } else if line.starts_with("description:") || line.starts_with("Description:") {
                 description = line.split(':').nth(1).unwrap_or("").trim().to_string();
             } else if line.starts_with("themes:") || line.starts_with("Themes:") {
                 let theme_str = line.split(':').nth(1).unwrap_or("");
-                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                themes = theme_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             } else if line.starts_with("tags:") || line.starts_with("Tags:") {
                 let tag_str = line.split(':').nth(1).unwrap_or("");
-                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                tags = tag_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             }
         }
 
@@ -1167,7 +1203,11 @@ impl LLMClient for OpenRouterClient {
     async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
         // Simple reranking based on keyword matching
         // OpenRouter supports reranking through specific models, but we use simple approach
-        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+        let query_terms: Vec<String> = query
+            .to_lowercase()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
 
         // Sort by relevance (content match > summary match)
         items.sort_by(|a, b| {
@@ -1176,10 +1216,22 @@ impl LLMClient for OpenRouterClient {
             let a_summary = a.summary.to_lowercase();
             let b_summary = b.summary.to_lowercase();
 
-            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
-            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+            let a_score = query_terms
+                .iter()
+                .filter(|t| a_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| a_summary.contains(t.as_str()))
+                    .count() as i32;
+            let b_score = query_terms
+                .iter()
+                .filter(|t| b_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| b_summary.contains(t.as_str()))
+                    .count() as i32;
 
             b_score.cmp(&a_score)
         });
@@ -1298,19 +1350,11 @@ impl GrokClient {
     /// Default model: grok-2-1212
     /// Default base URL: https://api.x.ai
     pub fn new(api_key: String) -> Self {
-        Self::with_config(
-            api_key,
-            "grok-2-1212".to_string(),
-            None,
-        )
+        Self::with_config(api_key, "grok-2-1212".to_string(), None)
     }
 
     /// Create with custom configuration
-    pub fn with_config(
-        api_key: String,
-        model: String,
-        base_url: Option<String>,
-    ) -> Self {
+    pub fn with_config(api_key: String, model: String, base_url: Option<String>) -> Self {
         Self {
             api_key,
             model,
@@ -1414,7 +1458,8 @@ impl LLMClient for GrokClient {
         // Grok does not provide an embeddings API
         // Users should use OpenAI or other embedding services
         Err(MemError::Embedding(
-            "Grok does not provide embeddings API. Use OpenAI or other embedding services.".to_string()
+            "Grok does not provide embeddings API. Use OpenAI or other embedding services."
+                .to_string(),
         ))
     }
 
@@ -1440,19 +1485,33 @@ impl LLMClient for GrokClient {
 
         for line in response.lines() {
             let line = line.trim();
-            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
-                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
-                    .trim().trim_matches('"').to_string();
+            if line.starts_with("name:")
+                || line.starts_with("Name:")
+                || line.starts_with("\"name\":")
+            {
+                name = line
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
             } else if line.starts_with("description:") || line.starts_with("Description:") {
                 description = line.split(':').nth(1).unwrap_or("").trim().to_string();
             } else if line.starts_with("themes:") || line.starts_with("Themes:") {
                 let theme_str = line.split(':').nth(1).unwrap_or("");
-                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                themes = theme_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             } else if line.starts_with("tags:") || line.starts_with("Tags:") {
                 let tag_str = line.split(':').nth(1).unwrap_or("");
-                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                tags = tag_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             }
         }
 
@@ -1466,7 +1525,11 @@ impl LLMClient for GrokClient {
 
     async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
         // Simple reranking based on keyword matching
-        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+        let query_terms: Vec<String> = query
+            .to_lowercase()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
 
         items.sort_by(|a, b| {
             let a_content = a.content.to_lowercase();
@@ -1474,10 +1537,22 @@ impl LLMClient for GrokClient {
             let a_summary = a.summary.to_lowercase();
             let b_summary = b.summary.to_lowercase();
 
-            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
-            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+            let a_score = query_terms
+                .iter()
+                .filter(|t| a_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| a_summary.contains(t.as_str()))
+                    .count() as i32;
+            let b_score = query_terms
+                .iter()
+                .filter(|t| b_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| b_summary.contains(t.as_str()))
+                    .count() as i32;
 
             b_score.cmp(&a_score)
         });
@@ -1866,19 +1941,33 @@ impl LLMClient for LazyLLMClient {
 
         for line in response.lines() {
             let line = line.trim();
-            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
-                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
-                    .trim().trim_matches('"').to_string();
+            if line.starts_with("name:")
+                || line.starts_with("Name:")
+                || line.starts_with("\"name\":")
+            {
+                name = line
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
             } else if line.starts_with("description:") || line.starts_with("Description:") {
                 description = line.split(':').nth(1).unwrap_or("").trim().to_string();
             } else if line.starts_with("themes:") || line.starts_with("Themes:") {
                 let theme_str = line.split(':').nth(1).unwrap_or("");
-                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                themes = theme_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             } else if line.starts_with("tags:") || line.starts_with("Tags:") {
                 let tag_str = line.split(':').nth(1).unwrap_or("");
-                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                tags = tag_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             }
         }
 
@@ -1892,7 +1981,11 @@ impl LLMClient for LazyLLMClient {
 
     async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
         // Simple reranking based on keyword matching
-        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+        let query_terms: Vec<String> = query
+            .to_lowercase()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
 
         items.sort_by(|a, b| {
             let a_content = a.content.to_lowercase();
@@ -1900,10 +1993,22 @@ impl LLMClient for LazyLLMClient {
             let a_summary = a.summary.to_lowercase();
             let b_summary = b.summary.to_lowercase();
 
-            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
-            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+            let a_score = query_terms
+                .iter()
+                .filter(|t| a_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| a_summary.contains(t.as_str()))
+                    .count() as i32;
+            let b_score = query_terms
+                .iter()
+                .filter(|t| b_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| b_summary.contains(t.as_str()))
+                    .count() as i32;
 
             b_score.cmp(&a_score)
         });
@@ -1911,7 +2016,11 @@ impl LLMClient for LazyLLMClient {
         Ok(items)
     }
 
-    async fn analyze_image(&self, _image_data: &[u8], _mime_type: &str) -> MemResult<ImageAnalysis> {
+    async fn analyze_image(
+        &self,
+        _image_data: &[u8],
+        _mime_type: &str,
+    ) -> MemResult<ImageAnalysis> {
         // LazyLLM may or may not support vision depending on the backend
         // Return a placeholder indicating this needs external processing
         Ok(ImageAnalysis {
@@ -1927,24 +2036,17 @@ impl DoubaoClient {
     /// Default model: doubao-pro-32k
     /// Default base URL: https://ark.cn-beijing.volces.com/api/v3
     pub fn new(api_key: String) -> Self {
-        Self::with_config(
-            api_key,
-            "doubao-pro-32k".to_string(),
-            None,
-        )
+        Self::with_config(api_key, "doubao-pro-32k".to_string(), None)
     }
 
     /// Create with custom configuration
-    pub fn with_config(
-        api_key: String,
-        model: String,
-        base_url: Option<String>,
-    ) -> Self {
+    pub fn with_config(api_key: String, model: String, base_url: Option<String>) -> Self {
         Self {
             api_key,
             model,
             client: reqwest::Client::new(),
-            base_url: base_url.unwrap_or_else(|| "https://ark.cn-beijing.volces.com/api/v3".to_string()),
+            base_url: base_url
+                .unwrap_or_else(|| "https://ark.cn-beijing.volces.com/api/v3".to_string()),
         }
     }
 
@@ -2032,7 +2134,8 @@ impl LLMClient for DoubaoClient {
         // Doubao does not provide an embeddings API
         // Users should use OpenAI or other embedding services
         Err(MemError::Embedding(
-            "Doubao does not provide embeddings API. Use OpenAI or other embedding services.".to_string()
+            "Doubao does not provide embeddings API. Use OpenAI or other embedding services."
+                .to_string(),
         ))
     }
 
@@ -2058,19 +2161,33 @@ impl LLMClient for DoubaoClient {
 
         for line in response.lines() {
             let line = line.trim();
-            if line.starts_with("name:") || line.starts_with("Name:") || line.starts_with("\"name\":") {
-                name = line.split(':').nth(1).unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
-                    .trim().trim_matches('"').to_string();
+            if line.starts_with("name:")
+                || line.starts_with("Name:")
+                || line.starts_with("\"name\":")
+            {
+                name = line
+                    .split(':')
+                    .nth(1)
+                    .unwrap_or(line.split('"').nth(3).unwrap_or("Uncategorized"))
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
             } else if line.starts_with("description:") || line.starts_with("Description:") {
                 description = line.split(':').nth(1).unwrap_or("").trim().to_string();
             } else if line.starts_with("themes:") || line.starts_with("Themes:") {
                 let theme_str = line.split(':').nth(1).unwrap_or("");
-                themes = theme_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                themes = theme_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             } else if line.starts_with("tags:") || line.starts_with("Tags:") {
                 let tag_str = line.split(':').nth(1).unwrap_or("");
-                tags = tag_str.split(',').map(|s| s.trim().trim_matches('"').to_string())
-                    .filter(|s| !s.is_empty()).collect();
+                tags = tag_str
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             }
         }
 
@@ -2084,7 +2201,11 @@ impl LLMClient for DoubaoClient {
 
     async fn rerank(&self, query: &str, mut items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
         // Simple reranking based on keyword matching
-        let query_terms: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+        let query_terms: Vec<String> = query
+            .to_lowercase()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
 
         items.sort_by(|a, b| {
             let a_content = a.content.to_lowercase();
@@ -2092,10 +2213,22 @@ impl LLMClient for DoubaoClient {
             let a_summary = a.summary.to_lowercase();
             let b_summary = b.summary.to_lowercase();
 
-            let a_score = query_terms.iter().filter(|t| a_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| a_summary.contains(t.as_str())).count() as i32;
-            let b_score = query_terms.iter().filter(|t| b_content.contains(t.as_str())).count() as i32
-                + query_terms.iter().filter(|t| b_summary.contains(t.as_str())).count() as i32;
+            let a_score = query_terms
+                .iter()
+                .filter(|t| a_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| a_summary.contains(t.as_str()))
+                    .count() as i32;
+            let b_score = query_terms
+                .iter()
+                .filter(|t| b_content.contains(t.as_str()))
+                .count() as i32
+                + query_terms
+                    .iter()
+                    .filter(|t| b_summary.contains(t.as_str()))
+                    .count() as i32;
 
             b_score.cmp(&a_score)
         });
@@ -2103,7 +2236,11 @@ impl LLMClient for DoubaoClient {
         Ok(items)
     }
 
-    async fn analyze_image(&self, _image_data: &[u8], _mime_type: &str) -> MemResult<ImageAnalysis> {
+    async fn analyze_image(
+        &self,
+        _image_data: &[u8],
+        _mime_type: &str,
+    ) -> MemResult<ImageAnalysis> {
         // Doubao may support vision through specific models
         // For now, return a placeholder
         Ok(ImageAnalysis {
@@ -2252,11 +2389,8 @@ mod tests {
 
     #[test]
     fn test_grok_client_model_accessor() {
-        let client = GrokClient::with_config(
-            "test-key".to_string(),
-            "grok-vision-beta".to_string(),
-            None,
-        );
+        let client =
+            GrokClient::with_config("test-key".to_string(), "grok-vision-beta".to_string(), None);
         assert_eq!(client.model(), "grok-vision-beta");
     }
 
@@ -2339,11 +2473,8 @@ mod tests {
 
     #[test]
     fn test_doubao_client_model_accessor() {
-        let client = DoubaoClient::with_config(
-            "test-key".to_string(),
-            "doubao-pro-128k".to_string(),
-            None,
-        );
+        let client =
+            DoubaoClient::with_config("test-key".to_string(), "doubao-pro-128k".to_string(), None);
         assert_eq!(client.model(), "doubao-pro-128k");
     }
 

@@ -58,12 +58,15 @@ impl DEntry {
 
     /// 增加引用计数
     pub fn inc_ref(&self) {
-        self.ref_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.ref_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 减少引用计数
     pub fn dec_ref(&self) -> usize {
-        self.ref_count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed).saturating_sub(1)
+        self.ref_count
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+            .saturating_sub(1)
     }
 
     /// 获取引用计数
@@ -208,8 +211,7 @@ mod tests {
         let inode = NodeId::new_v4();
         let parent = NodeId::new_v4();
 
-        let dentry = DEntry::new("test.txt", inode, false)
-            .with_parent(parent);
+        let dentry = DEntry::new("test.txt", inode, false).with_parent(parent);
 
         assert_eq!(dentry.parent, Some(parent));
     }
@@ -283,9 +285,24 @@ mod tests {
         let file1_path = PathBuf::from("/dir/file1.txt");
         let file2_path = PathBuf::from("/dir/file2.txt");
 
-        cache.insert(dir_path.clone(), DEntry::new("dir", parent, true)).await.unwrap();
-        cache.insert(file1_path.clone(), DEntry::new("file1.txt", child1, false).with_parent(parent)).await.unwrap();
-        cache.insert(file2_path.clone(), DEntry::new("file2.txt", child2, false).with_parent(parent)).await.unwrap();
+        cache
+            .insert(dir_path.clone(), DEntry::new("dir", parent, true))
+            .await
+            .unwrap();
+        cache
+            .insert(
+                file1_path.clone(),
+                DEntry::new("file1.txt", child1, false).with_parent(parent),
+            )
+            .await
+            .unwrap();
+        cache
+            .insert(
+                file2_path.clone(),
+                DEntry::new("file2.txt", child2, false).with_parent(parent),
+            )
+            .await
+            .unwrap();
 
         let children = cache.children(&dir_path).await;
         assert_eq!(children.len(), 2);

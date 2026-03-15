@@ -1,17 +1,17 @@
 // EVIF Protocol - 线协议定义和序列化
 
+pub mod codec;
 pub mod error;
 pub mod message;
-pub mod codec;
 pub mod request;
 pub mod response;
 pub mod stream;
 
 // Re-export main types
+pub use codec::{MessagePackCodec, ProtocolCodec};
 pub use error::{ProtocolError, ProtocolResult};
 pub use message::{Message, MessageKind, MessageType};
-pub use codec::{ProtocolCodec, MessagePackCodec};
-pub use request::{Request, RequestKind, FileOperation, SeekPosition};
+pub use request::{FileOperation, Request, RequestKind, SeekPosition};
 pub use response::{Response, ResponseKind, ResponseStatus};
 pub use stream::{StreamChunk, StreamHandle};
 

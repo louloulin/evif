@@ -16,23 +16,22 @@
 //! ```
 
 #[cfg(feature = "security")]
+pub mod audit;
+#[cfg(feature = "security")]
 pub mod encryption;
 #[cfg(feature = "security")]
 pub mod rbac;
-#[cfg(feature = "security")]
-pub mod audit;
 
 pub mod masking;
 
 #[cfg(feature = "security")]
+pub use audit::{AuditConfig, AuditEvent, AuditLevel, AuditLogger};
+#[cfg(feature = "security")]
 pub use encryption::{Encryption, EncryptionConfig};
 #[cfg(feature = "security")]
 pub use rbac::{
-    Rbac, RbacConfig, Role, Permission, Resource, Action,
-    RoleBuilder, PermissionBuilder,
+    Action, Permission, PermissionBuilder, Rbac, RbacConfig, Resource, Role, RoleBuilder,
 };
-#[cfg(feature = "security")]
-pub use audit::{AuditLogger, AuditConfig, AuditEvent, AuditLevel};
 
 pub use masking::{mask_sensitive_data, MaskConfig, SensitiveField};
 

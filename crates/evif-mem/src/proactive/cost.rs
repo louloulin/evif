@@ -9,12 +9,12 @@ use crate::error::MemError;
 use crate::llm::LLMClient;
 use crate::storage::MemoryStorage;
 use crate::vector::VectorIndex;
+use chrono::{DateTime, Duration, Utc};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc, Duration};
 use uuid::Uuid;
-use sha2::{Sha256, Digest};
 
 /// Result type for cost optimization operations
 pub type CostResult<T> = Result<T, MemError>;
@@ -42,10 +42,10 @@ impl Default for CostOptimizerConfig {
     fn default() -> Self {
         Self {
             cache_max_size: 1000,
-            cache_ttl_secs: 3600,         // 1 hour
-            similarity_threshold: 0.95,   // 95% similarity
+            cache_ttl_secs: 3600,       // 1 hour
+            similarity_threshold: 0.95, // 95% similarity
             enable_batching: true,
-            batch_window_ms: 100,         // 100ms batch window
+            batch_window_ms: 100, // 100ms batch window
             max_batch_size: 10,
             enable_similar_detection: true,
         }
@@ -275,7 +275,11 @@ impl CostOptimizer {
     }
 
     /// Add query to batch queue
-    pub async fn add_to_batch(&self, query: String, embedding: Option<Vec<f32>>) -> CostResult<Uuid> {
+    pub async fn add_to_batch(
+        &self,
+        query: String,
+        embedding: Option<Vec<f32>>,
+    ) -> CostResult<Uuid> {
         let item = BatchItem::new(query, embedding);
         let id = item.id;
 

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 use std::pin::Pin;
 
-use crate::{StorageResult, StorageError, Node, Edge, NodeId, EdgeId};
+use crate::{Edge, EdgeId, Node, NodeId, StorageError, StorageResult};
 
 /// 存储操作
 #[derive(Debug, Clone)]
@@ -54,7 +54,9 @@ pub trait StorageBackend: Send + Sync {
 
     // 事务（可选实现）
     async fn begin_transaction(&self) -> StorageResult<Box<dyn Transaction>> {
-        Err(StorageError::TransactionError("此后端不支持事务".to_string()))
+        Err(StorageError::TransactionError(
+            "此后端不支持事务".to_string(),
+        ))
     }
 
     // 扫描操作
@@ -82,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_storage_op_creation() {
-        use evif_graph::{NodeType, EdgeType};
+        use evif_graph::{EdgeType, NodeType};
         let node = Node::new(NodeType::File, "test.txt");
         let op = StorageOp::InsertNode(node);
         // 测试操作创建

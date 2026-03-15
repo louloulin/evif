@@ -1,7 +1,7 @@
 // 请求类型定义
 
-use serde::{Deserialize, Serialize};
 use evif_graph::{NodeId, NodeType};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// 请求类型
@@ -116,9 +116,7 @@ impl Request {
             RequestKind::QueryGraph { query } => 64 + query.len(),
             RequestKind::GetChildren { .. } => 64,
             RequestKind::FileOperation { path, .. } => 256 + path.as_os_str().len(),
-            RequestKind::Batch { requests } => {
-                requests.iter().map(|r| r.estimated_size()).sum()
-            }
+            RequestKind::Batch { requests } => requests.iter().map(|r| r.estimated_size()).sum(),
             RequestKind::Stream { .. } => 32,
         }
     }

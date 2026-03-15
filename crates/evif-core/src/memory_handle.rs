@@ -45,7 +45,9 @@ impl MemoryFileHandle {
 
     /// 获取当前文件大小
     pub fn len(&self) -> EvifResult<usize> {
-        let data = self.data.lock()
+        let data = self
+            .data
+            .lock()
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
         Ok(data.get_ref().len())
@@ -68,69 +70,86 @@ impl FileHandle for MemoryFileHandle {
     }
 
     async fn read(&mut self, buf: &mut [u8]) -> EvifResult<usize> {
-        let mut data = self.data.lock()
+        let mut data = self
+            .data
+            .lock()
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
-        let n = data.read(buf)
+        let n = data
+            .read(buf)
             .map_err(|e| EvifError::Internal(format!("Read error: {}", e)))?;
 
         Ok(n)
     }
 
     async fn read_at(&self, buf: &mut [u8], offset: u64) -> EvifResult<usize> {
-        let mut data = self.data.lock()
+        let mut data = self
+            .data
+            .lock()
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
         data.seek(SeekFrom::Start(offset))
             .map_err(|e| EvifError::Internal(format!("Seek error: {}", e)))?;
 
-        let n = data.read(buf)
+        let n = data
+            .read(buf)
             .map_err(|e| EvifError::Internal(format!("Read error: {}", e)))?;
 
         Ok(n)
     }
 
     async fn write(&mut self, data: &[u8]) -> EvifResult<usize> {
-        let mut cursor = self.data.lock()
+        let mut cursor = self
+            .data
+            .lock()
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
         // 如果是追加模式，先移动到末尾
         if self.flags.contains(OpenFlags::APPEND) {
-            cursor.seek(SeekFrom::End(0))
+            cursor
+                .seek(SeekFrom::End(0))
                 .map_err(|e| EvifError::Internal(format!("Seek error: {}", e)))?;
         }
 
-        let n = cursor.write(data)
+        let n = cursor
+            .write(data)
             .map_err(|e| EvifError::Internal(format!("Write error: {}", e)))?;
 
         Ok(n)
     }
 
     async fn write_at(&self, data: &[u8], offset: u64) -> EvifResult<usize> {
-        let mut cursor = self.data.lock()
+        let mut cursor = self
+            .data
+            .lock()
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
-        cursor.seek(SeekFrom::Start(offset))
+        cursor
+            .seek(SeekFrom::Start(offset))
             .map_err(|e| EvifError::Internal(format!("Seek error: {}", e)))?;
 
-        let n = cursor.write(data)
+        let n = cursor
+            .write(data)
             .map_err(|e| EvifError::Internal(format!("Write error: {}", e)))?;
 
         Ok(n)
     }
 
     async fn seek(&mut self, offset: i64, whence: u8) -> EvifResult<i64> {
-        let mut data = self.data.lock()
+        let mut data = self
+            .data
+            .lock()
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
         let pos = match whence {
-            0 => SeekFrom::Start(offset as u64),  // SEEK_SET
-            1 => SeekFrom::Current(offset),         // SEEK_CUR
-            2 => SeekFrom::End(offset),             // SEEK_END
+            0 => SeekFrom::Start(offset as u64), // SEEK_SET
+            1 => SeekFrom::Current(offset),      // SEEK_CUR
+            2 => SeekFrom::End(offset),          // SEEK_END
             _ => return Err(EvifError::Internal(format!("Invalid whence: {}", whence))),
         };
 
-        let new_pos = data.seek(pos)
+        let new_pos = data
+            .seek(pos)
             .map_err(|e| EvifError::Internal(format!("Seek error: {}", e)))?;
 
         Ok(new_pos as i64)
@@ -147,7 +166,9 @@ impl FileHandle for MemoryFileHandle {
     }
 
     async fn stat(&self) -> EvifResult<FileInfo> {
-        let data = self.data.lock()
+        let data = self
+            .data
+            .lock()
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
         Ok(FileInfo {

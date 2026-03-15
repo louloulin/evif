@@ -2,16 +2,16 @@
 
 use axum::{
     extract::{
-        State,
         ws::{Message, WebSocket, WebSocketUpgrade},
+        State,
     },
     response::IntoResponse,
 };
+use evif_core::RadixMountTable;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use evif_core::RadixMountTable;
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
 /// WebSocket 应用状态
 #[derive(Clone)]
@@ -241,11 +241,9 @@ Examples:
                     output: format!("{}\r\n$ ", output),
                 }
             }
-            "pwd" => {
-                WSMessage::Output {
-                    output: format!("/\r\n$ "),
-                }
-            }
+            "pwd" => WSMessage::Output {
+                output: format!("/\r\n$ "),
+            },
             "echo" => {
                 let text = args.join(" ");
                 WSMessage::Output {
@@ -253,7 +251,10 @@ Examples:
                 }
             }
             _ => WSMessage::Error {
-                message: format!("Unknown command: {}. Type 'help' for available commands.", cmd),
+                message: format!(
+                    "Unknown command: {}. Type 'help' for available commands.",
+                    cmd
+                ),
             },
         }
     }

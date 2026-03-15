@@ -103,16 +103,18 @@ class EvifMemoryClient {
         const result = await this.request('GET', `/api/v1/categories/${categoryId}/memories`, { params });
         return result.data ?? [];
     }
-    async queryGraph(query, queryOptions) {
+    async queryGraph(queryType, queryOptions) {
         const data = {
-            query,
-            query_type: queryOptions?.queryType ?? models_1.GraphQueryType.CAUSAL_CHAIN,
-            node_id: queryOptions?.nodeId,
-            max_depth: queryOptions?.maxDepth ?? 3,
-            limit: queryOptions?.limit ?? 10,
+            query_type: queryOptions?.queryType ?? queryType ?? models_1.GraphQueryType.CAUSAL_CHAIN,
+            start_node: queryOptions?.startNode ?? queryOptions?.nodeId,
+            end_node: queryOptions?.endNode,
+            max_depth: queryOptions?.maxDepth ?? 5,
+            event_type: queryOptions?.eventType,
+            category: queryOptions?.category,
+            start_time: queryOptions?.startTime,
+            end_time: queryOptions?.endTime,
         };
-        const result = await this.request('POST', '/api/v1/graph/query', data);
-        return result.data;
+        return this.request('POST', '/api/v1/graph/query', data);
     }
     async close() {
         // Axios doesn't require explicit closing for node.js

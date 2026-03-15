@@ -3,7 +3,7 @@
 // 测试 S3 和 S3 兼容存储 (MinIO) 的 OpenDAL 集成
 
 use evif_core::{EvifPlugin, WriteFlags};
-use evif_plugins::{OpendalPlugin, OpendalConfig, OpendalService};
+use evif_plugins::{OpendalConfig, OpendalPlugin, OpendalService};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -105,7 +105,10 @@ async fn test_aws_s3() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn run_s3_tests(plugin: OpendalPlugin, service_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_s3_tests(
+    plugin: OpendalPlugin,
+    service_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let test_prefix = format!("evif-test-{}/", uuid::Uuid::new_v4());
 
     // 测试 1: 创建文件
@@ -116,7 +119,9 @@ async fn run_s3_tests(plugin: OpendalPlugin, service_name: &str) -> Result<(), B
 
     // 测试 2: 写入文件
     println!("  ✅ 测试 2: 写入文件");
-    plugin.write(&test_path, b"Hello, S3!".to_vec(), -1, WriteFlags::empty()).await?;
+    plugin
+        .write(&test_path, b"Hello, S3!".to_vec(), -1, WriteFlags::empty())
+        .await?;
     println!("     写入数据: 'Hello, S3!'");
 
     // 测试 3: 读取文件
@@ -140,7 +145,9 @@ async fn run_s3_tests(plugin: OpendalPlugin, service_name: &str) -> Result<(), B
 
     // 测试 6: 列出目录
     println!("  ✅ 测试 6: 列出目录");
-    let files = plugin.readdir(&format!("{}{}", test_prefix, "test-dir/")).await?;
+    let files = plugin
+        .readdir(&format!("{}{}", test_prefix, "test-dir/"))
+        .await?;
     println!("     目录 {} 包含 {} 个文件", dir_path, files.len());
 
     // 测试 7: 重命名文件

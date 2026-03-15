@@ -329,7 +329,12 @@ mod inner {
         }
 
         /// Update storage stats.
-        pub async fn update_storage_stats(&self, items: usize, categories: usize, resources: usize) {
+        pub async fn update_storage_stats(
+            &self,
+            items: usize,
+            categories: usize,
+            resources: usize,
+        ) {
             if let Some(metrics) = self.get().await {
                 metrics.update_storage_stats(items, categories, resources);
             }
@@ -391,7 +396,13 @@ mod inner {
         pub async fn record_retrieve(&self, _results_count: usize, _duration_ms: u64) {}
         pub async fn record_evolve(&self, _items_count: usize, _duration_ms: u64) {}
         pub async fn increment_errors(&self, _operation: &str) {}
-        pub async fn update_storage_stats(&self, _items: usize, _categories: usize, _resources: usize) {}
+        pub async fn update_storage_stats(
+            &self,
+            _items: usize,
+            _categories: usize,
+            _resources: usize,
+        ) {
+        }
     }
 }
 

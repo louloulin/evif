@@ -2,15 +2,15 @@
 //
 // Tests multi-tier storage with automatic migration logic
 
-use evif_plugins::{TieredFsPlugin, TieredConfig, StorageTier, MemFsPlugin};
 use evif_core::EvifPlugin;
+use evif_plugins::{MemFsPlugin, StorageTier, TieredConfig, TieredFsPlugin};
 use std::sync::Arc;
 use tokio;
 
 #[tokio::test]
 async fn test_tiered_config_default() {
     let config = TieredConfig::default();
-();
+    ();
     assert_eq!(config.hot_ttl_hours, 24);
     assert_eq!(config.hot_min_accesses, 5);
 }

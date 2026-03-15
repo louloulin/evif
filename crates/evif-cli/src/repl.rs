@@ -1,12 +1,12 @@
 // REPL 实现
 
-use anyhow::Result;
-use reedline::{Reedline, Signal, DefaultPrompt, FileBackedHistory};
-use reedline::DefaultPromptSegment;
-use std::sync::Arc;
-use std::path::PathBuf;
 use crate::commands::EvifCommand;
 use crate::completer::EvifCompleter;
+use anyhow::Result;
+use reedline::DefaultPromptSegment;
+use reedline::{DefaultPrompt, FileBackedHistory, Reedline, Signal};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 pub struct Repl {
     editor: Reedline,
@@ -20,7 +20,7 @@ impl Repl {
         let history_path = Self::history_file_path();
         let history = Box::new(
             FileBackedHistory::with_file(1000, history_path)
-                .expect("Failed to create history file")
+                .expect("Failed to create history file"),
         );
 
         // 创建自动完成器
@@ -33,7 +33,7 @@ impl Repl {
 
         let prompt = DefaultPrompt::new(
             DefaultPromptSegment::Basic("evif".to_string()),
-            DefaultPromptSegment::Basic(format!("{}>", server))
+            DefaultPromptSegment::Basic(format!("{}>", server)),
         );
 
         if verbose {
@@ -41,7 +41,11 @@ impl Repl {
         }
 
         let command = EvifCommand::new(server.clone(), verbose);
-        Self { editor, prompt, command }
+        Self {
+            editor,
+            prompt,
+            command,
+        }
     }
 
     /// 获取历史文件路径
@@ -50,9 +54,7 @@ impl Repl {
         let base_dir = std::env::var("XDG_DATA_HOME")
             .map(PathBuf::from)
             .ok()
-            .or_else(|| {
-                dirs::home_dir().map(|h| h.join(".local/share"))
-            })
+            .or_else(|| dirs::home_dir().map(|h| h.join(".local/share")))
             .unwrap_or_else(|| PathBuf::from("."));
 
         base_dir.join("evif").join("history.txt")
@@ -119,13 +121,12 @@ impl Repl {
 
         // 检查是否有内置命令（内置命令暂不支持管道）
         let builtin_commands = [
-            "ls", "cat", "write", "mkdir", "rm", "mv", "cp", "stat", "touch",
-            "head", "tail", "tree", "find", "grep", "digest", "mount", "unmount", "mounts",
-            "health", "stats", "clear", "echo", "cd", "pwd", "sort", "uniq", "wc",
-            "date", "sleep", "diff", "du", "cut", "tr", "base", "env", "export", "unset",
-            "true", "false", "basename", "dirname", "ln", "readlink", "realpath",
-            "rev", "tac", "truncate", "split", "locate", "which", "type", "file", "help",
-            "exit", "quit", "source"
+            "ls", "cat", "write", "mkdir", "rm", "mv", "cp", "stat", "touch", "head", "tail",
+            "tree", "find", "grep", "digest", "mount", "unmount", "mounts", "health", "stats",
+            "clear", "echo", "cd", "pwd", "sort", "uniq", "wc", "date", "sleep", "diff", "du",
+            "cut", "tr", "base", "env", "export", "unset", "true", "false", "basename", "dirname",
+            "ln", "readlink", "realpath", "rev", "tac", "truncate", "split", "locate", "which",
+            "type", "file", "help", "exit", "quit", "source",
         ];
 
         for cmd_str in &commands {
@@ -133,7 +134,10 @@ impl Repl {
             if !cmd_str.is_empty() {
                 let first_word = cmd_str.split_whitespace().next().unwrap_or("");
                 if builtin_commands.contains(&first_word) {
-                    eprintln!("Pipeline error: Built-in command '{}' not supported in pipes", first_word);
+                    eprintln!(
+                        "Pipeline error: Built-in command '{}' not supported in pipes",
+                        first_word
+                    );
                     eprintln!("Hint: Use shell redirection or external commands for pipelines");
                     return Ok(());
                 }
@@ -212,7 +216,10 @@ impl Repl {
                 self.print_help();
             }
             "ls" => {
-                let path = parts.get(1).map(|s| s.to_string()).unwrap_or_else(|| "/".to_string());
+                let path = parts
+                    .get(1)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "/".to_string());
                 if let Err(e) = self.command.ls(Some(path), false, false).await {
                     eprintln!("Error: {}", e);
                 }
@@ -292,7 +299,10 @@ impl Repl {
             }
             "head" => {
                 if let Some(path) = parts.get(1) {
-                    let lines = parts.get(2).and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
+                    let lines = parts
+                        .get(2)
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .unwrap_or(10);
                     if let Err(e) = self.command.head(path.to_string(), lines).await {
                         eprintln!("Error: {}", e);
                     }
@@ -302,7 +312,10 @@ impl Repl {
             }
             "tail" => {
                 if let Some(path) = parts.get(1) {
-                    let lines = parts.get(2).and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
+                    let lines = parts
+                        .get(2)
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .unwrap_or(10);
                     if let Err(e) = self.command.tail(path.to_string(), lines).await {
                         eprintln!("Error: {}", e);
                     }
@@ -311,8 +324,14 @@ impl Repl {
                 }
             }
             "tree" => {
-                let path = parts.get(1).map(|s| s.to_string()).unwrap_or_else(|| "/".to_string());
-                let depth = parts.get(2).and_then(|s| s.parse::<usize>().ok()).unwrap_or(3);
+                let path = parts
+                    .get(1)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "/".to_string());
+                let depth = parts
+                    .get(2)
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(3);
                 if let Err(e) = self.command.tree(path, depth, depth).await {
                     eprintln!("Error: {}", e);
                 }
@@ -330,8 +349,15 @@ impl Repl {
             }
             "grep" => {
                 if let (Some(path), Some(pattern)) = (parts.get(1), parts.get(2)) {
-                    let recursive = parts.get(3).map(|s| *s == "-r" || *s == "--recursive").unwrap_or(false);
-                    if let Err(e) = self.command.grep(path.to_string(), pattern.to_string(), recursive).await {
+                    let recursive = parts
+                        .get(3)
+                        .map(|s| *s == "-r" || *s == "--recursive")
+                        .unwrap_or(false);
+                    if let Err(e) = self
+                        .command
+                        .grep(path.to_string(), pattern.to_string(), recursive)
+                        .await
+                    {
                         eprintln!("Error: {}", e);
                     }
                 } else {
@@ -340,7 +366,10 @@ impl Repl {
             }
             "digest" | "checksum" => {
                 if let Some(path) = parts.get(1) {
-                    let algorithm = parts.get(2).map(|s| s.to_string()).unwrap_or_else(|| "sha256".to_string());
+                    let algorithm = parts
+                        .get(2)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "sha256".to_string());
                     if let Err(e) = self.command.checksum(path.to_string(), algorithm).await {
                         eprintln!("Error: {}", e);
                     }
@@ -350,7 +379,10 @@ impl Repl {
             }
             "mount" => {
                 if let Some(plugin) = parts.get(1) {
-                    let path = parts.get(2).map(|s| s.to_string()).unwrap_or_else(|| format!("/{}", plugin));
+                    let path = parts
+                        .get(2)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("/{}", plugin));
                     if let Err(e) = self.command.mount(plugin.to_string(), path, None).await {
                         eprintln!("Error: {}", e);
                     }
@@ -391,9 +423,11 @@ impl Repl {
                     let script_path_expanded = self.command.expand_variables(script_path);
                     match crate::script::ScriptExecutor::execute_script_with_client(
                         &script_path_expanded,
-                        &self.command
-                    ).await {
-                        Ok(_) => {},
+                        &self.command,
+                    )
+                    .await
+                    {
+                        Ok(_) => {}
                         Err(e) => eprintln!("Error executing script: {}", e),
                     }
                 } else {
@@ -432,7 +466,8 @@ impl Repl {
                 } else if parts.len() == 2 {
                     // 如果是 VAR=value 格式
                     if let Some((name, value)) = parts[1].split_once('=') {
-                        self.command.set_variable(name.to_string(), value.to_string());
+                        self.command
+                            .set_variable(name.to_string(), value.to_string());
                         println!("Variable set");
                     } else {
                         println!("Usage: set VAR value or set VAR=value");
@@ -443,13 +478,19 @@ impl Repl {
             }
             "echo" => {
                 // 支持变量展开的 echo
-                let text = parts.get(1).map(|s| parts[1..].join(" ")).unwrap_or_default();
+                let text = parts
+                    .get(1)
+                    .map(|s| parts[1..].join(" "))
+                    .unwrap_or_default();
                 // 使用 expand_variables 处理变量引用
                 let expanded = self.command.expand_variables(&text);
                 println!("{}", expanded);
             }
             _ => {
-                println!("Unknown command: {}. Type 'help' for available commands.", cmd);
+                println!(
+                    "Unknown command: {}. Type 'help' for available commands.",
+                    cmd
+                );
             }
         }
 

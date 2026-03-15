@@ -8,12 +8,15 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use evif_core::{MountTable, EvifPlugin, DynamicPluginLoader, PluginInfo as EvifPluginInfo, PluginRegistry, PluginState as RegistryPluginState};
-use std::sync::OnceLock;
 use crate::handlers::AppState;
+use evif_core::{
+    DynamicPluginLoader, EvifPlugin, MountTable, PluginInfo as EvifPluginInfo, PluginRegistry,
+    PluginState as RegistryPluginState,
+};
+use std::sync::OnceLock;
 
 /// 应用状态
 #[derive(Clone)]
@@ -144,7 +147,7 @@ impl PluginHandlers {
         // 这里需要插件工厂来创建插件实例
         // 暂时返回错误提示需要实现
         Err(PluginError::Internal(
-            "Plugin mounting not fully implemented - requires plugin factory".to_string()
+            "Plugin mounting not fully implemented - requires plugin factory".to_string(),
         ))
     }
 
@@ -159,7 +162,8 @@ impl PluginHandlers {
             .ok_or_else(|| PluginError::BadRequest("Missing path parameter".to_string()))?
             .clone();
 
-        state.mount_table
+        state
+            .mount_table
             .unmount(&path)
             .await
             .map_err(|e| PluginError::Internal(e.to_string()))?;
@@ -181,15 +185,13 @@ impl PluginHandlers {
                 name: "localfs".to_string(),
                 description: "Local filesystem plugin".to_string(),
                 version: "1.0.0".to_string(),
-                parameters: vec![
-                    ConfigParameter {
-                        name: "root".to_string(),
-                        param_type: "string".to_string(),
-                        required: true,
-                        default: None,
-                        description: "Root directory path".to_string(),
-                    },
-                ],
+                parameters: vec![ConfigParameter {
+                    name: "root".to_string(),
+                    param_type: "string".to_string(),
+                    required: true,
+                    default: None,
+                    description: "Root directory path".to_string(),
+                }],
             })),
             "s3fs" => Ok(Json(PluginConfigSchema {
                 name: "s3fs".to_string(),
@@ -223,15 +225,13 @@ impl PluginHandlers {
                 name: "memoryfs".to_string(),
                 description: "In-memory storage plugin".to_string(),
                 version: "1.0.0".to_string(),
-                parameters: vec![
-                    ConfigParameter {
-                        name: "max_size_mb".to_string(),
-                        param_type: "number".to_string(),
-                        required: false,
-                        default: Some("100".to_string()),
-                        description: "Maximum memory size in MB".to_string(),
-                    },
-                ],
+                parameters: vec![ConfigParameter {
+                    name: "max_size_mb".to_string(),
+                    param_type: "number".to_string(),
+                    required: false,
+                    default: Some("100".to_string()),
+                    description: "Maximum memory size in MB".to_string(),
+                }],
             })),
             "httpfs" => Ok(Json(PluginConfigSchema {
                 name: "httpfs".to_string(),
@@ -258,15 +258,13 @@ impl PluginHandlers {
                 name: "queuefs".to_string(),
                 description: "Message queue filesystem plugin".to_string(),
                 version: "1.0.0".to_string(),
-                parameters: vec![
-                    ConfigParameter {
-                        name: "max_messages".to_string(),
-                        param_type: "number".to_string(),
-                        required: false,
-                        default: Some("1000".to_string()),
-                        description: "Maximum number of messages in queue".to_string(),
-                    },
-                ],
+                parameters: vec![ConfigParameter {
+                    name: "max_messages".to_string(),
+                    param_type: "number".to_string(),
+                    required: false,
+                    default: Some("1000".to_string()),
+                    description: "Maximum number of messages in queue".to_string(),
+                }],
             })),
             _ => Err(PluginError::NotFound(format!("Plugin not found: {}", name))),
         }
@@ -285,19 +283,35 @@ impl PluginHandlers {
             let mount_path = format!("/{}", library_name);
 
             // 先加载动态库
-            let plugin_info = state.dynamic_loader.load_plugin(&library_name)
-                .map_err(|e| PluginError::Internal(format!("Failed to load dynamic library: {}", e)))?;
+            let plugin_info = state
+                .dynamic_loader
+                .load_plugin(&library_name)
+                .map_err(|e| {
+                    PluginError::Internal(format!("Failed to load dynamic library: {}", e))
+                })?;
 
             // 创建插件实例
-            let plugin = state.dynamic_loader.create_plugin(&library_name)
-                .map_err(|e| PluginError::Internal(format!("Failed to create plugin instance: {}", e)))?;
+            let plugin = state
+                .dynamic_loader
+                .create_plugin(&library_name)
+                .map_err(|e| {
+                    PluginError::Internal(format!("Failed to create plugin instance: {}", e))
+                })?;
 
             // 挂载插件
-            let config = req.config.as_ref().map(|c| serde_json::Value::Object(c.clone().into_iter().collect()));
-            plugin.validate(config.as_ref()).await
+            let config = req
+                .config
+                .as_ref()
+                .map(|c| serde_json::Value::Object(c.clone().into_iter().collect()));
+            plugin
+                .validate(config.as_ref())
+                .await
                 .map_err(|e| PluginError::Internal(format!("Plugin validation failed: {}", e)))?;
 
-            state.mount_table.mount(mount_path.clone(), plugin).await
+            state
+                .mount_table
+                .mount(mount_path.clone(), plugin)
+                .await
                 .map_err(|e| PluginError::Internal(format!("Failed to mount plugin: {}", e)))?;
 
             return Ok(Json(serde_json::json!({
@@ -317,12 +331,17 @@ impl PluginHandlers {
         {
             if req.plugin_type == "wasm" {
                 // 使用WASM插件加载器
-                use crate::wasm_handlers::{LoadWasmPluginRequest, WasmPluginHandlers};
                 use crate::handlers::AppState;
+                use crate::wasm_handlers::{LoadWasmPluginRequest, WasmPluginHandlers};
 
                 let wasm_req = LoadWasmPluginRequest {
                     wasm_path: req.path.clone(),
-                    name: req.path.split('/').last().unwrap_or("wasm_plugin").to_string(),
+                    name: req
+                        .path
+                        .split('/')
+                        .last()
+                        .unwrap_or("wasm_plugin")
+                        .to_string(),
                     mount: format!("/{}", req.path.split('/').last().unwrap_or("wasm")),
                     config: req.config.clone().unwrap_or(serde_json::json!({})),
                 };
@@ -336,7 +355,9 @@ impl PluginHandlers {
                 match WasmPluginHandlers::load_wasm_plugin(
                     axum::extract::State(app_state),
                     Json(wasm_req),
-                ).await {
+                )
+                .await
+                {
                     Ok(response) => {
                         return Ok(Json(serde_json::json!({
                             "message": response.message,
@@ -345,16 +366,20 @@ impl PluginHandlers {
                         })))
                     }
                     Err(e) => {
-                        return Err(PluginError::Internal(format!("WASM plugin loading failed: {}", e)));
+                        return Err(PluginError::Internal(format!(
+                            "WASM plugin loading failed: {}",
+                            e
+                        )));
                     }
                 }
             }
         }
 
         // 其他类型的插件暂不支持
-        Err(PluginError::Internal(
-            format!("Plugin type '{}' not supported. Currently 'dynamic' and 'wasm' types are supported.", req.plugin_type)
-        ))
+        Err(PluginError::Internal(format!(
+            "Plugin type '{}' not supported. Currently 'dynamic' and 'wasm' types are supported.",
+            req.plugin_type
+        )))
     }
 
     /// 卸载外部插件
@@ -364,7 +389,8 @@ impl PluginHandlers {
         Json(req): Json<UnloadPluginRequest>,
     ) -> Result<Json<serde_json::Value>, PluginError> {
         // 直接卸载挂载点
-        state.mount_table
+        state
+            .mount_table
             .unmount(&req.path)
             .await
             .map_err(|e| PluginError::Internal(format!("Failed to unload plugin: {}", e)))?;

@@ -1,10 +1,10 @@
 // node 宏 - 为结构体生成节点相关代码
 
+use darling::FromDeriveInput;
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput};
-use darling::FromDeriveInput;
 
 /// #[node] 宏的参数
 #[derive(Debug, Default, FromDeriveInput)]
@@ -60,7 +60,11 @@ fn impl_node_macro(input: &DeriveInput, args: &NodeArgs) -> proc_macro2::TokenSt
 fn extract_fields(input: &DeriveInput) -> Vec<(Ident, syn::Type)> {
     let mut fields = Vec::new();
 
-    if let Data::Struct(DataStruct { fields: struct_fields, .. }) = &input.data {
+    if let Data::Struct(DataStruct {
+        fields: struct_fields,
+        ..
+    }) = &input.data
+    {
         for field in struct_fields {
             if let Some(ident) = &field.ident {
                 fields.push((ident.clone(), field.ty.clone()));

@@ -5,12 +5,12 @@
 
 use crate::{AuthError, AuthResult};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
 
 /// 审计事件类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -395,10 +395,13 @@ impl AuditLogManager {
     ) -> AuthResult<()> {
         let event = AuditEvent::new(
             AuditEventType::CapabilityGranted,
-            format!("Capability granted for principal {} on resource {}", principal_id, resource_id),
+            format!(
+                "Capability granted for principal {} on resource {}",
+                principal_id, resource_id
+            ),
         )
-            .with_principal_id(principal_id)
-            .with_resource_id(resource_id);
+        .with_principal_id(principal_id)
+        .with_resource_id(resource_id);
 
         self.logger.log(event)
     }
@@ -411,10 +414,13 @@ impl AuditLogManager {
     ) -> AuthResult<()> {
         let event = AuditEvent::new(
             AuditEventType::CapabilityRevoked,
-            format!("Capability revoked for principal {} on resource {}", principal_id, resource_id),
+            format!(
+                "Capability revoked for principal {} on resource {}",
+                principal_id, resource_id
+            ),
         )
-            .with_principal_id(principal_id)
-            .with_resource_id(resource_id);
+        .with_principal_id(principal_id)
+        .with_resource_id(resource_id);
 
         self.logger.log(event)
     }
@@ -428,11 +434,14 @@ impl AuditLogManager {
     ) -> AuthResult<()> {
         let event = AuditEvent::new(
             AuditEventType::AccessGranted,
-            format!("Access granted: {} permission for principal {} on resource {}", permission, principal_id, resource_id),
+            format!(
+                "Access granted: {} permission for principal {} on resource {}",
+                permission, principal_id, resource_id
+            ),
         )
-            .with_principal_id(principal_id)
-            .with_resource_id(resource_id)
-            .with_success(true);
+        .with_principal_id(principal_id)
+        .with_resource_id(resource_id)
+        .with_success(true);
 
         self.logger.log(event)
     }
@@ -447,11 +456,14 @@ impl AuditLogManager {
     ) -> AuthResult<()> {
         let event = AuditEvent::new(
             AuditEventType::AccessDenied,
-            format!("Access denied: {} permission for principal {} on resource {} - {}", permission, principal_id, resource_id, reason),
+            format!(
+                "Access denied: {} permission for principal {} on resource {} - {}",
+                permission, principal_id, resource_id, reason
+            ),
         )
-            .with_principal_id(principal_id)
-            .with_resource_id(resource_id)
-            .with_success(false);
+        .with_principal_id(principal_id)
+        .with_resource_id(resource_id)
+        .with_success(false);
 
         self.logger.log(event)
     }
@@ -460,10 +472,13 @@ impl AuditLogManager {
     pub fn log_auth_failed(&self, principal_id: uuid::Uuid, reason: &str) -> AuthResult<()> {
         let event = AuditEvent::new(
             AuditEventType::AuthenticationFailed,
-            format!("Authentication failed for principal {}: {}", principal_id, reason),
+            format!(
+                "Authentication failed for principal {}: {}",
+                principal_id, reason
+            ),
         )
-            .with_principal_id(principal_id)
-            .with_success(false);
+        .with_principal_id(principal_id)
+        .with_success(false);
 
         self.logger.log(event)
     }
@@ -500,10 +515,7 @@ mod tests {
 
     #[test]
     fn test_audit_event_creation() {
-        let event = AuditEvent::new(
-            AuditEventType::AccessGranted,
-            "Test event".to_string(),
-        );
+        let event = AuditEvent::new(AuditEventType::AccessGranted, "Test event".to_string());
 
         assert_eq!(event.details, "Test event");
         assert_eq!(event.success, true);
@@ -516,10 +528,7 @@ mod tests {
         let principal_id = uuid::Uuid::new_v4();
         let resource_id = uuid::Uuid::new_v4();
 
-        let event = AuditEvent::new(
-            AuditEventType::AccessDenied,
-            "Test event".to_string(),
-        )
+        let event = AuditEvent::new(AuditEventType::AccessDenied, "Test event".to_string())
             .with_principal_id(principal_id)
             .with_resource_id(resource_id)
             .with_success(false)
@@ -534,10 +543,7 @@ mod tests {
     #[test]
     fn test_memory_audit_logger() {
         let logger = MemoryAuditLogger::new();
-        let event = AuditEvent::new(
-            AuditEventType::AccessGranted,
-            "Test event".to_string(),
-        );
+        let event = AuditEvent::new(AuditEventType::AccessGranted, "Test event".to_string());
 
         logger.log(event.clone()).unwrap();
         assert_eq!(logger.event_count(), 1);
@@ -554,22 +560,17 @@ mod tests {
         let resource_id = uuid::Uuid::new_v4();
 
         // 添加不同类型的事件
-        let event1 = AuditEvent::new(
-            AuditEventType::AccessGranted,
-            "Granted".to_string(),
-        ).with_principal_id(principal_id);
+        let event1 = AuditEvent::new(AuditEventType::AccessGranted, "Granted".to_string())
+            .with_principal_id(principal_id);
 
-        let event2 = AuditEvent::new(
-            AuditEventType::AccessDenied,
-            "Denied".to_string(),
-        ).with_principal_id(principal_id);
+        let event2 = AuditEvent::new(AuditEventType::AccessDenied, "Denied".to_string())
+            .with_principal_id(principal_id);
 
         logger.log(event1).unwrap();
         logger.log(event2).unwrap();
 
         // 测试过滤器
-        let filter = AuditFilter::new()
-            .with_event_type(AuditEventType::AccessGranted);
+        let filter = AuditFilter::new().with_event_type(AuditEventType::AccessGranted);
 
         let events = logger.query(filter).unwrap();
         assert_eq!(events.len(), 1);
@@ -579,10 +580,7 @@ mod tests {
     #[test]
     fn test_audit_log_prune() {
         let logger = MemoryAuditLogger::new();
-        let event = AuditEvent::new(
-            AuditEventType::AccessGranted,
-            "Test event".to_string(),
-        );
+        let event = AuditEvent::new(AuditEventType::AccessGranted, "Test event".to_string());
 
         logger.log(event).unwrap();
 
@@ -600,9 +598,15 @@ mod tests {
         let resource_id = uuid::Uuid::new_v4();
 
         // 测试记录不同类型的事件
-        manager.log_capability_granted(principal_id, resource_id).unwrap();
-        manager.log_access_granted(principal_id, resource_id, "read").unwrap();
-        manager.log_access_denied(principal_id, resource_id, "write", "no permission").unwrap();
+        manager
+            .log_capability_granted(principal_id, resource_id)
+            .unwrap();
+        manager
+            .log_access_granted(principal_id, resource_id, "read")
+            .unwrap();
+        manager
+            .log_access_denied(principal_id, resource_id, "write", "no permission")
+            .unwrap();
 
         let events = manager.query(AuditFilter::new()).unwrap();
         assert_eq!(events.len(), 3);
@@ -623,15 +627,11 @@ mod tests {
             .with_event_type(AuditEventType::AccessDenied)
             .with_success_only(false);
 
-        let matching_event = AuditEvent::new(
-            AuditEventType::AccessDenied,
-            "Test".to_string(),
-        ).with_success(false);
+        let matching_event =
+            AuditEvent::new(AuditEventType::AccessDenied, "Test".to_string()).with_success(false);
 
-        let non_matching_event = AuditEvent::new(
-            AuditEventType::AccessGranted,
-            "Test".to_string(),
-        ).with_success(false);
+        let non_matching_event =
+            AuditEvent::new(AuditEventType::AccessGranted, "Test".to_string()).with_success(false);
 
         assert!(filter.matches(&matching_event));
         assert!(!filter.matches(&non_matching_event));

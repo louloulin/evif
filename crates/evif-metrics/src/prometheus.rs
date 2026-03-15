@@ -4,10 +4,8 @@
 use {
     super::error::{MetricsError, MetricsResult},
     prometheus::{
-        self, CounterVec as PrometheusCounterVec,
-        GaugeVec as PrometheusGaugeVec,
-        HistogramVec as PrometheusHistogramVec,
-        Registry as PrometheusRegistry, Opts, HistogramOpts,
+        self, CounterVec as PrometheusCounterVec, GaugeVec as PrometheusGaugeVec, HistogramOpts,
+        HistogramVec as PrometheusHistogramVec, Opts, Registry as PrometheusRegistry,
     },
     std::collections::HashMap,
     std::sync::Arc,
@@ -96,7 +94,9 @@ impl PrometheusMetricsRegistry {
         buckets: Option<Vec<f64>>,
     ) -> MetricsResult<()> {
         let opts = HistogramOpts::new(name, help).buckets(buckets.unwrap_or_else(|| {
-            vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+            vec![
+                0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]
         }));
         let histogram = PrometheusHistogramVec::new(opts, label_names)
             .map_err(|e| MetricsError::Prometheus(e.to_string()))?;
@@ -116,21 +116,22 @@ impl PrometheusMetricsRegistry {
         let counter = counters
             .get(name)
             .ok_or_else(|| MetricsError::MetricNotFound(name.to_string()))?;
-        counter
-            .with_label_values(labels)
-            .inc();
+        counter.with_label_values(labels).inc();
         Ok(())
     }
 
     /// Increment a counter by value
-    pub async fn counter_inc_by(&self, name: &str, labels: &[&str], value: f64) -> MetricsResult<()> {
+    pub async fn counter_inc_by(
+        &self,
+        name: &str,
+        labels: &[&str],
+        value: f64,
+    ) -> MetricsResult<()> {
         let counters = self.counters.read().await;
         let counter = counters
             .get(name)
             .ok_or_else(|| MetricsError::MetricNotFound(name.to_string()))?;
-        counter
-            .with_label_values(labels)
-            .inc_by(value);
+        counter.with_label_values(labels).inc_by(value);
         Ok(())
     }
 
@@ -140,9 +141,7 @@ impl PrometheusMetricsRegistry {
         let gauge = gauges
             .get(name)
             .ok_or_else(|| MetricsError::MetricNotFound(name.to_string()))?;
-        gauge
-            .with_label_values(labels)
-            .set(value);
+        gauge.with_label_values(labels).set(value);
         Ok(())
     }
 
@@ -152,9 +151,7 @@ impl PrometheusMetricsRegistry {
         let gauge = gauges
             .get(name)
             .ok_or_else(|| MetricsError::MetricNotFound(name.to_string()))?;
-        gauge
-            .with_label_values(labels)
-            .inc();
+        gauge.with_label_values(labels).inc();
         Ok(())
     }
 
@@ -164,21 +161,22 @@ impl PrometheusMetricsRegistry {
         let gauge = gauges
             .get(name)
             .ok_or_else(|| MetricsError::MetricNotFound(name.to_string()))?;
-        gauge
-            .with_label_values(labels)
-            .dec();
+        gauge.with_label_values(labels).dec();
         Ok(())
     }
 
     /// Observe a histogram value
-    pub async fn histogram_observe(&self, name: &str, labels: &[&str], value: f64) -> MetricsResult<()> {
+    pub async fn histogram_observe(
+        &self,
+        name: &str,
+        labels: &[&str],
+        value: f64,
+    ) -> MetricsResult<()> {
         let histograms = self.histograms.read().await;
         let histogram = histograms
             .get(name)
             .ok_or_else(|| MetricsError::MetricNotFound(name.to_string()))?;
-        histogram
-            .with_label_values(labels)
-            .observe(value);
+        histogram.with_label_values(labels).observe(value);
         Ok(())
     }
 
@@ -214,15 +212,31 @@ impl PrometheusMetricsRegistry {
         Ok(Self)
     }
 
-    pub async fn register_counter(&self, _name: &str, _help: &str, _label_names: &[&str]) -> MetricsResult<()> {
+    pub async fn register_counter(
+        &self,
+        _name: &str,
+        _help: &str,
+        _label_names: &[&str],
+    ) -> MetricsResult<()> {
         Ok(())
     }
 
-    pub async fn register_gauge(&self, _name: &str, _help: &str, _label_names: &[&str]) -> MetricsResult<()> {
+    pub async fn register_gauge(
+        &self,
+        _name: &str,
+        _help: &str,
+        _label_names: &[&str],
+    ) -> MetricsResult<()> {
         Ok(())
     }
 
-    pub async fn register_histogram(&self, _name: &str, _help: &str, _label_names: &[&str], _buckets: Option<Vec<f64>>) -> MetricsResult<()> {
+    pub async fn register_histogram(
+        &self,
+        _name: &str,
+        _help: &str,
+        _label_names: &[&str],
+        _buckets: Option<Vec<f64>>,
+    ) -> MetricsResult<()> {
         Ok(())
     }
 
@@ -230,7 +244,12 @@ impl PrometheusMetricsRegistry {
         Ok(())
     }
 
-    pub async fn counter_inc_by(&self, _name: &str, _labels: &[&str], _value: f64) -> MetricsResult<()> {
+    pub async fn counter_inc_by(
+        &self,
+        _name: &str,
+        _labels: &[&str],
+        _value: f64,
+    ) -> MetricsResult<()> {
         Ok(())
     }
 
@@ -246,7 +265,12 @@ impl PrometheusMetricsRegistry {
         Ok(())
     }
 
-    pub async fn histogram_observe(&self, _name: &str, _labels: &[&str], _value: f64) -> MetricsResult<()> {
+    pub async fn histogram_observe(
+        &self,
+        _name: &str,
+        _labels: &[&str],
+        _value: f64,
+    ) -> MetricsResult<()> {
         Ok(())
     }
 

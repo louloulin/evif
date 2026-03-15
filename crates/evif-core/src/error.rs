@@ -39,7 +39,10 @@ pub enum EvifError {
     ReadOnly,
 
     #[error("Operation not supported by plugin '{plugin_name}': {operation}")]
-    NotSupported { plugin_name: String, operation: String },
+    NotSupported {
+        plugin_name: String,
+        operation: String,
+    },
 
     #[error("Operation not supported")]
     NotSupportedGeneric,

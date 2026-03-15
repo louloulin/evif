@@ -1,11 +1,11 @@
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::{Node, Edge, NodeId, EdgeId, Result, GraphError};
+use crate::{Edge, EdgeId, GraphError, Node, NodeId, Result};
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use std::sync::Arc;
 use std::collections::{HashSet, VecDeque};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// 图配置
@@ -52,7 +52,9 @@ impl Graph {
 
     pub fn add_node(&self, node: Node) -> Result<NodeId> {
         if self.nodes.len() >= self.config.max_nodes {
-            return Err(GraphError::InvalidOperation("已达到最大节点数限制".to_string()));
+            return Err(GraphError::InvalidOperation(
+                "已达到最大节点数限制".to_string(),
+            ));
         }
 
         let id = node.id;
@@ -104,7 +106,9 @@ impl Graph {
 
     pub fn add_edge(&self, edge: Edge) -> Result<EdgeId> {
         if self.edges.len() >= self.config.max_edges {
-            return Err(GraphError::InvalidOperation("已达到最大边数限制".to_string()));
+            return Err(GraphError::InvalidOperation(
+                "已达到最大边数限制".to_string(),
+            ));
         }
 
         let id = edge.id;
@@ -310,7 +314,11 @@ impl GraphEngine {
                     let visited_read = visited.read();
                     if !visited_read.contains(&neighbor_id) {
                         drop(visited_read);
-                        if self.has_cycle_util(neighbor_id, Arc::clone(&visited), Arc::clone(&rec_stack)) {
+                        if self.has_cycle_util(
+                            neighbor_id,
+                            Arc::clone(&visited),
+                            Arc::clone(&rec_stack),
+                        ) {
                             return true;
                         }
                     }
@@ -398,7 +406,7 @@ impl Default for GraphEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{NodeType, Node, EdgeType};
+    use crate::{EdgeType, Node, NodeType};
 
     #[test]
     fn test_graph_creation() {
@@ -470,9 +478,15 @@ mod tests {
         let child2_id = graph.add_node(child2).unwrap();
         let grandchild_id = graph.add_node(grandchild).unwrap();
 
-        graph.add_edge(Edge::new(root_id, child1_id, EdgeType::Parent)).unwrap();
-        graph.add_edge(Edge::new(root_id, child2_id, EdgeType::Parent)).unwrap();
-        graph.add_edge(Edge::new(child1_id, grandchild_id, EdgeType::Parent)).unwrap();
+        graph
+            .add_edge(Edge::new(root_id, child1_id, EdgeType::Parent))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(root_id, child2_id, EdgeType::Parent))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(child1_id, grandchild_id, EdgeType::Parent))
+            .unwrap();
 
         let result = engine.bfs(root_id).unwrap();
         assert_eq!(result.len(), 4);

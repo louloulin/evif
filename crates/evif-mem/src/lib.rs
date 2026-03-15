@@ -38,31 +38,32 @@ pub mod workflow;
 pub mod plugin;
 
 pub use error::MemError;
-pub use models::*;
-pub use pipeline::*;
-pub use proactive::{
-    ExtractionStats, ExtractorConfig, ProactiveAgent, ProactiveConfig, ProactiveEvent,
-    ProactiveExtractor, ProactiveStats, ProactiveResult, ResourceMonitor, EventTrigger,
-    IntentionPredictor, IntentConfig, IntentResult, PredictedIntent, MemoryPattern,
-    CostOptimizer, CostOptimizerConfig, CostOptimizerStats, CacheEntry, BatchItem,
-};
 pub use langchain::{
-    EvifMemory, EvifMemoryConfig, ChatMessage, BufferMemory, ConversationTokenBuffer,
+    BufferMemory, ChatMessage, ConversationTokenBuffer, EvifMemory, EvifMemoryConfig,
     VectorStoreRetriever,
 };
 pub use llamaindex::{
-    LlamaIndexConfig, ChatMessageLLM, EvifChatStore, EvifVectorStore, EvifDocument,
-    EvifKVStore, QueryResult,
+    ChatMessageLLM, EvifChatStore, EvifDocument, EvifKVStore, EvifVectorStore, LlamaIndexConfig,
+    QueryResult,
 };
-pub use metrics::{Metrics, MetricsConfig, MetricsRegistry, MetricsError};
+pub use metrics::{Metrics, MetricsConfig, MetricsError, MetricsRegistry};
+pub use models::*;
+pub use pipeline::*;
+pub use proactive::{
+    BatchItem, CacheEntry, CostOptimizer, CostOptimizerConfig, CostOptimizerStats, EventTrigger,
+    ExtractionStats, ExtractorConfig, IntentConfig, IntentResult, IntentionPredictor,
+    MemoryPattern, PredictedIntent, ProactiveAgent, ProactiveConfig, ProactiveEvent,
+    ProactiveExtractor, ProactiveResult, ProactiveStats, ResourceMonitor,
+};
 
 #[cfg(feature = "telemetry")]
-pub use telemetry::{Telemetry, TelemetryConfig, TelemetrySpan, TelemetryRegistry, TelemetryError, create_telemetry_registry};
+pub use telemetry::{
+    create_telemetry_registry, Telemetry, TelemetryConfig, TelemetryError, TelemetryRegistry,
+    TelemetrySpan,
+};
 
 #[cfg(feature = "security")]
 pub use security::{
-    Encryption, EncryptionConfig,
-    Rbac, RbacConfig, Role, Permission, Resource, Action,
-    AuditLogger, AuditConfig, AuditEvent, AuditLevel,
-    mask_sensitive_data, MaskConfig, SensitiveField,
+    mask_sensitive_data, Action, AuditConfig, AuditEvent, AuditLevel, AuditLogger, Encryption,
+    EncryptionConfig, MaskConfig, Permission, Rbac, RbacConfig, Resource, Role, SensitiveField,
 };

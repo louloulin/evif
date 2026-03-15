@@ -162,7 +162,8 @@ impl INodeCache {
 
     /// 分配新的 INode 编号
     pub fn alloc_ino(&self) -> u64 {
-        self.next_ino.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.next_ino
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     /// 缓存大小

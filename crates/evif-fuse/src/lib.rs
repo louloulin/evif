@@ -12,14 +12,14 @@
 //
 // 使用 fuser 库实现 FUSE 协议
 
-mod inode_manager;
 mod dir_cache;
+mod inode_manager;
 mod mount_config;
 
-use evif_core::{EvifResult, EvifError, FileInfo, WriteFlags};
+use evif_core::{EvifError, EvifResult, FileInfo, WriteFlags};
 use fuser::{
-    FileAttr, FileType, Filesystem, Request, ReplyAttr, ReplyData, ReplyDirectory,
-    ReplyEntry, ReplyOpen, ReplyWrite, ReplyCreate, TimeOrNow,
+    FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEntry,
+    ReplyOpen, ReplyWrite, Request, TimeOrNow,
 };
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -29,10 +29,10 @@ use std::time::{Duration, SystemTime};
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, warn};
 
-pub use inode_manager::{Inode, InodeManager, InodeInfo, ROOT_INODE};
 pub use dir_cache::{DirCache, DirEntry};
-pub use mount_config::{FuseMountConfig, MountOptions};
 pub use evif_core::RadixMountTable;
+pub use inode_manager::{Inode, InodeInfo, InodeManager, ROOT_INODE};
+pub use mount_config::{FuseMountConfig, MountOptions};
 /// EVIF FUSE 文件系统
 ///
 /// 实现 fuser::Filesystem trait，提供完整的文件系统接口
@@ -73,7 +73,7 @@ impl EvifFuseFuse {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
-                .map_err(|e| EvifError::Internal(format!("Failed to create runtime: {}", e)))?
+                .map_err(|e| EvifError::Internal(format!("Failed to create runtime: {}", e)))?,
         );
 
         let inode_manager = Arc::new(InodeManager::new(config.cache_size));
@@ -158,15 +158,15 @@ impl EvifFuseFuse {
             ino: inode,
             size: file_info.size,
             blocks,
-            atime: now,      // EVIF 暂不跟踪访问时间
+            atime: now, // EVIF 暂不跟踪访问时间
             mtime,
-            ctime: mtime,    // 使用修改时间作为创建时间
+            ctime: mtime, // 使用修改时间作为创建时间
             crtime: mtime,
             kind: file_type,
-            perm: (file_info.mode & 0o777) as u16,  // 提取权限位
+            perm: (file_info.mode & 0o777) as u16, // 提取权限位
             nlink: 1,
-            uid: 501,    // 默认 uid
-            gid: 20,     // 默认 gid
+            uid: 501, // 默认 uid
+            gid: 20,  // 默认 gid
             rdev: 0,
             blksize: 4096,
             flags: 0,
@@ -214,7 +214,10 @@ impl EvifFuseFuse {
     /// 异步读取文件数据
     async fn read_async(&self, path: &Path, offset: u64, size: u32) -> EvifResult<Vec<u8>> {
         let evif_path = self.resolve_path(1, path)?;
-        debug!("Reading file: {} (offset={}, size={})", evif_path, offset, size);
+        debug!(
+            "Reading file: {} (offset={}, size={})",
+            evif_path, offset, size
+        );
 
         // 查找负责此路径的插件
         let plugin = self.mount_table.lookup(&evif_path).await;
@@ -229,18 +232,18 @@ impl EvifFuseFuse {
     }
 
     /// 异步写入文件数据
-    async fn write_async(
-        &self,
-        path: &Path,
-        offset: u64,
-        data: &[u8],
-    ) -> EvifResult<u32> {
+    async fn write_async(&self, path: &Path, offset: u64, data: &[u8]) -> EvifResult<u32> {
         if !self.allow_write {
             return Err(EvifError::PermissionDenied("Read-only mount".to_string()));
         }
 
         let evif_path = self.resolve_path(1, path)?;
-        debug!("Writing file: {} (offset={}, size={})", evif_path, offset, data.len());
+        debug!(
+            "Writing file: {} (offset={}, size={})",
+            evif_path,
+            offset,
+            data.len()
+        );
 
         // 查找负责此路径的插件
         let plugin = self.mount_table.lookup(&evif_path).await;
@@ -248,7 +251,9 @@ impl EvifFuseFuse {
 
         // 调用插件写入文件
         // EVIF 的 write: path, data, offset(-1 表示忽略), flags
-        let written = plugin.write(&evif_path, data.to_vec(), offset as i64, WriteFlags::NONE).await?;
+        let written = plugin
+            .write(&evif_path, data.to_vec(), offset as i64, WriteFlags::NONE)
+            .await?;
 
         debug!("Wrote {} bytes to {}", written, evif_path);
         Ok(written as u32)
@@ -337,12 +342,16 @@ impl Filesystem for EvifFuseFuse {
                     if size < current_data.len() as u64 {
                         // 截断文件
                         let truncated_data = &current_data[..size as usize];
-                        plugin.write(&path_str, truncated_data.to_vec(), 0, WriteFlags::NONE).await?;
+                        plugin
+                            .write(&path_str, truncated_data.to_vec(), 0, WriteFlags::NONE)
+                            .await?;
                     } else if size > current_data.len() as u64 {
                         // 扩展文件（填充零）
                         let mut extended_data = current_data;
                         extended_data.resize(size as usize, 0);
-                        plugin.write(&path_str, extended_data, 0, WriteFlags::NONE).await?;
+                        plugin
+                            .write(&path_str, extended_data, 0, WriteFlags::NONE)
+                            .await?;
                     }
                 }
             }
@@ -359,7 +368,10 @@ impl Filesystem for EvifFuseFuse {
 
             // 处理所有者修改（chown）
             if _uid.is_some() || _gid.is_some() {
-                debug!("chown requested on {}: uid={:?}, gid={:?}", path_str, _uid, _gid);
+                debug!(
+                    "chown requested on {}: uid={:?}, gid={:?}",
+                    path_str, _uid, _gid
+                );
                 // EVIF 通常不支持 chown，因为它是用户空间文件系统
                 // 可以记录此操作或返回当前属性
             }
@@ -371,7 +383,9 @@ impl Filesystem for EvifFuseFuse {
             }
 
             // 获取更新后的文件属性
-            let plugin = mount_table.lookup(&path_str_clone).await
+            let plugin = mount_table
+                .lookup(&path_str_clone)
+                .await
                 .ok_or_else(|| EvifError::NotFound(format!("Path: {}", path_str)))?;
             let file_info = plugin.stat(&path_str).await?;
 
@@ -516,7 +530,9 @@ impl Filesystem for EvifFuseFuse {
 
         // 检查权限并打开文件
         let result = rt.block_on(async move {
-            let plugin = mount_table.lookup(&path_str).await
+            let plugin = mount_table
+                .lookup(&path_str)
+                .await
                 .ok_or_else(|| EvifError::NotFound(format!("Path: {}", path_str)))?;
 
             // 检查文件是否存在
@@ -663,7 +679,9 @@ impl Filesystem for EvifFuseFuse {
         let full_path_clone = full_path.clone();
 
         match rt.block_on(async move {
-            let plugin = mount_table.lookup(&full_path_clone).await
+            let plugin = mount_table
+                .lookup(&full_path_clone)
+                .await
                 .ok_or_else(|| EvifError::NotFound(format!("Path: {}", full_path_clone)))?;
 
             // 创建文件
@@ -731,7 +749,9 @@ impl Filesystem for EvifFuseFuse {
         let full_path_clone = full_path.clone();
 
         match rt.block_on(async move {
-            let plugin = mount_table.lookup(&full_path_clone).await
+            let plugin = mount_table
+                .lookup(&full_path_clone)
+                .await
                 .ok_or_else(|| EvifError::NotFound(format!("Path: {}", full_path_clone)))?;
 
             plugin.remove(&full_path_clone).await
@@ -785,7 +805,9 @@ impl Filesystem for EvifFuseFuse {
         let full_path_clone = full_path.clone();
 
         match rt.block_on(async move {
-            let plugin = mount_table.lookup(&full_path_clone).await
+            let plugin = mount_table
+                .lookup(&full_path_clone)
+                .await
                 .ok_or_else(|| EvifError::NotFound(format!("Path: {}", full_path_clone)))?;
 
             // 创建目录
@@ -853,7 +875,9 @@ impl Filesystem for EvifFuseFuse {
         let full_path_clone = full_path.clone();
 
         match rt.block_on(async move {
-            let plugin = mount_table.lookup(&full_path_clone).await
+            let plugin = mount_table
+                .lookup(&full_path_clone)
+                .await
                 .ok_or_else(|| EvifError::NotFound(format!("Path: {}", full_path_clone)))?;
 
             plugin.remove(&full_path_clone).await
@@ -901,12 +925,14 @@ impl Filesystem for EvifFuseFuse {
 
         let old_parent_str = parent_path.as_ref().unwrap().clone();
         let new_parent_str = newparent_path.as_ref().unwrap().clone();
-        let old_path = format!("{}/{}",
+        let old_path = format!(
+            "{}/{}",
             old_parent_str.trim_end_matches('/'),
             name.to_string_lossy()
         );
 
-        let new_path = format!("{}/{}",
+        let new_path = format!(
+            "{}/{}",
             new_parent_str.trim_end_matches('/'),
             newname.to_string_lossy()
         );
@@ -919,7 +945,9 @@ impl Filesystem for EvifFuseFuse {
         let new_path_clone = new_path.clone();
 
         match rt.block_on(async move {
-            let plugin = mount_table.lookup(&old_path_clone).await
+            let plugin = mount_table
+                .lookup(&old_path_clone)
+                .await
                 .ok_or_else(|| EvifError::NotFound(format!("Path: {}", old_path_clone)))?;
 
             plugin.rename(&old_path_clone, &new_path_clone).await
@@ -943,8 +971,18 @@ impl Filesystem for EvifFuseFuse {
 
     /// 同步文件
     #[allow(unused_variables)]
-    fn fsync(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _datasync: bool, reply: fuser::ReplyEmpty) {
-        debug!("fsync called for inode {} (fh={}, datasync={})", _ino, _fh, _datasync);
+    fn fsync(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _datasync: bool,
+        reply: fuser::ReplyEmpty,
+    ) {
+        debug!(
+            "fsync called for inode {} (fh={}, datasync={})",
+            _ino, _fh, _datasync
+        );
 
         let path = self.inode_manager.get_path(_ino);
         if path.is_none() {
@@ -990,7 +1028,10 @@ impl Filesystem for EvifFuseFuse {
         _datasync: bool,
         reply: fuser::ReplyEmpty,
     ) {
-        debug!("fsyncdir called for inode {} (fh={}, datasync={})", _ino, _fh, _datasync);
+        debug!(
+            "fsyncdir called for inode {} (fh={}, datasync={})",
+            _ino, _fh, _datasync
+        );
 
         let path = self.inode_manager.get_path(_ino);
         if path.is_none() {
@@ -1061,13 +1102,7 @@ impl Filesystem for EvifFuseFuse {
 
     /// 获取扩展属性列表
     #[allow(unused_variables)]
-    fn listxattr(
-        &mut self,
-        _req: &Request<'_>,
-        _ino: u64,
-        size: u32,
-        reply: fuser::ReplyXattr,
-    ) {
+    fn listxattr(&mut self, _req: &Request<'_>, _ino: u64, size: u32, reply: fuser::ReplyXattr) {
         // 暂时返回空列表
         if size == 0 {
             reply.size(0);
@@ -1129,7 +1164,11 @@ pub fn mount_evif(
     mount_point: &Path,
     config: FuseMountConfig,
 ) -> EvifResult<()> {
-    info!("Mounting EVIF at {} (readonly={})", mount_point.display(), !config.allow_write);
+    info!(
+        "Mounting EVIF at {} (readonly={})",
+        mount_point.display(),
+        !config.allow_write
+    );
 
     let root_path = PathBuf::from("/");
     let fs = EvifFuseFuse::new(mount_table, root_path, &config)?;
@@ -1172,7 +1211,11 @@ pub fn mount_evif_background(
     mount_point: &Path,
     config: FuseMountConfig,
 ) -> EvifResult<fuser::BackgroundSession> {
-    info!("Mounting EVIF at {} (readonly={}, background)", mount_point.display(), !config.allow_write);
+    info!(
+        "Mounting EVIF at {} (readonly={}, background)",
+        mount_point.display(),
+        !config.allow_write
+    );
 
     let root_path = PathBuf::from("/");
     let fs = EvifFuseFuse::new(mount_table, root_path, &config)?;
@@ -1197,7 +1240,10 @@ pub fn mount_evif_background(
     let session = fuser::spawn_mount2(fs, mount_point, &options)
         .map_err(|e| EvifError::Internal(format!("Mount failed: {}", e)))?;
 
-    info!("EVIF mounted successfully at {} (background)", mount_point.display());
+    info!(
+        "EVIF mounted successfully at {} (background)",
+        mount_point.display()
+    );
     Ok(session)
 }
 
@@ -1262,9 +1308,9 @@ impl FuseMountBuilder {
 
     /// 构建配置
     pub fn build(self) -> EvifResult<FuseMountConfig> {
-        let mount_point = self.mount_point.ok_or_else(|| {
-            EvifError::InvalidArgument("Mount point is required".to_string())
-        })?;
+        let mount_point = self
+            .mount_point
+            .ok_or_else(|| EvifError::InvalidArgument("Mount point is required".to_string()))?;
 
         Ok(FuseMountConfig {
             mount_point,
@@ -1277,10 +1323,7 @@ impl FuseMountBuilder {
     }
 
     /// 直接挂载（阻塞版本）
-    pub fn mount(
-        self,
-        mount_table: Arc<RadixMountTable>,
-    ) -> EvifResult<()> {
+    pub fn mount(self, mount_table: Arc<RadixMountTable>) -> EvifResult<()> {
         let config = self.build()?;
         let mount_point = config.mount_point.clone();
         mount_evif(mount_table, &mount_point, config)

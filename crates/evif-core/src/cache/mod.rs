@@ -1,12 +1,12 @@
 // EVIF缓存系统 - 使用moka实现高性能缓存
 
 pub mod cache;
-pub mod metadata_cache;
 pub mod directory_cache;
+pub mod metadata_cache;
 
-pub use cache::{EvifCache, CacheConfig};
-pub use metadata_cache::MetadataCache;
+pub use cache::{CacheConfig, EvifCache};
 pub use directory_cache::DirectoryCache;
+pub use metadata_cache::MetadataCache;
 
 use crate::FileInfo;
 use std::time::Duration;

@@ -4,8 +4,8 @@
 //! Supports Prometheus metrics export with multiple metric types (Counter, Gauge, Histogram).
 
 pub mod error;
-pub mod types;
 pub mod prometheus;
+pub mod types;
 
 pub use error::{MetricsError, MetricsResult};
 pub use types::*;

@@ -3,16 +3,16 @@
 // 实现基于 extism 的 WASM 插件支持
 // 充分复用 extism 的 PDK (Plugin Development Kit) 能力
 
-use crate::error::{EvifResult, EvifError};
-use crate::plugin::{EvifPlugin, FileInfo, WriteFlags, FileHandle};
+use crate::error::{EvifError, EvifResult};
+use crate::plugin::{EvifPlugin, FileHandle, FileInfo, WriteFlags};
 use async_trait::async_trait;
-use extism::{Plugin, Manifest, Wasm};
+use extism::{Manifest, Plugin, Wasm};
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 
 /// WASM 插件配置
 #[derive(Debug, Clone)]
@@ -87,7 +87,11 @@ impl ExtismPlugin {
     ///
     /// # 返回
     /// 插件返回的数据
-    async fn call_wasm_function(&self, func_name: &str, input: serde_json::Value) -> EvifResult<Vec<u8>> {
+    async fn call_wasm_function(
+        &self,
+        func_name: &str,
+        input: serde_json::Value,
+    ) -> EvifResult<Vec<u8>> {
         let mut plugin = self.plugin.lock().await;
         let input_json = input.to_string();
 
@@ -134,7 +138,9 @@ impl EvifPlugin for ExtismPlugin {
 
         if !response.success {
             return Err(EvifError::Internal(
-                response.error.unwrap_or_else(|| "Unknown error".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             ));
         }
 
@@ -157,7 +163,9 @@ impl EvifPlugin for ExtismPlugin {
 
         if !response.success {
             return Err(EvifError::Internal(
-                response.error.unwrap_or_else(|| "Unknown error".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             ));
         }
 
@@ -173,7 +181,7 @@ impl EvifPlugin for ExtismPlugin {
 
         #[derive(Deserialize)]
         struct Response {
-            data: String,  // Base64 编码的数据
+            data: String, // Base64 编码的数据
             error: Option<String>,
         }
 
@@ -184,13 +192,20 @@ impl EvifPlugin for ExtismPlugin {
         }
 
         // Base64 解码
-        let data = general_purpose::STANDARD.decode(&response.data)
+        let data = general_purpose::STANDARD
+            .decode(&response.data)
             .map_err(|e| EvifError::Internal(format!("Base64 decode failed: {}", e)))?;
 
         Ok(data)
     }
 
-    async fn write(&self, path: &str, data: Vec<u8>, offset: i64, flags: WriteFlags) -> EvifResult<u64> {
+    async fn write(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        offset: i64,
+        flags: WriteFlags,
+    ) -> EvifResult<u64> {
         // Base64 编码数据
         let data_base64 = general_purpose::STANDARD.encode(&data);
 
@@ -232,7 +247,7 @@ impl EvifPlugin for ExtismPlugin {
             name: String,
             size: u64,
             mode: u32,
-            modified: String,  // ISO 8601 字符串
+            modified: String, // ISO 8601 字符串
             is_dir: bool,
         }
 
@@ -312,7 +327,9 @@ impl EvifPlugin for ExtismPlugin {
 
         if !response.success {
             return Err(EvifError::Internal(
-                response.error.unwrap_or_else(|| "Unknown error".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             ));
         }
 
@@ -335,7 +352,9 @@ impl EvifPlugin for ExtismPlugin {
 
         if !response.success {
             return Err(EvifError::Internal(
-                response.error.unwrap_or_else(|| "Unknown error".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             ));
         }
 
@@ -357,7 +376,9 @@ impl EvifPlugin for ExtismPlugin {
 
         if !response.success {
             return Err(EvifError::Internal(
-                response.error.unwrap_or_else(|| "Unknown error".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             ));
         }
 

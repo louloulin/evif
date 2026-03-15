@@ -4,7 +4,7 @@
 // 所有插件实现此 trait 即可挂载到 EVIF 系统
 // Phase 8: 增加 Validate/GetReadme/GetConfigParams（对标 AGFS ServicePlugin）
 
-use crate::error::{EvifResult, EvifError};
+use crate::error::{EvifError, EvifResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -13,7 +13,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginConfigParam {
     pub name: String,
-    pub param_type: String,  // "string" | "int" | "bool" | "object" 等
+    pub param_type: String, // "string" | "int" | "bool" | "object" 等
     pub required: bool,
     #[serde(default)]
     pub default: Option<String>,
@@ -112,7 +112,12 @@ pub trait HandleFS: EvifPlugin {
     ///
     /// # 返回
     /// 文件句柄
-    async fn open_handle(&self, path: &str, flags: OpenFlags, mode: u32) -> EvifResult<Box<dyn FileHandle>>;
+    async fn open_handle(
+        &self,
+        path: &str,
+        flags: OpenFlags,
+        mode: u32,
+    ) -> EvifResult<Box<dyn FileHandle>>;
 
     /// 根据 ID 获取已存在的句柄
     ///
@@ -176,8 +181,13 @@ pub trait EvifPlugin: Send + Sync {
     ///
     /// # 返回
     /// 实际写入的字节数
-    async fn write(&self, path: &str, data: Vec<u8>, offset: i64, flags: WriteFlags)
-        -> EvifResult<u64>;
+    async fn write(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        offset: i64,
+        flags: WriteFlags,
+    ) -> EvifResult<u64>;
 
     /// 读取目录内容
     async fn readdir(&self, path: &str) -> EvifResult<Vec<FileInfo>>;

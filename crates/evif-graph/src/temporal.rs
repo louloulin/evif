@@ -4,7 +4,7 @@
 //! 时序知识图谱扩展
 //! 为记忆平台提供时序关系查询能力
 
-use crate::{Graph, NodeId, EdgeType, Result, GraphError};
+use crate::{EdgeType, Graph, GraphError, NodeId, Result};
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -161,10 +161,7 @@ impl TemporalGraph {
                 if !visited.contains(&successor) {
                     visited.insert(successor);
                     let edges = self.graph.outgoing_edges(&current)?;
-                    let edge = edges
-                        .into_iter()
-                        .find(|e| e.target == successor)
-                        .unwrap();
+                    let edge = edges.into_iter().find(|e| e.target == successor).unwrap();
 
                     parent.insert(successor, (current, edge.edge_type.clone()));
                     queue.push_back(successor);
@@ -176,7 +173,11 @@ impl TemporalGraph {
     }
 
     /// 获取事件时间线
-    pub fn get_event_timeline(&self, start: NodeId, event_type: &str) -> Result<Vec<TimelineEvent>> {
+    pub fn get_event_timeline(
+        &self,
+        start: NodeId,
+        event_type: &str,
+    ) -> Result<Vec<TimelineEvent>> {
         let mut timeline = Vec::new();
 
         // 查找所有 Event 类型的节点
@@ -235,7 +236,8 @@ impl TemporalGraph {
         node_id: NodeId,
         window_days: i64,
     ) -> Result<Vec<(DateTime<Utc>, DateTime<Utc>)>> {
-        let timestamp = self.get_timestamp(&node_id)
+        let timestamp = self
+            .get_timestamp(&node_id)
             .ok_or_else(|| GraphError::InvalidOperation("节点没有时间戳".to_string()))?;
 
         let window = chrono::Duration::days(window_days);
@@ -266,7 +268,7 @@ impl TemporalGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Node, NodeType, Edge, EdgeType};
+    use crate::{Edge, EdgeType, Node, NodeType};
     fn test_temporal_edge_types() {
         assert!(EdgeType::Before.is_temporal());
         assert!(EdgeType::After.is_temporal());

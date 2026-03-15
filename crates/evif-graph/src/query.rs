@@ -52,7 +52,8 @@ impl QueryBuilder {
     }
 
     pub fn find_by_type(mut self, node_type: impl Into<String>) -> Self {
-        self.queries.push(GraphQuery::FindNodesByType(node_type.into()));
+        self.queries
+            .push(GraphQuery::FindNodesByType(node_type.into()));
         self
     }
 

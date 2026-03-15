@@ -80,18 +80,32 @@ mod file_operations {
         let test_dir = unique_test_path();
 
         // Create test file
-        let output = run_evif_cli(&["write", &format!("{}/file1.txt", test_dir), "-c", "test content"]);
+        let output = run_evif_cli(&[
+            "write",
+            &format!("{}/file1.txt", test_dir),
+            "-c",
+            "test content",
+        ]);
         if !cli_success(&output) {
             // Try creating parent directory first
             let _ = run_evif_cli(&["mkdir", &test_dir, "-p"]);
-            let _ = run_evif_cli(&["write", &format!("{}/file1.txt", test_dir), "-c", "test content"]);
+            let _ = run_evif_cli(&[
+                "write",
+                &format!("{}/file1.txt", test_dir),
+                "-c",
+                "test content",
+            ]);
         }
 
         // When: Run `ls /`
         let output = run_evif_cli(&["ls", "/"]);
 
         // Then: Correctly display files and subdirectories
-        assert!(cli_success(&output), "ls / failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "ls / failed: {}",
+            stderr_string(&output)
+        );
         let stdout = stdout_string(&output);
         assert!(!stdout.is_empty(), "ls output should not be empty");
 
@@ -109,7 +123,11 @@ mod file_operations {
         let output = run_evif_cli(&["ls", "/"]);
 
         // Then: Display directory contents
-        assert!(cli_success(&output), "ls failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "ls failed: {}",
+            stderr_string(&output)
+        );
 
         cleanup_path(&test_dir);
     }
@@ -119,13 +137,22 @@ mod file_operations {
         // Given: A directory structure with nested folders
         let test_dir = unique_test_path();
         let _ = run_evif_cli(&["mkdir", &format!("{}/sub1/sub2", test_dir), "-p"]);
-        let _ = run_evif_cli(&["write", &format!("{}/sub1/sub2/file.txt", test_dir), "-c", "nested"]);
+        let _ = run_evif_cli(&[
+            "write",
+            &format!("{}/sub1/sub2/file.txt", test_dir),
+            "-c",
+            "nested",
+        ]);
 
         // When: Run `ls /` (recursive may be default or -r flag)
         let output = run_evif_cli(&["ls", "/"]);
 
         // Then: Display directory contents
-        assert!(cli_success(&output), "ls failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "ls failed: {}",
+            stderr_string(&output)
+        );
 
         cleanup_path(&test_dir);
     }
@@ -141,9 +168,17 @@ mod file_operations {
         let output = run_evif_cli(&["cat", &test_file]);
 
         // Then: Correctly output file content
-        assert!(cli_success(&output), "cat failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "cat failed: {}",
+            stderr_string(&output)
+        );
         let stdout = stdout_string(&output);
-        assert!(stdout.contains("Hello"), "cat output should contain file content, got: {}", stdout);
+        assert!(
+            stdout.contains("Hello"),
+            "cat output should contain file content, got: {}",
+            stdout
+        );
 
         cleanup_path(&test_file);
     }
@@ -158,7 +193,11 @@ mod file_operations {
         let output = run_evif_cli(&["write", &test_file, "-c", "new file content"]);
 
         // Then: File created successfully with correct content
-        assert!(cli_success(&output), "write failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "write failed: {}",
+            stderr_string(&output)
+        );
 
         // Verify content
         let read_output = run_evif_cli(&["cat", &test_file]);
@@ -178,12 +217,19 @@ mod file_operations {
         let output = run_evif_cli(&["write", &test_file, "-c", " appended", "-a"]);
 
         // Then: Content appended to file end
-        assert!(cli_success(&output), "write -a failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "write -a failed: {}",
+            stderr_string(&output)
+        );
 
         // Verify appended content
         let read_output = run_evif_cli(&["cat", &test_file]);
         let content = stdout_string(&read_output);
-        assert!(content.contains("original"), "Should contain original content");
+        assert!(
+            content.contains("original"),
+            "Should contain original content"
+        );
         // Note: append behavior may vary
 
         cleanup_path(&test_file);
@@ -200,7 +246,11 @@ mod file_operations {
         let output = run_evif_cli(&["mkdir", &test_dir]);
 
         // Then: Directory created successfully
-        assert!(cli_success(&output), "mkdir failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "mkdir failed: {}",
+            stderr_string(&output)
+        );
 
         cleanup_path(&parent);
     }
@@ -214,7 +264,11 @@ mod file_operations {
         let output = run_evif_cli(&["mkdir", &test_dir, "-p"]);
 
         // Then: Automatically create parent directories
-        assert!(cli_success(&output), "mkdir -p failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "mkdir -p failed: {}",
+            stderr_string(&output)
+        );
 
         cleanup_path(&test_dir);
     }
@@ -229,7 +283,11 @@ mod file_operations {
         let output = run_evif_cli(&["rm", &test_file]);
 
         // Then: File deleted successfully
-        assert!(cli_success(&output), "rm failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "rm failed: {}",
+            stderr_string(&output)
+        );
 
         // Verify file is gone (cat should fail)
         let cat_output = run_evif_cli(&["cat", &test_file]);
@@ -247,7 +305,11 @@ mod file_operations {
         let output = run_evif_cli(&["rm", &test_dir, "-r"]);
 
         // Then: Directory and all contents deleted
-        assert!(cli_success(&output), "rm -r failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "rm -r failed: {}",
+            stderr_string(&output)
+        );
     }
 
     #[test]
@@ -261,12 +323,18 @@ mod file_operations {
         let output = run_evif_cli(&["mv", &src, &dst]);
 
         // Then: File moved to destination
-        assert!(cli_success(&output), "mv failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "mv failed: {}",
+            stderr_string(&output)
+        );
 
         // Verify content at new location
         let cat_output = run_evif_cli(&["cat", &dst]);
-        assert!(cli_success(&cat_output) || stdout_string(&cat_output).contains("move me"),
-            "File should exist at destination");
+        assert!(
+            cli_success(&cat_output) || stdout_string(&cat_output).contains("move me"),
+            "File should exist at destination"
+        );
 
         cleanup_path(&dst);
         cleanup_path(&src);
@@ -283,13 +351,19 @@ mod file_operations {
         let output = run_evif_cli(&["cp", &src, &dst]);
 
         // Then: File copied with identical content
-        assert!(cli_success(&output), "cp failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "cp failed: {}",
+            stderr_string(&output)
+        );
 
         // Verify both files exist
         let cat_src = run_evif_cli(&["cat", &src]);
         let cat_dst = run_evif_cli(&["cat", &dst]);
-        assert!(cli_success(&cat_src) || cli_success(&cat_dst),
-            "Both files should exist after copy");
+        assert!(
+            cli_success(&cat_src) || cli_success(&cat_dst),
+            "Both files should exist after copy"
+        );
 
         cleanup_path(&src);
         cleanup_path(&dst);
@@ -305,7 +379,11 @@ mod file_operations {
         let output = run_evif_cli(&["stat", &test_file]);
 
         // Then: Return type, size, time, permissions
-        assert!(cli_success(&output), "stat failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "stat failed: {}",
+            stderr_string(&output)
+        );
         let stdout = stdout_string(&output);
         // stat output should contain file info
         assert!(!stdout.is_empty(), "stat should return file information");
@@ -323,12 +401,18 @@ mod file_operations {
         let output = run_evif_cli(&["touch", &test_file]);
 
         // Then: Empty file created successfully
-        assert!(cli_success(&output), "touch failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "touch failed: {}",
+            stderr_string(&output)
+        );
 
         // Verify file exists
         let stat_output = run_evif_cli(&["stat", &test_file]);
-        assert!(cli_success(&stat_output) || cli_success(&output),
-            "File should exist after touch");
+        assert!(
+            cli_success(&stat_output) || cli_success(&output),
+            "File should exist after touch"
+        );
 
         cleanup_path(&test_file);
     }
@@ -337,14 +421,19 @@ mod file_operations {
     fn test_head_file() {
         // Given: A file with multiple lines
         let test_file = unique_test_path();
-        let content = "Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11\nLine12";
+        let content =
+            "Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11\nLine12";
         let _ = run_evif_cli(&["write", &test_file, "-c", content]);
 
         // When: Run `head <path>` (default 10 lines)
         let output = run_evif_cli(&["head", &test_file]);
 
         // Then: Display first N lines
-        assert!(cli_success(&output), "head failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "head failed: {}",
+            stderr_string(&output)
+        );
         let stdout = stdout_string(&output);
         assert!(!stdout.is_empty(), "head should return content");
 
@@ -362,7 +451,11 @@ mod file_operations {
         let output = run_evif_cli(&["head", &test_file, "-n", "5"]);
 
         // Then: Display first 5 lines
-        assert!(cli_success(&output), "head -n 5 failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "head -n 5 failed: {}",
+            stderr_string(&output)
+        );
 
         cleanup_path(&test_file);
     }
@@ -371,14 +464,19 @@ mod file_operations {
     fn test_tail_file() {
         // Given: A file with multiple lines
         let test_file = unique_test_path();
-        let content = "Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11\nLine12";
+        let content =
+            "Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10\nLine11\nLine12";
         let _ = run_evif_cli(&["write", &test_file, "-c", content]);
 
         // When: Run `tail <path>` (default 10 lines)
         let output = run_evif_cli(&["tail", &test_file]);
 
         // Then: Display last N lines
-        assert!(cli_success(&output), "tail failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "tail failed: {}",
+            stderr_string(&output)
+        );
         let stdout = stdout_string(&output);
         assert!(!stdout.is_empty(), "tail should return content");
 
@@ -396,7 +494,11 @@ mod file_operations {
         let output = run_evif_cli(&["tail", &test_file, "-n", "5"]);
 
         // Then: Display last 5 lines
-        assert!(cli_success(&output), "tail -n 5 failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "tail -n 5 failed: {}",
+            stderr_string(&output)
+        );
 
         cleanup_path(&test_file);
     }
@@ -412,7 +514,11 @@ mod file_operations {
         let output = run_evif_cli(&["tree", &test_dir]);
 
         // Then: Display structure hierarchically
-        assert!(cli_success(&output), "tree failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "tree failed: {}",
+            stderr_string(&output)
+        );
         let stdout = stdout_string(&output);
         assert!(!stdout.is_empty(), "tree should return structure");
 
@@ -429,7 +535,11 @@ mod file_operations {
         let output = run_evif_cli(&["tree", &test_dir, "-d", "2"]);
 
         // Then: Display only 2 levels deep
-        assert!(cli_success(&output), "tree -d 2 failed: {}", stderr_string(&output));
+        assert!(
+            cli_success(&output),
+            "tree -d 2 failed: {}",
+            stderr_string(&output)
+        );
 
         cleanup_path(&test_dir);
     }

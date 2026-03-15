@@ -6,8 +6,8 @@ use dashmap::DashMap;
 use futures::stream::{self, Stream};
 use std::pin::Pin;
 
-use crate::{StorageBackend, StorageResult, StorageOp, MemoryTransaction};
-use evif_graph::{Node, Edge, NodeId, EdgeId};
+use crate::{MemoryTransaction, StorageBackend, StorageOp, StorageResult};
+use evif_graph::{Edge, EdgeId, Node, NodeId};
 
 /// 内存存储后端
 pub struct MemoryStorage {
@@ -111,17 +111,17 @@ impl StorageBackend for MemoryStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use evif_graph::{NodeType, EdgeType};
+    use evif_graph::{EdgeType, NodeType};
 
     #[tokio::test]
     async fn test_memory_storage_basic() {
         let storage = MemoryStorage::new();
         let node = Node::new(NodeType::File, "test.txt");
         let id = node.id;
-        
+
         storage.put_node(&node).await.unwrap();
         assert_eq!(storage.node_count(), 1);
-        
+
         let retrieved = storage.get_node(&id).await.unwrap();
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().name, "test.txt");
@@ -132,12 +132,9 @@ mod tests {
         let storage = MemoryStorage::new();
         let node1 = Node::new(NodeType::File, "file1.txt");
         let node2 = Node::new(NodeType::File, "file2.txt");
-        
-        let ops = vec![
-            StorageOp::InsertNode(node1),
-            StorageOp::InsertNode(node2),
-        ];
-        
+
+        let ops = vec![StorageOp::InsertNode(node1), StorageOp::InsertNode(node2)];
+
         storage.batch_write(ops).await.unwrap();
         assert_eq!(storage.node_count(), 2);
     }

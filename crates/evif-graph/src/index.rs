@@ -1,22 +1,22 @@
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::{Node, NodeId, Result, GraphError};
+use crate::{GraphError, Node, NodeId, Result};
+use ahash::AHashSet;
 use std::collections::HashMap;
 use std::sync::RwLock;
-use ahash::AHashSet;
 
 /// 图索引 trait
 pub trait GraphIndex: Send + Sync {
     /// 插入节点到索引
     fn insert(&mut self, node: &Node) -> Result<()>;
-    
+
     /// 从索引删除节点
     fn remove(&mut self, id: &NodeId) -> Result<()>;
-    
+
     /// 查询节点
     fn query(&self, query: &str) -> Result<Vec<NodeId>>;
-    
+
     /// 优化索引
     fn optimize(&mut self) -> Result<()>;
 }
@@ -52,17 +52,19 @@ impl GraphIndex for MemoryIndex {
 
         // 索引类型
         {
-            let mut by_type = self.by_type.write().map_err(|e| {
-                GraphError::IndexError(format!("获取写锁失败: {}", e))
-            })?;
+            let mut by_type = self
+                .by_type
+                .write()
+                .map_err(|e| GraphError::IndexError(format!("获取写锁失败: {}", e)))?;
             by_type.entry(node_type).or_default().insert(id);
         }
 
         // 索引名称
         {
-            let mut by_name = self.by_name.write().map_err(|e| {
-                GraphError::IndexError(format!("获取写锁失败: {}", e))
-            })?;
+            let mut by_name = self
+                .by_name
+                .write()
+                .map_err(|e| GraphError::IndexError(format!("获取写锁失败: {}", e)))?;
             by_name.entry(name).or_default().insert(id);
         }
 
@@ -72,18 +74,20 @@ impl GraphIndex for MemoryIndex {
     fn remove(&mut self, id: &NodeId) -> Result<()> {
         // 从所有索引中删除
         {
-            let mut by_type = self.by_type.write().map_err(|e| {
-                GraphError::IndexError(format!("获取写锁失败: {}", e))
-            })?;
+            let mut by_type = self
+                .by_type
+                .write()
+                .map_err(|e| GraphError::IndexError(format!("获取写锁失败: {}", e)))?;
             for set in by_type.values_mut() {
                 set.remove(id);
             }
         }
 
         {
-            let mut by_name = self.by_name.write().map_err(|e| {
-                GraphError::IndexError(format!("获取写锁失败: {}", e))
-            })?;
+            let mut by_name = self
+                .by_name
+                .write()
+                .map_err(|e| GraphError::IndexError(format!("获取写锁失败: {}", e)))?;
             for set in by_name.values_mut() {
                 set.remove(id);
             }
@@ -94,9 +98,10 @@ impl GraphIndex for MemoryIndex {
 
     fn query(&self, query: &str) -> Result<Vec<NodeId>> {
         // 简单实现：查询名称索引
-        let by_name = self.by_name.read().map_err(|e| {
-            GraphError::IndexError(format!("获取读锁失败: {}", e))
-        })?;
+        let by_name = self
+            .by_name
+            .read()
+            .map_err(|e| GraphError::IndexError(format!("获取读锁失败: {}", e)))?;
 
         if let Some(set) = by_name.get(query) {
             Ok(set.iter().copied().collect())
@@ -108,16 +113,18 @@ impl GraphIndex for MemoryIndex {
     fn optimize(&mut self) -> Result<()> {
         // 清理空的索引项
         {
-            let mut by_type = self.by_type.write().map_err(|e| {
-                GraphError::IndexError(format!("获取写锁失败: {}", e))
-            })?;
+            let mut by_type = self
+                .by_type
+                .write()
+                .map_err(|e| GraphError::IndexError(format!("获取写锁失败: {}", e)))?;
             by_type.retain(|_, set| !set.is_empty());
         }
 
         {
-            let mut by_name = self.by_name.write().map_err(|e| {
-                GraphError::IndexError(format!("获取写锁失败: {}", e))
-            })?;
+            let mut by_name = self
+                .by_name
+                .write()
+                .map_err(|e| GraphError::IndexError(format!("获取写锁失败: {}", e)))?;
             by_name.retain(|_, set| !set.is_empty());
         }
 
@@ -164,7 +171,7 @@ mod tests {
         let id = node.id;
 
         index.insert(&node).unwrap();
-        
+
         let results = index.query("test.txt").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], id);
@@ -178,7 +185,7 @@ mod tests {
 
         index.insert(&node).unwrap();
         index.remove(&id).unwrap();
-        
+
         let results = index.query("test.txt").unwrap();
         assert_eq!(results.len(), 0);
     }

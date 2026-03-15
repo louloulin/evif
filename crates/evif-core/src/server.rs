@@ -5,7 +5,7 @@
 
 use crate::error::{EvifError, EvifResult};
 use crate::mount_table::MountTable;
-use crate::plugin::{EvifPlugin, WriteFlags, FileInfo};
+use crate::plugin::{EvifPlugin, FileInfo, WriteFlags};
 use std::sync::Arc;
 
 /// EVIF 服务器
@@ -29,9 +29,11 @@ impl EvifServer {
     /// # 参数
     /// - `path`: 挂载路径（如 "/local", "/kv"）
     /// - `plugin`: 插件实例
-    pub async fn register_plugin(&self, path: String, plugin: Arc<dyn EvifPlugin>)
-        -> EvifResult<()>
-    {
+    pub async fn register_plugin(
+        &self,
+        path: String,
+        plugin: Arc<dyn EvifPlugin>,
+    ) -> EvifResult<()> {
         self.mount_table.mount(path, plugin).await
     }
 
@@ -72,9 +74,13 @@ impl EvifServer {
     }
 
     /// 写入文件
-    pub async fn write(&self, path: &str, data: Vec<u8>, offset: i64, flags: WriteFlags)
-        -> EvifResult<u64>
-    {
+    pub async fn write(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        offset: i64,
+        flags: WriteFlags,
+    ) -> EvifResult<u64> {
         let plugin = self.route(path).await?;
         plugin.write(path, data, offset, flags).await
     }
@@ -138,7 +144,10 @@ mod tests {
         let server = EvifServer::new();
         let plugin = Arc::new(MockPlugin::new("test"));
 
-        server.register_plugin("/test".to_string(), plugin.clone()).await.unwrap();
+        server
+            .register_plugin("/test".to_string(), plugin.clone())
+            .await
+            .unwrap();
 
         let mounts = server.list_mounts().await;
         assert_eq!(mounts.len(), 1);
@@ -150,7 +159,10 @@ mod tests {
         let server = EvifServer::new();
         let plugin = Arc::new(MockPlugin::new("test"));
 
-        server.register_plugin("/test".to_string(), plugin).await.unwrap();
+        server
+            .register_plugin("/test".to_string(), plugin)
+            .await
+            .unwrap();
 
         // 路由应该找到插件
         let result = server.create("/test/file.txt", 0o644).await;
@@ -163,8 +175,14 @@ mod tests {
         let plugin1 = Arc::new(MockPlugin::new("test1"));
         let plugin2 = Arc::new(MockPlugin::new("test2"));
 
-        server.register_plugin("/test1".to_string(), plugin1).await.unwrap();
-        server.register_plugin("/test2".to_string(), plugin2).await.unwrap();
+        server
+            .register_plugin("/test1".to_string(), plugin1)
+            .await
+            .unwrap();
+        server
+            .register_plugin("/test2".to_string(), plugin2)
+            .await
+            .unwrap();
 
         // 跨插件重命名应该失败
         let result = server.rename("/test1/file.txt", "/test2/file.txt").await;

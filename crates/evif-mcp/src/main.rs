@@ -1,6 +1,6 @@
 // EVIF MCP Server - 可执行文件
 
-use evif_mcp::{McpServerConfig, EvifMcpServer};
+use evif_mcp::{EvifMcpServer, McpServerConfig};
 use tokio::signal;
 
 #[tokio::main]
@@ -11,8 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = McpServerConfig {
-        evif_url: std::env::var("EVIF_URL")
-            .unwrap_or_else(|_| "http://localhost:8081".to_string()),
+        evif_url: std::env::var("EVIF_URL").unwrap_or_else(|_| "http://localhost:8081".to_string()),
         server_name: "evif-mcp".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     };

@@ -3,7 +3,7 @@
 // 用于验证 OpenDAL 集成是否正常工作
 
 use evif_core::{EvifPlugin, WriteFlags};
-use evif_plugins::{OpendalPlugin, OpendalConfig, OpendalService};
+use evif_plugins::{OpendalConfig, OpendalPlugin, OpendalService};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,7 +37,14 @@ async fn test_memory_service() -> Result<(), Box<dyn std::error::Error>> {
 
     // 测试写入文件
     println!("  - 写入数据 'Hello, OpenDAL!'...");
-    plugin.write("/test.txt", b"Hello, OpenDAL!".to_vec(), -1, WriteFlags::empty()).await?;
+    plugin
+        .write(
+            "/test.txt",
+            b"Hello, OpenDAL!".to_vec(),
+            -1,
+            WriteFlags::empty(),
+        )
+        .await?;
 
     // 测试读取文件
     println!("  - 读取文件内容...");
@@ -111,7 +118,9 @@ async fn test_fs_service() -> Result<(), Box<dyn std::error::Error>> {
 
     // 测试写入文件
     println!("  - 写入数据 'Hello, Fs!'...");
-    plugin.write("/test.txt", b"Hello, Fs!".to_vec(), -1, WriteFlags::empty()).await?;
+    plugin
+        .write("/test.txt", b"Hello, Fs!".to_vec(), -1, WriteFlags::empty())
+        .await?;
 
     // 测试读取文件
     println!("  - 读取文件内容...");

@@ -53,7 +53,8 @@ impl Transport for MockTransport {
         match message {
             Message::Request(req) => {
                 // 返回一个模拟响应
-                let response = evif_protocol::Response::success(req.id, evif_protocol::ResponseKind::Pong);
+                let response =
+                    evif_protocol::Response::success(req.id, evif_protocol::ResponseKind::Pong);
                 Ok(Message::Response(response))
             }
             _ => Ok(message),
@@ -73,13 +74,14 @@ mod tests {
     }
 }
 
-
 // Dummy Transport for blocking client
 pub struct DummyTransport;
 
 #[async_trait::async_trait]
 impl Transport for DummyTransport {
     async fn send(&self, _message: Message) -> Result<Message, TransportError> {
-        Err(TransportError::ConnectionFailed("Dummy transport not implemented".to_string()))
+        Err(TransportError::ConnectionFailed(
+            "Dummy transport not implemented".to_string(),
+        ))
     }
 }

@@ -1,10 +1,10 @@
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// 节点唯一标识符
 pub type NodeId = Uuid;

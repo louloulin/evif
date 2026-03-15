@@ -69,7 +69,10 @@ impl CompatFsHandlers {
     /// ├── /hello           # 挂载点
     /// └── /local           # 挂载点
     /// ```
-    pub async fn list(State(state): State<AppState>, Query(q): Query<FsQuery>) -> RestResult<Json<FsListResponse>> {
+    pub async fn list(
+        State(state): State<AppState>,
+        Query(q): Query<FsQuery>,
+    ) -> RestResult<Json<FsListResponse>> {
         // Task 05: 使用 lookup_with_path 替代 lookup，支持路径翻译
         // 返回 (插件选项, 相对路径)，例如：/mem/world → (Some(mem插件), "/world")
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&q.path).await;
@@ -92,7 +95,8 @@ impl CompatFsHandlers {
 
         // 非根路径：使用相对路径调用插件
         // 例如：请求 /mem/world，relative_path 为 /world，调用 mem_fs.readdir("/world")
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", q.path)))?;
+        let plugin =
+            plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", q.path)))?;
 
         let entries = plugin
             .readdir(&relative_path)
@@ -127,18 +131,22 @@ impl CompatFsHandlers {
     ///
     /// # 相关方法
     /// - [`RadixMountTable::lookup_with_path()`]: VFS 路径翻译实现
-    pub async fn read(State(state): State<AppState>, Query(q): Query<FsQuery>) -> RestResult<Json<FsReadResponse>> {
+    pub async fn read(
+        State(state): State<AppState>,
+        Query(q): Query<FsQuery>,
+    ) -> RestResult<Json<FsReadResponse>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&q.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", q.path)))?;
+        let plugin =
+            plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", q.path)))?;
 
         let data = plugin
             .read(&relative_path, 0, 0)
             .await
             .map_err(|e| RestError::Internal(e.to_string()))?;
 
-        let content =
-            String::from_utf8(data).map_err(|e| RestError::Internal(format!("Invalid UTF-8: {}", e)))?;
+        let content = String::from_utf8(data)
+            .map_err(|e| RestError::Internal(format!("Invalid UTF-8: {}", e)))?;
 
         Ok(Json(FsReadResponse { content }))
     }
@@ -160,10 +168,16 @@ impl CompatFsHandlers {
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&q.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", q.path)))?;
+        let plugin =
+            plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", q.path)))?;
 
         let _bytes = plugin
-            .write(&relative_path, body.content.into_bytes(), 0, evif_core::WriteFlags::TRUNCATE)
+            .write(
+                &relative_path,
+                body.content.into_bytes(),
+                0,
+                evif_core::WriteFlags::TRUNCATE,
+            )
             .await
             .map_err(|e| RestError::Internal(e.to_string()))?;
 
@@ -187,7 +201,8 @@ impl CompatFsHandlers {
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&body.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", body.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", body.path)))?;
 
         plugin
             .create(&relative_path, 0o644)
@@ -197,7 +212,10 @@ impl CompatFsHandlers {
         Ok(Json(serde_json::json!({ "ok": true })))
     }
 
-    pub async fn delete(State(state): State<AppState>, Query(q): Query<FsQuery>) -> RestResult<Json<serde_json::Value>> {
+    pub async fn delete(
+        State(state): State<AppState>,
+        Query(q): Query<FsQuery>,
+    ) -> RestResult<Json<serde_json::Value>> {
         let plugin = state
             .mount_table
             .lookup(&q.path)
@@ -212,4 +230,3 @@ impl CompatFsHandlers {
         Ok(Json(serde_json::json!({ "ok": true })))
     }
 }
-

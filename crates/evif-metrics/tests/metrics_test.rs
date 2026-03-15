@@ -75,12 +75,7 @@ async fn test_histogram_registration() {
     let registry = PrometheusMetricsRegistry::new().unwrap();
 
     let result = registry
-        .register_histogram(
-            "test_histogram",
-            "A test histogram",
-            &["operation"],
-            None,
-        )
+        .register_histogram("test_histogram", "A test histogram", &["operation"], None)
         .await;
     assert!(result.is_ok());
 }

@@ -14,7 +14,7 @@ pub enum ConfigParamType {
     Bool,
     Int,
     Float64,
-    Size,   // 支持 "512KB", "1MB", "2GB"
+    Size, // 支持 "512KB", "1MB", "2GB"
     StringList,
 }
 
@@ -110,11 +110,9 @@ impl ConfigValidator {
     /// ```
     pub fn require_int(config: &HashMap<String, Value>, key: &str) -> EvifResult<i64> {
         match config.get(key) {
-            Some(Value::Number(n)) => {
-                n.as_i64().ok_or_else(|| {
-                    EvifError::Configuration(format!("{} must be an integer", key))
-                })
-            }
+            Some(Value::Number(n)) => n
+                .as_i64()
+                .ok_or_else(|| EvifError::Configuration(format!("{} must be an integer", key))),
             Some(_) => Err(EvifError::Configuration(format!(
                 "{} must be an integer",
                 key
@@ -234,9 +232,9 @@ impl ConfigValidator {
 
         // 纯数字视为字节
         if size_str.chars().all(|c| c.is_ascii_digit()) {
-            return size_str
-                .parse::<i64>()
-                .map_err(|_| EvifError::Configuration(format!("Invalid size number: {}", size_str)));
+            return size_str.parse::<i64>().map_err(|_| {
+                EvifError::Configuration(format!("Invalid size number: {}", size_str))
+            });
         }
 
         // 找到数字和单位的分界点
@@ -249,11 +247,9 @@ impl ConfigValidator {
         let number_str = &size_str[..split_idx];
         let unit = &size_str[split_idx..];
 
-        let number: i64 = number_str
-            .parse()
-            .map_err(|_| {
-                EvifError::Configuration(format!("Invalid size number: {}", number_str))
-            })?;
+        let number: i64 = number_str.parse().map_err(|_| {
+            EvifError::Configuration(format!("Invalid size number: {}", number_str))
+        })?;
 
         let multiplier = match unit {
             "B" | "BYTE" | "BYTES" => 1,
@@ -274,19 +270,13 @@ impl ConfigValidator {
     }
 
     /// 验证并解析大小字段
-    pub fn parse_size_field(
-        config: &HashMap<String, Value>,
-        key: &str,
-    ) -> EvifResult<i64> {
+    pub fn parse_size_field(config: &HashMap<String, Value>, key: &str) -> EvifResult<i64> {
         let size_str = Self::require_string(config, key)?;
         Self::parse_size(&size_str)
     }
 
     /// 获取大小字段（可选）
-    pub fn get_size_field(
-        config: &HashMap<String, Value>,
-        key: &str,
-    ) -> EvifResult<Option<i64>> {
+    pub fn get_size_field(config: &HashMap<String, Value>, key: &str) -> EvifResult<Option<i64>> {
         match Self::get_string(config, key) {
             Some(s) => Ok(Some(Self::parse_size(&s)?)),
             None => Ok(None),
@@ -306,16 +296,10 @@ mod tests {
         config.insert("port".to_string(), json!(8080));
 
         // 应该通过
-        assert!(ConfigValidator::validate_only_known_keys(
-            &config,
-            &["host", "port"]
-        ).is_ok());
+        assert!(ConfigValidator::validate_only_known_keys(&config, &["host", "port"]).is_ok());
 
         // 应该失败（未知键）
-        assert!(ConfigValidator::validate_only_known_keys(
-            &config,
-            &["host"]
-        ).is_err());
+        assert!(ConfigValidator::validate_only_known_keys(&config, &["host"]).is_err());
     }
 
     #[test]
@@ -341,10 +325,7 @@ mod tests {
         let mut config = HashMap::new();
         config.insert("count".to_string(), json!(42));
 
-        assert_eq!(
-            ConfigValidator::require_int(&config, "count").unwrap(),
-            42
-        );
+        assert_eq!(ConfigValidator::require_int(&config, "count").unwrap(), 42);
 
         // 缺失字段
         assert!(ConfigValidator::require_int(&config, "missing").is_err());
@@ -367,7 +348,10 @@ mod tests {
         assert_eq!(ConfigValidator::parse_size("1024").unwrap(), 1024);
         assert_eq!(ConfigValidator::parse_size("1KB").unwrap(), 1024);
         assert_eq!(ConfigValidator::parse_size("1MB").unwrap(), 1024 * 1024);
-        assert_eq!(ConfigValidator::parse_size("2GB").unwrap(), 2 * 1024 * 1024 * 1024);
+        assert_eq!(
+            ConfigValidator::parse_size("2GB").unwrap(),
+            2 * 1024 * 1024 * 1024
+        );
 
         // 大小写不敏感
         assert_eq!(ConfigValidator::parse_size("1kb").unwrap(), 1024);

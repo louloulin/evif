@@ -5,9 +5,9 @@
 
 use crate::dynamic_loader::PluginInfo;
 use crate::error::{EvifError, EvifResult};
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 
 /// 插件生命周期状态
@@ -225,7 +225,10 @@ impl PluginRegistry {
     /// 获取活跃插件数量
     pub fn active_count(&self) -> usize {
         let plugins = self.plugins.read().unwrap();
-        plugins.values().filter(|p| p.state == PluginState::Active).count()
+        plugins
+            .values()
+            .filter(|p| p.state == PluginState::Active)
+            .count()
     }
 
     /// 获取总插件数量
@@ -271,6 +274,9 @@ mod tests {
     fn test_plugin_state_display() {
         assert_eq!(PluginState::Loading.to_string(), "loading");
         assert_eq!(PluginState::Active.to_string(), "active");
-        assert_eq!(PluginState::Error("test".to_string()).to_string(), "error: test");
+        assert_eq!(
+            PluginState::Error("test".to_string()).to_string(),
+            "error: test"
+        );
     }
 }

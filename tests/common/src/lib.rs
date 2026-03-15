@@ -54,9 +54,7 @@ pub fn cli_exit_code(output: &Output) -> Option<i32> {
 
 /// Create a temporary directory for testing
 pub fn create_temp_dir(prefix: &str) -> std::io::Result<tempfile::TempDir> {
-    Ok(tempfile::Builder::new()
-        .prefix(prefix)
-        .tempdir()?)
+    Ok(tempfile::Builder::new().prefix(prefix).tempdir()?)
 }
 
 /// Cleanup function for test environment
@@ -80,8 +78,7 @@ pub fn build_cli() -> std::io::Result<Output> {
 
 /// Get the CLI binary path
 pub fn cli_bin_path() -> PathBuf {
-    workspace_root()
-        .join("target/debug/evif")
+    workspace_root().join("target/debug/evif")
 }
 
 /// Start the REST server for testing
@@ -143,7 +140,8 @@ pub fn api_get(port: u16, path: &str) -> Result<String, String> {
 pub fn api_post(port: u16, path: &str, body: &str) -> Result<String, String> {
     let url = format!("http://localhost:{}{}", port, path);
     let client = reqwest::blocking::Client::new();
-    client.post(&url)
+    client
+        .post(&url)
         .body(body.to_string())
         .header("Content-Type", "application/json")
         .send()
@@ -156,7 +154,8 @@ pub fn api_post(port: u16, path: &str, body: &str) -> Result<String, String> {
 pub fn api_delete(port: u16, path: &str) -> Result<String, String> {
     let url = format!("http://localhost:{}{}", port, path);
     let client = reqwest::blocking::Client::new();
-    client.delete(&url)
+    client
+        .delete(&url)
         .send()
         .map_err(|e| e.to_string())?
         .text()
@@ -169,7 +168,9 @@ pub fn wait_for_server(port: u16, max_secs: u64) -> bool {
     while start.elapsed().as_secs() < max_secs {
         if std::net::TcpListener::bind(format!("127.0.0.1:{}", port)).is_err() {
             // Port is in use, server might be running
-            if let Ok(response) = reqwest::blocking::get(format!("http://localhost:{}/health", port)) {
+            if let Ok(response) =
+                reqwest::blocking::get(format!("http://localhost:{}/health", port))
+            {
                 if response.status().is_success() {
                     return true;
                 }
@@ -214,7 +215,8 @@ pub mod test_data {
 #[macro_export]
 macro_rules! assert_cli_success {
     ($output:expr) => {
-        assert!($output.status.success(),
+        assert!(
+            $output.status.success(),
             "CLI command failed with exit code: {:?}\nstdout: {}\nstderr: {}",
             $output.status.code(),
             String::from_utf8_lossy(&$output.stdout),
@@ -226,7 +228,8 @@ macro_rules! assert_cli_success {
 #[macro_export]
 macro_rules! assert_cli_failure {
     ($output:expr) => {
-        assert!(!$output.status.success(),
+        assert!(
+            !$output.status.success(),
             "CLI command should have failed but succeeded"
         )
     };
@@ -236,9 +239,11 @@ macro_rules! assert_cli_failure {
 macro_rules! assert_output_contains {
     ($output:expr, $text:expr) => {
         let stdout = String::from_utf8_lossy(&$output.stdout);
-        assert!(stdout.contains($text),
+        assert!(
+            stdout.contains($text),
             "Output should contain '{}', but got: {}",
-            $text, stdout
+            $text,
+            stdout
         )
     };
 }
@@ -254,9 +259,11 @@ macro_rules! assert_api_success {
 macro_rules! assert_api_contains {
     ($result:expr, $text:expr) => {
         let content = $result.unwrap();
-        assert!(content.contains($text),
+        assert!(
+            content.contains($text),
             "API response should contain '{}', but got: {}",
-            $text, content
+            $text,
+            content
         )
     };
 }

@@ -9,10 +9,14 @@
 // - GET /api/v1/batch/operations - 列出所有操作
 // - DELETE /api/v1/batch/operation/<id> - 取消操作
 
-use axum::{extract::{State, Path}, response::IntoResponse, Json, Router};
+use axum::{
+    extract::{Path, State},
+    response::IntoResponse,
+    Json, Router,
+};
 use evif_core::{
-    BatchExecutor, BatchCopyRequest, BatchDeleteRequest, BatchProgress, BatchResult,
-    EvifResult, RadixMountTable
+    BatchCopyRequest, BatchDeleteRequest, BatchExecutor, BatchProgress, BatchResult, EvifResult,
+    RadixMountTable,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -260,7 +264,11 @@ pub async fn handle_batch_copy(
             let executor = BatchExecutor::new(plugin)
                 .with_concurrency(copy_req.concurrency)
                 .with_progress(Box::new(move |progress: BatchProgress| {
-                    manager_cb.update_progress(&op_id_cb, progress.percent, progress.current_file.clone());
+                    manager_cb.update_progress(
+                        &op_id_cb,
+                        progress.percent,
+                        progress.current_file.clone(),
+                    );
                     if progress.percent >= 100.0 {
                         manager_cb.mark_completed(&op_id_cb, None);
                     }
@@ -328,7 +336,11 @@ pub async fn handle_batch_delete(
             let executor = BatchExecutor::new(plugin)
                 .with_concurrency(delete_req.concurrency)
                 .with_progress(Box::new(move |progress: BatchProgress| {
-                    manager_cb.update_progress(&op_id_cb, progress.percent, progress.current_file.clone());
+                    manager_cb.update_progress(
+                        &op_id_cb,
+                        progress.percent,
+                        progress.current_file.clone(),
+                    );
                     if progress.percent >= 100.0 {
                         manager_cb.mark_completed(&op_id_cb, None);
                     }
@@ -381,20 +393,20 @@ pub async fn get_batch_progress(
         None => Json(serde_json::json!({
             "error": "Operation not found",
             "operation_id": operation_id
-        })).into_response(),
+        }))
+        .into_response(),
     }
 }
 
 /// 列出所有批量操作
-pub async fn list_batch_operations(
-    State(state): State<BatchState>,
-) -> impl IntoResponse {
+pub async fn list_batch_operations(State(state): State<BatchState>) -> impl IntoResponse {
     let manager = &state.manager;
     let operations = manager.list_operations();
     Json(serde_json::json!({
         "operations": operations,
         "count": operations.len()
-    })).into_response()
+    }))
+    .into_response()
 }
 
 /// 取消批量操作
@@ -407,12 +419,14 @@ pub async fn cancel_batch_operation(
         Json(serde_json::json!({
             "message": "Operation cancelled",
             "operation_id": operation_id
-        })).into_response()
+        }))
+        .into_response()
     } else {
         Json(serde_json::json!({
             "error": "Operation not found",
             "operation_id": operation_id
-        })).into_response()
+        }))
+        .into_response()
     }
 }
 
@@ -421,13 +435,28 @@ pub fn create_batch_routes(
     manager: BatchOperationManager,
     mount_table: Arc<RadixMountTable>,
 ) -> Router {
-    let state = BatchState { manager, mount_table };
+    let state = BatchState {
+        manager,
+        mount_table,
+    };
     Router::new()
         // ============== 批量操作 ==============
         .route("/api/v1/batch/copy", axum::routing::post(handle_batch_copy))
-        .route("/api/v1/batch/delete", axum::routing::post(handle_batch_delete))
-        .route("/api/v1/batch/progress/:id", axum::routing::get(get_batch_progress))
-        .route("/api/v1/batch/operations", axum::routing::get(list_batch_operations))
-        .route("/api/v1/batch/operation/:id", axum::routing::delete(cancel_batch_operation))
+        .route(
+            "/api/v1/batch/delete",
+            axum::routing::post(handle_batch_delete),
+        )
+        .route(
+            "/api/v1/batch/progress/:id",
+            axum::routing::get(get_batch_progress),
+        )
+        .route(
+            "/api/v1/batch/operations",
+            axum::routing::get(list_batch_operations),
+        )
+        .route(
+            "/api/v1/batch/operation/:id",
+            axum::routing::delete(cancel_batch_operation),
+        )
         .with_state(state)
 }

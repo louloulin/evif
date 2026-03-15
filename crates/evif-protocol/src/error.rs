@@ -18,22 +18,13 @@ pub enum ProtocolError {
     DeserializationError(String),
 
     /// 版本不匹配
-    VersionMismatch {
-        expected: u32,
-        actual: u32,
-    },
+    VersionMismatch { expected: u32, actual: u32 },
 
     /// 消息过大
-    MessageTooLarge {
-        size: usize,
-        max_size: usize,
-    },
+    MessageTooLarge { size: usize, max_size: usize },
 
     /// 无效的魔数
-    InvalidMagic {
-        expected: Vec<u8>,
-        actual: Vec<u8>,
-    },
+    InvalidMagic { expected: Vec<u8>, actual: Vec<u8> },
 
     /// 超时
     Timeout,

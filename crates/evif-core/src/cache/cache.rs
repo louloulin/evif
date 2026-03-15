@@ -1,6 +1,6 @@
 // EVIF通用缓存实现 - 使用moka
 
-use super::{Cache, CacheStats, CacheKey};
+use super::{Cache, CacheKey, CacheStats};
 use async_trait::async_trait;
 use moka::future::Cache as MokaCache;
 use serde::{Deserialize, Serialize};
@@ -128,7 +128,7 @@ where
     async fn stats(&self) -> CacheStats {
         // moka缓存不直接提供hit/miss计数，使用entry_count和weighted_size
         CacheStats {
-            hits: 0,  // moka不直接支持
+            hits: 0, // moka不直接支持
             misses: 0,
             total_size: self.inner.weighted_size(),
             entry_count: self.inner.entry_count(),

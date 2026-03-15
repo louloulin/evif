@@ -3,20 +3,21 @@
 use crate::error::GrpcError;
 use crate::evif;
 use crate::evif::evif_service_server::EvifService;
-use crate::{GetNodeRequest, GetNodeResponse, PutNodeRequest, PutNodeResponse,
-               DeleteNodeRequest, DeleteNodeResponse, BatchGetNodesRequest, BatchPutNodesResponse,
-               QueryRequest, NodeResponse, ReadFileRequest, WriteFileResponse,
-               StatsRequest, StatsResponse, HealthRequest, HealthResponse,
-               DataChunk, Value, value};
-use tonic::{Request, Response, Status, Streaming};
-use evif_graph::{Graph, Node, NodeType, Attribute};
+use crate::{
+    value, BatchGetNodesRequest, BatchPutNodesResponse, DataChunk, DeleteNodeRequest,
+    DeleteNodeResponse, GetNodeRequest, GetNodeResponse, HealthRequest, HealthResponse,
+    NodeResponse, PutNodeRequest, PutNodeResponse, QueryRequest, ReadFileRequest, StatsRequest,
+    StatsResponse, Value, WriteFileResponse,
+};
 use evif_auth::AuthManager;
-use std::sync::Arc;
+use evif_graph::{Attribute, Graph, Node, NodeType};
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
-use tokio::sync::mpsc;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tonic::{Request, Response, Status, Streaming};
 use uuid::Uuid;
 
 /// 服务器配置
@@ -105,45 +106,69 @@ impl EvifServer {
     pub fn graph_node_to_proto(&self, node: &Node) -> evif::Node {
         let mut metadata = HashMap::new();
         metadata.insert("name".to_string(), node.name.clone());
-        metadata.insert("permissions".to_string(), node.metadata.permissions.to_string());
+        metadata.insert(
+            "permissions".to_string(),
+            node.metadata.permissions.to_string(),
+        );
 
         let mut attributes = HashMap::new();
         for (k, v) in &node.attributes {
             match v {
                 Attribute::String(s) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::StringValue(s.clone())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::StringValue(s.clone())),
+                        },
+                    );
                 }
                 Attribute::Integer(i) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::IntValue(*i)),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::IntValue(*i)),
+                        },
+                    );
                 }
                 Attribute::Float(f) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::DoubleValue(*f)),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::DoubleValue(*f)),
+                        },
+                    );
                 }
                 Attribute::Boolean(b) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::BoolValue(*b)),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::BoolValue(*b)),
+                        },
+                    );
                 }
                 Attribute::Binary(data) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::BytesValue(data.clone())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::BytesValue(data.clone())),
+                        },
+                    );
                 }
                 Attribute::DateTime(dt) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::StringValue(dt.to_rfc3339())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::StringValue(dt.to_rfc3339())),
+                        },
+                    );
                 }
                 Attribute::Null => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::StringValue("null".to_string())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::StringValue("null".to_string())),
+                        },
+                    );
                 }
             }
         }
@@ -164,7 +189,9 @@ impl EvifServer {
         let id = Uuid::parse_str(&proto_node.id)
             .map_err(|_| GrpcError::Internal(format!("Invalid UUID: {}", proto_node.id)))?;
 
-        let name = proto_node.metadata.get("name")
+        let name = proto_node
+            .metadata
+            .get("name")
             .cloned()
             .unwrap_or_else(|| "unnamed".to_string());
 
@@ -200,7 +227,8 @@ impl Default for EvifServer {
 }
 
 /// 流式响应的类型别名
-type BatchGetNodesStream = Pin<Box<dyn tokio_stream::Stream<Item = Result<NodeResponse, Status>> + Send>>;
+type BatchGetNodesStream =
+    Pin<Box<dyn tokio_stream::Stream<Item = Result<NodeResponse, Status>> + Send>>;
 type QueryStream = Pin<Box<dyn tokio_stream::Stream<Item = Result<NodeResponse, Status>> + Send>>;
 type ReadFileStream = Pin<Box<dyn tokio_stream::Stream<Item = Result<DataChunk, Status>> + Send>>;
 
@@ -219,7 +247,9 @@ impl EvifService for EvifServer {
         match self.graph.get_node(&node_id) {
             Ok(node) => {
                 let proto_node = self.graph_node_to_proto(&node);
-                Ok(Response::new(GetNodeResponse { node: Some(proto_node) }))
+                Ok(Response::new(GetNodeResponse {
+                    node: Some(proto_node),
+                }))
             }
             Err(e) => Err(Status::not_found(format!("Node not found: {}", e))),
         }
@@ -232,14 +262,16 @@ impl EvifService for EvifServer {
     ) -> Result<Response<PutNodeResponse>, Status> {
         let req = request.into_inner();
 
-        let node = req.node.ok_or_else(|| {
-            Status::invalid_argument("Node is required")
-        })?;
+        let node = req
+            .node
+            .ok_or_else(|| Status::invalid_argument("Node is required"))?;
 
-        let graph_node = self.proto_node_to_graph(node.clone())
+        let graph_node = self
+            .proto_node_to_graph(node.clone())
             .map_err(|e| Status::internal(format!("Failed to convert node: {}", e)))?;
 
-        self.graph.add_node(graph_node.clone())
+        self.graph
+            .add_node(graph_node.clone())
             .map_err(|e| Status::internal(format!("Failed to add node: {}", e)))?;
 
         Ok(Response::new(PutNodeResponse {
@@ -257,7 +289,8 @@ impl EvifService for EvifServer {
         let node_id = Uuid::parse_str(&req.id)
             .map_err(|e| Status::invalid_argument(format!("Invalid node ID: {}", e)))?;
 
-        self.graph.remove_node(&node_id)
+        self.graph
+            .remove_node(&node_id)
             .map_err(|e| Status::internal(format!("Failed to delete node: {}", e)))?;
 
         Ok(Response::new(DeleteNodeResponse { success: true }))
@@ -280,9 +313,12 @@ impl EvifService for EvifServer {
                 let node_id = match Uuid::parse_str(&id) {
                     Ok(nid) => nid,
                     Err(e) => {
-                        let _ = tx.send(Err(Status::invalid_argument(format!(
-                            "Invalid node ID {}: {}", id, e
-                        )))).await;
+                        let _ = tx
+                            .send(Err(Status::invalid_argument(format!(
+                                "Invalid node ID {}: {}",
+                                id, e
+                            ))))
+                            .await;
                         continue;
                     }
                 };
@@ -295,9 +331,12 @@ impl EvifService for EvifServer {
                         let mut attributes = HashMap::new();
                         for (k, v) in &node.attributes {
                             if let Attribute::String(s) = v {
-                                attributes.insert(k.clone(), evif::Value {
-                                    value: Some(evif::value::Value::StringValue(s.clone())),
-                                });
+                                attributes.insert(
+                                    k.clone(),
+                                    evif::Value {
+                                        value: Some(evif::value::Value::StringValue(s.clone())),
+                                    },
+                                );
                             }
                         }
 
@@ -311,10 +350,16 @@ impl EvifService for EvifServer {
                             updated_at: node.metadata.modified_at.timestamp(),
                         };
 
-                        let _ = tx.send(Ok(NodeResponse { node: Some(proto_node) })).await;
+                        let _ = tx
+                            .send(Ok(NodeResponse {
+                                node: Some(proto_node),
+                            }))
+                            .await;
                     }
                     Err(e) => {
-                        let _ = tx.send(Err(Status::not_found(format!("Node not found: {}", e)))).await;
+                        let _ = tx
+                            .send(Err(Status::not_found(format!("Node not found: {}", e))))
+                            .await;
                     }
                 }
             }
@@ -347,7 +392,10 @@ impl EvifService for EvifServer {
                                 ids.push(node_id_str);
                             }
                             Err(e) => {
-                                return Err(Status::invalid_argument(format!("Invalid node ID: {}", e)));
+                                return Err(Status::invalid_argument(format!(
+                                    "Invalid node ID: {}",
+                                    e
+                                )));
                             }
                         }
                     }
@@ -359,10 +407,7 @@ impl EvifService for EvifServer {
         }
 
         let count = ids.len() as i32;
-        Ok(Response::new(BatchPutNodesResponse {
-            ids,
-            count,
-        }))
+        Ok(Response::new(BatchPutNodesResponse { ids, count }))
     }
 
     /// 查询节点 (流式响应)
@@ -393,9 +438,12 @@ impl EvifService for EvifServer {
                 let mut attributes = HashMap::new();
                 for (k, v) in &node.attributes {
                     if let Attribute::String(s) = v {
-                        attributes.insert(k.clone(), evif::Value {
-                            value: Some(evif::value::Value::StringValue(s.clone())),
-                        });
+                        attributes.insert(
+                            k.clone(),
+                            evif::Value {
+                                value: Some(evif::value::Value::StringValue(s.clone())),
+                            },
+                        );
                     }
                 }
 
@@ -409,7 +457,11 @@ impl EvifService for EvifServer {
                     updated_at: node.metadata.modified_at.timestamp(),
                 };
 
-                let _ = tx.send(Ok(NodeResponse { node: Some(proto_node) })).await;
+                let _ = tx
+                    .send(Ok(NodeResponse {
+                        node: Some(proto_node),
+                    }))
+                    .await;
             }
         });
 

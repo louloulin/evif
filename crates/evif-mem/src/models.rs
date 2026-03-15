@@ -355,7 +355,11 @@ impl UserScope {
     }
 
     /// Check if user has access to a resource
-    pub fn can_access(&self, resource_user_id: &Option<String>, resource_tenant_id: &Option<String>) -> bool {
+    pub fn can_access(
+        &self,
+        resource_user_id: &Option<String>,
+        resource_tenant_id: &Option<String>,
+    ) -> bool {
         // If no user_id on resource, it's public
         if resource_user_id.is_none() {
             return true;

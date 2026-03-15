@@ -183,7 +183,10 @@ mod tests {
     fn test_mount_options_parse() {
         assert_eq!(MountOptions::from_str("ro"), Some(MountOptions::ReadOnly));
         assert_eq!(MountOptions::from_str("rw"), Some(MountOptions::ReadWrite));
-        assert_eq!(MountOptions::from_str("allow_other"), Some(MountOptions::AllowOther));
+        assert_eq!(
+            MountOptions::from_str("allow_other"),
+            Some(MountOptions::AllowOther)
+        );
         assert_eq!(MountOptions::from_str("invalid"), None);
     }
 }

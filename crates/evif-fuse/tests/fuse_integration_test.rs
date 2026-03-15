@@ -28,9 +28,7 @@ mod fuse_integration_tests {
     #[test]
     fn test_fuse_filesystem_creation() {
         let rt = Runtime::new().unwrap();
-        let mount_table = rt.block_on(async {
-            create_test_mount_table().await
-        });
+        let mount_table = rt.block_on(async { create_test_mount_table().await });
 
         let config = FuseMountConfig {
             mount_point: PathBuf::from("/tmp/evif-test"),
@@ -41,11 +39,7 @@ mod fuse_integration_tests {
             cache_timeout: 60,
         };
 
-        let result = EvifFuseFuse::new(
-            mount_table,
-            PathBuf::from("/"),
-            &config
-        );
+        let result = EvifFuseFuse::new(mount_table, PathBuf::from("/"), &config);
 
         assert!(result.is_ok());
         let fs = result.unwrap();
@@ -55,9 +49,7 @@ mod fuse_integration_tests {
     #[test]
     fn test_fuse_readwrite_mount() {
         let rt = Runtime::new().unwrap();
-        let mount_table = rt.block_on(async {
-            create_test_mount_table().await
-        });
+        let mount_table = rt.block_on(async { create_test_mount_table().await });
 
         let config = FuseMountConfig {
             mount_point: PathBuf::from("/tmp/evif-test"),
@@ -68,11 +60,7 @@ mod fuse_integration_tests {
             cache_timeout: 60,
         };
 
-        let result = EvifFuseFuse::new(
-            mount_table,
-            PathBuf::from("/"),
-            &config
-        );
+        let result = EvifFuseFuse::new(mount_table, PathBuf::from("/"), &config);
 
         assert!(result.is_ok());
         let fs = result.unwrap();
@@ -117,10 +105,13 @@ mod fuse_integration_tests {
         let cache = DirCache::new(10);
 
         // 测试缓存命中
-        cache.put("/dir/".to_string(), vec![
-            DirEntry::new(10, "file1.txt".to_string(), false),
-            DirEntry::new(11, "file2.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir/".to_string(),
+            vec![
+                DirEntry::new(10, "file1.txt".to_string(), false),
+                DirEntry::new(11, "file2.txt".to_string(), false),
+            ],
+        );
 
         let entries = cache.get("/dir/");
         assert!(entries.is_some());
@@ -133,9 +124,10 @@ mod fuse_integration_tests {
     fn test_dir_cache_invalidate() {
         let cache = DirCache::new(10);
 
-        cache.put("/dir/".to_string(), vec![
-            DirEntry::new(10, "file.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir/".to_string(),
+            vec![DirEntry::new(10, "file.txt".to_string(), false)],
+        );
 
         cache.invalidate("/dir/");
 
@@ -147,9 +139,10 @@ mod fuse_integration_tests {
     fn test_dir_cache_stats() {
         let cache = DirCache::new(10);
 
-        cache.put("/dir/".to_string(), vec![
-            DirEntry::new(10, "file.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir/".to_string(),
+            vec![DirEntry::new(10, "file.txt".to_string(), false)],
+        );
 
         let (current, max, ttl) = cache.stats();
         assert_eq!(current, 1);
@@ -198,16 +191,17 @@ mod fuse_integration_tests {
 
         assert_eq!(MountOptions::from_str("ro"), Some(MountOptions::ReadOnly));
         assert_eq!(MountOptions::from_str("rw"), Some(MountOptions::ReadWrite));
-        assert_eq!(MountOptions::from_str("allow_other"), Some(MountOptions::AllowOther));
+        assert_eq!(
+            MountOptions::from_str("allow_other"),
+            Some(MountOptions::AllowOther)
+        );
         assert_eq!(MountOptions::from_str("invalid"), None);
     }
 }
 
 #[cfg(test)]
 mod fuse_functional_tests {
-    use evif_fuse::{
-        EvifFuseFuse, FuseMountConfig, RadixMountTable,
-    };
+    use evif_fuse::{EvifFuseFuse, FuseMountConfig, RadixMountTable};
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tokio::runtime::Runtime;
@@ -227,11 +221,7 @@ mod fuse_functional_tests {
             cache_timeout: 60,
         };
 
-        let fs = EvifFuseFuse::new(
-            mount_table,
-            PathBuf::from("/"),
-            &config
-        ).unwrap();
+        let fs = EvifFuseFuse::new(mount_table, PathBuf::from("/"), &config).unwrap();
 
         // 测试根路径解析
         let result = fs.resolve_path(1, Path::new("/"));
@@ -251,11 +241,7 @@ mod fuse_functional_tests {
         let mount_table = Arc::new(RadixMountTable::new());
 
         let config = FuseMountConfig::default();
-        let fs = EvifFuseFuse::new(
-            mount_table,
-            PathBuf::from("/"),
-            &config
-        ).unwrap();
+        let fs = EvifFuseFuse::new(mount_table, PathBuf::from("/"), &config).unwrap();
 
         // 测试句柄分配
         let ino = 10;
@@ -281,11 +267,7 @@ mod fuse_functional_tests {
         let mount_table = Arc::new(RadixMountTable::new());
 
         let config = FuseMountConfig::default();
-        let fs = EvifFuseFuse::new(
-            mount_table,
-            PathBuf::from("/"),
-            &config
-        ).unwrap();
+        let fs = EvifFuseFuse::new(mount_table, PathBuf::from("/"), &config).unwrap();
 
         let (blocks, bfree, files, ffree) = fs.get_stats();
         assert!(blocks > 0);

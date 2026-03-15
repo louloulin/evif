@@ -1,10 +1,10 @@
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use crate::{GraphError, NodeId, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::{NodeId, Result, GraphError};
 
 /// 边唯一标识符
 pub type EdgeId = Uuid;

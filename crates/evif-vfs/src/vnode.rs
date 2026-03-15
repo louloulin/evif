@@ -83,12 +83,15 @@ impl VNode {
 
     /// 增加引用计数
     pub fn inc_ref(&self) {
-        self.ref_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.ref_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// 减少引用计数
     pub fn dec_ref(&self) -> usize {
-        self.ref_count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed).saturating_sub(1)
+        self.ref_count
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+            .saturating_sub(1)
     }
 
     /// 获取引用计数
@@ -110,10 +113,13 @@ impl VNode {
         node.metadata.permissions = data.mode;
 
         // 转换时间戳回 DateTime
-        use chrono::{DateTime, Utc, TimeZone};
-        node.metadata.accessed_at = DateTime::<Utc>::from_timestamp(data.atime as i64, 0).unwrap_or_else(|| Utc::now());
-        node.metadata.modified_at = DateTime::<Utc>::from_timestamp(data.mtime as i64, 0).unwrap_or_else(|| Utc::now());
-        node.metadata.created_at = DateTime::<Utc>::from_timestamp(data.ctime as i64, 0).unwrap_or_else(|| Utc::now());
+        use chrono::{DateTime, TimeZone, Utc};
+        node.metadata.accessed_at =
+            DateTime::<Utc>::from_timestamp(data.atime as i64, 0).unwrap_or_else(|| Utc::now());
+        node.metadata.modified_at =
+            DateTime::<Utc>::from_timestamp(data.mtime as i64, 0).unwrap_or_else(|| Utc::now());
+        node.metadata.created_at =
+            DateTime::<Utc>::from_timestamp(data.ctime as i64, 0).unwrap_or_else(|| Utc::now());
 
         if let Some(content) = &data.content {
             node.content = Some(content.clone());
@@ -263,9 +269,7 @@ mod tests {
 
     #[test]
     fn test_vnode_ref_count() {
-        let vnode = VNodeBuilder::new()
-            .with_name("test.txt")
-            .build();
+        let vnode = VNodeBuilder::new().with_name("test.txt").build();
 
         vnode.inc_ref();
         assert_eq!(vnode.ref_count(), 2);
@@ -288,13 +292,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_vnode_update() {
-        let vnode = VNodeBuilder::new()
-            .with_name("test.txt")
-            .build();
+        let vnode = VNodeBuilder::new().with_name("test.txt").build();
 
-        vnode.update_data(|data| {
-            data.size = 4096;
-        }).await.unwrap();
+        vnode
+            .update_data(|data| {
+                data.size = 4096;
+            })
+            .await
+            .unwrap();
 
         let data = vnode.data().await;
         assert_eq!(data.size, 4096);

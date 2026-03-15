@@ -9,13 +9,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::Duration;
+use tokio::sync::RwLock;
 
-use evif_core::{
-    RadixMountTable, OpenFlags, GlobalHandleManager,
-    EvifResult, EvifError,
-};
+use evif_core::{EvifError, EvifResult, GlobalHandleManager, OpenFlags, RadixMountTable};
 
 /// Handle状态（包含全局句柄管理器）
 #[derive(Clone)]
@@ -28,9 +25,9 @@ pub struct HandleState {
 #[derive(Debug, Deserialize)]
 pub struct OpenHandleRequest {
     pub path: String,
-    pub flags: String,  // "r", "w", "rw", "rw-create", etc.
+    pub flags: String, // "r", "w", "rw", "rw-create", etc.
     pub mode: Option<u32>,
-    pub lease: Option<u64>,  // 租约时间（秒）
+    pub lease: Option<u64>, // 租约时间（秒）
 }
 
 /// 读取请求
@@ -42,7 +39,7 @@ pub struct ReadRequest {
 /// 写入请求
 #[derive(Debug, Deserialize)]
 pub struct WriteRequest {
-    pub data: String,  // Base64编码的数据
+    pub data: String, // Base64编码的数据
     pub offset: Option<u64>,
 }
 
@@ -50,13 +47,13 @@ pub struct WriteRequest {
 #[derive(Debug, Deserialize)]
 pub struct SeekRequest {
     pub offset: i64,
-    pub whence: String,  // "set", "cur", "end"
+    pub whence: String, // "set", "cur", "end"
 }
 
 /// 续租请求
 #[derive(Debug, Deserialize)]
 pub struct RenewRequest {
-    pub lease: u64,  // 租约时间（秒）
+    pub lease: u64, // 租约时间（秒）
 }
 
 /// 打开句柄响应
@@ -65,13 +62,13 @@ pub struct OpenHandleResponse {
     pub handle_id: i64,
     pub path: String,
     pub flags: String,
-    pub lease_expires_at: Option<i64>,  // Unix timestamp
+    pub lease_expires_at: Option<i64>, // Unix timestamp
 }
 
 /// 读取响应
 #[derive(Debug, Serialize)]
 pub struct ReadResponse {
-    pub data: String,  // Base64编码
+    pub data: String, // Base64编码
     pub bytes_read: usize,
     pub eof: bool,
 }
@@ -216,18 +213,23 @@ impl HandleHandlers {
         Path(id): Path<i64>,
     ) -> Result<Json<HandleInfoResponse>, RestError> {
         // 获取句柄信息 (id, mount_path, full_path, expires_at)
-        let (_hid, mount_path, full_path, expires_at) = state
-            .handle_manager
-            .get_handle(id)
-            .await
-            .map_err(|e| RestError::NotFound(e.to_string()))?;
+        let (_hid, mount_path, full_path, expires_at) =
+            state
+                .handle_manager
+                .get_handle(id)
+                .await
+                .map_err(|e| RestError::NotFound(e.to_string()))?;
 
         Ok(Json(HandleInfoResponse {
             handle_id: id,
             path: full_path,
-            flags: "N/A".to_string(),  // HandleInfo doesn't store flags
-            plugin_id: mount_path,  // Using mount_path as plugin_id
-            lease_expires_at: Some(expires_at.duration_since(std::time::Instant::now()).as_secs() as i64),
+            flags: "N/A".to_string(), // HandleInfo doesn't store flags
+            plugin_id: mount_path,    // Using mount_path as plugin_id
+            lease_expires_at: Some(
+                expires_at
+                    .duration_since(std::time::Instant::now())
+                    .as_secs() as i64,
+            ),
         }))
     }
 
@@ -246,11 +248,10 @@ impl HandleHandlers {
             .map_err(|e| RestError::NotFound(e.to_string()))?;
 
         // 使用mount_table的lookup查找插件
-        let plugin = state
-            .mount_table
-            .lookup(&mount_path)
-            .await
-            .ok_or_else(|| RestError::NotFound(format!("Plugin not found at: {}", mount_path)))?;
+        let plugin =
+            state.mount_table.lookup(&mount_path).await.ok_or_else(|| {
+                RestError::NotFound(format!("Plugin not found at: {}", mount_path))
+            })?;
 
         // 读取文件数据
         let size = req.size.unwrap_or(4096) as u64;
@@ -280,7 +281,8 @@ impl HandleHandlers {
     ) -> Result<Json<WriteResponse>, RestError> {
         // 解码Base64数据
         use base64::Engine;
-        let data = base64::engine::general_purpose::STANDARD.decode(&req.data)
+        let data = base64::engine::general_purpose::STANDARD
+            .decode(&req.data)
             .map_err(|e| RestError::Internal(format!("Invalid base64: {}", e)))?;
 
         // 获取句柄信息 (hid, mount_path, full_path, expires_at)
@@ -291,10 +293,10 @@ impl HandleHandlers {
             .map_err(|e| RestError::NotFound(e.to_string()))?;
 
         // 使用mount_path查找插件
-        let plugin = state
-            .mount_table
-            .lookup(&mount_path).await
-            .ok_or_else(|| RestError::NotFound(format!("Plugin not found at: {}", mount_path)))?;
+        let plugin =
+            state.mount_table.lookup(&mount_path).await.ok_or_else(|| {
+                RestError::NotFound(format!("Plugin not found at: {}", mount_path))
+            })?;
 
         // 转换为HandleFS
         let handle_fs = plugin
@@ -340,10 +342,10 @@ impl HandleHandlers {
             .map_err(|e| RestError::NotFound(e.to_string()))?;
 
         // 使用mount_path查找插件
-        let plugin = state
-            .mount_table
-            .lookup(&mount_path).await
-            .ok_or_else(|| RestError::NotFound(format!("Plugin not found at: {}", mount_path)))?;
+        let plugin =
+            state.mount_table.lookup(&mount_path).await.ok_or_else(|| {
+                RestError::NotFound(format!("Plugin not found at: {}", mount_path))
+            })?;
 
         // 转换为HandleFS
         let handle_fs = plugin
@@ -379,10 +381,10 @@ impl HandleHandlers {
             .map_err(|e| RestError::NotFound(e.to_string()))?;
 
         // 使用mount_path查找插件
-        let plugin = state
-            .mount_table
-            .lookup(&mount_path).await
-            .ok_or_else(|| RestError::NotFound(format!("Plugin not found at: {}", mount_path)))?;
+        let plugin =
+            state.mount_table.lookup(&mount_path).await.ok_or_else(|| {
+                RestError::NotFound(format!("Plugin not found at: {}", mount_path))
+            })?;
 
         // 转换为HandleFS
         let handle_fs = plugin
@@ -418,10 +420,10 @@ impl HandleHandlers {
             .map_err(|e| RestError::NotFound(e.to_string()))?;
 
         // 使用mount_path查找插件
-        let plugin = state
-            .mount_table
-            .lookup(&mount_path).await
-            .ok_or_else(|| RestError::NotFound(format!("Plugin not found at: {}", mount_path)))?;
+        let plugin =
+            state.mount_table.lookup(&mount_path).await.ok_or_else(|| {
+                RestError::NotFound(format!("Plugin not found at: {}", mount_path))
+            })?;
 
         // 转换为HandleFS
         let handle_fs = plugin
@@ -484,7 +486,8 @@ impl HandleHandlers {
                         std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
-                            .as_secs() as i64 + 3600 // 默认1小时过期
+                            .as_secs() as i64
+                            + 3600, // 默认1小时过期
                     ),
                 });
             }

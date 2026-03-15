@@ -1,8 +1,8 @@
 // 元数据缓存 - 用于缓存文件/目录的元数据
 
 use super::{Cache, CacheConfig, CacheKey, CacheStats};
-use async_trait::async_trait;
 use crate::FileInfo;
+use async_trait::async_trait;
 use std::sync::Arc;
 
 /// 元数据缓存
@@ -20,7 +20,9 @@ impl MetadataCache {
     pub fn with_config(config: CacheConfig) -> Self {
         use super::cache::EvifCache;
         let cache = EvifCache::<CacheKey, FileInfo>::new("metadata".to_string(), config);
-        Self { cache: Arc::new(cache) }
+        Self {
+            cache: Arc::new(cache),
+        }
     }
 
     /// 获取文件元数据

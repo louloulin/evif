@@ -1,7 +1,7 @@
 // CLI 定义
 
-use clap::{Parser, Subcommand};
 use crate::commands::EvifCommand;
+use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(name = "evif")]
@@ -519,8 +519,14 @@ impl EvifCli {
             Commands::Cat { path } => {
                 command.cat(path.clone()).await?;
             }
-            Commands::Write { path, content, append } => {
-                command.write(path.clone(), content.clone().unwrap_or_default(), *append).await?;
+            Commands::Write {
+                path,
+                content,
+                append,
+            } => {
+                command
+                    .write(path.clone(), content.clone().unwrap_or_default(), *append)
+                    .await?;
             }
             Commands::Mkdir { path, parents } => {
                 command.mkdir(path.clone(), *parents).await?;
@@ -540,8 +546,14 @@ impl EvifCli {
             Commands::Health => {
                 command.health().await?;
             }
-            Commands::Grep { path, pattern, recursive } => {
-                command.grep(path.clone(), pattern.clone(), *recursive).await?;
+            Commands::Grep {
+                path,
+                pattern,
+                recursive,
+            } => {
+                command
+                    .grep(path.clone(), pattern.clone(), *recursive)
+                    .await?;
             }
             Commands::Digest { path, algorithm } => {
                 command.checksum(path.clone(), algorithm.clone()).await?;
@@ -567,15 +579,31 @@ impl EvifCli {
             Commands::Get { id } => {
                 command.get(id.clone()).await?;
             }
-            Commands::Create { node_type, name, parent } => {
-                command.create(node_type.clone(), name.clone(), parent.clone()).await?;
+            Commands::Create {
+                node_type,
+                name,
+                parent,
+            } => {
+                command
+                    .create(node_type.clone(), name.clone(), parent.clone())
+                    .await?;
             }
             Commands::Delete { id } => {
                 command.delete(id.clone()).await?;
             }
-            Commands::Mount { mount_point, write, cache_size, cache_timeout } => {
-                let config = Some(format!("write={},cache_size={},cache_timeout={}", write, cache_size, cache_timeout));
-                command.mount("fuse".to_string(), mount_point.clone(), config).await?;
+            Commands::Mount {
+                mount_point,
+                write,
+                cache_size,
+                cache_timeout,
+            } => {
+                let config = Some(format!(
+                    "write={},cache_size={},cache_timeout={}",
+                    write, cache_size, cache_timeout
+                ));
+                command
+                    .mount("fuse".to_string(), mount_point.clone(), config)
+                    .await?;
             }
             Commands::Umount { mount_point } => {
                 command.unmount(mount_point.clone()).await?;
@@ -583,17 +611,33 @@ impl EvifCli {
             Commands::ListMounts => {
                 command.mounts().await?;
             }
-            Commands::MountPlugin { plugin, path, config } => {
-                command.mount(plugin.clone(), path.clone(), config.clone()).await?;
+            Commands::MountPlugin {
+                plugin,
+                path,
+                config,
+            } => {
+                command
+                    .mount(plugin.clone(), path.clone(), config.clone())
+                    .await?;
             }
             Commands::UnmountPlugin { path } => {
                 command.unmount(path.clone()).await?;
             }
-            Commands::Upload { local_path, remote_path } => {
-                command.upload(local_path.clone(), remote_path.clone()).await?;
+            Commands::Upload {
+                local_path,
+                remote_path,
+            } => {
+                command
+                    .upload(local_path.clone(), remote_path.clone())
+                    .await?;
             }
-            Commands::Download { remote_path, local_path } => {
-                command.download(remote_path.clone(), local_path.clone()).await?;
+            Commands::Download {
+                remote_path,
+                local_path,
+            } => {
+                command
+                    .download(remote_path.clone(), local_path.clone())
+                    .await?;
             }
             Commands::Echo { text } => {
                 command.echo(text.clone()).await?;
@@ -604,13 +648,25 @@ impl EvifCli {
             Commands::Pwd => {
                 command.pwd().await?;
             }
-            Commands::Sort { file, reverse, numeric, unique } => {
-                command.sort(file.clone(), *reverse, *numeric, *unique).await?;
+            Commands::Sort {
+                file,
+                reverse,
+                numeric,
+                unique,
+            } => {
+                command
+                    .sort(file.clone(), *reverse, *numeric, *unique)
+                    .await?;
             }
             Commands::Uniq { file, count } => {
                 command.uniq(file.clone(), *count).await?;
             }
-            Commands::Wc { file, lines, words, bytes } => {
+            Commands::Wc {
+                file,
+                lines,
+                words,
+                bytes,
+            } => {
                 command.wc(file.clone(), *lines, *words, *bytes).await?;
             }
             Commands::Date { format } => {
@@ -625,11 +681,32 @@ impl EvifCli {
             Commands::Du { path, summarize } => {
                 command.du(path.clone(), !*summarize).await?;
             }
-            Commands::Cut { file, bytes, chars, fields, delimiter } => {
-                command.cut(file.clone(), bytes.clone(), chars.clone(), fields.clone(), delimiter.clone()).await?;
+            Commands::Cut {
+                file,
+                bytes,
+                chars,
+                fields,
+                delimiter,
+            } => {
+                command
+                    .cut(
+                        file.clone(),
+                        bytes.clone(),
+                        chars.clone(),
+                        fields.clone(),
+                        delimiter.clone(),
+                    )
+                    .await?;
             }
-            Commands::Tr { file, from, to, delete } => {
-                command.tr_(file.clone(), from.clone(), to.clone(), *delete).await?;
+            Commands::Tr {
+                file,
+                from,
+                to,
+                delete,
+            } => {
+                command
+                    .tr_(file.clone(), from.clone(), to.clone(), *delete)
+                    .await?;
             }
             Commands::Base { file, decode } => {
                 command.base(file.clone(), *decode).await?;
@@ -655,8 +732,14 @@ impl EvifCli {
             Commands::Dirname { path } => {
                 command.dirname(path.clone()).await?;
             }
-            Commands::Ln { target, link_name, symbolic } => {
-                command.ln(target.clone(), link_name.clone(), *symbolic).await?;
+            Commands::Ln {
+                target,
+                link_name,
+                symbolic,
+            } => {
+                command
+                    .ln(target.clone(), link_name.clone(), *symbolic)
+                    .await?;
             }
             Commands::Readlink { path } => {
                 command.readlink(path.clone()).await?;
@@ -677,7 +760,9 @@ impl EvifCli {
                 command.split(file.clone(), lines.clone()).await?;
             }
             Commands::Find { path, name, type_ } => {
-                command.find(path.clone(), name.as_deref(), type_.as_deref()).await?;
+                command
+                    .find(path.clone(), name.as_deref(), type_.as_deref())
+                    .await?;
             }
             Commands::Locate { pattern } => {
                 command.locate(pattern.clone()).await?;

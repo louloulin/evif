@@ -4,9 +4,8 @@
 
 use evif_core::{EvifPlugin, WriteFlags};
 use evif_plugins::{
-    AliyunOssFsPlugin, AliyunOssConfig,
-    TencentCosFsPlugin, TencentCosConfig,
-    HuaweiObsFsPlugin, HuaweiObsConfig,
+    AliyunOssConfig, AliyunOssFsPlugin, HuaweiObsConfig, HuaweiObsFsPlugin, TencentCosConfig,
+    TencentCosFsPlugin,
 };
 
 #[tokio::main]
@@ -162,7 +161,14 @@ async fn run_china_cloud_tests<P: EvifPlugin>(
 
     // 测试 2: 写入文件
     println!("  ✅ 测试 2: 写入文件");
-    plugin.write(&test_path, b"Hello, China Cloud Storage!".to_vec(), -1, WriteFlags::empty()).await?;
+    plugin
+        .write(
+            &test_path,
+            b"Hello, China Cloud Storage!".to_vec(),
+            -1,
+            WriteFlags::empty(),
+        )
+        .await?;
     println!("     写入数据: 'Hello, 中国云存储!'");
 
     // 测试 3: 读取文件
@@ -186,7 +192,9 @@ async fn run_china_cloud_tests<P: EvifPlugin>(
 
     // 测试 6: 列出目录
     println!("  ✅ 测试 6: 列出目录");
-    let files = plugin.readdir(&format!("{}{}", test_prefix, "test-dir/")).await?;
+    let files = plugin
+        .readdir(&format!("{}{}", test_prefix, "test-dir/"))
+        .await?;
     println!("     目录 {} 包含 {} 个文件", dir_path, files.len());
 
     // 测试 7: 重命名文件

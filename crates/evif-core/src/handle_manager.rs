@@ -111,7 +111,7 @@ impl GlobalHandleManager {
         let handles = self.handles.read().await;
         if handles.len() >= self.max_handles {
             return Err(EvifError::Internal(
-                "Maximum handle limit reached".to_string()
+                "Maximum handle limit reached".to_string(),
             ));
         }
         drop(handles);
@@ -138,15 +138,30 @@ impl GlobalHandleManager {
     /// ```go
     /// info, ok := mfs.handleInfos[handleID]
     /// ```
-    pub async fn get_handle(&self, id: i64) -> EvifResult<(i64, String, String, std::time::Instant)> {
+    pub async fn get_handle(
+        &self,
+        id: i64,
+    ) -> EvifResult<(i64, String, String, std::time::Instant)> {
         let handles = self.handles.read().await;
 
-        handles.get(&id)
-            .map(|info| (info.id, info.mount_path.clone(), info.full_path.clone(), info.expires_at))
+        handles
+            .get(&id)
+            .map(|info| {
+                (
+                    info.id,
+                    info.mount_path.clone(),
+                    info.full_path.clone(),
+                    info.expires_at,
+                )
+            })
             .ok_or_else(|| EvifError::NotFound(format!("Handle: {}", id)))
     }
     /// 更新本地句柄
-    pub async fn update_local_handle(&self, id: i64, local_handle: Box<dyn FileHandle>) -> EvifResult<()> {
+    pub async fn update_local_handle(
+        &self,
+        id: i64,
+        local_handle: Box<dyn FileHandle>,
+    ) -> EvifResult<()> {
         let mut handles = self.handles.write().await;
 
         if let Some(info) = handles.get_mut(&id) {
@@ -166,7 +181,8 @@ impl GlobalHandleManager {
     pub async fn close_handle(&self, id: i64) -> EvifResult<()> {
         let mut handles = self.handles.write().await;
 
-        handles.remove(&id)
+        handles
+            .remove(&id)
             .ok_or_else(|| EvifError::NotFound(format!("Handle: {}", id)))?;
 
         Ok(())
@@ -182,7 +198,11 @@ impl GlobalHandleManager {
     /// ```go
     /// func (h *globalFileHandle) Renew(lease time.Duration) error
     /// ```
-    pub async fn renew_handle(&self, id: i64, lease: Option<std::time::Duration>) -> EvifResult<()> {
+    pub async fn renew_handle(
+        &self,
+        id: i64,
+        lease: Option<std::time::Duration>,
+    ) -> EvifResult<()> {
         let lease = lease.unwrap_or(self.default_lease);
 
         let mut handles = self.handles.write().await;
@@ -232,7 +252,10 @@ impl GlobalHandleManager {
     /// ```go
     /// go mfs.cleanupExpiredHandles()
     /// ```
-    pub fn spawn_cleanup_task(self: Arc<Self>, interval: std::time::Duration) -> tokio::task::JoinHandle<()> {
+    pub fn spawn_cleanup_task(
+        self: Arc<Self>,
+        interval: std::time::Duration,
+    ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
 
@@ -273,12 +296,10 @@ mod tests {
         let manager = GlobalHandleManager::new();
         let id = manager.allocate_id();
 
-        manager.register_handle(
-            id,
-            "/test".to_string(),
-            "/test/file.txt".to_string(),
-            None,
-        ).await.unwrap();
+        manager
+            .register_handle(id, "/test".to_string(), "/test/file.txt".to_string(), None)
+            .await
+            .unwrap();
 
         let (handle_id, mount_path, full_path, _expires_at) = manager.get_handle(id).await.unwrap();
         assert_eq!(handle_id, id);
@@ -291,12 +312,10 @@ mod tests {
         let manager = GlobalHandleManager::new();
         let id = manager.allocate_id();
 
-        manager.register_handle(
-            id,
-            "/test".to_string(),
-            "/test/file.txt".to_string(),
-            None,
-        ).await.unwrap();
+        manager
+            .register_handle(id, "/test".to_string(), "/test/file.txt".to_string(), None)
+            .await
+            .unwrap();
 
         manager.close_handle(id).await.unwrap();
 
@@ -308,17 +327,16 @@ mod tests {
         let manager = GlobalHandleManager::new();
         let id = manager.allocate_id();
 
-        manager.register_handle(
-            id,
-            "/test".to_string(),
-            "/test/file.txt".to_string(),
-            None,
-        ).await.unwrap();
+        manager
+            .register_handle(id, "/test".to_string(), "/test/file.txt".to_string(), None)
+            .await
+            .unwrap();
 
         let new_lease = std::time::Duration::from_secs(7200);
         manager.renew_handle(id, Some(new_lease)).await.unwrap();
 
-        let (_handle_id, _mount_path, _full_path, expires_at) = manager.get_handle(id).await.unwrap();
+        let (_handle_id, _mount_path, _full_path, expires_at) =
+            manager.get_handle(id).await.unwrap();
         assert!(expires_at > std::time::Instant::now());
     }
 }

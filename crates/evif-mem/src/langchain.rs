@@ -17,14 +17,14 @@
 //! let memory = EvifMemory::new(storage, EvifMemoryConfig::default());
 //! ```
 
+use crate::embedding::EmbeddingManager;
 use crate::error::MemError;
 use crate::models::MemoryItem;
 use crate::storage::MemoryStorage;
 use crate::vector::{SearchResult, VectorIndex};
-use crate::embedding::EmbeddingManager;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 /// Configuration for LangChain memory integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,13 +106,11 @@ pub struct EvifMemory {
 
 impl EvifMemory {
     /// Create a new EvifMemory instance
-    pub fn new(
-        storage: Arc<MemoryStorage>,
-        config: EvifMemoryConfig,
-    ) -> Self {
-        let session_id = config.session_id.clone().unwrap_or_else(|| {
-            uuid::Uuid::new_v4().to_string()
-        });
+    pub fn new(storage: Arc<MemoryStorage>, config: EvifMemoryConfig) -> Self {
+        let session_id = config
+            .session_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         Self {
             storage,
@@ -122,13 +120,8 @@ impl EvifMemory {
     }
 
     /// Create with default configuration
-    pub fn with_defaults(
-        storage: Arc<MemoryStorage>,
-    ) -> Self {
-        Self::new(
-            storage,
-            EvifMemoryConfig::default(),
-        )
+    pub fn with_defaults(storage: Arc<MemoryStorage>) -> Self {
+        Self::new(storage, EvifMemoryConfig::default())
     }
 
     /// Add a message to conversation memory
@@ -224,7 +217,9 @@ impl EvifMemory {
     }
 
     /// Load memory variables from storage
-    pub async fn load_memory_variables(&self) -> Result<std::collections::HashMap<String, String>, MemError> {
+    pub async fn load_memory_variables(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, MemError> {
         let history = if self.config.return_messages_as_string {
             self.get_messages_as_string().await?
         } else {
@@ -249,10 +244,7 @@ pub struct BufferMemory {
 
 impl BufferMemory {
     /// Create a new BufferMemory
-    pub fn new(
-        storage: Arc<MemoryStorage>,
-        token_limit: usize,
-    ) -> Self {
+    pub fn new(storage: Arc<MemoryStorage>, token_limit: usize) -> Self {
         let mut config = EvifMemoryConfig::default();
         config.max_tokens = Some(token_limit);
 
@@ -291,10 +283,7 @@ pub struct ConversationTokenBuffer {
 
 impl ConversationTokenBuffer {
     /// Create a new ConversationTokenBuffer
-    pub fn new(
-        storage: Arc<MemoryStorage>,
-        token_limit: usize,
-    ) -> Self {
+    pub fn new(storage: Arc<MemoryStorage>, token_limit: usize) -> Self {
         let mut config = EvifMemoryConfig::default();
         config.max_tokens = Some(token_limit);
 
@@ -374,10 +363,7 @@ impl VectorStoreRetriever {
     pub async fn get_relevant_documents_as_text(&self, query: &str) -> Result<String, MemError> {
         let items = self.get_relevant_documents(query).await?;
 
-        let texts: Vec<String> = items
-            .iter()
-            .map(|item| item.content.clone())
-            .collect();
+        let texts: Vec<String> = items.iter().map(|item| item.content.clone()).collect();
 
         Ok(texts.join("\n\n"))
     }

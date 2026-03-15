@@ -5,7 +5,7 @@
 // Requirements:
 // - EVIF server running on http://localhost:8081
 
-use reqwest::{Client, StatusCode, Response};
+use reqwest::{Client, Response, StatusCode};
 use serde_json::Value;
 use std::time::Duration;
 
@@ -43,11 +43,7 @@ async fn assert_success(resp: Response) -> Value {
     let body = resp.text().await.unwrap_or_default();
 
     if !status.is_success() {
-        panic!(
-            "Request failed with status {}: {}",
-            status,
-            body
-        );
+        panic!("Request failed with status {}: {}", status, body);
     }
 
     serde_json::from_str(&body).unwrap_or_else(|_| Value::Null)
@@ -59,10 +55,7 @@ async fn assert_status(resp: Response, expected: StatusCode) -> Value {
     let body = resp.text().await.unwrap_or_default();
 
     if status != expected {
-        panic!(
-            "Expected status {}, got {}: {}",
-            expected, status, body
-        );
+        panic!("Expected status {}, got {}: {}", expected, status, body);
     }
 
     if !body.is_empty() {
@@ -289,7 +282,11 @@ async fn e2e_10_create_file() {
 
     // Accept 200 OK or 201 Created (both indicate success)
     let status = response.status();
-    assert!(status.is_success(), "Create file failed with status {}", status);
+    assert!(
+        status.is_success(),
+        "Create file failed with status {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -466,7 +463,11 @@ async fn e2e_15_create_directory() {
         .expect("Create directory request failed");
 
     let status = response.status();
-    assert!(status.is_success(), "Create directory failed with status {}", status);
+    assert!(
+        status.is_success(),
+        "Create directory failed with status {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -796,7 +797,8 @@ async fn e2e_24_get_handle() {
         .unwrap();
 
     let open_json: Value = open_resp.json().await.unwrap_or_default();
-    let handle_id = open_json["handle_id"].as_str()
+    let handle_id = open_json["handle_id"]
+        .as_str()
         .or_else(|| open_json["id"].as_str())
         .unwrap();
 
@@ -839,7 +841,8 @@ async fn e2e_25_read_handle() {
         .unwrap();
 
     let open_json: Value = open_resp.json().await.unwrap_or_default();
-    let handle_id = open_json["handle_id"].as_str()
+    let handle_id = open_json["handle_id"]
+        .as_str()
         .or_else(|| open_json["id"].as_str())
         .unwrap();
 
@@ -887,7 +890,8 @@ async fn e2e_26_close_handle() {
         .unwrap();
 
     let open_json: Value = open_resp.json().await.unwrap_or_default();
-    let handle_id = open_json["handle_id"].as_str()
+    let handle_id = open_json["handle_id"]
+        .as_str()
         .or_else(|| open_json["id"].as_str())
         .unwrap();
 

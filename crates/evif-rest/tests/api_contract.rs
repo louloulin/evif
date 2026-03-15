@@ -4,9 +4,9 @@
 // write 接受 { "data", "encoding": "base64" }。
 
 use base64::Engine;
-use evif_rest::create_routes;
-use evif_core::{RadixMountTable, EvifPlugin};
+use evif_core::{EvifPlugin, RadixMountTable};
 use evif_plugins::MemFsPlugin;
+use evif_rest::create_routes;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
@@ -32,7 +32,11 @@ async fn test_list_mounts_returns_mounts_key() {
         if let Ok(res) = reqwest::get(&url).await {
             if res.status().is_success() {
                 let json: serde_json::Value = res.json().await.unwrap();
-                assert!(json.get("mounts").is_some(), "response must have 'mounts' key: {:?}", json);
+                assert!(
+                    json.get("mounts").is_some(),
+                    "response must have 'mounts' key: {:?}",
+                    json
+                );
                 assert!(json["mounts"].is_array(), "'mounts' must be array");
                 return;
             }
@@ -64,19 +68,43 @@ async fn test_read_file_returns_data_and_content() {
     for i in 0..80 {
         tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
         let mkdir_url = format!("{}/api/v1/directories", base);
-        let _ = client.post(&mkdir_url).json(&serde_json::json!({ "path": "/mem" })).send().await;
+        let _ = client
+            .post(&mkdir_url)
+            .json(&serde_json::json!({ "path": "/mem" }))
+            .send()
+            .await;
         let create_url = format!("{}/api/v1/files", base);
-        let _ = client.post(&create_url).json(&serde_json::json!({ "path": "/mem/read_contract_test.txt" })).send().await;
+        let _ = client
+            .post(&create_url)
+            .json(&serde_json::json!({ "path": "/mem/read_contract_test.txt" }))
+            .send()
+            .await;
         let write_url = format!("{}/api/v1/files?path=/mem/read_contract_test.txt", base);
         let data_b64 = base64::engine::general_purpose::STANDARD.encode(b"hello contract");
-        let _ = client.put(&write_url).json(&serde_json::json!({ "data": data_b64, "encoding": "base64" })).send().await;
+        let _ = client
+            .put(&write_url)
+            .json(&serde_json::json!({ "data": data_b64, "encoding": "base64" }))
+            .send()
+            .await;
         let read_url = format!("{}/api/v1/files?path=/mem/read_contract_test.txt", base);
         if let Ok(res) = client.get(&read_url).send().await {
             if res.status().is_success() {
                 let json: serde_json::Value = res.json().await.unwrap();
-                assert!(json.get("data").is_some(), "read response must have 'data' (base64): {:?}", json);
-                assert!(json.get("content").is_some(), "read response must have 'content': {:?}", json);
-                assert!(json.get("size").is_some(), "read response must have 'size': {:?}", json);
+                assert!(
+                    json.get("data").is_some(),
+                    "read response must have 'data' (base64): {:?}",
+                    json
+                );
+                assert!(
+                    json.get("content").is_some(),
+                    "read response must have 'content': {:?}",
+                    json
+                );
+                assert!(
+                    json.get("size").is_some(),
+                    "read response must have 'size': {:?}",
+                    json
+                );
                 return;
             }
         }
@@ -109,8 +137,16 @@ async fn test_write_file_accepts_base64_encoding() {
 
     for i in 0..80 {
         tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
-        let _ = client.post(&format!("{}/api/v1/directories", base)).json(&serde_json::json!({ "path": "/mem" })).send().await;
-        let _ = client.post(&format!("{}/api/v1/files", base)).json(&serde_json::json!({ "path": path })).send().await;
+        let _ = client
+            .post(&format!("{}/api/v1/directories", base))
+            .json(&serde_json::json!({ "path": "/mem" }))
+            .send()
+            .await;
+        let _ = client
+            .post(&format!("{}/api/v1/files", base))
+            .json(&serde_json::json!({ "path": path }))
+            .send()
+            .await;
         let write_url = format!("{}/api/v1/files?path={}", base, path);
         let body = serde_json::json!({ "data": data_b64, "encoding": "base64" });
         if let Ok(res) = client.put(&write_url).json(&body).send().await {
@@ -159,7 +195,11 @@ async fn test_get_plugin_readme_returns_content() {
                 assert_eq!(json["name"], "memfs");
                 assert!(json.get("readme").is_some());
                 let readme = json["readme"].as_str().unwrap();
-                assert!(readme.contains("MemFS"), "readme should describe MemFS: {}", readme);
+                assert!(
+                    readme.contains("MemFS"),
+                    "readme should describe MemFS: {}",
+                    readme
+                );
                 return;
             }
         }
@@ -194,7 +234,9 @@ async fn test_get_plugin_config_returns_params() {
                 assert!(json.get("params").is_some());
                 let params = json["params"].as_array().unwrap();
                 assert!(!params.is_empty(), "localfs should have root param");
-                let has_root = params.iter().any(|p| p.get("name").and_then(|n| n.as_str()) == Some("root"));
+                let has_root = params
+                    .iter()
+                    .any(|p| p.get("name").and_then(|n| n.as_str()) == Some("root"));
                 assert!(has_root, "params should include root: {:?}", params);
                 return;
             }
@@ -234,8 +276,12 @@ async fn test_mount_local_with_invalid_config_fails() {
             if res.status().is_client_error() {
                 let status = res.status();
                 let text = res.text().await.unwrap();
-                assert!(text.contains("validation") || text.contains("root") || status.as_u16() == 400,
-                    "expect 400 or validation/root message: {} {}", status, text);
+                assert!(
+                    text.contains("validation") || text.contains("root") || status.as_u16() == 400,
+                    "expect 400 or validation/root message: {} {}",
+                    status,
+                    text
+                );
                 return;
             }
         }
@@ -267,11 +313,23 @@ async fn test_api_v1_health_returns_status_version_uptime() {
         if let Ok(res) = client.get(&url).send().await {
             if res.status().is_success() {
                 let json: serde_json::Value = res.json().await.unwrap();
-                assert!(json.get("status").is_some(), "response must have 'status': {:?}", json);
+                assert!(
+                    json.get("status").is_some(),
+                    "response must have 'status': {:?}",
+                    json
+                );
                 assert_eq!(json["status"], "healthy");
-                assert!(json.get("version").is_some(), "response must have 'version': {:?}", json);
+                assert!(
+                    json.get("version").is_some(),
+                    "response must have 'version': {:?}",
+                    json
+                );
                 assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
-                assert!(json.get("uptime").is_some(), "response must have 'uptime' (seconds): {:?}", json);
+                assert!(
+                    json.get("uptime").is_some(),
+                    "response must have 'uptime' (seconds): {:?}",
+                    json
+                );
                 return;
             }
         }
@@ -313,8 +371,16 @@ async fn test_root_health_matches_canonical_version_and_reports_timestamp() {
                 assert_eq!(api_json["status"], "healthy");
                 assert_eq!(root_json["version"], env!("CARGO_PKG_VERSION"));
                 assert_eq!(root_json["version"], api_json["version"]);
-                assert!(root_json.get("uptime").is_some(), "root health must include uptime: {:?}", root_json);
-                assert!(root_json.get("timestamp").is_some(), "root health must include timestamp: {:?}", root_json);
+                assert!(
+                    root_json.get("uptime").is_some(),
+                    "root health must include uptime: {:?}",
+                    root_json
+                );
+                assert!(
+                    root_json.get("timestamp").is_some(),
+                    "root health must include timestamp: {:?}",
+                    root_json
+                );
                 return;
             }
         }
@@ -346,7 +412,15 @@ async fn test_key_path_mount_list_write_read_unmount() {
         // 1. 动态挂载 mem 到 /mkey
         let mount_url = format!("{}/api/v1/mount", base);
         let mount_body = serde_json::json!({ "path": "/mkey", "plugin": "mem", "config": {} });
-        if client.post(&mount_url).json(&mount_body).send().await.ok().map(|r| r.status().is_success()) != Some(true) {
+        if client
+            .post(&mount_url)
+            .json(&mount_body)
+            .send()
+            .await
+            .ok()
+            .map(|r| r.status().is_success())
+            != Some(true)
+        {
             continue;
         }
         // 2. 列出挂载点，确认 /mkey 存在
@@ -355,19 +429,39 @@ async fn test_key_path_mount_list_write_read_unmount() {
             Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
             _ => continue,
         };
-        let mounts = match mounts_res.and_then(|j| j.get("mounts").and_then(|a| a.as_array()).cloned()) {
-            Some(m) => m,
-            _ => continue,
-        };
-        if !mounts.iter().any(|m| m.get("path").and_then(|p| p.as_str()) == Some("/mkey")) {
+        let mounts =
+            match mounts_res.and_then(|j| j.get("mounts").and_then(|a| a.as_array()).cloned()) {
+                Some(m) => m,
+                _ => continue,
+            };
+        if !mounts
+            .iter()
+            .any(|m| m.get("path").and_then(|p| p.as_str()) == Some("/mkey"))
+        {
             continue;
         }
         // 3. 创建目录占位、创建文件、写入、读取
-        let _ = client.post(&format!("{}/api/v1/directories", base)).json(&serde_json::json!({ "path": "/mkey" })).send().await;
-        let _ = client.post(&format!("{}/api/v1/files", base)).json(&serde_json::json!({ "path": "/mkey/keypath.txt" })).send().await;
+        let _ = client
+            .post(&format!("{}/api/v1/directories", base))
+            .json(&serde_json::json!({ "path": "/mkey" }))
+            .send()
+            .await;
+        let _ = client
+            .post(&format!("{}/api/v1/files", base))
+            .json(&serde_json::json!({ "path": "/mkey/keypath.txt" }))
+            .send()
+            .await;
         let write_url = format!("{}/api/v1/files?path=/mkey/keypath.txt", base);
         let payload = serde_json::json!({ "data": "keypath-content", "encoding": null });
-        if !client.put(&write_url).json(&payload).send().await.ok().map(|r| r.status().is_success()).unwrap_or(false) {
+        if !client
+            .put(&write_url)
+            .json(&payload)
+            .send()
+            .await
+            .ok()
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+        {
             continue;
         }
         let read_url = format!("{}/api/v1/files?path=/mkey/keypath.txt", base);
@@ -375,22 +469,37 @@ async fn test_key_path_mount_list_write_read_unmount() {
             Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
             _ => continue,
         };
-        let content = read_res.and_then(|j| j.get("content").and_then(|c| c.as_str()).map(String::from));
+        let content =
+            read_res.and_then(|j| j.get("content").and_then(|c| c.as_str()).map(String::from));
         if content.as_deref() != Some("keypath-content") {
             continue;
         }
         // 4. 卸载
         let unmount_url = format!("{}/api/v1/unmount", base);
         let unmount_body = serde_json::json!({ "path": "/mkey" });
-        let unmount_ok = client.post(&unmount_url).json(&unmount_body).send().await.ok().map(|r| r.status().is_success()).unwrap_or(false);
+        let unmount_ok = client
+            .post(&unmount_url)
+            .json(&unmount_body)
+            .send()
+            .await
+            .ok()
+            .map(|r| r.status().is_success())
+            .unwrap_or(false);
         if unmount_ok {
             let after_res = client.get(&mounts_url).send().await.ok();
             let after = match after_res {
                 Some(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
                 _ => None,
             };
-            let after_mounts = after.and_then(|j| j.get("mounts").and_then(|a| a.as_array()).cloned()).unwrap_or_default();
-            assert!(!after_mounts.iter().any(|m| m.get("path").and_then(|p| p.as_str()) == Some("/mkey")), "unmount should remove /mkey");
+            let after_mounts = after
+                .and_then(|j| j.get("mounts").and_then(|a| a.as_array()).cloned())
+                .unwrap_or_default();
+            assert!(
+                !after_mounts
+                    .iter()
+                    .any(|m| m.get("path").and_then(|p| p.as_str()) == Some("/mkey")),
+                "unmount should remove /mkey"
+            );
             return;
         }
     }
@@ -400,7 +509,6 @@ async fn test_key_path_mount_list_write_read_unmount() {
 // Task 05: Test root path listing returns mount points
 #[tokio::test]
 async fn test_list_root_directory() {
-
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
     mount_table.mount("/mem".to_string(), mem).await.unwrap();
@@ -423,14 +531,20 @@ async fn test_list_root_directory() {
             if res.status().is_success() {
                 let json: serde_json::Value = res.json().await.unwrap();
                 // Verify response structure (FsListResponse uses "nodes" not "files")
-                assert!(json.get("nodes").is_some(), "response must have 'nodes' key");
+                assert!(
+                    json.get("nodes").is_some(),
+                    "response must have 'nodes' key"
+                );
 
                 // Verify mount points are returned
                 let nodes = json["nodes"].as_array().expect("nodes must be array");
                 assert_eq!(nodes.len(), 1, "should have 1 mount point");
                 assert_eq!(nodes[0]["name"], "mem", "mount point name should be 'mem'");
                 assert_eq!(nodes[0]["is_dir"], true, "mount point should be directory");
-                assert_eq!(nodes[0]["path"], "/mem", "mount point path should be '/mem'");
+                assert_eq!(
+                    nodes[0]["path"], "/mem",
+                    "mount point path should be '/mem'"
+                );
                 return;
             }
         }
@@ -444,12 +558,22 @@ async fn test_list_root_directory() {
 async fn test_read_file_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     // Create directory and test file in nested path, then write content
     mem.mkdir("/nested", 0o755).await.unwrap();
     mem.create("/nested/test.txt", 0o644).await.unwrap();
-    mem.write("/nested/test.txt", b"Hello, World!".to_vec(), 0, evif_core::WriteFlags::NONE).await.unwrap();
+    mem.write(
+        "/nested/test.txt",
+        b"Hello, World!".to_vec(),
+        0,
+        evif_core::WriteFlags::NONE,
+    )
+    .await
+    .unwrap();
 
     // Verify mount exists
     let mounts = mount_table.list_mounts().await;
@@ -458,8 +582,14 @@ async fn test_read_file_in_nested_path() {
 
     // Test lookup_with_path directly
     let (plugin_opt, relative_path) = mount_table.lookup_with_path("/mem/nested/test.txt").await;
-    assert!(plugin_opt.is_some(), "plugin should be found for /mem/nested/test.txt");
-    assert_eq!(relative_path, "/nested/test.txt", "relative path should be /nested/test.txt");
+    assert!(
+        plugin_opt.is_some(),
+        "plugin should be found for /mem/nested/test.txt"
+    );
+    assert_eq!(
+        relative_path, "/nested/test.txt",
+        "relative path should be /nested/test.txt"
+    );
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -483,17 +613,29 @@ async fn test_read_file_in_nested_path() {
             }
         }
 
-        let url = format!("http://127.0.0.1:{}/api/v1/fs/read?path=/mem/nested/test.txt", port);
+        let url = format!(
+            "http://127.0.0.1:{}/api/v1/fs/read?path=/mem/nested/test.txt",
+            port
+        );
         if let Ok(res) = reqwest::get(&url).await {
             if res.status().is_success() {
                 let json: serde_json::Value = res.json().await.unwrap();
-                assert!(json.get("content").is_some(), "response must have 'content' key");
-                assert_eq!(json["content"], "Hello, World!", "file content should match");
+                assert!(
+                    json.get("content").is_some(),
+                    "response must have 'content' key"
+                );
+                assert_eq!(
+                    json["content"], "Hello, World!",
+                    "file content should match"
+                );
                 return;
             } else {
                 // Print error for debugging
                 let status = res.status();
-                let text = res.text().await.unwrap_or_else(|_| "unable to read response".to_string());
+                let text = res
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "unable to read response".to_string());
                 eprintln!("Request failed with status {}: {}", status, text);
             }
         }
@@ -506,12 +648,22 @@ async fn test_read_file_in_nested_path() {
 async fn test_stat_file_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     // Create directory and test file in nested path, then write content
     mem.mkdir("/nested", 0o755).await.unwrap();
     mem.create("/nested/test.txt", 0o644).await.unwrap();
-    mem.write("/nested/test.txt", b"Hello, World!".to_vec(), 0, evif_core::WriteFlags::NONE).await.unwrap();
+    mem.write(
+        "/nested/test.txt",
+        b"Hello, World!".to_vec(),
+        0,
+        evif_core::WriteFlags::NONE,
+    )
+    .await
+    .unwrap();
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -526,7 +678,10 @@ async fn test_stat_file_in_nested_path() {
 
     // Wait for server and test file stat
     for _ in 0..50 {
-        let url = format!("http://127.0.0.1:{}/api/v1/stat?path=/mem/nested/test.txt", port);
+        let url = format!(
+            "http://127.0.0.1:{}/api/v1/stat?path=/mem/nested/test.txt",
+            port
+        );
         if let Ok(res) = reqwest::get(&url).await {
             if res.status().is_success() {
                 let json: serde_json::Value = res.json().await.unwrap();
@@ -545,12 +700,22 @@ async fn test_stat_file_in_nested_path() {
 async fn test_digest_file_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     // Create directory and test file in nested path, then write content
     mem.mkdir("/nested", 0o755).await.unwrap();
     mem.create("/nested/test.txt", 0o644).await.unwrap();
-    mem.write("/nested/test.txt", b"Hello, World!".to_vec(), 0, evif_core::WriteFlags::NONE).await.unwrap();
+    mem.write(
+        "/nested/test.txt",
+        b"Hello, World!".to_vec(),
+        0,
+        evif_core::WriteFlags::NONE,
+    )
+    .await
+    .unwrap();
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -591,7 +756,10 @@ async fn test_digest_file_in_nested_path() {
 async fn test_create_file_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     // Create the nested directory first
     mem.mkdir("/new", 0o755).await.unwrap();
@@ -630,11 +798,21 @@ async fn test_create_file_in_nested_path() {
 async fn test_write_file_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     // Create existing file
     mem.create("/existing.txt", 0o644).await.unwrap();
-    mem.write("/existing.txt", b"Initial".to_vec(), 0, evif_core::WriteFlags::NONE).await.unwrap();
+    mem.write(
+        "/existing.txt",
+        b"Initial".to_vec(),
+        0,
+        evif_core::WriteFlags::NONE,
+    )
+    .await
+    .unwrap();
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -656,7 +834,13 @@ async fn test_write_file_in_nested_path() {
             "content": "Updated content"
         });
 
-        if let Ok(res) = client.post(&url).query(&[("path", "/mem/existing.txt")]).json(&body).send().await {
+        if let Ok(res) = client
+            .post(&url)
+            .query(&[("path", "/mem/existing.txt")])
+            .json(&body)
+            .send()
+            .await
+        {
             if res.status().is_success() {
                 // Verify content was updated
                 let content = mem.read("/existing.txt", 0, 0).await.unwrap();
@@ -673,7 +857,10 @@ async fn test_write_file_in_nested_path() {
 async fn test_touch_file_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -709,7 +896,10 @@ async fn test_touch_file_in_nested_path() {
 async fn test_create_directory_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -725,7 +915,10 @@ async fn test_create_directory_in_nested_path() {
     // Create directory via API using /api/v1/directories endpoint
     for _ in 0..50 {
         let client = reqwest::Client::new();
-        let url = format!("http://127.0.0.1:{}/api/v1/directories?path=/mem/new/dir", port);
+        let url = format!(
+            "http://127.0.0.1:{}/api/v1/directories?path=/mem/new/dir",
+            port
+        );
         let body = serde_json::json!({"path": "/mem/new/dir", "parents": true});
 
         if let Ok(res) = client.post(&url).json(&body).send().await {
@@ -745,7 +938,10 @@ async fn test_create_directory_in_nested_path() {
 async fn test_delete_directory_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     // Create directory to delete
     mem.mkdir("/dir", 0o755).await.unwrap();
@@ -766,7 +962,10 @@ async fn test_delete_directory_in_nested_path() {
     // Delete directory via API using /api/v1/directories endpoint
     for _ in 0..50 {
         let client = reqwest::Client::new();
-        let url = format!("http://127.0.0.1:{}/api/v1/directories?path=/mem/dir/to/delete", port);
+        let url = format!(
+            "http://127.0.0.1:{}/api/v1/directories?path=/mem/dir/to/delete",
+            port
+        );
 
         if let Ok(res) = client.delete(&url).send().await {
             if res.status().is_success() {
@@ -776,8 +975,10 @@ async fn test_delete_directory_in_nested_path() {
 
                 // Also verify parent still exists
                 let parent_files = mem.readdir("/dir/to").await.unwrap();
-                assert!(parent_files.is_empty() || !parent_files.iter().any(|f| f.name == "delete"),
-                       "deleted directory should not exist");
+                assert!(
+                    parent_files.is_empty() || !parent_files.iter().any(|f| f.name == "delete"),
+                    "deleted directory should not exist"
+                );
                 return;
             }
         }
@@ -791,7 +992,10 @@ async fn test_delete_directory_in_nested_path() {
 async fn test_rename_file_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -809,7 +1013,14 @@ async fn test_rename_file_in_nested_path() {
     // Create parent directory and file in nested path
     mem.mkdir("/nested", 0o755).await.unwrap();
     mem.create("/nested/old.txt", 0o644).await.unwrap();
-    mem.write("/nested/old.txt", b"content".to_vec(), 0, evif_core::WriteFlags::NONE).await.unwrap();
+    mem.write(
+        "/nested/old.txt",
+        b"content".to_vec(),
+        0,
+        evif_core::WriteFlags::NONE,
+    )
+    .await
+    .unwrap();
 
     // Rename file via API
     for _ in 0..50 {
@@ -846,7 +1057,10 @@ async fn test_rename_file_in_nested_path() {
 async fn test_grep_in_nested_path() {
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-    mount_table.mount("/mem".to_string(), mem.clone()).await.unwrap();
+    mount_table
+        .mount("/mem".to_string(), mem.clone())
+        .await
+        .unwrap();
 
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -864,9 +1078,23 @@ async fn test_grep_in_nested_path() {
     // Create nested directory with files containing "World"
     mem.mkdir("/nested", 0o755).await.unwrap();
     mem.create("/nested/file1.txt", 0o644).await.unwrap();
-    mem.write("/nested/file1.txt", b"Hello World".to_vec(), 0, evif_core::WriteFlags::NONE).await.unwrap();
+    mem.write(
+        "/nested/file1.txt",
+        b"Hello World".to_vec(),
+        0,
+        evif_core::WriteFlags::NONE,
+    )
+    .await
+    .unwrap();
     mem.create("/nested/file2.txt", 0o644).await.unwrap();
-    mem.write("/nested/file2.txt", b"Goodbye World".to_vec(), 0, evif_core::WriteFlags::NONE).await.unwrap();
+    mem.write(
+        "/nested/file2.txt",
+        b"Goodbye World".to_vec(),
+        0,
+        evif_core::WriteFlags::NONE,
+    )
+    .await
+    .unwrap();
 
     // Search via API
     for _ in 0..50 {

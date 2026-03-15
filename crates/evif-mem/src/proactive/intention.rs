@@ -8,12 +8,12 @@
 //! - LLM inference: Use LLM to predict intent from context
 
 use crate::error::MemError;
+use crate::llm::LLMClient;
 use crate::models::MemoryItem;
 use crate::storage::MemoryStorage;
-use crate::llm::LLMClient;
+use chrono::{DateTime, Duration, Utc};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc, Duration};
 
 /// Result type for intent prediction operations
 pub type IntentResult<T> = Result<T, MemError>;
@@ -65,9 +65,9 @@ impl Default for IntentConfig {
     fn default() -> Self {
         Self {
             lookback_hours: 24,        // Analyze last 24 hours
-            min_pattern_frequency: 2,   // At least 2 occurrences
-            confidence_threshold: 0.7,  // 70% confidence
-            max_related_items: 5,       // Top 5 related items
+            min_pattern_frequency: 2,  // At least 2 occurrences
+            confidence_threshold: 0.7, // 70% confidence
+            max_related_items: 5,      // Top 5 related items
         }
     }
 }
@@ -105,7 +105,9 @@ impl IntentionPredictor {
         let patterns = self.find_patterns(&recent_memories).await?;
 
         // 3. Use LLM to infer intent
-        let intent = self.infer_intent_with_llm(context, &patterns, &recent_memories).await?;
+        let intent = self
+            .infer_intent_with_llm(context, &patterns, &recent_memories)
+            .await?;
 
         // 4. Filter by confidence threshold
         if intent.confidence >= self.config.confidence_threshold {
@@ -156,7 +158,10 @@ impl IntentionPredictor {
     }
 
     /// Analyze topic frequency patterns
-    async fn analyze_topic_patterns(&self, memories: &[MemoryItem]) -> IntentResult<Vec<MemoryPattern>> {
+    async fn analyze_topic_patterns(
+        &self,
+        memories: &[MemoryItem],
+    ) -> IntentResult<Vec<MemoryPattern>> {
         use std::collections::HashMap;
 
         let mut topic_counts: HashMap<String, Vec<String>> = HashMap::new();
@@ -200,9 +205,12 @@ impl IntentionPredictor {
     }
 
     /// Analyze time-based patterns
-    async fn analyze_time_patterns(&self, memories: &[MemoryItem]) -> IntentResult<Vec<MemoryPattern>> {
-        use std::collections::HashMap;
+    async fn analyze_time_patterns(
+        &self,
+        memories: &[MemoryItem],
+    ) -> IntentResult<Vec<MemoryPattern>> {
         use chrono::Timelike;
+        use std::collections::HashMap;
 
         let mut hour_counts: HashMap<u32, Vec<String>> = HashMap::new();
 
@@ -219,14 +227,12 @@ impl IntentionPredictor {
         let patterns: Vec<MemoryPattern> = hour_counts
             .into_iter()
             .filter(|(_, items)| items.len() >= self.config.min_pattern_frequency)
-            .map(|(hour, items)| {
-                MemoryPattern {
-                    pattern_type: "time_based".to_string(),
-                    description: format!("Active at {}:00", hour),
-                    item_ids: items.clone(),
-                    frequency: items.len(),
-                    last_occurrence: Utc::now(),
-                }
+            .map(|(hour, items)| MemoryPattern {
+                pattern_type: "time_based".to_string(),
+                description: format!("Active at {}:00", hour),
+                item_ids: items.clone(),
+                frequency: items.len(),
+                last_occurrence: Utc::now(),
             })
             .collect();
 
@@ -234,7 +240,10 @@ impl IntentionPredictor {
     }
 
     /// Analyze sequence patterns (action A → action B)
-    async fn analyze_sequence_patterns(&self, memories: &[MemoryItem]) -> IntentResult<Vec<MemoryPattern>> {
+    async fn analyze_sequence_patterns(
+        &self,
+        memories: &[MemoryItem],
+    ) -> IntentResult<Vec<MemoryPattern>> {
         // Sort by creation time
         let mut sorted_memories = memories.to_vec();
         sorted_memories.sort_by_key(|m| m.created_at);
@@ -257,14 +266,12 @@ impl IntentionPredictor {
         let patterns: Vec<MemoryPattern> = sequence_counts
             .into_iter()
             .filter(|(_, items)| items.len() >= self.config.min_pattern_frequency)
-            .map(|((prev, next), items)| {
-                MemoryPattern {
-                    pattern_type: "sequence".to_string(),
-                    description: format!("Sequence: {} → {}", prev, next),
-                    item_ids: items.clone(),
-                    frequency: items.len(),
-                    last_occurrence: Utc::now(),
-                }
+            .map(|((prev, next), items)| MemoryPattern {
+                pattern_type: "sequence".to_string(),
+                description: format!("Sequence: {} → {}", prev, next),
+                item_ids: items.clone(),
+                frequency: items.len(),
+                last_occurrence: Utc::now(),
             })
             .collect();
 
@@ -345,16 +352,21 @@ Only respond with the JSON object, no additional text."#,
             "query"
         } else {
             "other"
-        }.to_string();
+        }
+        .to_string();
 
         // Extract confidence (simple heuristic)
-        let confidence = if response.contains("high") || response.contains("0.8") || response.contains("0.9") {
-            0.85
-        } else if response.contains("medium") || response.contains("0.6") || response.contains("0.7") {
-            0.7
-        } else {
-            0.5
-        };
+        let confidence =
+            if response.contains("high") || response.contains("0.8") || response.contains("0.9") {
+                0.85
+            } else if response.contains("medium")
+                || response.contains("0.6")
+                || response.contains("0.7")
+            {
+                0.7
+            } else {
+                0.5
+            };
 
         // Get related items (top recent)
         let related_items: Vec<String> = recent_memories
@@ -383,7 +395,7 @@ Only respond with the JSON object, no additional text."#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{MemoryType, MemoryItem};
+    use crate::models::{MemoryItem, MemoryType};
     use uuid::Uuid;
 
     #[test]

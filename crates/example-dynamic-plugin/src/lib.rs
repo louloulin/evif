@@ -1,10 +1,10 @@
 // Example Dynamic Plugin for EVIF
 // This plugin demonstrates how to create a dynamically loadable plugin
 
-use evif_core::EvifPlugin;
 use async_trait::async_trait;
-use evif_core::{EvifResult, EvifError, FileInfo, OpenFlags, WriteFlags};
 use chrono::{DateTime, Utc};
+use evif_core::EvifPlugin;
+use evif_core::{EvifError, EvifResult, FileInfo, OpenFlags, WriteFlags};
 use std::collections::HashMap;
 
 pub struct ExampleDynamicPlugin {
@@ -57,7 +57,13 @@ impl EvifPlugin for ExampleDynamicPlugin {
         }
     }
 
-    async fn write(&self, path: &str, data: Vec<u8>, _offset: i64, _flags: WriteFlags) -> EvifResult<u64> {
+    async fn write(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        _offset: i64,
+        _flags: WriteFlags,
+    ) -> EvifResult<u64> {
         let mut data_store = self.data.write().await;
         data_store.insert(path.to_string(), data);
         Ok(data_store.get(path).map(|d| d.len() as u64).unwrap_or(0))
@@ -108,7 +114,8 @@ impl EvifPlugin for ExampleDynamicPlugin {
 
     async fn remove(&self, path: &str) -> EvifResult<()> {
         let mut data_store = self.data.write().await;
-        data_store.remove(path)
+        data_store
+            .remove(path)
             .ok_or_else(|| EvifError::NotFound(path.to_string()))?;
         Ok(())
     }
@@ -159,7 +166,7 @@ impl EvifPlugin for ExampleDynamicPlugin {
 }
 
 // ABI exports
-use evif_core::{PluginInfo, EVIF_PLUGIN_ABI_VERSION, PluginPtr};
+use evif_core::{PluginInfo, PluginPtr, EVIF_PLUGIN_ABI_VERSION};
 use std::sync::Arc;
 
 #[no_mangle]

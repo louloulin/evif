@@ -18,26 +18,24 @@
 //! - Cost optimization ✅ (Phase 1.5.4)
 
 // Module structure for proactive system
-pub mod intention;
 pub mod cost;
+pub mod intention;
 
+pub use cost::{BatchItem, CacheEntry, CostOptimizer, CostOptimizerConfig, CostOptimizerStats};
 pub use intention::{
-    IntentionPredictor, IntentConfig, IntentResult, PredictedIntent, MemoryPattern,
-};
-pub use cost::{
-    CostOptimizer, CostOptimizerConfig, CostOptimizerStats, CacheEntry, BatchItem,
+    IntentConfig, IntentResult, IntentionPredictor, MemoryPattern, PredictedIntent,
 };
 
 use crate::error::MemError;
+use crate::llm::LLMClient;
 use crate::models::{MemoryItem, Resource};
 use crate::pipeline::{EvolvePipeline, MemorizePipeline};
 use crate::storage::MemoryStorage;
-use crate::llm::LLMClient;
 use crate::vector::VectorIndex;
+use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
-use chrono::{DateTime, Utc};
 
 /// Result type for proactive operations
 pub type ProactiveResult<T> = Result<T, MemError>;
@@ -75,9 +73,9 @@ pub struct ProactiveConfig {
 impl Default for ProactiveConfig {
     fn default() -> Self {
         Self {
-            monitor_interval_secs: 60,        // Check every 60 seconds
-            evolution_interval_secs: 86400,   // Evolve daily (24 hours)
-            memory_threshold: 1000,           // Trigger at 1000 items
+            monitor_interval_secs: 60,      // Check every 60 seconds
+            evolution_interval_secs: 86400, // Evolve daily (24 hours)
+            memory_threshold: 1000,         // Trigger at 1000 items
             enable_intent_prediction: true,
             enable_cost_optimization: true,
         }
@@ -137,8 +135,8 @@ pub struct ExtractorConfig {
 impl Default for ExtractorConfig {
     fn default() -> Self {
         Self {
-            intent_confidence_threshold: 0.7,     // 70% confidence
-            min_extraction_interval_secs: 300,   // 5 minutes
+            intent_confidence_threshold: 0.7,  // 70% confidence
+            min_extraction_interval_secs: 300, // 5 minutes
             max_items_per_extraction: 100,
             auto_extract_on_intent: true,
             trigger_evolution_after_extraction: true,
@@ -208,7 +206,10 @@ impl ProactiveExtractor {
     }
 
     /// Extract memories proactively from a resource
-    pub async fn extract_proactively(&self, resource: Resource) -> ProactiveResult<Vec<MemoryItem>> {
+    pub async fn extract_proactively(
+        &self,
+        resource: Resource,
+    ) -> ProactiveResult<Vec<MemoryItem>> {
         tracing::info!(
             "Proactively extracting memories from resource: {:?}",
             resource.id
@@ -222,7 +223,8 @@ impl ProactiveExtractor {
         };
 
         // Use memorize pipeline to extract
-        let items = self.memorize_pipeline
+        let items = self
+            .memorize_pipeline
             .memorize_resource(&source, None)
             .await?;
 
@@ -272,7 +274,10 @@ impl ProactiveExtractor {
     }
 
     /// Extract memories when threshold is reached
-    pub async fn extract_on_threshold(&self, resources: Vec<Resource>) -> ProactiveResult<Vec<MemoryItem>> {
+    pub async fn extract_on_threshold(
+        &self,
+        resources: Vec<Resource>,
+    ) -> ProactiveResult<Vec<MemoryItem>> {
         let mut all_items = Vec::new();
 
         for resource in resources {
@@ -684,7 +689,7 @@ mod tests {
         let config = ExtractorConfig::default();
         let intent = PredictedIntent {
             intent_type: "search".to_string(),
-            confidence: 0.5,  // Below threshold
+            confidence: 0.5, // Below threshold
             related_items: vec![],
             suggested_action: Some("retrieve".to_string()),
             timestamp: Utc::now(),
@@ -715,4 +720,3 @@ mod tests {
         assert!(!should);
     }
 }
-

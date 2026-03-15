@@ -44,8 +44,11 @@ mod health_checks {
         // Then: Return { status: "ok" }
         assert!(response.is_ok(), "Health check request failed");
         let status = response.unwrap().status();
-        assert!(status.is_success() || status.as_u16() == 200,
-            "Health check should return 200, got: {}", status);
+        assert!(
+            status.is_success() || status.as_u16() == 200,
+            "Health check should return 200, got: {}",
+            status
+        );
     }
 
     #[tokio::test]
@@ -60,8 +63,11 @@ mod health_checks {
         // Then: Return status, version, uptime
         assert!(response.is_ok(), "Health v1 request failed");
         let status = response.unwrap().status();
-        assert!(status.is_success() || status.as_u16() == 200,
-            "Health v1 should return 200, got: {}", status);
+        assert!(
+            status.is_success() || status.as_u16() == 200,
+            "Health v1 should return 200, got: {}",
+            status
+        );
     }
 }
 
@@ -76,12 +82,17 @@ mod file_operations {
         let test_file = unique_test_path();
 
         // First create a file
-        let _ = client.put(&format!("{}/api/v1/files?path={}", base, test_file))
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("test content".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // When: GET /api/v1/files?path=/test.txt
-        let response = client.get(&format!("{}/api/v1/files?path={}", base, test_file)).send().await;
+        let response = client
+            .get(&format!("{}/api/v1/files?path={}", base, test_file))
+            .send()
+            .await;
 
         // Then: Return file content
         assert!(response.is_ok(), "Read file request failed");
@@ -96,9 +107,11 @@ mod file_operations {
         let test_file = unique_test_path();
 
         // When: PUT /api/v1/files with content
-        let response = client.put(&format!("{}/api/v1/files?path={}", base, test_file))
+        let response = client
+            .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("new content".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // Then: File content overwritten
         assert!(response.is_ok(), "Write file request failed");
@@ -112,14 +125,18 @@ mod file_operations {
         let test_file = unique_test_path();
 
         // When: POST /api/v1/files
-        let response = client.post(&format!("{}/api/v1/files?path={}", base, test_file))
+        let response = client
+            .post(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("created content".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // Then: New file created
         // Note: Implementation may use PUT for create, not POST
-        assert!(response.is_ok() || response.unwrap().status() == 405,
-            "Create file request should succeed or method not allowed");
+        assert!(
+            response.is_ok() || response.unwrap().status() == 405,
+            "Create file request should succeed or method not allowed"
+        );
     }
 
     #[tokio::test]
@@ -130,12 +147,17 @@ mod file_operations {
         let test_file = unique_test_path();
 
         // First create a file
-        let _ = client.put(&format!("{}/api/v1/files?path={}", base, test_file))
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("to be deleted".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // When: DELETE /api/v1/files?path=/test.txt
-        let response = client.delete(&format!("{}/api/v1/files?path={}", base, test_file)).send().await;
+        let response = client
+            .delete(&format!("{}/api/v1/files?path={}", base, test_file))
+            .send()
+            .await;
 
         // Then: File deleted
         assert!(response.is_ok(), "Delete file request failed");
@@ -152,7 +174,10 @@ mod directory_operations {
         let base = get_api_base();
 
         // When: GET /api/v1/directories?path=/
-        let response = client.get(&format!("{}/api/v1/directories?path=/", base)).send().await;
+        let response = client
+            .get(&format!("{}/api/v1/directories?path=/", base))
+            .send()
+            .await;
 
         // Then: Return directory contents
         assert!(response.is_ok(), "List directory request failed");
@@ -166,8 +191,10 @@ mod directory_operations {
         let test_dir = unique_test_path();
 
         // When: POST /api/v1/directories
-        let response = client.post(&format!("{}/api/v1/directories?path={}", base, test_dir))
-            .send().await;
+        let response = client
+            .post(&format!("{}/api/v1/directories?path={}", base, test_dir))
+            .send()
+            .await;
 
         // Then: New directory created
         assert!(response.is_ok(), "Create directory request failed");
@@ -181,11 +208,16 @@ mod directory_operations {
         let test_dir = unique_test_path();
 
         // First create a directory
-        let _ = client.post(&format!("{}/api/v1/directories?path={}", base, test_dir))
-            .send().await;
+        let _ = client
+            .post(&format!("{}/api/v1/directories?path={}", base, test_dir))
+            .send()
+            .await;
 
         // When: DELETE /api/v1/directories?path=/testdir
-        let response = client.delete(&format!("{}/api/v1/directories?path={}", base, test_dir)).send().await;
+        let response = client
+            .delete(&format!("{}/api/v1/directories?path={}", base, test_dir))
+            .send()
+            .await;
 
         // Then: Directory deleted
         assert!(response.is_ok(), "Delete directory request failed");
@@ -203,12 +235,17 @@ mod metadata_operations {
         let test_file = unique_test_path();
 
         // First create a file
-        let _ = client.put(&format!("{}/api/v1/files?path={}", base, test_file))
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("stat test".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // When: GET /api/v1/stat?path=/test.txt
-        let response = client.get(&format!("{}/api/v1/stat?path={}", base, test_file)).send().await;
+        let response = client
+            .get(&format!("{}/api/v1/stat?path={}", base, test_file))
+            .send()
+            .await;
 
         // Then: Return file metadata (type, size, mtime, permissions)
         assert!(response.is_ok(), "Stat request failed");
@@ -222,12 +259,17 @@ mod metadata_operations {
         let test_file = unique_test_path();
 
         // First create a file
-        let _ = client.put(&format!("{}/api/v1/files?path={}", base, test_file))
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("touch test".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // When: POST /api/v1/touch?path=/test.txt
-        let response = client.post(&format!("{}/api/v1/touch?path={}", base, test_file)).send().await;
+        let response = client
+            .post(&format!("{}/api/v1/touch?path={}", base, test_file))
+            .send()
+            .await;
 
         // Then: File mtime updated
         assert!(response.is_ok(), "Touch request failed");
@@ -241,13 +283,20 @@ mod metadata_operations {
         let test_file = unique_test_path();
 
         // First create a file
-        let _ = client.put(&format!("{}/api/v1/files?path={}", base, test_file))
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("digest test".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // When: POST /api/v1/digest?path=/test.txt&algo=sha256
-        let response = client.post(&format!("{}/api/v1/digest?path={}&algo=sha256", base, test_file))
-            .send().await;
+        let response = client
+            .post(&format!(
+                "{}/api/v1/digest?path={}&algo=sha256",
+                base, test_file
+            ))
+            .send()
+            .await;
 
         // Then: Return file checksum
         assert!(response.is_ok(), "Digest request failed");
@@ -262,13 +311,20 @@ mod metadata_operations {
         let dst_file = format!("{}_renamed", src_file);
 
         // First create a file
-        let _ = client.put(&format!("{}/api/v1/files?path={}", base, src_file))
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, src_file))
             .body("rename test".to_string())
-            .send().await;
+            .send()
+            .await;
 
         // When: POST /api/v1/rename with src and dst
-        let response = client.post(&format!("{}/api/v1/rename?src={}&dst={}", base, src_file, dst_file))
-            .send().await;
+        let response = client
+            .post(&format!(
+                "{}/api/v1/rename?src={}&dst={}",
+                base, src_file, dst_file
+            ))
+            .send()
+            .await;
 
         // Then: File moved/renamed
         assert!(response.is_ok(), "Rename request failed");
@@ -299,13 +355,20 @@ mod mount_management {
         let mount_path = unique_test_path();
 
         // When: POST /api/v1/mount with plugin and path
-        let response = client.post(&format!("{}/api/v1/mount?plugin=memfs&path={}", base, mount_path))
-            .send().await;
+        let response = client
+            .post(&format!(
+                "{}/api/v1/mount?plugin=memfs&path={}",
+                base, mount_path
+            ))
+            .send()
+            .await;
 
         // Then: Plugin mounted successfully
         // Note: May return error if plugin not available
-        assert!(response.is_ok() || response.unwrap().status() == 500,
-            "Mount request should succeed or return server error");
+        assert!(
+            response.is_ok() || response.unwrap().status() == 500,
+            "Mount request should succeed or return server error"
+        );
     }
 
     #[tokio::test]
@@ -316,12 +379,19 @@ mod mount_management {
         let mount_path = unique_test_path();
 
         // First mount a plugin
-        let _ = client.post(&format!("{}/api/v1/mount?plugin=memfs&path={}", base, mount_path))
-            .send().await;
+        let _ = client
+            .post(&format!(
+                "{}/api/v1/mount?plugin=memfs&path={}",
+                base, mount_path
+            ))
+            .send()
+            .await;
 
         // When: POST /api/v1/unmount with path
-        let response = client.post(&format!("{}/api/v1/unmount?path={}", base, mount_path))
-            .send().await;
+        let response = client
+            .post(&format!("{}/api/v1/unmount?path={}", base, mount_path))
+            .send()
+            .await;
 
         // Then: Plugin unmounted
         assert!(response.is_ok(), "Unmount request failed");

@@ -5,11 +5,11 @@
 //!
 //! 这个模块提供了查询执行器，用于执行 GraphQuery 并返回结果
 
-use crate::{Graph, NodeId, Edge, Result, GraphError};
-use std::collections::{HashMap, HashSet, VecDeque, BinaryHeap};
-use std::sync::Arc;
 use crate::query::{GraphQuery, QueryResult};
 use crate::EdgeType;
+use crate::{Edge, Graph, GraphError, NodeId, Result};
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
+use std::sync::Arc;
 
 /// 查询执行器
 pub struct QueryExecutor {
@@ -44,7 +44,8 @@ impl QueryExecutor {
 
     /// 按类型查找节点
     fn find_nodes_by_type(&self, node_type: &str) -> Result<QueryResult> {
-        let nodes: Vec<NodeId> = self.graph
+        let nodes: Vec<NodeId> = self
+            .graph
             .all_nodes()
             .into_iter()
             .filter(|node| node.node_type.as_str() == node_type)
@@ -56,7 +57,8 @@ impl QueryExecutor {
 
     /// 按属性查找节点
     fn find_nodes_by_attr(&self, key: &str, value: &str) -> Result<QueryResult> {
-        let nodes: Vec<NodeId> = self.graph
+        let nodes: Vec<NodeId> = self
+            .graph
             .all_nodes()
             .into_iter()
             .filter(|node| {
@@ -357,8 +359,15 @@ impl GraphAnalyzer {
             .all_nodes()
             .into_iter()
             .filter(|node| {
-                self.graph.outgoing_edges(&node.id).unwrap_or_default().is_empty()
-                    && self.graph.incoming_edges(&node.id).unwrap_or_default().is_empty()
+                self.graph
+                    .outgoing_edges(&node.id)
+                    .unwrap_or_default()
+                    .is_empty()
+                    && self
+                        .graph
+                        .incoming_edges(&node.id)
+                        .unwrap_or_default()
+                        .is_empty()
             })
             .map(|node| node.id)
             .collect()
@@ -400,7 +409,7 @@ impl GraphAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{NodeType, Node, Edge};
+    use crate::{Edge, Node, NodeType};
     use uuid::Uuid;
 
     fn setup_test_graph() -> Arc<Graph> {
@@ -416,9 +425,15 @@ mod tests {
         let child2_id = graph.add_node(child2).unwrap();
         let grandchild_id = graph.add_node(grandchild).unwrap();
 
-        graph.add_edge(Edge::new(root_id, child1_id, EdgeType::Parent)).unwrap();
-        graph.add_edge(Edge::new(root_id, child2_id, EdgeType::Parent)).unwrap();
-        graph.add_edge(Edge::new(child1_id, grandchild_id, EdgeType::Parent)).unwrap();
+        graph
+            .add_edge(Edge::new(root_id, child1_id, EdgeType::Parent))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(root_id, child2_id, EdgeType::Parent))
+            .unwrap();
+        graph
+            .add_edge(Edge::new(child1_id, grandchild_id, EdgeType::Parent))
+            .unwrap();
 
         graph
     }
@@ -445,8 +460,16 @@ mod tests {
         let finder = PathFinder::new(graph.clone());
 
         let nodes = graph.all_nodes();
-        let root_id = nodes.iter().find(|n| n.name == "root").map(|n| n.id).unwrap();
-        let grandchild_id = nodes.iter().find(|n| n.name == "grandchild").map(|n| n.id).unwrap();
+        let root_id = nodes
+            .iter()
+            .find(|n| n.name == "root")
+            .map(|n| n.id)
+            .unwrap();
+        let grandchild_id = nodes
+            .iter()
+            .find(|n| n.name == "grandchild")
+            .map(|n| n.id)
+            .unwrap();
 
         let path = finder.shortest_path(root_id, grandchild_id).unwrap();
         assert_eq!(path.len(), 3); // root -> child1 -> grandchild
@@ -476,8 +499,16 @@ mod tests {
         let executor = QueryExecutor::new(graph.clone());
 
         let nodes = graph.all_nodes();
-        let root_id = nodes.iter().find(|n| n.name == "root").map(|n| n.id).unwrap();
-        let grandchild_id = nodes.iter().find(|n| n.name == "grandchild").map(|n| n.id).unwrap();
+        let root_id = nodes
+            .iter()
+            .find(|n| n.name == "root")
+            .map(|n| n.id)
+            .unwrap();
+        let grandchild_id = nodes
+            .iter()
+            .find(|n| n.name == "grandchild")
+            .map(|n| n.id)
+            .unwrap();
 
         let query = GraphQuery::FindPath {
             from: root_id,

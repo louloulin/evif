@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use evif_core::{EvifPlugin, MountTable, FileInfo, WriteFlags, OpenFlags};
+use evif_core::{EvifPlugin, FileInfo, MountTable, OpenFlags, WriteFlags};
 
 // 导入哈希库
+use base64::{engine::general_purpose, Engine as _};
+use digest::Digest;
 use md5;
 use sha2::{Sha256, Sha512};
-use digest::Digest;
-use base64::{Engine as _, engine::general_purpose};
 
 /// 应用状态
 #[derive(Clone)]
@@ -108,7 +108,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<FileReadParams>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&params.path)
             .await
             .ok_or_else(|| FsError::NotFound(params.path.clone()))?;
@@ -136,13 +137,15 @@ impl FsHandlers {
         Query(params): Query<FileWriteParams>,
         body: Vec<u8>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&params.path)
             .await
             .ok_or_else(|| FsError::NotFound(params.path.clone()))?;
 
         let offset = params.offset.unwrap_or(-1);
-        let flags = params.flags
+        let flags = params
+            .flags
             .and_then(|f| Self::parse_write_flags(&f))
             .unwrap_or(WriteFlags::NONE);
 
@@ -163,7 +166,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<std::collections::HashMap<String, String>>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let path = params.get("path")
+        let path = params
+            .get("path")
             .ok_or_else(|| FsError::BadRequest("Missing path parameter".to_string()))?
             .clone();
 
@@ -172,7 +176,8 @@ impl FsHandlers {
             .and_then(|p| p.parse::<u32>().ok())
             .unwrap_or(0o644);
 
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&path)
             .await
             .ok_or_else(|| FsError::NotFound(path.clone()))?;
@@ -194,11 +199,13 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<std::collections::HashMap<String, String>>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let path = params.get("path")
+        let path = params
+            .get("path")
             .ok_or_else(|| FsError::BadRequest("Missing path parameter".to_string()))?
             .clone();
 
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&path)
             .await
             .ok_or_else(|| FsError::NotFound(path.clone()))?;
@@ -220,11 +227,13 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<std::collections::HashMap<String, String>>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let path = params.get("path")
+        let path = params
+            .get("path")
             .ok_or_else(|| FsError::BadRequest("Missing path parameter".to_string()))?
             .clone();
 
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&path)
             .await
             .ok_or_else(|| FsError::NotFound(path.clone()))?;
@@ -248,7 +257,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<std::collections::HashMap<String, String>>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let path = params.get("path")
+        let path = params
+            .get("path")
             .ok_or_else(|| FsError::BadRequest("Missing path parameter".to_string()))?
             .clone();
 
@@ -257,7 +267,8 @@ impl FsHandlers {
             .and_then(|p| p.parse::<u32>().ok())
             .unwrap_or(0o755);
 
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&path)
             .await
             .ok_or_else(|| FsError::NotFound(path.clone()))?;
@@ -279,7 +290,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<DirListParams>,
     ) -> Result<Json<Vec<FileInfo>>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&params.path)
             .await
             .ok_or_else(|| FsError::NotFound(params.path.clone()))?;
@@ -300,7 +312,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<StatParams>,
     ) -> Result<Json<FileInfo>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&params.path)
             .await
             .ok_or_else(|| FsError::NotFound(params.path.clone()))?;
@@ -319,7 +332,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Json(req): Json<RenameRequest>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&req.old_path)
             .await
             .ok_or_else(|| FsError::NotFound(req.old_path.clone()))?;
@@ -341,7 +355,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Json(req): Json<ChmodRequest>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&req.path)
             .await
             .ok_or_else(|| FsError::NotFound(req.path.clone()))?;
@@ -363,7 +378,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Json(req): Json<TruncateRequest>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&req.path)
             .await
             .ok_or_else(|| FsError::NotFound(req.path.clone()))?;
@@ -387,7 +403,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Json(req): Json<SymlinkRequest>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&req.link)
             .await
             .ok_or_else(|| FsError::NotFound(req.link.clone()))?;
@@ -409,11 +426,13 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<std::collections::HashMap<String, String>>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let path = params.get("path")
+        let path = params
+            .get("path")
             .ok_or_else(|| FsError::BadRequest("Missing path parameter".to_string()))?
             .clone();
 
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&path)
             .await
             .ok_or_else(|| FsError::NotFound(path.clone()))?;
@@ -437,7 +456,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Query(params): Query<DigestParams>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&params.path)
             .await
             .ok_or_else(|| FsError::NotFound(params.path.clone()))?;
@@ -457,15 +477,15 @@ impl FsHandlers {
                 format!("md5 not implemented")
             }
             "sha256" => {
-                use sha2::Sha256;
                 use digest::Digest;
+                use sha2::Sha256;
                 let mut hasher = Sha256::new();
                 digest::Digest::update(&mut hasher, &data);
                 format!("{:x}", digest::Digest::finalize(hasher))
             }
             "sha512" => {
-                use sha2::Sha512;
                 use digest::Digest;
+                use sha2::Sha512;
                 let mut hasher = Sha512::new();
                 digest::Digest::update(&mut hasher, &data);
                 format!("{:x}", digest::Digest::finalize(hasher))
@@ -478,7 +498,12 @@ impl FsHandlers {
                 data.hash(&mut hasher);
                 format!("{:x}", hasher.finish())
             }
-            _ => return Err(FsError::BadRequest(format!("Unsupported algorithm: {}", algorithm))),
+            _ => {
+                return Err(FsError::BadRequest(format!(
+                    "Unsupported algorithm: {}",
+                    algorithm
+                )))
+            }
         };
 
         Ok(Json(serde_json::json!({
@@ -495,7 +520,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Json(req): Json<GrepRequest>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&req.path)
             .await
             .ok_or_else(|| FsError::NotFound(req.path.clone()))?;
@@ -508,8 +534,7 @@ impl FsHandlers {
         let mut results = Vec::new();
 
         // 递归搜索文件
-        Self::grep_recursive(&plugin, &req.path, &regex, max_results, &mut results)
-            .await?;
+        Self::grep_recursive(&plugin, &req.path, &regex, max_results, &mut results).await?;
 
         Ok(Json(serde_json::json!({
             "path": req.path,
@@ -525,7 +550,8 @@ impl FsHandlers {
         State(state): State<FsState>,
         Json(req): Json<TouchRequest>,
     ) -> Result<Json<serde_json::Value>, FsError> {
-        let plugin = state.mount_table
+        let plugin = state
+            .mount_table
             .lookup(&req.path)
             .await
             .ok_or_else(|| FsError::NotFound(req.path.clone()))?;

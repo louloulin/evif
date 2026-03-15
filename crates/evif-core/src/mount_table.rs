@@ -112,7 +112,11 @@ impl MountTable {
     /// ```go
     /// func (mfs *MountableFS) resolveSymlinkRecursive(path string, maxDepth int) (string, error)
     /// ```
-    pub async fn resolve_symlink_recursive(&self, path: &str, max_depth: usize) -> EvifResult<String> {
+    pub async fn resolve_symlink_recursive(
+        &self,
+        path: &str,
+        max_depth: usize,
+    ) -> EvifResult<String> {
         let mut current_path = Self::normalize_path(path);
         let mut visited = std::collections::HashSet::new();
 
@@ -157,7 +161,11 @@ impl MountTable {
     /// ```go
     /// func (mfs *MountableFS) resolvePathWithSymlinks(path string, maxDepth int) (string, error)
     /// ```
-    pub async fn resolve_path_with_symlinks(&self, path: &str, max_depth: usize) -> EvifResult<String> {
+    pub async fn resolve_path_with_symlinks(
+        &self,
+        path: &str,
+        max_depth: usize,
+    ) -> EvifResult<String> {
         let normalized_path = Self::normalize_path(path);
 
         // 分割路径为组件
@@ -310,7 +318,10 @@ mod tests {
         let mount_table = MountTable::new();
         let plugin = Arc::new(MockPlugin::new("test"));
 
-        mount_table.mount("/test".to_string(), plugin.clone()).await.unwrap();
+        mount_table
+            .mount("/test".to_string(), plugin.clone())
+            .await
+            .unwrap();
 
         let found = mount_table.lookup("/test/file.txt").await;
         assert!(found.is_some());
@@ -323,7 +334,10 @@ mod tests {
         let plugin1 = Arc::new(MockPlugin::new("test1"));
         let plugin2 = Arc::new(MockPlugin::new("test2"));
 
-        mount_table.mount("/test".to_string(), plugin1).await.unwrap();
+        mount_table
+            .mount("/test".to_string(), plugin1)
+            .await
+            .unwrap();
         let result = mount_table.mount("/test".to_string(), plugin2).await;
 
         assert!(result.is_err());
@@ -334,7 +348,10 @@ mod tests {
         let mount_table = MountTable::new();
         let plugin = Arc::new(MockPlugin::new("test"));
 
-        mount_table.mount("/test".to_string(), plugin).await.unwrap();
+        mount_table
+            .mount("/test".to_string(), plugin)
+            .await
+            .unwrap();
         mount_table.unmount("/test").await.unwrap();
 
         let found = mount_table.lookup("/test/file.txt").await;
@@ -348,7 +365,10 @@ mod tests {
         let plugin2 = Arc::new(MockPlugin::new("sub"));
 
         mount_table.mount("/".to_string(), plugin1).await.unwrap();
-        mount_table.mount("/sub".to_string(), plugin2).await.unwrap();
+        mount_table
+            .mount("/sub".to_string(), plugin2)
+            .await
+            .unwrap();
 
         // 应该匹配到更具体的 /sub 而不是 /
         let found = mount_table.lookup("/sub/file.txt").await;
@@ -401,7 +421,13 @@ impl EvifPlugin for MockPlugin {
         Ok(Vec::new())
     }
 
-    async fn write(&self, _path: &str, _data: Vec<u8>, _offset: i64, _flags: crate::plugin::WriteFlags) -> EvifResult<u64> {
+    async fn write(
+        &self,
+        _path: &str,
+        _data: Vec<u8>,
+        _offset: i64,
+        _flags: crate::plugin::WriteFlags,
+    ) -> EvifResult<u64> {
         Ok(0)
     }
 

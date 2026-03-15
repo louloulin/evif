@@ -1,12 +1,12 @@
 // EVIF 客户端 SDK
 
+mod cache;
 mod client;
 mod transport;
-mod cache;
 
-pub use client::{EvifClient, ClientConfig, HealthInfo, MountInfo, GrepMatch};
-pub use transport::{Transport, TransportError};
 pub use cache::ClientCache;
+pub use client::{ClientConfig, EvifClient, GrepMatch, HealthInfo, MountInfo};
+pub use transport::{Transport, TransportError};
 
 use evif_graph::NodeId;
 

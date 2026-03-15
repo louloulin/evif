@@ -2,7 +2,7 @@
  * EVIF Memory Client - Main client for interacting with the EVIF Memory API.
  */
 import { MemoryConfig } from './config';
-import { Memory, MemorySearchResult, Category, GraphResult, SearchOptions, ListMemoriesOptions, GraphQueryOptions, MemoryType, Modality } from './models';
+import { Memory, MemorySearchResult, Category, GraphResult, SearchOptions, ListMemoriesOptions, GraphQueryOptions, MemoryType, Modality, GraphQueryType } from './models';
 export declare class EvifMemoryClient {
     private readonly client;
     private readonly config;
@@ -22,6 +22,6 @@ export declare class EvifMemoryClient {
     listCategories(): Promise<Category[]>;
     getCategory(categoryId: string): Promise<Category>;
     getCategoryMemories(categoryId: string, limit?: number): Promise<Memory[]>;
-    queryGraph(query: string, queryOptions?: GraphQueryOptions): Promise<GraphResult>;
+    queryGraph(queryType: GraphQueryType | string, queryOptions?: GraphQueryOptions): Promise<GraphResult>;
     close(): Promise<void>;
 }

@@ -1,10 +1,10 @@
 // error 宏 - 为错误类型生成代码
 
+use darling::FromDeriveInput;
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::quote;
 use syn::{parse_macro_input, Data, DataEnum, DeriveInput};
-use darling::FromDeriveInput;
 
 /// #[error] 宏的参数
 #[derive(Debug, Default, FromDeriveInput)]
@@ -31,7 +31,8 @@ fn impl_error_macro(input: &DeriveInput, _args: &ErrorArgs) -> proc_macro2::Toke
     let variants = extract_variants(input);
 
     // 生成 Display 实现
-    let display_impl = generate_display(name, &impl_generics, &ty_generics, where_clause, &variants);
+    let display_impl =
+        generate_display(name, &impl_generics, &ty_generics, where_clause, &variants);
 
     // 生成 std::error::Error 实现
     let error_impl = generate_std_error(name, &impl_generics, &ty_generics, where_clause);

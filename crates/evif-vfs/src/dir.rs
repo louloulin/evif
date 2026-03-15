@@ -146,13 +146,15 @@ impl DirectoryBuilder {
 
     /// 添加当前目录引用
     pub fn add_current(mut self) -> Self {
-        self.entries.push(DirEntry::new(".", self.ino, FileType::Directory));
+        self.entries
+            .push(DirEntry::new(".", self.ino, FileType::Directory));
         self
     }
 
     /// 添加父目录引用
     pub fn add_parent(mut self, parent_ino: u64) -> Self {
-        self.entries.push(DirEntry::new("..", parent_ino, FileType::Directory));
+        self.entries
+            .push(DirEntry::new("..", parent_ino, FileType::Directory));
         self
     }
 

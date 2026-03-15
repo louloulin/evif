@@ -395,9 +395,11 @@ impl File {
         }
 
         let bytes_written = if self.is_append() {
-            let _ = self.offset.fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-                Some(self.size)
-            });
+            let _ = self
+                .offset
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                    Some(self.size)
+                });
             data.len() as u64
         } else {
             let current = self.offset();
@@ -416,7 +418,9 @@ impl File {
                 if offset < 0 {
                     let offset_abs = offset.unsigned_abs();
                     if offset_abs > self.size {
-                        return Err(VfsError::InvalidOperation("定位位置超出文件范围".to_string()));
+                        return Err(VfsError::InvalidOperation(
+                            "定位位置超出文件范围".to_string(),
+                        ));
                     }
                     self.size - offset_abs
                 } else {
@@ -428,7 +432,9 @@ impl File {
                 if offset < 0 {
                     let offset_abs = offset.unsigned_abs();
                     if offset_abs > current {
-                        return Err(VfsError::InvalidOperation("定位位置超出文件范围".to_string()));
+                        return Err(VfsError::InvalidOperation(
+                            "定位位置超出文件范围".to_string(),
+                        ));
                     }
                     current - offset_abs
                 } else {

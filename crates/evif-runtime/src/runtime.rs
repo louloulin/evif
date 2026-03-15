@@ -1,11 +1,11 @@
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::sync::Arc;
 use crate::{RuntimeConfig, RuntimeError, RuntimeResult};
-use evif_graph::{GraphEngine, GraphConfig};
-use evif_storage::MemoryStorage;
 use evif_auth::{AuthManager as EvifAuthManager, AuthPolicy as EvifAuthPolicy};
+use evif_graph::{GraphConfig, GraphEngine};
+use evif_storage::MemoryStorage;
+use std::sync::Arc;
 
 /// EVIF 运行时
 pub struct EvifRuntime {
@@ -28,7 +28,7 @@ impl EvifRuntime {
         };
         let graph_engine = Arc::new(GraphEngine::with_config(graph_config));
         let storage_manager = Arc::new(MemoryStorage::new());
-        
+
         let auth_policy = match config.auth_policy {
             crate::AuthPolicy::Open => EvifAuthPolicy::Open,
             crate::AuthPolicy::Strict => EvifAuthPolicy::Strict,
@@ -74,7 +74,7 @@ mod tests {
     fn test_runtime_creation() {
         let runtime = EvifRuntime::new();
         assert!(runtime.is_ok());
-        
+
         let runtime = runtime.unwrap();
         assert_eq!(runtime.config().max_nodes, 1_000_000);
     }
@@ -82,11 +82,11 @@ mod tests {
     #[test]
     fn test_runtime_components() {
         let runtime = EvifRuntime::new().unwrap();
-        
+
         let graph = runtime.graph_engine();
         let storage = runtime.storage_manager();
         let auth = runtime.auth_manager();
-        
+
         assert_eq!(graph.graph().node_count(), 0);
         assert_eq!(storage.node_count(), 0);
     }

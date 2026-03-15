@@ -62,10 +62,7 @@ pub enum AuditEvent {
         details: String,
     },
     /// System event
-    System {
-        event_type: String,
-        details: String,
-    },
+    System { event_type: String, details: String },
 }
 
 impl AuditEvent {
@@ -241,10 +238,18 @@ impl AuditLogger {
         match &entry.event {
             AuditEvent::Security { .. } => AuditLevel::Warning,
             AuditEvent::Auth { success, .. } => {
-                if *success { AuditLevel::Info } else { AuditLevel::Warning }
+                if *success {
+                    AuditLevel::Info
+                } else {
+                    AuditLevel::Warning
+                }
             }
             AuditEvent::Authorization { granted, .. } => {
-                if *granted { AuditLevel::Debug } else { AuditLevel::Warning }
+                if *granted {
+                    AuditLevel::Debug
+                } else {
+                    AuditLevel::Warning
+                }
             }
             AuditEvent::Delete { .. } => AuditLevel::Warning,
             _ => AuditLevel::Info,
@@ -255,7 +260,8 @@ impl AuditLogger {
     fn trim_entries(&self) {
         let excess = self.entries.len() - self.config.max_entries;
         if excess > 0 {
-            let keys: Vec<_> = self.entries
+            let keys: Vec<_> = self
+                .entries
                 .iter()
                 .take(excess)
                 .map(|e| e.key().clone())
@@ -280,13 +286,11 @@ impl AuditLogger {
     pub fn get_resource_entries(&self, resource: &str) -> Vec<AuditEntry> {
         self.entries
             .iter()
-            .filter(|e| {
-                match &e.event {
-                    AuditEvent::Access { resource: r, .. } => r == resource,
-                    AuditEvent::Modify { resource: r, .. } => r == resource,
-                    AuditEvent::Delete { resource: r, .. } => r == resource,
-                    _ => false,
-                }
+            .filter(|e| match &e.event {
+                AuditEvent::Access { resource: r, .. } => r == resource,
+                AuditEvent::Modify { resource: r, .. } => r == resource,
+                AuditEvent::Delete { resource: r, .. } => r == resource,
+                _ => false,
             })
             .map(|e| e.value().clone())
             .collect()
@@ -295,10 +299,7 @@ impl AuditLogger {
     /// Get recent entries
     pub fn get_recent(&self, limit: usize) -> Vec<AuditEntry> {
         // Collect all entries and sort by timestamp descending
-        let mut entries: Vec<_> = self.entries
-            .iter()
-            .map(|e| e.value().clone())
-            .collect();
+        let mut entries: Vec<_> = self.entries.iter().map(|e| e.value().clone()).collect();
 
         // Sort by timestamp descending (most recent first)
         entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -338,13 +339,7 @@ impl AuditLogger {
     }
 
     /// Log authentication event
-    pub fn log_auth(
-        &self,
-        user_id: &str,
-        action: &str,
-        success: bool,
-        reason: Option<String>,
-    ) {
+    pub fn log_auth(&self, user_id: &str, action: &str, success: bool, reason: Option<String>) {
         self.log(AuditEvent::Auth {
             user_id: user_id.to_string(),
             action: action.to_string(),
@@ -354,13 +349,7 @@ impl AuditLogger {
     }
 
     /// Log authorization event
-    pub fn log_authorization(
-        &self,
-        user_id: &str,
-        resource: &str,
-        action: &str,
-        granted: bool,
-    ) {
+    pub fn log_authorization(&self, user_id: &str, resource: &str, action: &str, granted: bool) {
         self.log(AuditEvent::Authorization {
             user_id: user_id.to_string(),
             resource: resource.to_string(),
@@ -370,12 +359,7 @@ impl AuditLogger {
     }
 
     /// Log security event
-    pub fn log_security(
-        &self,
-        user_id: Option<String>,
-        event_type: &str,
-        details: &str,
-    ) {
+    pub fn log_security(&self, user_id: Option<String>, event_type: &str, details: &str) {
         self.log(AuditEvent::Security {
             user_id,
             event_type: event_type.to_string(),
@@ -408,7 +392,12 @@ mod tests {
     #[test]
     fn test_log_auth_failure() {
         let logger = AuditLogger::new(AuditConfig::default());
-        logger.log_auth("user1", "login", false, Some("Invalid password".to_string()));
+        logger.log_auth(
+            "user1",
+            "login",
+            false,
+            Some("Invalid password".to_string()),
+        );
 
         assert_eq!(logger.len(), 1);
     }
@@ -418,7 +407,13 @@ mod tests {
         let logger = AuditLogger::new(AuditConfig::default());
 
         for i in 0..15 {
-            logger.log_access(&format!("user{}", i), "memory_item", &format!("id-{}", i), "read", true);
+            logger.log_access(
+                &format!("user{}", i),
+                "memory_item",
+                &format!("id-{}", i),
+                "read",
+                true,
+            );
         }
 
         let recent = logger.get_recent(5);

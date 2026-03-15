@@ -1,6 +1,6 @@
 // 客户端缓存
 
-use evif_graph::{NodeId, Node};
+use evif_graph::{Node, NodeId};
 use lru::LruCache;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -14,7 +14,9 @@ impl ClientCache {
     /// 创建新缓存
     pub fn new(capacity: usize) -> Self {
         Self {
-            cache: Arc::new(Mutex::new(LruCache::new(std::num::NonZeroUsize::new(capacity).unwrap()))),
+            cache: Arc::new(Mutex::new(LruCache::new(
+                std::num::NonZeroUsize::new(capacity).unwrap(),
+            ))),
         }
     }
 

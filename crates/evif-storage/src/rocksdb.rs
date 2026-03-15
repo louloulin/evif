@@ -1,5 +1,4 @@
 #![cfg(feature = "rocksdb-backend")]
-
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
@@ -20,9 +19,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::{
-    backend::Transaction,
-    StorageBackend, StorageResult, StorageError,
-    StorageOp, Node, Edge, NodeId, EdgeId,
+    backend::Transaction, Edge, EdgeId, Node, NodeId, StorageBackend, StorageError, StorageOp,
+    StorageResult,
 };
 
 /// 序列化节点为字节
@@ -33,8 +31,9 @@ fn serialize_node(node: &Node) -> StorageResult<Vec<u8>> {
 
 /// 从字节反序列化节点
 fn deserialize_node(data: &[u8]) -> StorageResult<Node> {
-    serde_json::from_slice(data)
-        .map_err(|e| StorageError::DeserializationError(format!("Failed to deserialize node: {}", e)))
+    serde_json::from_slice(data).map_err(|e| {
+        StorageError::DeserializationError(format!("Failed to deserialize node: {}", e))
+    })
 }
 
 /// 序列化边为字节
@@ -45,8 +44,9 @@ fn serialize_edge(edge: &Edge) -> StorageResult<Vec<u8>> {
 
 /// 从字节反序列化边
 fn deserialize_edge(data: &[u8]) -> StorageResult<Edge> {
-    serde_json::from_slice(data)
-        .map_err(|e| StorageError::DeserializationError(format!("Failed to deserialize edge: {}", e)))
+    serde_json::from_slice(data).map_err(|e| {
+        StorageError::DeserializationError(format!("Failed to deserialize edge: {}", e))
+    })
 }
 
 /// RocksDB 存储后端
@@ -94,9 +94,7 @@ impl RocksDBStorage {
         let db = rocksdb::DB::open_cf_descriptors(&opts, db_path, cf_descriptors)
             .map_err(|e| StorageError::IoError(format!("Failed to open RocksDB: {}", e)))?;
 
-        Ok(Self {
-            db: Arc::new(db),
-        })
+        Ok(Self { db: Arc::new(db) })
     }
 
     /// 创建临时内存存储
@@ -126,12 +124,22 @@ impl RocksDBStorage {
     /// 获取节点数量（近似值）
     pub fn node_count(&self) -> usize {
         // 使用迭代器计数作为近似
-        self.db.iterator_cf(&self.db.cf_handle("nodes").unwrap(), rocksdb::IteratorMode::Start).count()
+        self.db
+            .iterator_cf(
+                &self.db.cf_handle("nodes").unwrap(),
+                rocksdb::IteratorMode::Start,
+            )
+            .count()
     }
 
     /// 获取边数量（近似值）
     pub fn edge_count(&self) -> usize {
-        self.db.iterator_cf(&self.db.cf_handle("edges").unwrap(), rocksdb::IteratorMode::Start).count()
+        self.db
+            .iterator_cf(
+                &self.db.cf_handle("edges").unwrap(),
+                rocksdb::IteratorMode::Start,
+            )
+            .count()
     }
 
     /// 创建快照
@@ -141,7 +149,8 @@ impl RocksDBStorage {
 
     /// 刷入磁盘
     pub fn flush(&self) -> StorageResult<()> {
-        self.db.flush()
+        self.db
+            .flush()
             .map_err(|e| StorageError::IoError(format!("Failed to flush: {}", e)))?;
         Ok(())
     }
@@ -161,7 +170,10 @@ impl RocksDBStorage {
 
     /// 获取数据库统计信息字符串
     pub fn get_statistics(&self) -> Option<String> {
-        self.db.property_value(rocksdb::properties::STATS).ok().flatten()
+        self.db
+            .property_value(rocksdb::properties::STATS)
+            .ok()
+            .flatten()
     }
 
     fn node_id_to_vec(id: &NodeId) -> Vec<u8> {
@@ -173,11 +185,15 @@ impl RocksDBStorage {
     }
 
     fn get_nodes_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle("nodes").expect("nodes column family should exist")
+        self.db
+            .cf_handle("nodes")
+            .expect("nodes column family should exist")
     }
 
     fn get_edges_cf(&self) -> &rocksdb::ColumnFamily {
-        self.db.cf_handle("edges").expect("edges column family should exist")
+        self.db
+            .cf_handle("edges")
+            .expect("edges column family should exist")
     }
 }
 
@@ -199,14 +215,16 @@ impl StorageBackend for RocksDBStorage {
         let key = Self::node_id_to_vec(&node.id);
         let value = serialize_node(node)?;
 
-        self.db.put_cf(self.get_nodes_cf(), key, value)
+        self.db
+            .put_cf(self.get_nodes_cf(), key, value)
             .map_err(|e| StorageError::IoError(format!("Failed to put node: {}", e)))?;
         Ok(())
     }
 
     async fn delete_node(&self, id: &NodeId) -> StorageResult<()> {
         let key = Self::node_id_to_vec(id);
-        self.db.delete_cf(self.get_nodes_cf(), key)
+        self.db
+            .delete_cf(self.get_nodes_cf(), key)
             .map_err(|e| StorageError::IoError(format!("Failed to delete node: {}", e)))?;
         Ok(())
     }
@@ -227,14 +245,16 @@ impl StorageBackend for RocksDBStorage {
         let key = Self::edge_id_to_vec(&edge.id);
         let value = serialize_edge(edge)?;
 
-        self.db.put_cf(self.get_edges_cf(), key, value)
+        self.db
+            .put_cf(self.get_edges_cf(), key, value)
             .map_err(|e| StorageError::IoError(format!("Failed to put edge: {}", e)))?;
         Ok(())
     }
 
     async fn delete_edge(&self, id: &EdgeId) -> StorageResult<()> {
         let key = Self::edge_id_to_vec(id);
-        self.db.delete_cf(self.get_edges_cf(), key)
+        self.db
+            .delete_cf(self.get_edges_cf(), key)
             .map_err(|e| StorageError::IoError(format!("Failed to delete edge: {}", e)))?;
         Ok(())
     }
@@ -268,7 +288,8 @@ impl StorageBackend for RocksDBStorage {
             }
         }
 
-        self.db.write(batch)
+        self.db
+            .write(batch)
             .map_err(|e| StorageError::IoError(format!("Batch write failed: {}", e)))?;
         Ok(())
     }
@@ -282,10 +303,13 @@ impl StorageBackend for RocksDBStorage {
 
     async fn scan_nodes(&self) -> StorageResult<Pin<Box<dyn Stream<Item = Node> + Send>>> {
         let mut nodes = Vec::new();
-        let iter = self.db.iterator_cf(self.get_nodes_cf(), rocksdb::IteratorMode::Start);
+        let iter = self
+            .db
+            .iterator_cf(self.get_nodes_cf(), rocksdb::IteratorMode::Start);
 
         for item in iter {
-            let (_key, value) = item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
+            let (_key, value) =
+                item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
             let node = deserialize_node(&value)?;
             nodes.push(node);
         }
@@ -295,10 +319,13 @@ impl StorageBackend for RocksDBStorage {
 
     async fn scan_edges(&self) -> StorageResult<Pin<Box<dyn Stream<Item = Edge> + Send>>> {
         let mut edges = Vec::new();
-        let iter = self.db.iterator_cf(self.get_edges_cf(), rocksdb::IteratorMode::Start);
+        let iter = self
+            .db
+            .iterator_cf(self.get_edges_cf(), rocksdb::IteratorMode::Start);
 
         for item in iter {
-            let (_key, value) = item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
+            let (_key, value) =
+                item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
             let edge = deserialize_edge(&value)?;
             edges.push(edge);
         }
@@ -320,7 +347,8 @@ unsafe impl Send for RocksDBTransaction {}
 impl Transaction for RocksDBTransaction {
     async fn commit(mut self: Box<Self>) -> StorageResult<()> {
         // RocksDB 的写操作是原子性的，通过 WriteBatch 实现
-        self.db.flush()
+        self.db
+            .flush()
             .map_err(|e| StorageError::TransactionError(format!("Commit failed: {}", e)))?;
         self.committed = true;
         Ok(())
@@ -342,7 +370,7 @@ pub struct RocksDBStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use evif_graph::{NodeType, EdgeType};
+    use evif_graph::{EdgeType, NodeType};
     use tempfile::TempDir;
 
     #[tokio::test]

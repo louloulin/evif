@@ -1,7 +1,7 @@
 // 响应类型定义
 
-use serde::{Deserialize, Serialize};
 use evif_graph::{Node, NodeId};
+use serde::{Deserialize, Serialize};
 
 /// 响应状态
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,7 +108,10 @@ impl Response {
 
     /// 检查是否成功
     pub fn is_success(&self) -> bool {
-        matches!(self.status, ResponseStatus::Success | ResponseStatus::PartialSuccess)
+        matches!(
+            self.status,
+            ResponseStatus::Success | ResponseStatus::PartialSuccess
+        )
     }
 
     /// 获取错误信息
@@ -120,9 +123,7 @@ impl Response {
     pub fn estimated_size(&self) -> usize {
         match &self.kind {
             ResponseKind::Pong => 32,
-            ResponseKind::Node { node } => {
-                node.as_ref().map(|_n| 256).unwrap_or(64)
-            }
+            ResponseKind::Node { node } => node.as_ref().map(|_n| 256).unwrap_or(64),
             ResponseKind::Created { .. } => 64,
             ResponseKind::Updated => 32,
             ResponseKind::Deleted => 32,
@@ -131,9 +132,7 @@ impl Response {
             ResponseKind::FileResult { data, .. } => {
                 64 + data.as_ref().map(|d| d.len()).unwrap_or(0)
             }
-            ResponseKind::Batch { results } => {
-                results.iter().map(|r| r.estimated_size()).sum()
-            }
+            ResponseKind::Batch { results } => results.iter().map(|r| r.estimated_size()).sum(),
             ResponseKind::Stream { .. } => 32,
         }
     }
@@ -171,11 +170,7 @@ impl Response {
         size: Option<u64>,
         data: Option<Vec<u8>>,
     ) -> Self {
-        Self::success(request_id, ResponseKind::FileResult {
-            handle,
-            size,
-            data,
-        })
+        Self::success(request_id, ResponseKind::FileResult { handle, size, data })
     }
 }
 
@@ -220,11 +215,7 @@ mod tests {
 
     #[test]
     fn test_response_status() {
-        let resp = Response::new(
-            123,
-            ResponseStatus::Success,
-            ResponseKind::Pong,
-        );
+        let resp = Response::new(123, ResponseStatus::Success, ResponseKind::Pong);
 
         assert_eq!(resp.status, ResponseStatus::Success);
         assert!(resp.is_success());

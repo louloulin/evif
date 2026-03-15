@@ -4,9 +4,9 @@
 //! EVIF 运行时 - 核心编排和配置管理
 
 pub mod config;
-pub mod runtime;
 pub mod error;
+pub mod runtime;
 
-pub use config::{RuntimeConfig, StorageConfig, AuthPolicy};
-pub use runtime::EvifRuntime;
+pub use config::{AuthPolicy, RuntimeConfig, StorageConfig};
 pub use error::{RuntimeError, RuntimeResult};
+pub use runtime::EvifRuntime;

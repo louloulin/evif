@@ -1,10 +1,10 @@
 // 脚本执行支持 - .as (AGFS Script) 文件
 // 支持 if/for/while 控制流和变量替换
 
-use anyhow::Result;
-use std::path::Path;
-use std::collections::HashMap;
 use crate::commands::EvifCommand;
+use anyhow::Result;
+use std::collections::HashMap;
+use std::path::Path;
 
 /// 脚本执行器
 pub struct ScriptExecutor {
@@ -23,7 +23,8 @@ impl ScriptExecutor {
 
     /// 执行脚本文件
     pub async fn execute_file(&mut self, path: &str) -> Result<()> {
-        let content = tokio::fs::read_to_string(path).await
+        let content = tokio::fs::read_to_string(path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to read script file: {}", e))?;
 
         self.execute_script(&content).await
@@ -64,7 +65,8 @@ impl ScriptExecutor {
             }
             "sleep" => {
                 if let Some(seconds) = args.first() {
-                    let secs: u64 = seconds.parse()
+                    let secs: u64 = seconds
+                        .parse()
                         .map_err(|_| anyhow::anyhow!("Invalid sleep duration: {}", seconds))?;
                     tokio::time::sleep(tokio::time::Duration::from_secs(secs)).await;
                 }
@@ -119,7 +121,8 @@ impl ScriptExecutor {
                         }
                         var_name.push(chars.next().unwrap());
                     }
-                    let value = self.get_variable(&var_name)
+                    let value = self
+                        .get_variable(&var_name)
                         .cloned()
                         .or_else(|| std::env::var(&var_name).ok())
                         .unwrap_or_default();
@@ -137,7 +140,8 @@ impl ScriptExecutor {
                         "?" => "0".to_string(),
                         "$" => std::process::id().to_string(),
                         "0" => "evif".to_string(),
-                        _ => self.get_variable(&var_name)
+                        _ => self
+                            .get_variable(&var_name)
                             .cloned()
                             .or_else(|| std::env::var(&var_name).ok())
                             .unwrap_or_default(),
@@ -154,7 +158,8 @@ impl ScriptExecutor {
 
     /// 使用 EvifCommand 执行脚本文件（静态方法，用于 REPL 集成）
     pub async fn execute_script_with_client(script_path: &str, client: &EvifCommand) -> Result<()> {
-        let content = tokio::fs::read_to_string(script_path).await
+        let content = tokio::fs::read_to_string(script_path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to read script file: {}", e))?;
 
         let mut variables = HashMap::new();
@@ -177,7 +182,10 @@ impl ScriptExecutor {
                     println!("{}", parts[1..].join(" "));
                 }
                 "ls" => {
-                    let path = parts.get(1).map(|s| s.to_string()).unwrap_or_else(|| "/".to_string());
+                    let path = parts
+                        .get(1)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "/".to_string());
                     if let Err(e) = client.ls(Some(path), false, false).await {
                         eprintln!("Error: {}", e);
                     }
@@ -277,7 +285,9 @@ impl<'a> ScriptParser<'a> {
                         }
                         var_name.push(chars.next().unwrap());
                     }
-                    let value = self.variables.get(&var_name)
+                    let value = self
+                        .variables
+                        .get(&var_name)
                         .cloned()
                         .or_else(|| std::env::var(&var_name).ok())
                         .unwrap_or_default();
@@ -295,7 +305,9 @@ impl<'a> ScriptParser<'a> {
                         "?" => "0".to_string(),
                         "$" => std::process::id().to_string(),
                         "0" => "evif".to_string(),
-                        _ => self.variables.get(&var_name)
+                        _ => self
+                            .variables
+                            .get(&var_name)
                             .cloned()
                             .or_else(|| std::env::var(&var_name).ok())
                             .unwrap_or_default(),
@@ -382,11 +394,7 @@ impl<'a> ScriptParser<'a> {
     }
 
     /// 执行脚本
-    async fn execute<F, Fut>(
-        mut self,
-        script: &str,
-        mut execute_command: F,
-    ) -> Result<()>
+    async fn execute<F, Fut>(mut self, script: &str, mut execute_command: F) -> Result<()>
     where
         F: FnMut(String) -> Fut,
         Fut: std::future::Future<Output = Result<()>>,
@@ -394,7 +402,8 @@ impl<'a> ScriptParser<'a> {
         let statements = self.parse_statements(script)?;
 
         for statement in statements {
-            self.execute_statement(&statement, &mut execute_command).await?;
+            self.execute_statement(&statement, &mut execute_command)
+                .await?;
         }
 
         Ok(())
@@ -413,7 +422,11 @@ impl<'a> ScriptParser<'a> {
     }
 
     /// 收集语句中的所有命令
-    fn collect_commands(&mut self, statement: &Statement, commands: &mut Vec<String>) -> Result<()> {
+    fn collect_commands(
+        &mut self,
+        statement: &Statement,
+        commands: &mut Vec<String>,
+    ) -> Result<()> {
         match statement {
             Statement::Command(cmd) => {
                 let expanded = self.expand_variables(cmd);
@@ -510,14 +523,22 @@ impl<'a> ScriptParser<'a> {
     }
 
     /// 解析代码块
-    fn parse_block(&self, lines: &[&str], i: &mut usize, start_kw: &str, end_kw: &str) -> Result<(String, Vec<Statement>)> {
+    fn parse_block(
+        &self,
+        lines: &[&str],
+        i: &mut usize,
+        start_kw: &str,
+        end_kw: &str,
+    ) -> Result<(String, Vec<Statement>)> {
         let first_line = lines[*i - 1].trim();
         let mut block_lines = Vec::new();
 
         // 检查是否有花括号
         if first_line.contains('{') {
             let open_brace = first_line.find('{').unwrap();
-            let condition = first_line[start_kw.len() + 1..open_brace].trim().to_string();
+            let condition = first_line[start_kw.len() + 1..open_brace]
+                .trim()
+                .to_string();
 
             let mut block_content = String::new();
 

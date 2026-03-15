@@ -2,16 +2,16 @@
 
 use crate::repl::Repl;
 use anyhow::Result;
+use base64::Engine;
+use chrono::Utc;
 use evif_client::EvifClient;
+use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::io::Write;
-use tokio::runtime::Runtime;
-use tracing::{info, error};
-use chrono::Utc;
 use std::sync::Mutex;
-use base64::Engine;
-use std::collections::HashMap;
+use tokio::runtime::Runtime;
+use tracing::{error, info};
 
 pub struct EvifCommand {
     server: String,
@@ -45,7 +45,13 @@ impl EvifCommand {
 
         // 使用同步方法创建客户端
         let client = evif_client::EvifClient::new_sync(config);
-        Self { server, verbose, client, cwd: Arc::new(Mutex::new("/".to_string())), env_vars: Arc::new(Mutex::new(std::collections::HashMap::new())) }
+        Self {
+            server,
+            verbose,
+            client,
+            cwd: Arc::new(Mutex::new("/".to_string())),
+            env_vars: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        }
     }
 
     /// 列出目录内容
@@ -54,17 +60,27 @@ impl EvifCommand {
         let files = self.client.ls(&path).await?;
 
         if long {
-            println!("{:<8} {:<12} {:<20} {:<40}", "Mode", "Size", "Modified", "Name");
+            println!(
+                "{:<8} {:<12} {:<20} {:<40}",
+                "Mode", "Size", "Modified", "Name"
+            );
             println!("{}", "-".repeat(80));
             for file in files {
-                let mode = if file.is_dir { "drwxr-xr-x" } else { "-rw-r--r--" };
+                let mode = if file.is_dir {
+                    "drwxr-xr-x"
+                } else {
+                    "-rw-r--r--"
+                };
                 let modified = file.modified.format("%Y-%m-%d %H:%M").to_string();
-                let size = if file.is_dir { "".to_string() } else { format!("{}", file.size) };
-                println!("{:<8} {:<12} {:<20} {:<40}",
-                    mode,
-                    size,
-                    modified,
-                    file.name);
+                let size = if file.is_dir {
+                    "".to_string()
+                } else {
+                    format!("{}", file.size)
+                };
+                println!(
+                    "{:<8} {:<12} {:<20} {:<40}",
+                    mode, size, modified, file.name
+                );
             }
         } else {
             for file in files {
@@ -170,7 +186,11 @@ impl EvifCommand {
         let content = self.client.cat(&path).await?;
         let content_lines: Vec<&str> = content.lines().collect();
         let total_lines = content_lines.len();
-        let start = if total_lines > lines { total_lines - lines } else { 0 };
+        let start = if total_lines > lines {
+            total_lines - lines
+        } else {
+            0
+        };
         for line in content_lines.iter().skip(start) {
             println!("{}", line);
         }
@@ -273,7 +293,12 @@ impl EvifCommand {
 
     /// 创建节点
     /// NOTE: Graph functionality not implemented (confirmed not required for EVIF 1.8)
-    pub async fn create(&self, node_type: String, name: String, parent: Option<String>) -> Result<()> {
+    pub async fn create(
+        &self,
+        node_type: String,
+        name: String,
+        parent: Option<String>,
+    ) -> Result<()> {
         println!("Error: Graph functionality not implemented");
         println!("Use 'mkdir' and 'write' for filesystem operations instead.");
         Ok(())
@@ -300,7 +325,10 @@ impl EvifCommand {
     /// 修改文件所有者
     /// NOTE: chown requires backend support (not yet implemented in REST API)
     pub async fn chown(&self, path: String, owner: String, group: Option<String>) -> Result<()> {
-        let group_info = group.as_ref().map(|g| format!(":{}", g)).unwrap_or_default();
+        let group_info = group
+            .as_ref()
+            .map(|g| format!(":{}", g))
+            .unwrap_or_default();
         println!("Error: chown not yet supported by backend");
         Ok(())
     }
@@ -308,7 +336,8 @@ impl EvifCommand {
     /// 上传文件到EVIF
     pub async fn upload(&self, local_path: String, remote_path: String) -> Result<()> {
         // 读取本地文件
-        let content = tokio::fs::read_to_string(&local_path).await
+        let content = tokio::fs::read_to_string(&local_path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to read local file: {}", e))?;
 
         // 写入到EVIF
@@ -323,7 +352,8 @@ impl EvifCommand {
         let content = self.client.cat(&remote_path).await?;
 
         // 写入本地文件
-        tokio::fs::write(&local_path, content).await
+        tokio::fs::write(&local_path, content)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to write local file: {}", e))?;
 
         println!("Downloaded: {} -> {}", remote_path, local_path);
@@ -363,7 +393,14 @@ impl EvifCommand {
         let mut total_files = 0usize;
         let mut total_dirs = 0usize;
 
-        self.calculate_size(&path, &mut total_size, &mut total_files, &mut total_dirs, recursive).await?;
+        self.calculate_size(
+            &path,
+            &mut total_size,
+            &mut total_files,
+            &mut total_dirs,
+            recursive,
+        )
+        .await?;
 
         println!("Size summary for: {}", path);
         println!("  Total size: {} bytes", total_size);
@@ -389,7 +426,14 @@ impl EvifCommand {
                 *total_dirs += 1;
                 if recursive {
                     let new_path = format!("{}/{}", path.trim_end_matches('/'), file.name);
-                    Box::pin(self.calculate_size(&new_path, total_size, total_files, total_dirs, recursive)).await?;
+                    Box::pin(self.calculate_size(
+                        &new_path,
+                        total_size,
+                        total_files,
+                        total_dirs,
+                        recursive,
+                    ))
+                    .await?;
                 }
             } else {
                 *total_files += 1;
@@ -481,7 +525,11 @@ impl EvifCommand {
 
     /// 生成文件校验和（Phase 10.1：使用 evif-client digest，POST /api/v1/digest）
     pub async fn checksum(&self, path: String, algorithm: String) -> Result<()> {
-        let algo = if algorithm.is_empty() { None } else { Some(algorithm.as_str()) };
+        let algo = if algorithm.is_empty() {
+            None
+        } else {
+            Some(algorithm.as_str())
+        };
         let (algo_name, hash) = self.client.digest(&path, algo).await?;
         println!("{}  {}  {}", algo_name, hash, path);
         Ok(())
@@ -520,7 +568,10 @@ impl EvifCommand {
         println!("  Destination: {}", destination);
         println!("  Files: {}", sources.len());
         println!("  Concurrency: {}", concurrency);
-        println!("  Progress: {}", if progress { "enabled" } else { "disabled" });
+        println!(
+            "  Progress: {}",
+            if progress { "enabled" } else { "disabled" }
+        );
 
         let url = format!("{}/api/v1/batch/copy", self.server);
         let body = serde_json::json!({
@@ -570,7 +621,10 @@ impl EvifCommand {
         println!("  Files: {}", paths.len());
         println!("  Recursive: {}", recursive);
         println!("  Concurrency: {}", concurrency);
-        println!("  Progress: {}", if progress { "enabled" } else { "disabled" });
+        println!(
+            "  Progress: {}",
+            if progress { "enabled" } else { "disabled" }
+        );
 
         let url = format!("{}/api/v1/batch/delete", self.server);
         let body = serde_json::json!({
@@ -743,7 +797,9 @@ impl EvifCommand {
                     if resp.status().is_success() {
                         if let Ok(json) = resp.json::<serde_json::Value>().await {
                             if let Some(status) = json.get("status").and_then(|v| v.as_str()) {
-                                if let Some(progress) = json.get("progress").and_then(|v| v.as_f64()) {
+                                if let Some(progress) =
+                                    json.get("progress").and_then(|v| v.as_f64())
+                                {
                                     print!("\rProgress: {:.1}%", progress);
                                     std::io::stdout().flush().unwrap();
                                 }
@@ -808,32 +864,45 @@ impl EvifCommand {
     }
 
     /// 排序文本行
-    pub async fn sort(&self, file: Option<String>, reverse: bool, numeric: bool, unique: bool) -> Result<()> {
+    pub async fn sort(
+        &self,
+        file: Option<String>,
+        reverse: bool,
+        numeric: bool,
+        unique: bool,
+    ) -> Result<()> {
         let content = if let Some(ref path) = file {
             // 判断是本地文件还是 EVIF 路径
             if path.starts_with('/') && !std::path::Path::new(path).exists() {
                 self.client.cat(path).await?
             } else {
-                tokio::fs::read_to_string(path).await
+                tokio::fs::read_to_string(path)
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to read local file: {}", e))?
             }
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         let mut lines: Vec<&str> = content.lines().collect();
 
         if numeric {
             lines.sort_by(|a, b| {
-                let a_val = a.split_whitespace()
+                let a_val = a
+                    .split_whitespace()
                     .next()
                     .and_then(|s| s.parse::<f64>().ok())
                     .unwrap_or(f64::NAN);
-                let b_val = b.split_whitespace()
+                let b_val = b
+                    .split_whitespace()
                     .next()
                     .and_then(|s| s.parse::<f64>().ok())
                     .unwrap_or(f64::NAN);
-                a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
+                a_val
+                    .partial_cmp(&b_val)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
         } else {
             lines.sort();
@@ -862,11 +931,14 @@ impl EvifCommand {
             if path.starts_with('/') && !std::path::Path::new(path).exists() {
                 self.client.cat(path).await?
             } else {
-                tokio::fs::read_to_string(path).await
+                tokio::fs::read_to_string(path)
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to read local file: {}", e))?
             }
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         let mut prev_line = "";
@@ -897,16 +969,25 @@ impl EvifCommand {
     }
 
     /// 统计文本行数、字数、字节数
-    pub async fn wc(&self, file: Option<String>, lines: bool, words: bool, bytes: bool) -> Result<()> {
+    pub async fn wc(
+        &self,
+        file: Option<String>,
+        lines: bool,
+        words: bool,
+        bytes: bool,
+    ) -> Result<()> {
         let content = if let Some(ref path) = file {
             if path.starts_with('/') && !std::path::Path::new(path).exists() {
                 self.client.cat(path).await?
             } else {
-                tokio::fs::read_to_string(path).await
+                tokio::fs::read_to_string(path)
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to read local file: {}", e))?
             }
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         let line_count = content.lines().count();
@@ -953,11 +1034,20 @@ impl EvifCommand {
     }
 
     /// Cut 命令：从每行提取指定部分
-    pub async fn cut(&self, file: Option<String>, bytes: Option<String>, chars: Option<String>, fields: Option<String>, delimiter: Option<String>) -> Result<()> {
+    pub async fn cut(
+        &self,
+        file: Option<String>,
+        bytes: Option<String>,
+        chars: Option<String>,
+        fields: Option<String>,
+        delimiter: Option<String>,
+    ) -> Result<()> {
         let content = if let Some(ref path) = file {
             self.client.cat(path).await?
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         for line in content.lines() {
@@ -981,7 +1071,8 @@ impl EvifCommand {
     fn cut_bytes(&self, line: &str, ranges: &str) -> String {
         let bytes = line.as_bytes();
         let ranges = self.parse_ranges(ranges, bytes.len());
-        let result: Vec<u8> = ranges.iter()
+        let result: Vec<u8> = ranges
+            .iter()
             .flat_map(|(start, end)| bytes.get(*start..*end).unwrap_or(&[]))
             .copied()
             .collect();
@@ -992,7 +1083,8 @@ impl EvifCommand {
     fn cut_chars(&self, line: &str, ranges: &str) -> String {
         let chars: Vec<char> = line.chars().collect();
         let ranges = self.parse_ranges(ranges, chars.len());
-        let result: String = ranges.iter()
+        let result: String = ranges
+            .iter()
             .flat_map(|(start, end)| chars.get(*start..*end).unwrap_or(&[]))
             .collect();
         result
@@ -1004,7 +1096,13 @@ impl EvifCommand {
         let selected: Vec<&str> = field_list
             .split(',')
             .filter_map(|s| s.trim().parse::<usize>().ok())
-            .filter_map(|i| if i > 0 && i <= fields.len() { Some(fields[i - 1]) } else { None })
+            .filter_map(|i| {
+                if i > 0 && i <= fields.len() {
+                    Some(fields[i - 1])
+                } else {
+                    None
+                }
+            })
             .collect();
         selected.join(delimiter)
     }
@@ -1034,11 +1132,19 @@ impl EvifCommand {
     }
 
     /// Tr 命令：转换或删除字符
-    pub async fn tr_(&self, file: Option<String>, from: String, to: String, delete: bool) -> Result<()> {
+    pub async fn tr_(
+        &self,
+        file: Option<String>,
+        from: String,
+        to: String,
+        delete: bool,
+    ) -> Result<()> {
         let content = if let Some(ref path) = file {
             self.client.cat(path).await?
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         let from_chars: Vec<char> = from.chars().collect();
@@ -1046,13 +1152,12 @@ impl EvifCommand {
 
         for line in content.lines() {
             let result: String = if delete {
-                line.chars()
-                    .filter(|c| !from_chars.contains(c))
-                    .collect()
+                line.chars().filter(|c| !from_chars.contains(c)).collect()
             } else {
                 line.chars()
                     .map(|c| {
-                        from_chars.iter()
+                        from_chars
+                            .iter()
                             .position(|&fc| fc == c)
                             .and_then(|pos| to_chars.get(pos).copied())
                             .unwrap_or(c)
@@ -1070,7 +1175,9 @@ impl EvifCommand {
         let content = if let Some(ref path) = file {
             self.client.cat(path).await?
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         if decode {
@@ -1184,7 +1291,10 @@ impl EvifCommand {
         };
 
         // 简单的路径规范化（移除 . 和 ..）
-        let parts: Vec<&str> = resolved.split('/').filter(|s| !s.is_empty() && *s != ".").collect();
+        let parts: Vec<&str> = resolved
+            .split('/')
+            .filter(|s| !s.is_empty() && *s != ".")
+            .collect();
         let mut result = Vec::new();
         for part in parts {
             if part == ".." {
@@ -1213,11 +1323,14 @@ impl EvifCommand {
                 self.client.cat(path).await?
             } else {
                 // 本地文件
-                tokio::fs::read_to_string(path).await
+                tokio::fs::read_to_string(path)
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to read local file: {}", e))?
             }
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         // 反转整个字符串
@@ -1235,11 +1348,14 @@ impl EvifCommand {
                 self.client.cat(path).await?
             } else {
                 // 本地文件或已存在的路径
-                tokio::fs::read_to_string(path).await
+                tokio::fs::read_to_string(path)
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to read local file: {}", e))?
             }
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         // 按行分割，然后反转行数组
@@ -1273,11 +1389,14 @@ impl EvifCommand {
                 self.client.cat(path).await?
             } else {
                 // 本地文件
-                tokio::fs::read_to_string(path).await
+                tokio::fs::read_to_string(path)
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to read local file: {}", e))?
             }
         } else {
-            return Err(anyhow::anyhow!("Reading from stdin not yet supported. Please provide a file."));
+            return Err(anyhow::anyhow!(
+                "Reading from stdin not yet supported. Please provide a file."
+            ));
         };
 
         let lines_per_split = lines.unwrap_or(1000);
@@ -1301,16 +1420,30 @@ impl EvifCommand {
             std::path::PathBuf::from(&path)
         };
 
-        self.find_recursive(&search_path, name.map(|s| s.to_string()), type_.map(|s| s.to_string())).await
+        self.find_recursive(
+            &search_path,
+            name.map(|s| s.to_string()),
+            type_.map(|s| s.to_string()),
+        )
+        .await
     }
 
     /// 递归查找文件
-    async fn find_recursive(&self, path: &std::path::Path, name: Option<String>, type_: Option<String>) -> Result<()> {
-        let mut entries = tokio::fs::read_dir(path).await
+    async fn find_recursive(
+        &self,
+        path: &std::path::Path,
+        name: Option<String>,
+        type_: Option<String>,
+    ) -> Result<()> {
+        let mut entries = tokio::fs::read_dir(path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to read directory: {}", e))?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| anyhow::anyhow!("Failed to read entry: {}", e))? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read entry: {}", e))?
+        {
             let entry_path = entry.path();
             let file_name_os = entry.file_name();
             let file_name = file_name_os.to_string_lossy();
@@ -1337,7 +1470,8 @@ impl EvifCommand {
             let name_match = if let Some(ref pattern) = name {
                 if pattern.contains('*') || pattern.contains('?') {
                     // 简单的通配符匹配
-                    let pattern_regex = pattern.replace('.', "\\.")
+                    let pattern_regex = pattern
+                        .replace('.', "\\.")
                         .replace('*', ".*")
                         .replace('?', ".");
                     if let Ok(re) = regex::Regex::new(&pattern_regex) {
@@ -1405,13 +1539,12 @@ impl EvifCommand {
             return Ok(());
         }
 
-        let metadata = tokio::fs::metadata(&path).await
+        let metadata = tokio::fs::metadata(&path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get metadata: {}", e))?;
 
         let file_type = if metadata.is_file() {
-            let ext = path_obj.extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            let ext = path_obj.extension().and_then(|s| s.to_str()).unwrap_or("");
 
             match ext {
                 "rs" => "Rust source",
@@ -1421,7 +1554,7 @@ impl EvifCommand {
                 "txt" => "ASCII text",
                 "json" => "JSON data",
                 "md" => "Markdown text",
-                _ => "data"
+                _ => "data",
             }
         } else if metadata.is_dir() {
             "directory"
@@ -1477,9 +1610,9 @@ impl EvifCommand {
 
                     // 特殊变量
                     let value = match var_name.as_str() {
-                        "?" => "0".to_string(), // 上一个命令的退出码（简化实现）
+                        "?" => "0".to_string(),                // 上一个命令的退出码（简化实现）
                         "$" => std::process::id().to_string(), // 当前 PID
-                        "0" => "evif".to_string(), // shell 名称
+                        "0" => "evif".to_string(),             // shell 名称
                         _ => self.get_variable_value(&var_name, &env),
                     };
 
@@ -1494,7 +1627,11 @@ impl EvifCommand {
     }
 
     /// 获取变量值（优先从 shell 变量，然后从环境变量）
-    fn get_variable_value(&self, name: &str, env: &std::collections::HashMap<String, String>) -> String {
+    fn get_variable_value(
+        &self,
+        name: &str,
+        env: &std::collections::HashMap<String, String>,
+    ) -> String {
         // 首先检查 shell 变量
         if let Some(value) = env.get(name) {
             return value.clone();

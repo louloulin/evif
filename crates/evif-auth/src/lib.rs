@@ -3,15 +3,15 @@
 
 //! EVIF 认证和授权层
 
-pub mod error;
-pub mod capability;
-pub mod auth;
 pub mod audit;
+pub mod auth;
+pub mod capability;
+pub mod error;
 
-pub use error::{AuthError, AuthResult};
-pub use capability::{Capability, Permissions, Principal, PrincipalId, CapId};
-pub use auth::{AuthManager, AuthPolicy, Permission};
 pub use audit::{
-    AuditEvent, AuditEventType, AuditLogger, AuditLogManager,
-    MemoryAuditLogger, FileAuditLogger, AuditFilter, AuditConfig
+    AuditConfig, AuditEvent, AuditEventType, AuditFilter, AuditLogManager, AuditLogger,
+    FileAuditLogger, MemoryAuditLogger,
 };
+pub use auth::{AuthManager, AuthPolicy, Permission};
+pub use capability::{CapId, Capability, Permissions, Principal, PrincipalId};
+pub use error::{AuthError, AuthResult};

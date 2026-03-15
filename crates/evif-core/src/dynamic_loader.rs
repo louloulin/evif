@@ -15,7 +15,7 @@ use libloading::{Library, Symbol};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 
 /// 插件 ABI 版本
 /// 用于确保动态库与 EVIF 核心兼容
@@ -138,7 +138,8 @@ pub struct PluginVTable {
     /// 获取插件名称
     pub get_name: Option<unsafe extern "C" fn(*mut EvifPluginWrapper) -> NameBuffer>,
     /// 验证配置
-    pub validate: Option<unsafe extern "C" fn(*mut EvifPluginWrapper, config: *const u8, len: usize) -> u32>,
+    pub validate:
+        Option<unsafe extern "C" fn(*mut EvifPluginWrapper, config: *const u8, len: usize) -> u32>,
 }
 
 /// 名称缓冲区
@@ -280,11 +281,12 @@ impl DynamicPluginLoader {
         }
 
         // 查找库文件
-        let library_path = self.find_plugin_library(name)
-            .ok_or_else(|| EvifError::PluginLoadError(format!(
+        let library_path = self.find_plugin_library(name).ok_or_else(|| {
+            EvifError::PluginLoadError(format!(
                 "Plugin library '{}' not found in search paths: {:?}",
                 name, self.search_paths
-            )))?;
+            ))
+        })?;
 
         info!("Loading plugin from: {:?}", library_path);
 
@@ -313,11 +315,14 @@ impl DynamicPluginLoader {
         // 存储已加载的库
         {
             let mut libraries = self.libraries.write().unwrap();
-            libraries.insert(name.to_string(), LoadedLibrary {
-                library,
-                info: info.clone(),
-                path: library_path,
-            });
+            libraries.insert(
+                name.to_string(),
+                LoadedLibrary {
+                    library,
+                    info: info.clone(),
+                    path: library_path,
+                },
+            );
         }
 
         info!(
@@ -333,11 +338,12 @@ impl DynamicPluginLoader {
     /// 获取插件 ABI 版本
     fn get_abi_version(&self, library: &Library) -> EvifResult<u32> {
         unsafe {
-            let get_abi_version: Symbol<PluginAbiVersionFn> = library
-                .get(b"evif_plugin_abi_version")
-                .map_err(|_| EvifError::PluginLoadError(
-                    "Missing 'evif_plugin_abi_version' symbol".to_string()
-                ))?;
+            let get_abi_version: Symbol<PluginAbiVersionFn> =
+                library.get(b"evif_plugin_abi_version").map_err(|_| {
+                    EvifError::PluginLoadError(
+                        "Missing 'evif_plugin_abi_version' symbol".to_string(),
+                    )
+                })?;
 
             Ok(get_abi_version())
         }
@@ -346,11 +352,10 @@ impl DynamicPluginLoader {
     /// 获取插件信息
     fn get_plugin_info(&self, library: &Library) -> EvifResult<PluginInfo> {
         unsafe {
-            let get_info: Symbol<PluginInfoFn> = library
-                .get(b"evif_plugin_info")
-                .map_err(|_| EvifError::PluginLoadError(
-                    "Missing 'evif_plugin_info' symbol".to_string()
-                ))?;
+            let get_info: Symbol<PluginInfoFn> =
+                library.get(b"evif_plugin_info").map_err(|_| {
+                    EvifError::PluginLoadError("Missing 'evif_plugin_info' symbol".to_string())
+                })?;
 
             Ok(get_info())
         }
@@ -385,34 +390,34 @@ impl DynamicPluginLoader {
     /// ```
     pub fn create_plugin(&self, name: &str) -> EvifResult<Arc<dyn EvifPlugin>> {
         let libraries = self.libraries.read().unwrap();
-        let loaded = libraries.get(name)
-            .ok_or_else(|| EvifError::PluginLoadError(format!(
+        let loaded = libraries.get(name).ok_or_else(|| {
+            EvifError::PluginLoadError(format!(
                 "Plugin '{}' not loaded. Call load_plugin() first.",
                 name
-            )))?;
+            ))
+        })?;
 
         unsafe {
-            let create_fn: Symbol<PluginCreateFn> = loaded.library
-                .get(b"evif_plugin_create")
-                .map_err(|_| EvifError::PluginLoadError(
-                    "Missing 'evif_plugin_create' symbol".to_string()
-                ))?;
+            let create_fn: Symbol<PluginCreateFn> =
+                loaded.library.get(b"evif_plugin_create").map_err(|_| {
+                    EvifError::PluginLoadError("Missing 'evif_plugin_create' symbol".to_string())
+                })?;
 
             let plugin_ptr = create_fn();
             if plugin_ptr.data.is_null() {
                 return Err(EvifError::PluginLoadError(
-                    "Plugin creation returned null data pointer".to_string()
+                    "Plugin creation returned null data pointer".to_string(),
                 ));
             }
 
-            debug!("Received plugin pointer: data={:p}, vtable={:p}", plugin_ptr.data, plugin_ptr.vtable);
+            debug!(
+                "Received plugin pointer: data={:p}, vtable={:p}",
+                plugin_ptr.data, plugin_ptr.vtable
+            );
 
             // 从 PluginPtr 重建 fat pointer
             // fat pointer 布局: [data_ptr, vtable_ptr]
-            let fat_ptr: [usize; 2] = [
-                plugin_ptr.data as usize,
-                plugin_ptr.vtable as usize,
-            ];
+            let fat_ptr: [usize; 2] = [plugin_ptr.data as usize, plugin_ptr.vtable as usize];
             let typed_ptr: *const dyn EvifPlugin = std::mem::transmute(fat_ptr);
 
             // 将裸指针转换回 Arc<dyn EvifPlugin>
@@ -435,11 +440,9 @@ impl DynamicPluginLoader {
     /// 卸载前必须确保所有插件实例已释放
     pub fn unload_plugin(&self, name: &str) -> EvifResult<()> {
         let mut libraries = self.libraries.write().unwrap();
-        libraries.remove(name)
-            .ok_or_else(|| EvifError::PluginLoadError(format!(
-                "Plugin '{}' not loaded",
-                name
-            )))?;
+        libraries
+            .remove(name)
+            .ok_or_else(|| EvifError::PluginLoadError(format!("Plugin '{}' not loaded", name)))?;
 
         info!("Unloaded plugin: {}", name);
         Ok(())

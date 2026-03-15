@@ -448,7 +448,11 @@ impl MemorizePipeline {
 
         // Update category summary after the item is stored
         if let Err(e) = self.categorizer.update_category_summary(&category_id).await {
-            tracing::warn!("Failed to update category summary for {}: {}", category_id, e);
+            tracing::warn!(
+                "Failed to update category summary for {}: {}",
+                category_id,
+                e
+            );
         }
 
         Ok(memory)
@@ -457,19 +461,25 @@ impl MemorizePipeline {
     /// Extract structured memory from a tool call
     fn extract_tool_memory(&self, tool_call: &ToolCall) -> MemResult<MemoryItem> {
         // Build summary from tool call metadata
-        let status = if tool_call.success { "succeeded" } else { "failed" };
+        let status = if tool_call.success {
+            "succeeded"
+        } else {
+            "failed"
+        };
         let summary = format!(
             "Tool '{}' {} in {}ms",
-            tool_call.tool_name,
-            status,
-            tool_call.time_cost_ms
+            tool_call.tool_name, status, tool_call.time_cost_ms
         );
 
         // Build detailed content from tool call
         let mut content = format!(
             "Tool: {}\nStatus: {}\nTime Cost: {}ms\n",
             tool_call.tool_name,
-            if tool_call.success { "Success" } else { "Failed" },
+            if tool_call.success {
+                "Success"
+            } else {
+                "Failed"
+            },
             tool_call.time_cost_ms
         );
 
@@ -489,7 +499,10 @@ impl MemorizePipeline {
             for (key, value) in &tool_call.input {
                 // Skip sensitive keys
                 let key_lower = key.to_lowercase();
-                if key_lower.contains("password") || key_lower.contains("token") || key_lower.contains("secret") {
+                if key_lower.contains("password")
+                    || key_lower.contains("token")
+                    || key_lower.contains("secret")
+                {
                     content.push_str(&format!("  {}: [REDACTED]\n", key));
                 } else {
                     content.push_str(&format!("  {}: {}\n", key, value));
@@ -616,15 +629,12 @@ impl ResourceLoader {
 
     /// Load from URL (http/https)
     pub async fn load_url(&self, url: &str) -> MemResult<(Resource, String)> {
-        let response = self
-            .http_client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| MemError::Io(std::io::Error::new(
+        let response = self.http_client.get(url).send().await.map_err(|e| {
+            MemError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to fetch URL: {}", e),
-            )))?;
+            ))
+        })?;
 
         // Detect content type
         let content_type = response
@@ -646,23 +656,21 @@ impl ResourceLoader {
             serde_json::to_string_pretty(&json).unwrap_or_default()
         } else if content_type.contains("text/html") {
             // For HTML, extract text content (simple approach)
-            let html = response
-                .text()
-                .await
-                .map_err(|e| MemError::Io(std::io::Error::new(
+            let html = response.text().await.map_err(|e| {
+                MemError::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("Failed to read HTML: {}", e),
-                )))?;
+                ))
+            })?;
             extract_text_from_html(&html)
         } else {
             // Plain text or other
-            response
-                .text()
-                .await
-                .map_err(|e| MemError::Io(std::io::Error::new(
+            response.text().await.map_err(|e| {
+                MemError::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("Failed to read content: {}", e),
-                )))?
+                ))
+            })?
         };
 
         let mut resource = Resource::new(url.to_string(), modality);
@@ -808,14 +816,19 @@ impl Preprocessor {
     /// - Text/Document: Single item
     /// - Conversation: Multiple segments
     /// - Image/Video/Audio: Returns placeholder (use preprocess_async for these)
-    pub fn preprocess(&self, content: &str, modality: &Modality) -> MemResult<Vec<(String, Option<String>)>> {
+    pub fn preprocess(
+        &self,
+        content: &str,
+        modality: &Modality,
+    ) -> MemResult<Vec<(String, Option<String>)>> {
         match modality {
             Modality::Conversation => self.preprocess_conversation(content),
             Modality::Document => self.preprocess_document(content),
             Modality::Image | Modality::Video | Modality::Audio => {
                 // For multimodal content, use preprocess_async
                 Err(MemError::Processing(
-                    "Image/Video/Audio require async preprocessing. Use preprocess_async()".to_string()
+                    "Image/Video/Audio require async preprocessing. Use preprocess_async()"
+                        .to_string(),
                 ))
             }
         }
@@ -829,7 +842,11 @@ impl Preprocessor {
     /// - Image: Vision API analysis
     /// - Video: Frame extraction + Vision API (requires ffmpeg)
     /// - Audio: Placeholder (requires external transcription service)
-    pub async fn preprocess_async(&self, content: &str, modality: &Modality) -> MemResult<Vec<(String, Option<String>)>> {
+    pub async fn preprocess_async(
+        &self,
+        content: &str,
+        modality: &Modality,
+    ) -> MemResult<Vec<(String, Option<String>)>> {
         match modality {
             Modality::Conversation => self.preprocess_conversation(content),
             Modality::Document => self.preprocess_document(content),
@@ -858,7 +875,8 @@ impl Preprocessor {
         // Split by double newlines first (paragraph/speaker turns)
         for delimiter in &delimiters {
             if remaining.contains(delimiter) {
-                parts = remaining.split(*delimiter)
+                parts = remaining
+                    .split(*delimiter)
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect();
@@ -877,7 +895,9 @@ impl Preprocessor {
 
         for part in parts {
             // Check if adding this part would exceed max size
-            if current_segment.len() + part.len() + 2 > self.max_segment_size && !current_segment.is_empty() {
+            if current_segment.len() + part.len() + 2 > self.max_segment_size
+                && !current_segment.is_empty()
+            {
                 // Save current segment
                 let caption = format!("Conversation segment {}", segment_index + 1);
                 segments.push((current_segment.trim().to_string(), Some(caption)));
@@ -902,7 +922,10 @@ impl Preprocessor {
 
         // Ensure at least one segment exists
         if segments.is_empty() {
-            segments.push((content.to_string(), Some("Conversation segment 1".to_string())));
+            segments.push((
+                content.to_string(),
+                Some("Conversation segment 1".to_string()),
+            ));
         }
 
         Ok(segments)
@@ -977,7 +1000,8 @@ impl Preprocessor {
         })?;
 
         // Read image file
-        let image_data = tokio::fs::read(image_path).await
+        let image_data = tokio::fs::read(image_path)
+            .await
             .map_err(|e| MemError::Processing(format!("Failed to read image file: {}", e)))?;
 
         // Detect MIME type from file extension
@@ -1013,9 +1037,9 @@ impl Preprocessor {
         // Create temp file for frame extraction
         let temp_dir = std::env::temp_dir();
         let frame_path = temp_dir.join(format!("evif_frame_{}.jpg", uuid::Uuid::new_v4()));
-        let frame_path_str = frame_path.to_str().ok_or_else(|| {
-            MemError::Processing("Invalid temp path".to_string())
-        })?;
+        let frame_path_str = frame_path
+            .to_str()
+            .ok_or_else(|| MemError::Processing("Invalid temp path".to_string()))?;
 
         // Extract middle frame using ffmpeg
         // Using a simple approach: extract frame at 00:00:01 (1 second)
@@ -1031,7 +1055,12 @@ impl Preprocessor {
             .arg(frame_path_str)
             .output()
             .await
-            .map_err(|e| MemError::Processing(format!("ffmpeg failed: {}. Make sure ffmpeg is installed.", e)))?;
+            .map_err(|e| {
+                MemError::Processing(format!(
+                    "ffmpeg failed: {}. Make sure ffmpeg is installed.",
+                    e
+                ))
+            })?;
 
         if !output.status.success() {
             return Err(MemError::Processing(
@@ -1063,10 +1092,12 @@ impl Preprocessor {
             audio_path
         );
 
-        Ok(vec![(placeholder, Some("Audio (transcription required)".to_string()))])
+        Ok(vec![(
+            placeholder,
+            Some("Audio (transcription required)".to_string()),
+        )])
     }
 }
-
 
 impl Default for Preprocessor {
     fn default() -> Self {
@@ -1130,11 +1161,19 @@ impl RetrievePipeline {
             RetrieveMode::VectorSearch { k, threshold } => {
                 self.vector_search(query, k, threshold, user_scope).await
             }
-            RetrieveMode::Hybrid { vector_k, llm_top_n } => {
-                self.hybrid_search(query, vector_k, llm_top_n, user_scope).await
+            RetrieveMode::Hybrid {
+                vector_k,
+                llm_top_n,
+            } => {
+                self.hybrid_search(query, vector_k, llm_top_n, user_scope)
+                    .await
             }
-            RetrieveMode::LLMRead { category_id, max_items } => {
-                self.llm_read_search(query, &category_id, max_items, user_scope).await
+            RetrieveMode::LLMRead {
+                category_id,
+                max_items,
+            } => {
+                self.llm_read_search(query, &category_id, max_items, user_scope)
+                    .await
             }
             RetrieveMode::RAG {
                 intent_routing,
@@ -1233,7 +1272,8 @@ impl RetrievePipeline {
             found_items
         } else {
             // Direct vector search
-            self.vector_search(&search_query, max_results, 0.0, user_scope).await?
+            self.vector_search(&search_query, max_results, 0.0, user_scope)
+                .await?
         };
 
         metadata.total_candidates = items.len();
@@ -1454,7 +1494,9 @@ Respond ONLY with valid JSON, no additional text."#,
         }
 
         // Step 6: Also do vector search to find items that might not be in top categories
-        let vector_items = self.vector_search(query, max_results, 0.5, user_scope).await?;
+        let vector_items = self
+            .vector_search(query, max_results, 0.5, user_scope)
+            .await?;
 
         // Merge results, preferring vector scores
         for (item, score) in vector_items {
@@ -1478,11 +1520,7 @@ Respond ONLY with valid JSON, no additional text."#,
     /// Sufficiency check - evaluate if results are sufficient
     ///
     /// Uses LLM to judge if the retrieved items adequately answer the query.
-    async fn check_sufficiency(
-        &self,
-        query: &str,
-        items: &[(MemoryItem, f32)],
-    ) -> MemResult<f32> {
+    async fn check_sufficiency(&self, query: &str, items: &[(MemoryItem, f32)]) -> MemResult<f32> {
         // Format items for LLM analysis
         let items_text = items
             .iter()
@@ -1733,10 +1771,7 @@ Respond ONLY with valid JSON, no additional text."#,
         }
 
         // Step 2: Limit items to process
-        let limited_memories: Vec<MemoryItem> = memories
-            .into_iter()
-            .take(max_items)
-            .collect();
+        let limited_memories: Vec<MemoryItem> = memories.into_iter().take(max_items).collect();
 
         // Step 3: Format memories for LLM analysis
         let memories_text = self.format_memories_for_llm(&limited_memories);
@@ -1816,10 +1851,8 @@ Respond ONLY with valid JSON, no additional text."#,
         memories: &[MemoryItem],
     ) -> Vec<(MemoryItem, f32)> {
         // Create a map for quick lookup
-        let memory_map: std::collections::HashMap<String, &MemoryItem> = memories
-            .iter()
-            .map(|m| (m.id.clone(), m))
-            .collect();
+        let memory_map: std::collections::HashMap<String, &MemoryItem> =
+            memories.iter().map(|m| (m.id.clone(), m)).collect();
 
         // Parse JSON response
         #[derive(serde::Deserialize)]
@@ -1986,10 +2019,8 @@ impl Categorizer {
         };
 
         // Create new category
-        let mut category = crate::models::MemoryCategory::new(
-            analysis.name.clone(),
-            analysis.description.clone(),
-        );
+        let mut category =
+            crate::models::MemoryCategory::new(analysis.name.clone(), analysis.description.clone());
 
         // Generate category embedding ID
         let category_embedding_id = uuid::Uuid::new_v4().to_string();
@@ -2065,10 +2096,7 @@ pub struct EvolvePipeline {
 
 impl EvolvePipeline {
     /// Create a new evolve pipeline
-    pub fn new(
-        storage: Arc<MemoryStorage>,
-        llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
-    ) -> Self {
+    pub fn new(storage: Arc<MemoryStorage>, llm_client: Arc<RwLock<Box<dyn LLMClient>>>) -> Self {
         Self {
             storage,
             llm_client,
@@ -2132,7 +2160,9 @@ impl EvolvePipeline {
     /// The merged memory retains the most important information from all sources.
     pub async fn merge(&self, item_ids: &[String]) -> MemResult<MemoryItem> {
         if item_ids.is_empty() {
-            return Err(MemError::InvalidInput("Cannot merge empty list of items".to_string()));
+            return Err(MemError::InvalidInput(
+                "Cannot merge empty list of items".to_string(),
+            ));
         }
 
         if item_ids.len() == 1 {
@@ -2155,7 +2185,11 @@ impl EvolvePipeline {
         let merged_summary = format!(
             "Merged from {} memories: {}",
             items.len(),
-            items.iter().map(|i| i.summary.as_str()).collect::<Vec<_>>().join("; ")
+            items
+                .iter()
+                .map(|i| i.summary.as_str())
+                .collect::<Vec<_>>()
+                .join("; ")
         );
 
         let mut merged_item = MemoryItem::new(
@@ -2171,17 +2205,15 @@ impl EvolvePipeline {
         merged_item.reinforcement_count = items.iter().map(|i| i.reinforcement_count).sum();
 
         // Set the most recent reinforced time
-        merged_item.last_reinforced_at = items
-            .iter()
-            .filter_map(|i| i.last_reinforced_at)
-            .max();
+        merged_item.last_reinforced_at = items.iter().filter_map(|i| i.last_reinforced_at).max();
 
         // Store the merged item
         self.storage.put_item(merged_item.clone())?;
 
         // Link to category if exists
         if let Some(ref cat_id) = merged_item.category_id {
-            self.storage.link_item_to_category(&merged_item.id, cat_id)?;
+            self.storage
+                .link_item_to_category(&merged_item.id, cat_id)?;
         }
 
         Ok(merged_item)
@@ -2368,7 +2400,10 @@ mod tests {
 
         // Verify mode creation
         match mode {
-            RetrieveMode::Hybrid { vector_k, llm_top_n } => {
+            RetrieveMode::Hybrid {
+                vector_k,
+                llm_top_n,
+            } => {
                 assert_eq!(vector_k, 10);
                 assert_eq!(llm_top_n, 5);
             }
@@ -2387,7 +2422,10 @@ mod tests {
         };
 
         match mode {
-            RetrieveMode::Hybrid { vector_k, llm_top_n } => {
+            RetrieveMode::Hybrid {
+                vector_k,
+                llm_top_n,
+            } => {
                 assert_eq!(vector_k, 10);
                 assert_eq!(llm_top_n, 5);
             }
@@ -2405,7 +2443,10 @@ mod tests {
 
         // Verify mode creation
         match mode {
-            RetrieveMode::LLMRead { category_id, max_items } => {
+            RetrieveMode::LLMRead {
+                category_id,
+                max_items,
+            } => {
                 assert_eq!(category_id, "test-category-id");
                 assert_eq!(max_items, 20);
             }
@@ -2425,7 +2466,10 @@ mod tests {
         let decoded: RetrieveMode = serde_json::from_str(&json).expect("Failed to deserialize");
 
         match decoded {
-            RetrieveMode::LLMRead { category_id, max_items } => {
+            RetrieveMode::LLMRead {
+                category_id,
+                max_items,
+            } => {
                 assert_eq!(category_id, "category-123");
                 assert_eq!(max_items, 15);
             }
@@ -2523,27 +2567,75 @@ mod tests {
     #[test]
     fn test_detect_modality_from_path() {
         // Test various file extensions
-        assert_eq!(detect_modality_from_path(Path::new("test.txt")), Modality::Document);
-        assert_eq!(detect_modality_from_path(Path::new("test.md")), Modality::Document);
-        assert_eq!(detect_modality_from_path(Path::new("test.json")), Modality::Document);
-        assert_eq!(detect_modality_from_path(Path::new("test.html")), Modality::Document);
-        assert_eq!(detect_modality_from_path(Path::new("test.jpg")), Modality::Image);
-        assert_eq!(detect_modality_from_path(Path::new("test.png")), Modality::Image);
-        assert_eq!(detect_modality_from_path(Path::new("test.mp4")), Modality::Video);
-        assert_eq!(detect_modality_from_path(Path::new("test.mp3")), Modality::Audio);
-        assert_eq!(detect_modality_from_path(Path::new("test.log")), Modality::Conversation);
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.txt")),
+            Modality::Document
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.md")),
+            Modality::Document
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.json")),
+            Modality::Document
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.html")),
+            Modality::Document
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.jpg")),
+            Modality::Image
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.png")),
+            Modality::Image
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.mp4")),
+            Modality::Video
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.mp3")),
+            Modality::Audio
+        );
+        assert_eq!(
+            detect_modality_from_path(Path::new("test.log")),
+            Modality::Conversation
+        );
     }
 
     #[test]
     fn test_detect_modality_from_content_type() {
         // Test various content types
-        assert_eq!(detect_modality_from_content_type("text/html"), Modality::Document);
-        assert_eq!(detect_modality_from_content_type("application/json"), Modality::Document);
-        assert_eq!(detect_modality_from_content_type("text/plain"), Modality::Document);
-        assert_eq!(detect_modality_from_content_type("image/jpeg"), Modality::Image);
-        assert_eq!(detect_modality_from_content_type("image/png"), Modality::Image);
-        assert_eq!(detect_modality_from_content_type("video/mp4"), Modality::Video);
-        assert_eq!(detect_modality_from_content_type("audio/mpeg"), Modality::Audio);
+        assert_eq!(
+            detect_modality_from_content_type("text/html"),
+            Modality::Document
+        );
+        assert_eq!(
+            detect_modality_from_content_type("application/json"),
+            Modality::Document
+        );
+        assert_eq!(
+            detect_modality_from_content_type("text/plain"),
+            Modality::Document
+        );
+        assert_eq!(
+            detect_modality_from_content_type("image/jpeg"),
+            Modality::Image
+        );
+        assert_eq!(
+            detect_modality_from_content_type("image/png"),
+            Modality::Image
+        );
+        assert_eq!(
+            detect_modality_from_content_type("video/mp4"),
+            Modality::Video
+        );
+        assert_eq!(
+            detect_modality_from_content_type("audio/mpeg"),
+            Modality::Audio
+        );
     }
 
     #[test]
@@ -2577,7 +2669,10 @@ mod tests {
         // Test that Categorizer struct exists and has the update_category_summary method
         // The actual async update logic requires integration with LLM client and storage
         // This test verifies the Categorizer struct definition is valid
-        assert!(true, "Categorizer struct defined with update_category_summary method");
+        assert!(
+            true,
+            "Categorizer struct defined with update_category_summary method"
+        );
     }
 
     #[test]
@@ -2757,7 +2852,10 @@ mod tests {
         };
 
         assert_eq!(response.metadata.original_query, "test query");
-        assert_eq!(response.metadata.rewritten_query, Some("optimized test query".to_string()));
+        assert_eq!(
+            response.metadata.rewritten_query,
+            Some("optimized test query".to_string())
+        );
         assert_eq!(response.metadata.sufficiency_score, Some(0.85));
         assert_eq!(response.metadata.retrieval_time_ms, 250);
     }
@@ -2768,7 +2866,9 @@ mod tests {
         let metadata = RAGMetadata {
             intent_needed: Some(true),
             original_query: "what is Rust?".to_string(),
-            rewritten_query: Some("Rust programming language features and characteristics".to_string()),
+            rewritten_query: Some(
+                "Rust programming language features and characteristics".to_string(),
+            ),
             sufficiency_score: Some(0.9),
             total_candidates: 25,
             categories_searched: 5,
@@ -2873,7 +2973,10 @@ Respond ONLY with valid JSON, no additional text."#,
         }
 
         let parsed: RewriteResponse = serde_json::from_str(response).expect("Failed to parse");
-        assert_eq!(parsed.rewritten_query, "Rust async programming patterns and best practices");
+        assert_eq!(
+            parsed.rewritten_query,
+            "Rust async programming patterns and best practices"
+        );
     }
 
     #[test]
@@ -2931,7 +3034,11 @@ Respond ONLY with valid JSON, no additional text."#,
 
         // New memory should have high weight (close to 1.0)
         let weight = EvolvePipeline::calculate_weight(&item);
-        assert!(weight > 0.9, "New memory should have high weight, got {}", weight);
+        assert!(
+            weight > 0.9,
+            "New memory should have high weight, got {}",
+            weight
+        );
     }
 
     #[test]
@@ -2947,7 +3054,11 @@ Respond ONLY with valid JSON, no additional text."#,
 
         // Reinforced memory should have higher weight
         let weight = EvolvePipeline::calculate_weight(&item);
-        assert!(weight > 1.0, "Reinforced memory should have weight > 1.0, got {}", weight);
+        assert!(
+            weight > 1.0,
+            "Reinforced memory should have weight > 1.0, got {}",
+            weight
+        );
     }
 
     #[test]
@@ -2965,7 +3076,11 @@ Respond ONLY with valid JSON, no additional text."#,
 
         // Old memory should have decayed weight
         let weight = EvolvePipeline::calculate_weight(&item);
-        assert!(weight < 0.5, "Old memory should have decayed weight, got {}", weight);
+        assert!(
+            weight < 0.5,
+            "Old memory should have decayed weight, got {}",
+            weight
+        );
         assert!(weight > 0.0, "Weight should be positive, got {}", weight);
     }
 
@@ -3006,12 +3121,20 @@ Respond ONLY with valid JSON, no additional text."#,
         let preprocessor = Preprocessor::new();
         let content = "This is a short conversation.";
 
-        let result = preprocessor.preprocess_conversation(content)
+        let result = preprocessor
+            .preprocess_conversation(content)
             .expect("Failed to preprocess conversation");
 
-        assert_eq!(result.len(), 1, "Short conversation should produce one segment");
+        assert_eq!(
+            result.len(),
+            1,
+            "Short conversation should produce one segment"
+        );
         assert!(result[0].1.is_some(), "Segment should have caption");
-        assert!(result[0].1.as_ref().unwrap().contains("segment"), "Caption should mention segment");
+        assert!(
+            result[0].1.as_ref().unwrap().contains("segment"),
+            "Caption should mention segment"
+        );
     }
 
     #[test]
@@ -3022,10 +3145,14 @@ Respond ONLY with valid JSON, no additional text."#,
         // Create content that will need to be split
         let content = "First paragraph with enough content to fill a segment.\n\nSecond paragraph that should create another segment.\n\nThird paragraph for the final segment.";
 
-        let result = preprocessor.preprocess_conversation(content)
+        let result = preprocessor
+            .preprocess_conversation(content)
             .expect("Failed to preprocess conversation");
 
-        assert!(result.len() > 1, "Long conversation should produce multiple segments");
+        assert!(
+            result.len() > 1,
+            "Long conversation should produce multiple segments"
+        );
         assert!(result[0].1.is_some(), "First segment should have caption");
     }
 
@@ -3035,7 +3162,8 @@ Respond ONLY with valid JSON, no additional text."#,
         let preprocessor = Preprocessor::new();
         let content = "This is a plain text document.";
 
-        let result = preprocessor.preprocess_document(content)
+        let result = preprocessor
+            .preprocess_document(content)
             .expect("Failed to preprocess document");
 
         assert_eq!(result.len(), 1, "Document should produce one segment");
@@ -3049,11 +3177,15 @@ Respond ONLY with valid JSON, no additional text."#,
         let preprocessor = Preprocessor::new();
         let content = r#"<!DOCTYPE html><html><head><title>Test Page</title></head><body><p>Hello World</p></body></html>"#;
 
-        let result = preprocessor.preprocess_document(content)
+        let result = preprocessor
+            .preprocess_document(content)
             .expect("Failed to preprocess HTML document");
 
         assert_eq!(result.len(), 1, "HTML should produce one segment");
-        assert!(result[0].0.contains("Hello World"), "HTML should be extracted to text");
+        assert!(
+            result[0].0.contains("Hello World"),
+            "HTML should be extracted to text"
+        );
         assert!(result[0].1.is_some(), "HTML should have title as caption");
     }
 
@@ -3064,7 +3196,10 @@ Respond ONLY with valid JSON, no additional text."#,
         let result = preprocessor.preprocess("image.jpg", &Modality::Image);
 
         assert!(result.is_err(), "Sync preprocessing should error for Image");
-        assert!(result.unwrap_err().to_string().contains("async"), "Error should mention async");
+        assert!(
+            result.unwrap_err().to_string().contains("async"),
+            "Error should mention async"
+        );
     }
 
     #[test]
@@ -3074,7 +3209,10 @@ Respond ONLY with valid JSON, no additional text."#,
         let result = preprocessor.preprocess("video.mp4", &Modality::Video);
 
         assert!(result.is_err(), "Sync preprocessing should error for Video");
-        assert!(result.unwrap_err().to_string().contains("async"), "Error should mention async");
+        assert!(
+            result.unwrap_err().to_string().contains("async"),
+            "Error should mention async"
+        );
     }
 
     #[test]
@@ -3084,28 +3222,45 @@ Respond ONLY with valid JSON, no additional text."#,
         let result = preprocessor.preprocess("audio.mp3", &Modality::Audio);
 
         assert!(result.is_err(), "Sync preprocessing should error for Audio");
-        assert!(result.unwrap_err().to_string().contains("async"), "Error should mention async");
+        assert!(
+            result.unwrap_err().to_string().contains("async"),
+            "Error should mention async"
+        );
     }
 
     #[tokio::test]
     async fn test_preprocess_audio_placeholder() {
         // Test that audio preprocessing returns placeholder
         let preprocessor = Preprocessor::new();
-        let result = preprocessor.preprocess_audio("test.mp3").await
+        let result = preprocessor
+            .preprocess_audio("test.mp3")
+            .await
             .expect("Failed to preprocess audio");
 
         assert_eq!(result.len(), 1, "Audio should produce one segment");
-        assert!(result[0].0.contains("test.mp3"), "Placeholder should mention filename");
-        assert!(result[0].0.contains("transcription"), "Placeholder should mention transcription");
+        assert!(
+            result[0].0.contains("test.mp3"),
+            "Placeholder should mention filename"
+        );
+        assert!(
+            result[0].0.contains("transcription"),
+            "Placeholder should mention transcription"
+        );
         assert!(result[0].1.is_some(), "Audio should have caption");
-        assert!(result[0].1.as_ref().unwrap().contains("transcription"), "Caption should mention transcription");
+        assert!(
+            result[0].1.as_ref().unwrap().contains("transcription"),
+            "Caption should mention transcription"
+        );
     }
 
     // User context filtering tests
     #[test]
     fn test_retrieve_mode_with_user_scope_signature() {
         // Test that RetrieveMode enum exists and can be used
-        let mode = RetrieveMode::VectorSearch { k: 10, threshold: 0.5 };
+        let mode = RetrieveMode::VectorSearch {
+            k: 10,
+            threshold: 0.5,
+        };
         match mode {
             RetrieveMode::VectorSearch { k, threshold } => {
                 assert_eq!(k, 10);

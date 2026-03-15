@@ -279,7 +279,10 @@ impl MemoryStorage {
 
     /// Get all tenants (for admin purposes)
     pub fn get_all_tenants(&self) -> Vec<String> {
-        self.items_by_tenant.iter().map(|k| k.key().clone()).collect()
+        self.items_by_tenant
+            .iter()
+            .map(|k| k.key().clone())
+            .collect()
     }
 
     /// Get item count for a tenant
@@ -686,9 +689,14 @@ mod tests {
         assert!(!scope.can_access(&Some("user2".to_string()), &None));
 
         // Test tenant isolation
-        let scope_with_tenant = UserScope::new("user1".to_string()).with_tenant("tenant1".to_string());
-        assert!(scope_with_tenant.can_access(&Some("user1".to_string()), &Some("tenant1".to_string())));
-        assert!(!scope_with_tenant.can_access(&Some("user1".to_string()), &Some("tenant2".to_string())));
+        let scope_with_tenant =
+            UserScope::new("user1".to_string()).with_tenant("tenant1".to_string());
+        assert!(
+            scope_with_tenant.can_access(&Some("user1".to_string()), &Some("tenant1".to_string()))
+        );
+        assert!(
+            !scope_with_tenant.can_access(&Some("user1".to_string()), &Some("tenant2".to_string()))
+        );
     }
 
     #[test]

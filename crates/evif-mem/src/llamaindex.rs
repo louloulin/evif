@@ -17,14 +17,14 @@
 //! let chat_store = EvifChatStore::new(storage);
 //! ```
 
+use crate::embedding::EmbeddingManager;
 use crate::error::MemError;
 use crate::models::MemoryItem;
 use crate::storage::MemoryStorage;
 use crate::vector::{SearchResult, VectorIndex};
-use crate::embedding::EmbeddingManager;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 /// Configuration for LlamaIndex integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,13 +102,11 @@ pub struct EvifChatStore {
 
 impl EvifChatStore {
     /// Create a new EvifChatStore
-    pub fn new(
-        storage: Arc<MemoryStorage>,
-        config: LlamaIndexConfig,
-    ) -> Self {
-        let session_id = config.session_id.clone().unwrap_or_else(|| {
-            uuid::Uuid::new_v4().to_string()
-        });
+    pub fn new(storage: Arc<MemoryStorage>, config: LlamaIndexConfig) -> Self {
+        let session_id = config
+            .session_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         Self {
             storage,
@@ -317,10 +315,7 @@ impl EvifDocument {
     }
 
     /// Create with metadata
-    pub fn with_metadata(
-        text: impl Into<String>,
-        metadata: serde_json::Value,
-    ) -> Self {
+    pub fn with_metadata(text: impl Into<String>, metadata: serde_json::Value) -> Self {
         Self {
             text: text.into(),
             metadata: Some(metadata),
@@ -441,10 +436,8 @@ mod tests {
         assert_eq!(doc.text(), "Test content");
         assert!(doc.metadata().is_none());
 
-        let doc = EvifDocument::with_metadata(
-            "Test content",
-            serde_json::json!({"source": "test"}),
-        );
+        let doc =
+            EvifDocument::with_metadata("Test content", serde_json::json!({"source": "test"}));
         assert_eq!(doc.text(), "Test content");
         assert!(doc.metadata().is_some());
     }

@@ -4,7 +4,7 @@
 //! This is a simplified implementation using SHA-256 for key derivation.
 
 use rand::RngCore;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use crate::error::{MemError, MemResult};
 
@@ -96,9 +96,7 @@ impl Encryption {
         }
 
         if data.len() < 16 {
-            return Err(MemError::Security(
-                "Data too short".to_string(),
-            ));
+            return Err(MemError::Security("Data too short".to_string()));
         }
 
         // Extract salt and ciphertext

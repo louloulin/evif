@@ -3,15 +3,19 @@
 use crate::error::GrpcError;
 use crate::evif;
 use crate::evif::evif_service_client::EvifServiceClient;
-use crate::{GetNodeRequest, GetNodeResponse, PutNodeRequest, PutNodeResponse,
-               DeleteNodeRequest, DeleteNodeResponse, BatchGetNodesRequest, BatchPutNodesResponse,
-               QueryRequest, NodeResponse, ReadFileRequest, WriteFileResponse,
-               StatsRequest, StatsResponse, HealthRequest, HealthResponse,
-               DataChunk, Value, value};
-use tonic::{transport::{Channel, Endpoint}, Request, Streaming};
-use evif_graph::{Node, NodeType, Attribute};
+use crate::{
+    value, BatchGetNodesRequest, BatchPutNodesResponse, DataChunk, DeleteNodeRequest,
+    DeleteNodeResponse, GetNodeRequest, GetNodeResponse, HealthRequest, HealthResponse,
+    NodeResponse, PutNodeRequest, PutNodeResponse, QueryRequest, ReadFileRequest, StatsRequest,
+    StatsResponse, Value, WriteFileResponse,
+};
+use evif_graph::{Attribute, Node, NodeType};
 use std::collections::HashMap;
 use tokio_stream::{Stream, StreamExt};
+use tonic::{
+    transport::{Channel, Endpoint},
+    Request, Streaming,
+};
 use uuid::Uuid;
 
 /// 客户端配置
@@ -66,10 +70,12 @@ impl EvifClient {
         let channel = if config.enable_tls {
             // NOTE: TLS support requires certificate configuration
             return Err(GrpcError::Internal(
-                "TLS requires certificate configuration. Use disable_tls=true for now.".to_string()
+                "TLS requires certificate configuration. Use disable_tls=true for now.".to_string(),
             ));
         } else {
-            endpoint.connect().await
+            endpoint
+                .connect()
+                .await
                 .map_err(|e| GrpcError::Internal(format!("Failed to connect: {}", e)))?
         };
 
@@ -103,11 +109,12 @@ impl EvifClient {
 
     /// 获取单个节点
     pub async fn get_node(&mut self, id: &str) -> Result<Option<Node>, GrpcError> {
-        let request = Request::new(evif::GetNodeRequest {
-            id: id.to_string(),
-        });
+        let request = Request::new(evif::GetNodeRequest { id: id.to_string() });
 
-        let response = self.client.get_node(request).await
+        let response = self
+            .client
+            .get_node(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?;
 
         let response = response.into_inner();
@@ -126,7 +133,10 @@ impl EvifClient {
             node: Some(proto_node),
         });
 
-        let response = self.client.put_node(request).await
+        let response = self
+            .client
+            .put_node(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?;
 
         let response = response.into_inner();
@@ -136,11 +146,12 @@ impl EvifClient {
 
     /// 删除节点
     pub async fn delete_node(&mut self, id: &str) -> Result<bool, GrpcError> {
-        let request = Request::new(evif::DeleteNodeRequest {
-            id: id.to_string(),
-        });
+        let request = Request::new(evif::DeleteNodeRequest { id: id.to_string() });
 
-        let response = self.client.delete_node(request).await
+        let response = self
+            .client
+            .delete_node(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?;
 
         let response = response.into_inner();
@@ -151,7 +162,10 @@ impl EvifClient {
     pub async fn batch_get_nodes(&mut self, ids: Vec<String>) -> Result<Vec<Node>, GrpcError> {
         let request = Request::new(evif::BatchGetNodesRequest { ids });
 
-        let mut stream = self.client.batch_get_nodes(request).await
+        let mut stream = self
+            .client
+            .batch_get_nodes(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?
             .into_inner();
 
@@ -172,14 +186,16 @@ impl EvifClient {
     }
 
     /// 批量创建节点 (流式)
-    pub async fn batch_put_nodes(&mut self, nodes: Vec<Node>) -> Result<(Vec<String>, i32), GrpcError> {
+    pub async fn batch_put_nodes(
+        &mut self,
+        nodes: Vec<Node>,
+    ) -> Result<(Vec<String>, i32), GrpcError> {
         // 创建输出流
         let (tx, rx) = tokio::sync::mpsc::channel(64);
 
         // 在后台任务中发送所有节点
-        let proto_nodes: Vec<evif::Node> = nodes.iter()
-            .map(|n| self.graph_node_to_proto(n))
-            .collect();
+        let proto_nodes: Vec<evif::Node> =
+            nodes.iter().map(|n| self.graph_node_to_proto(n)).collect();
 
         tokio::spawn(async move {
             for node in proto_nodes {
@@ -194,7 +210,10 @@ impl EvifClient {
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
         let request = Request::new(stream);
 
-        let response = self.client.batch_put_nodes(request).await
+        let response = self
+            .client
+            .batch_put_nodes(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?;
 
         let response = response.into_inner();
@@ -208,7 +227,10 @@ impl EvifClient {
             limit,
         });
 
-        let mut stream = self.client.query(request).await
+        let mut stream = self
+            .client
+            .query(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?
             .into_inner();
 
@@ -229,14 +251,22 @@ impl EvifClient {
     }
 
     /// 读取文件 (流式)
-    pub async fn read_file(&mut self, path: &str, offset: u64, size: u64) -> Result<Vec<u8>, GrpcError> {
+    pub async fn read_file(
+        &mut self,
+        path: &str,
+        offset: u64,
+        size: u64,
+    ) -> Result<Vec<u8>, GrpcError> {
         let request = Request::new(evif::ReadFileRequest {
             path: path.to_string(),
             offset,
             size,
         });
 
-        let mut stream = self.client.read_file(request).await
+        let mut stream = self
+            .client
+            .read_file(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?
             .into_inner();
 
@@ -291,7 +321,10 @@ impl EvifClient {
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
         let request = Request::new(stream);
 
-        let response = self.client.write_file(request).await
+        let response = self
+            .client
+            .write_file(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?;
 
         let response = response.into_inner();
@@ -302,7 +335,10 @@ impl EvifClient {
     pub async fn stats(&mut self, detailed: bool) -> Result<(u64, u64, u64, String), GrpcError> {
         let request = Request::new(evif::StatsRequest { detailed });
 
-        let response = self.client.stats(request).await
+        let response = self
+            .client
+            .stats(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?;
 
         let response = response.into_inner();
@@ -318,7 +354,10 @@ impl EvifClient {
     pub async fn health(&mut self) -> Result<(String, String), GrpcError> {
         let request = Request::new(evif::HealthRequest {});
 
-        let response = self.client.health(request).await
+        let response = self
+            .client
+            .health(request)
+            .await
             .map_err(|e| GrpcError::Internal(format!("gRPC error: {}", e)))?;
 
         let response = response.into_inner();
@@ -330,7 +369,9 @@ impl EvifClient {
         let id = Uuid::parse_str(&proto_node.id)
             .map_err(|_| GrpcError::Internal(format!("Invalid UUID: {}", proto_node.id)))?;
 
-        let name = proto_node.metadata.get("name")
+        let name = proto_node
+            .metadata
+            .get("name")
             .cloned()
             .unwrap_or_else(|| "unnamed".to_string());
 
@@ -360,45 +401,69 @@ impl EvifClient {
     fn graph_node_to_proto(&self, node: &Node) -> evif::Node {
         let mut metadata = HashMap::new();
         metadata.insert("name".to_string(), node.name.clone());
-        metadata.insert("permissions".to_string(), node.metadata.permissions.to_string());
+        metadata.insert(
+            "permissions".to_string(),
+            node.metadata.permissions.to_string(),
+        );
 
         let mut attributes = HashMap::new();
         for (k, v) in &node.attributes {
             match v {
                 Attribute::String(s) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::StringValue(s.clone())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::StringValue(s.clone())),
+                        },
+                    );
                 }
                 Attribute::Integer(i) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::IntValue(*i)),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::IntValue(*i)),
+                        },
+                    );
                 }
                 Attribute::Float(f) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::DoubleValue(*f)),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::DoubleValue(*f)),
+                        },
+                    );
                 }
                 Attribute::Boolean(b) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::BoolValue(*b)),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::BoolValue(*b)),
+                        },
+                    );
                 }
                 Attribute::Binary(data) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::BytesValue(data.clone())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::BytesValue(data.clone())),
+                        },
+                    );
                 }
                 Attribute::DateTime(dt) => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::StringValue(dt.to_rfc3339())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::StringValue(dt.to_rfc3339())),
+                        },
+                    );
                 }
                 Attribute::Null => {
-                    attributes.insert(k.clone(), evif::Value {
-                        value: Some(evif::value::Value::StringValue("null".to_string())),
-                    });
+                    attributes.insert(
+                        k.clone(),
+                        evif::Value {
+                            value: Some(evif::value::Value::StringValue("null".to_string())),
+                        },
+                    );
                 }
             }
         }

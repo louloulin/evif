@@ -1,14 +1,14 @@
 // EVIF VFS - 虚拟文件系统实现 (真实实现版本 v2)
 // 基于 Graph + Storage 架构，简化实现以避免编译错误
 
+use crate::dir::DirEntry;
 use crate::error::{VfsError, VfsResult};
-use crate::filesystem::{FileSystem, FileAttributes, FileType as FsFileType, FileSystemStats};
-use crate::file::{File, FileHandle, FileHandleAllocator, FileMode, OpenFlags, FileType};
-use crate::dir::{DirEntry};
-use std::path::{Path, PathBuf};
+use crate::file::{File, FileHandle, FileHandleAllocator, FileMode, FileType, OpenFlags};
+use crate::filesystem::{FileAttributes, FileSystem, FileSystemStats, FileType as FsFileType};
 use async_trait::async_trait;
-use std::sync::Arc;
 use dashmap::DashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// VFS 配置
 #[derive(Debug, Clone)]
@@ -44,8 +44,9 @@ impl ContentStore {
     }
 
     fn read(&self, node_id: u64, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
-        let data = self.contents.get(&node_id)
-            .ok_or_else(|| VfsError::InternalError(format!("Node content not found: {}", node_id)))?;
+        let data = self.contents.get(&node_id).ok_or_else(|| {
+            VfsError::InternalError(format!("Node content not found: {}", node_id))
+        })?;
 
         let start = offset as usize;
         if start >= data.len() {
@@ -75,7 +76,8 @@ impl ContentStore {
     }
 
     fn size(&self, node_id: u64) -> VfsResult<u64> {
-        self.contents.get(&node_id)
+        self.contents
+            .get(&node_id)
             .map(|data| data.len() as u64)
             .ok_or_else(|| VfsError::InternalError(format!("Node content not found: {}", node_id)))
     }
@@ -116,7 +118,8 @@ impl Vfs {
     }
 
     fn validate_path(&self, path: &Path) -> VfsResult<()> {
-        let path_str = path.to_str()
+        let path_str = path
+            .to_str()
             .ok_or_else(|| VfsError::InvalidPath("路径包含无效字符".to_string()))?;
 
         if path_str.len() > self.config.max_path_length {
@@ -157,13 +160,16 @@ impl FileSystem for Vfs {
     }
 
     async fn close(&self, handle: FileHandle) -> VfsResult<()> {
-        self.open_files.remove(&handle)
+        self.open_files
+            .remove(&handle)
             .ok_or_else(|| VfsError::InvalidFileHandle(handle.value()))?;
         Ok(())
     }
 
     async fn read(&self, handle: FileHandle, _offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
-        let file = self.open_files.get(&handle)
+        let file = self
+            .open_files
+            .get(&handle)
             .ok_or_else(|| VfsError::InvalidFileHandle(handle.value()))?;
 
         if !file.can_read() {
@@ -180,7 +186,9 @@ impl FileSystem for Vfs {
             return Err(VfsError::ReadOnlyFileSystem);
         }
 
-        let file = self.open_files.get(&handle)
+        let file = self
+            .open_files
+            .get(&handle)
             .ok_or_else(|| VfsError::InvalidFileHandle(handle.value()))?;
 
         if !file.can_write() {
@@ -193,7 +201,8 @@ impl FileSystem for Vfs {
     }
 
     async fn fsync(&self, handle: FileHandle) -> VfsResult<()> {
-        self.open_files.get(&handle)
+        self.open_files
+            .get(&handle)
             .ok_or_else(|| VfsError::InvalidFileHandle(handle.value()))?;
         Ok(())
     }

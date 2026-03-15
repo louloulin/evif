@@ -2,14 +2,14 @@
 //
 // 测试完整的 gRPC 服务器和客户端交互
 
-use evif_grpc::{EvifServer, ServerConfig, ClientConfig, evif::evif_service_server::EvifService};
-use evif_graph::{Graph, Node, NodeType, Attribute};
 use evif_auth::AuthManager;
+use evif_graph::{Attribute, Graph, Node, NodeType};
+use evif_grpc::{evif::evif_service_server::EvifService, ClientConfig, EvifServer, ServerConfig};
 use std::sync::Arc;
 use tokio::time::{timeout, Duration};
+use tokio_stream::StreamExt;
 use tonic::Request;
 use uuid::Uuid;
-use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn test_server_creation() {
@@ -85,9 +85,12 @@ async fn test_put_and_get_node() {
     metadata.insert("name".to_string(), "test_file.txt".to_string());
 
     let mut attributes = std::collections::HashMap::new();
-    attributes.insert("size".to_string(), evif_grpc::Value {
-        value: Some(evif_grpc::value::Value::IntValue(1024)),
-    });
+    attributes.insert(
+        "size".to_string(),
+        evif_grpc::Value {
+            value: Some(evif_grpc::value::Value::IntValue(1024)),
+        },
+    );
 
     let proto_node = evif_grpc::Node {
         id: node_id.to_string(),
@@ -119,7 +122,10 @@ async fn test_put_and_get_node() {
     let retrieved_node = response.node.unwrap();
     assert_eq!(retrieved_node.id, node_id.to_string());
     assert_eq!(retrieved_node.node_type, "file");
-    assert_eq!(retrieved_node.metadata.get("name"), Some(&"test_file.txt".to_string()));
+    assert_eq!(
+        retrieved_node.metadata.get("name"),
+        Some(&"test_file.txt".to_string())
+    );
 }
 
 #[tokio::test]
@@ -168,11 +174,7 @@ async fn test_batch_get_nodes() {
     let auth = Arc::new(AuthManager::new());
     let server = EvifServer::new(Arc::clone(&graph), auth);
 
-    let node_ids = vec![
-        Uuid::new_v4(),
-        Uuid::new_v4(),
-        Uuid::new_v4(),
-    ];
+    let node_ids = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
 
     for id in &node_ids {
         let mut metadata = std::collections::HashMap::new();
@@ -244,9 +246,7 @@ async fn test_stats() {
     let auth = Arc::new(AuthManager::new());
     let server = EvifServer::new(graph, auth);
 
-    let stats_request = Request::new(evif_grpc::StatsRequest {
-        detailed: false,
-    });
+    let stats_request = Request::new(evif_grpc::StatsRequest { detailed: false });
 
     let stats_result = server.stats(stats_request).await;
     assert!(stats_result.is_ok());
@@ -304,13 +304,20 @@ async fn test_node_conversion_graph_to_proto() {
     let server = EvifServer::new(graph, auth);
 
     let mut node = Node::new(NodeType::File, "test.txt");
-    node.attributes.insert("size".to_string(), Attribute::Integer(2048));
-    node.attributes.insert("mime_type".to_string(), Attribute::String("text/plain".to_string()));
+    node.attributes
+        .insert("size".to_string(), Attribute::Integer(2048));
+    node.attributes.insert(
+        "mime_type".to_string(),
+        Attribute::String("text/plain".to_string()),
+    );
 
     let proto_node = server.graph_node_to_proto(&node);
 
     assert_eq!(proto_node.node_type, "file");
-    assert_eq!(proto_node.metadata.get("name"), Some(&"test.txt".to_string()));
+    assert_eq!(
+        proto_node.metadata.get("name"),
+        Some(&"test.txt".to_string())
+    );
     assert!(proto_node.attributes.contains_key("size"));
     assert!(proto_node.attributes.contains_key("mime_type"));
 }
@@ -326,9 +333,12 @@ async fn test_node_conversion_proto_to_graph() {
     metadata.insert("name".to_string(), "converted.txt".to_string());
 
     let mut attributes = std::collections::HashMap::new();
-    attributes.insert("attr1".to_string(), evif_grpc::Value {
-        value: Some(evif_grpc::value::Value::StringValue("value1".to_string())),
-    });
+    attributes.insert(
+        "attr1".to_string(),
+        evif_grpc::Value {
+            value: Some(evif_grpc::value::Value::StringValue("value1".to_string())),
+        },
+    );
 
     let proto_node = evif_grpc::Node {
         id: node_id.to_string(),
@@ -398,53 +408,76 @@ async fn test_graph_node_to_proto_all_attribute_types() {
     let server = EvifServer::new(graph, auth);
 
     let mut node = Node::new(NodeType::File, "test.txt");
-    node.attributes.insert("string_attr".to_string(), Attribute::String("test".to_string()));
-    node.attributes.insert("int_attr".to_string(), Attribute::Integer(42));
-    node.attributes.insert("float_attr".to_string(), Attribute::Float(3.14));
-    node.attributes.insert("bool_attr".to_string(), Attribute::Boolean(true));
-    node.attributes.insert("bytes_attr".to_string(), Attribute::Binary(vec![1, 2, 3, 4]));
-    node.attributes.insert("datetime_attr".to_string(), Attribute::DateTime(chrono::Utc::now()));
-    node.attributes.insert("null_attr".to_string(), Attribute::Null);
+    node.attributes.insert(
+        "string_attr".to_string(),
+        Attribute::String("test".to_string()),
+    );
+    node.attributes
+        .insert("int_attr".to_string(), Attribute::Integer(42));
+    node.attributes
+        .insert("float_attr".to_string(), Attribute::Float(3.14));
+    node.attributes
+        .insert("bool_attr".to_string(), Attribute::Boolean(true));
+    node.attributes.insert(
+        "bytes_attr".to_string(),
+        Attribute::Binary(vec![1, 2, 3, 4]),
+    );
+    node.attributes.insert(
+        "datetime_attr".to_string(),
+        Attribute::DateTime(chrono::Utc::now()),
+    );
+    node.attributes
+        .insert("null_attr".to_string(), Attribute::Null);
 
     let proto_node = server.graph_node_to_proto(&node);
 
     assert_eq!(proto_node.attributes.len(), 7);
 
     // Verify string attribute
-    if let Some(evif_grpc::Value { value: Some(evif_grpc::value::Value::StringValue(s)) }) =
-        proto_node.attributes.get("string_attr") {
+    if let Some(evif_grpc::Value {
+        value: Some(evif_grpc::value::Value::StringValue(s)),
+    }) = proto_node.attributes.get("string_attr")
+    {
         assert_eq!(s, "test");
     } else {
         panic!("String attribute conversion failed");
     }
 
     // Verify int attribute
-    if let Some(evif_grpc::Value { value: Some(evif_grpc::value::Value::IntValue(i)) }) =
-        proto_node.attributes.get("int_attr") {
+    if let Some(evif_grpc::Value {
+        value: Some(evif_grpc::value::Value::IntValue(i)),
+    }) = proto_node.attributes.get("int_attr")
+    {
         assert_eq!(*i, 42);
     } else {
         panic!("Int attribute conversion failed");
     }
 
     // Verify float attribute
-    if let Some(evif_grpc::Value { value: Some(evif_grpc::value::Value::DoubleValue(f)) }) =
-        proto_node.attributes.get("float_attr") {
+    if let Some(evif_grpc::Value {
+        value: Some(evif_grpc::value::Value::DoubleValue(f)),
+    }) = proto_node.attributes.get("float_attr")
+    {
         assert!((f - 3.14) < 0.001);
     } else {
         panic!("Float attribute conversion failed");
     }
 
     // Verify bool attribute
-    if let Some(evif_grpc::Value { value: Some(evif_grpc::value::Value::BoolValue(b)) }) =
-        proto_node.attributes.get("bool_attr") {
+    if let Some(evif_grpc::Value {
+        value: Some(evif_grpc::value::Value::BoolValue(b)),
+    }) = proto_node.attributes.get("bool_attr")
+    {
         assert!(b);
     } else {
         panic!("Bool attribute conversion failed");
     }
 
     // Verify bytes attribute
-    if let Some(evif_grpc::Value { value: Some(evif_grpc::value::Value::BytesValue(b)) }) =
-        proto_node.attributes.get("bytes_attr") {
+    if let Some(evif_grpc::Value {
+        value: Some(evif_grpc::value::Value::BytesValue(b)),
+    }) = proto_node.attributes.get("bytes_attr")
+    {
         assert_eq!(b.clone(), vec![1, 2, 3, 4]);
     } else {
         panic!("Bytes attribute conversion failed");
@@ -478,5 +511,8 @@ async fn test_batch_get_nodes_with_invalid_ids() {
         }
     }
 
-    assert!(error_count > 0, "Expected at least one error for invalid UUID");
+    assert!(
+        error_count > 0,
+        "Expected at least one error for invalid UUID"
+    );
 }

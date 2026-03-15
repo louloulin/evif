@@ -200,9 +200,7 @@ impl Role {
 
     /// Check if role allows action on resource
     pub fn allows(&self, resource: &Resource, action: &Action) -> bool {
-        self.permissions
-            .iter()
-            .any(|p| p.allows(resource, action))
+        self.permissions.iter().any(|p| p.allows(resource, action))
     }
 }
 
@@ -291,61 +289,81 @@ impl Rbac {
         // Admin role - full access
         let admin = RoleBuilder::new("admin")
             .with_description("Full system access")
-            .with_permission(PermissionBuilder::new(Resource::Custom("*".to_string()))
-                .with_action(Action::Custom("*".to_string()))
-                .build())
+            .with_permission(
+                PermissionBuilder::new(Resource::Custom("*".to_string()))
+                    .with_action(Action::Custom("*".to_string()))
+                    .build(),
+            )
             .build();
         self.roles.insert("admin".to_string(), admin);
 
         // Editor role - read, write, execute
         let editor = RoleBuilder::new("editor")
             .with_description("Can read, write and execute")
-            .with_permission(PermissionBuilder::new(Resource::MemoryItem)
-                .with_read()
-                .with_write()
-                .with_delete()
-                .build())
-            .with_permission(PermissionBuilder::new(Resource::Category)
-                .with_read()
-                .with_write()
-                .with_delete()
-                .build())
-            .with_permission(PermissionBuilder::new(Resource::Resource)
-                .with_read()
-                .with_write()
-                .build())
-            .with_permission(PermissionBuilder::new(Resource::Workflow)
-                .with_read()
-                .with_execute()
-                .build())
-            .with_permission(PermissionBuilder::new(Resource::Pipeline)
-                .with_read()
-                .with_execute()
-                .build())
+            .with_permission(
+                PermissionBuilder::new(Resource::MemoryItem)
+                    .with_read()
+                    .with_write()
+                    .with_delete()
+                    .build(),
+            )
+            .with_permission(
+                PermissionBuilder::new(Resource::Category)
+                    .with_read()
+                    .with_write()
+                    .with_delete()
+                    .build(),
+            )
+            .with_permission(
+                PermissionBuilder::new(Resource::Resource)
+                    .with_read()
+                    .with_write()
+                    .build(),
+            )
+            .with_permission(
+                PermissionBuilder::new(Resource::Workflow)
+                    .with_read()
+                    .with_execute()
+                    .build(),
+            )
+            .with_permission(
+                PermissionBuilder::new(Resource::Pipeline)
+                    .with_read()
+                    .with_execute()
+                    .build(),
+            )
             .build();
         self.roles.insert("editor".to_string(), editor);
 
         // Viewer role - read only
         let viewer = RoleBuilder::new("viewer")
             .with_description("Read-only access")
-            .with_permission(PermissionBuilder::new(Resource::MemoryItem)
-                .with_read()
-                .build())
-            .with_permission(PermissionBuilder::new(Resource::Category)
-                .with_read()
-                .build())
-            .with_permission(PermissionBuilder::new(Resource::Resource)
-                .with_read()
-                .build())
+            .with_permission(
+                PermissionBuilder::new(Resource::MemoryItem)
+                    .with_read()
+                    .build(),
+            )
+            .with_permission(
+                PermissionBuilder::new(Resource::Category)
+                    .with_read()
+                    .build(),
+            )
+            .with_permission(
+                PermissionBuilder::new(Resource::Resource)
+                    .with_read()
+                    .build(),
+            )
             .build();
         self.roles.insert("viewer".to_string(), viewer);
 
         // Guest role - minimal access
         let guest = RoleBuilder::new("guest")
             .with_description("Minimal access")
-            .with_permission(PermissionBuilder::new(Resource::MemoryItem)
-                .with_read()
-                .build())
+            .with_permission(
+                PermissionBuilder::new(Resource::MemoryItem)
+                    .with_read()
+                    .build(),
+            )
             .build();
         self.roles.insert("guest".to_string(), guest);
     }
@@ -353,9 +371,10 @@ impl Rbac {
     /// Register a custom role
     pub fn register_role(&self, role: Role) -> MemResult<()> {
         if self.roles.contains_key(&role.name) {
-            return Err(MemError::Authorization(
-                format!("Role '{}' already exists", role.name),
-            ));
+            return Err(MemError::Authorization(format!(
+                "Role '{}' already exists",
+                role.name
+            )));
         }
         self.roles.insert(role.name.clone(), role);
         Ok(())
@@ -364,12 +383,14 @@ impl Rbac {
     /// Assign role to user
     pub fn assign_role(&self, user_id: &str, role_name: &str) -> MemResult<()> {
         if !self.roles.contains_key(role_name) {
-            return Err(MemError::Authorization(
-                format!("Role '{}' not found", role_name),
-            ));
+            return Err(MemError::Authorization(format!(
+                "Role '{}' not found",
+                role_name
+            )));
         }
 
-        let mut roles = self.user_roles
+        let mut roles = self
+            .user_roles
             .entry(user_id.to_string())
             .or_insert_with(Vec::new);
 
@@ -397,19 +418,16 @@ impl Rbac {
             .get(user_id)
             .map(|r| r.clone())
             .unwrap_or_else(|| {
-                self.config.default_role.clone()
+                self.config
+                    .default_role
+                    .clone()
                     .map(|r| vec![r])
                     .unwrap_or_default()
             })
     }
 
     /// Check if user has permission
-    pub fn check_permission(
-        &self,
-        user_id: &str,
-        resource: &Resource,
-        action: &Action,
-    ) -> bool {
+    pub fn check_permission(&self, user_id: &str, resource: &Resource, action: &Action) -> bool {
         if !self.config.enabled {
             return true; // RBAC disabled, allow all
         }
@@ -497,10 +515,12 @@ mod tests {
         let rbac = Rbac::new(RbacConfig::default());
 
         let custom_role = RoleBuilder::new("custom")
-            .with_permission(PermissionBuilder::new(Resource::Workflow)
-                .with_read()
-                .with_execute()
-                .build())
+            .with_permission(
+                PermissionBuilder::new(Resource::Workflow)
+                    .with_read()
+                    .with_execute()
+                    .build(),
+            )
             .build();
 
         rbac.register_role(custom_role).unwrap();

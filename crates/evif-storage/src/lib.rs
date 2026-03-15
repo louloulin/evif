@@ -3,8 +3,8 @@
 
 //! EVIF 存储层 - 可插拔的存储后端
 
-pub mod error;
 pub mod backend;
+pub mod error;
 pub mod memory;
 pub mod transaction;
 
@@ -17,8 +17,8 @@ pub mod rocksdb;
 #[cfg(feature = "s3-backend")]
 pub mod s3;
 
-pub use error::{StorageError, StorageResult};
 pub use backend::{StorageBackend, StorageOp};
+pub use error::{StorageError, StorageResult};
 pub use memory::MemoryStorage;
 pub use transaction::MemoryTransaction;
 
@@ -26,10 +26,10 @@ pub use transaction::MemoryTransaction;
 pub use sled::{SledStorage, SledTransaction, StorageStats};
 
 #[cfg(feature = "rocksdb-backend")]
-pub use rocksdb::{RocksDBStorage, RocksDBTransaction, RocksDBStats};
+pub use rocksdb::{RocksDBStats, RocksDBStorage, RocksDBTransaction};
 
 #[cfg(feature = "s3-backend")]
-pub use s3::{S3Storage, S3StorageConfig, S3Transaction, S3Stats};
+pub use s3::{S3Stats, S3Storage, S3StorageConfig, S3Transaction};
 
 // 重新导出 evif-graph 类型以方便使用
-pub use evif_graph::{Node, Edge, NodeId, EdgeId};
+pub use evif_graph::{Edge, EdgeId, Node, NodeId};

@@ -8,7 +8,7 @@
 // - 继承和默认规则
 // - 权限验证逻辑
 
-use crate::error::{EvifResult, EvifError};
+use crate::error::{EvifError, EvifResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -399,10 +399,7 @@ impl AclManager {
     }
 
     /// 批量设置 ACL
-    pub async fn set_acl_batch(
-        &self,
-        acl_map: HashMap<String, Vec<AclEntry>>,
-    ) -> EvifResult<()> {
+    pub async fn set_acl_batch(&self, acl_map: HashMap<String, Vec<AclEntry>>) -> EvifResult<()> {
         let mut acls = self.acls.write().unwrap();
         for (path, entries) in acl_map {
             acls.insert(path, entries);
@@ -462,7 +459,10 @@ mod tests {
 
     #[test]
     fn test_acl_entry() {
-        let user_entry = AclEntry::user("alice".to_string(), AclPermissions::READ | AclPermissions::WRITE);
+        let user_entry = AclEntry::user(
+            "alice".to_string(),
+            AclPermissions::READ | AclPermissions::WRITE,
+        );
         assert_eq!(user_entry.acl_type, AclType::User);
         assert_eq!(user_entry.identifier, "alice");
 
@@ -478,19 +478,21 @@ mod tests {
         let manager = AclManager::new(true);
 
         // 添加用户
-        let user = UserContext::new(
-            "alice".to_string(),
-            vec!["developers".to_string()],
-            false,
-        );
+        let user = UserContext::new("alice".to_string(), vec!["developers".to_string()], false);
         manager.add_user(user);
 
         // 设置 ACL
         let entries = vec![
             AclEntry::user("alice".to_string(), AclPermissions::ALL),
-            AclEntry::group("developers".to_string(), AclPermissions::READ | AclPermissions::WRITE),
+            AclEntry::group(
+                "developers".to_string(),
+                AclPermissions::READ | AclPermissions::WRITE,
+            ),
         ];
-        manager.set_acl("/test/file.txt".to_string(), entries).await.unwrap();
+        manager
+            .set_acl("/test/file.txt".to_string(), entries)
+            .await
+            .unwrap();
 
         // 检查权限
         let user = manager.get_user("alice").unwrap();

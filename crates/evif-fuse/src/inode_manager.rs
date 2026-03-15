@@ -7,8 +7,8 @@
 // - 线程安全的并发访问
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
 use tracing::{debug, trace};
 
@@ -121,10 +121,7 @@ impl InodeManager {
 
         {
             let mut info_map = self.inode_to_info.write().unwrap();
-            info_map.insert(
-                inode,
-                InodeInfo::new(inode, path.to_string(), is_dir),
-            );
+            info_map.insert(inode, InodeInfo::new(inode, path.to_string(), is_dir));
         }
 
         debug!("Created new inode: {} -> {}", inode, path);

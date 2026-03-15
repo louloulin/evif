@@ -2,8 +2,8 @@
 //
 // Tests transparent encryption with AES-256-GCM
 
-use evif_plugins::{EncryptedFsPlugin, EncryptedConfig, MemFsPlugin};
 use evif_core::EvifPlugin;
+use evif_plugins::{EncryptedConfig, EncryptedFsPlugin, MemFsPlugin};
 use std::sync::Arc;
 use tokio;
 

@@ -1,14 +1,14 @@
 // EVIF 客户端实现
 
-use crate::{ClientError, ClientResult, Transport, ClientCache};
-use evif_graph::{NodeId, Node};
-use evif_protocol::{Request, Response, Message};
+use crate::{ClientCache, ClientError, ClientResult, Transport};
+use base64::Engine;
 use evif_core::FileInfo;
+use evif_graph::{Node, NodeId};
+use evif_protocol::{Message, Request, Response};
+use reqwest::Client as HttpClient;
+use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
-use serde_json::Value;
-use reqwest::Client as HttpClient;
-use base64::Engine;
 
 /// 客户端配置
 #[derive(Debug, Clone)]
@@ -107,7 +107,9 @@ impl EvifClient {
                 }
                 Ok(node)
             }
-            _ => Err(ClientError::Protocol("Unexpected response type".to_string())),
+            _ => Err(ClientError::Protocol(
+                "Unexpected response type".to_string(),
+            )),
         }
     }
 
@@ -123,7 +125,9 @@ impl EvifClient {
 
         match response.kind {
             evif_protocol::ResponseKind::Created { id } => Ok(id),
-            _ => Err(ClientError::Protocol("Unexpected response type".to_string())),
+            _ => Err(ClientError::Protocol(
+                "Unexpected response type".to_string(),
+            )),
         }
     }
 
@@ -146,7 +150,9 @@ impl EvifClient {
 
         match response.kind {
             evif_protocol::ResponseKind::QueryResult { ids, .. } => Ok(ids),
-            _ => Err(ClientError::Protocol("Unexpected response type".to_string())),
+            _ => Err(ClientError::Protocol(
+                "Unexpected response type".to_string(),
+            )),
         }
     }
 
@@ -157,7 +163,9 @@ impl EvifClient {
 
         match response.kind {
             evif_protocol::ResponseKind::Children { ids } => Ok(ids),
-            _ => Err(ClientError::Protocol("Unexpected response type".to_string())),
+            _ => Err(ClientError::Protocol(
+                "Unexpected response type".to_string(),
+            )),
         }
     }
 
@@ -178,7 +186,9 @@ impl EvifClient {
             evif_protocol::ResponseKind::FileResult { data, .. } => {
                 data.ok_or_else(|| ClientError::Protocol("No data in response".to_string()))
             }
-            _ => Err(ClientError::Protocol("Unexpected response type".to_string())),
+            _ => Err(ClientError::Protocol(
+                "Unexpected response type".to_string(),
+            )),
         }
     }
 
@@ -198,9 +208,10 @@ impl EvifClient {
         // 解析响应
         match response_msg {
             Message::Response(response) => Ok(response),
-            Message::Error { code, message } => {
-                Err(ClientError::Protocol(format!("Error {}: {}", code, message)))
-            }
+            Message::Error { code, message } => Err(ClientError::Protocol(format!(
+                "Error {}: {}",
+                code, message
+            ))),
             _ => Err(ClientError::Protocol("Unexpected message type".to_string())),
         }
     }
@@ -209,223 +220,305 @@ impl EvifClient {
 
     /// 列出文件
     pub async fn ls(&self, path: &str) -> ClientResult<Vec<FileInfo>> {
-    let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
-    let response = self.http_client.get(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
+        let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
+        let response = self.http_client.get(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
 
-    let status = response.status();
-    let json: Value = response.json().await
-        .map_err(|e| ClientError::Protocol(e.to_string()))?;
+        let status = response.status();
+        let json: Value = response
+            .json()
+            .await
+            .map_err(|e| ClientError::Protocol(e.to_string()))?;
 
-    // 如果返回错误，返回错误信息
-    if !status.is_success() {
-        if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
-            return Err(ClientError::Protocol(msg.to_string()));
+        // 如果返回错误，返回错误信息
+        if !status.is_success() {
+            if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+                return Err(ClientError::Protocol(msg.to_string()));
+            }
+            return Err(ClientError::Protocol(format!("HTTP {}", status.as_u16())));
         }
-        return Err(ClientError::Protocol(format!("HTTP {}", status.as_u16())));
+
+        let files = json["files"].as_array().ok_or_else(|| {
+            ClientError::Protocol("Invalid response: missing 'files' field".to_string())
+        })?;
+
+        files
+            .iter()
+            .map(|v| {
+                serde_json::from_value(v.clone()).map_err(|e| ClientError::Protocol(e.to_string()))
+            })
+            .collect()
     }
 
-    let files = json["files"].as_array()
-        .ok_or_else(|| ClientError::Protocol("Invalid response: missing 'files' field".to_string()))?;
+    /// 读取文件
+    pub async fn cat(&self, path: &str) -> ClientResult<String> {
+        let bytes = self.cat_bytes(path).await?;
+        String::from_utf8(bytes).map_err(|e| ClientError::Protocol(format!("Invalid UTF-8: {}", e)))
+    }
 
-    files.iter().map(|v| {
-        serde_json::from_value(v.clone())
+    /// 读取文件字节
+    pub async fn cat_bytes(&self, path: &str) -> ClientResult<Vec<u8>> {
+        let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
+        let response = self.http_client.get(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
+
+        let json: Value = response
+            .json()
+            .await
+            .map_err(|e| ClientError::Protocol(e.to_string()))?;
+
+        let data = json["data"]
+            .as_str()
+            .ok_or_else(|| ClientError::Protocol("Invalid response".to_string()))?;
+
+        base64::engine::general_purpose::STANDARD
+            .decode(data)
             .map_err(|e| ClientError::Protocol(e.to_string()))
-    }).collect()
-}
-
-/// 读取文件
-pub async fn cat(&self, path: &str) -> ClientResult<String> {
-    let bytes = self.cat_bytes(path).await?;
-    String::from_utf8(bytes)
-        .map_err(|e| ClientError::Protocol(format!("Invalid UTF-8: {}", e)))
-}
-
-/// 读取文件字节
-pub async fn cat_bytes(&self, path: &str) -> ClientResult<Vec<u8>> {
-    let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
-    let response = self.http_client.get(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-
-    let json: Value = response.json().await
-        .map_err(|e| ClientError::Protocol(e.to_string()))?;
-
-    let data = json["data"].as_str()
-        .ok_or_else(|| ClientError::Protocol("Invalid response".to_string()))?;
-
-    base64::engine::general_purpose::STANDARD.decode(data)
-        .map_err(|e| ClientError::Protocol(e.to_string()))
-}
-
-/// 写入文件（与 evif-rest 契约一致：JSON body data + encoding=base64）
-pub async fn write(&self, path: &str, content: &str, append: bool) -> ClientResult<()> {
-    let offset = if append { -1 } else { 0 };
-    let bytes = content.as_bytes().to_vec();
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-
-    let url = format!("{}/api/v1/files?path={}&offset={}",
-                     self.config.base_url, path, offset);
-    let body = serde_json::json!({ "data": encoded, "encoding": "base64" });
-
-    self.http_client.put(&url).json(&body).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-
-    Ok(())
-}
-
-/// 创建目录
-pub async fn mkdir(&self, path: &str) -> ClientResult<()> {
-    let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
-    self.http_client.post(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-    Ok(())
-}
-
-/// 删除文件
-pub async fn remove(&self, path: &str) -> ClientResult<()> {
-    let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
-    self.http_client.delete(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-    Ok(())
-}
-
-/// 递归删除
-pub async fn remove_all(&self, path: &str) -> ClientResult<()> {
-    let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
-    self.http_client.delete(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-    Ok(())
-}
-
-/// 重命名文件
-pub async fn rename(&self, old_path: &str, new_path: &str) -> ClientResult<()> {
-    let url = format!("{}/api/v1/rename", self.config.base_url);
-    let body = serde_json::json!({"old_path": old_path, "new_path": new_path});
-
-    self.http_client.post(&url).json(&body).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-    Ok(())
-}
-
-/// 获取文件信息
-pub async fn stat(&self, path: &str) -> ClientResult<FileInfo> {
-    let url = format!("{}/api/v1/stat?path={}", self.config.base_url, path);
-    let response = self.http_client.get(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-
-    let json: Value = response.json().await
-        .map_err(|e| ClientError::Protocol(e.to_string()))?;
-
-    serde_json::from_value(json)
-        .map_err(|e| ClientError::Protocol(e.to_string()))
-}
-
-/// 健康检查
-pub async fn health(&self) -> ClientResult<HealthInfo> {
-    let url = format!("{}/api/v1/health", self.config.base_url);
-    let response = self.http_client.get(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-
-    let json: Value = response.json().await
-        .map_err(|e| ClientError::Protocol(e.to_string()))?;
-
-    Ok(HealthInfo {
-        status: json["status"].as_str().unwrap_or("unknown").to_string(),
-        version: json["version"].as_str().unwrap_or("unknown").to_string(),
-        uptime: json["uptime"].as_u64().unwrap_or(0),
-    })
-}
-
-/// 挂载插件（与 evif-rest POST /api/v1/mount 契约一致）
-pub async fn mount(&self, plugin: &str, path: &str, config: Option<&str>) -> ClientResult<()> {
-    let url = format!("{}/api/v1/mount", self.config.base_url);
-    let mut body = serde_json::json!({"plugin": plugin, "path": path});
-    if let Some(cfg) = config {
-        body["config"] = serde_json::json!(cfg);
     }
 
-    self.http_client.post(&url).json(&body).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-    Ok(())
-}
+    /// 写入文件（与 evif-rest 契约一致：JSON body data + encoding=base64）
+    pub async fn write(&self, path: &str, content: &str, append: bool) -> ClientResult<()> {
+        let offset = if append { -1 } else { 0 };
+        let bytes = content.as_bytes().to_vec();
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
 
-/// 卸载插件（与 evif-rest POST /api/v1/unmount 契约一致）
-pub async fn unmount(&self, path: &str) -> ClientResult<()> {
-    let url = format!("{}/api/v1/unmount", self.config.base_url);
-    let body = serde_json::json!({"path": path});
-    self.http_client.post(&url).json(&body).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-    Ok(())
-}
+        let url = format!(
+            "{}/api/v1/files?path={}&offset={}",
+            self.config.base_url, path, offset
+        );
+        let body = serde_json::json!({ "data": encoded, "encoding": "base64" });
 
-/// 列出挂载点
-pub async fn mounts(&self) -> ClientResult<Vec<MountInfo>> {
-    let url = format!("{}/api/v1/mounts", self.config.base_url);
-    let response = self.http_client.get(&url).send().await
-        .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
+        self.http_client
+            .put(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            })?;
 
-    let status = response.status();
-    let json: Value = response.json().await
-        .map_err(|e| ClientError::Protocol(e.to_string()))?;
+        Ok(())
+    }
 
-    // 如果返回错误，返回错误信息
-    if !status.is_success() {
-        if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
-            return Err(ClientError::Protocol(msg.to_string()));
+    /// 创建目录
+    pub async fn mkdir(&self, path: &str) -> ClientResult<()> {
+        let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
+        self.http_client.post(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
+        Ok(())
+    }
+
+    /// 删除文件
+    pub async fn remove(&self, path: &str) -> ClientResult<()> {
+        let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
+        self.http_client.delete(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
+        Ok(())
+    }
+
+    /// 递归删除
+    pub async fn remove_all(&self, path: &str) -> ClientResult<()> {
+        let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
+        self.http_client.delete(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
+        Ok(())
+    }
+
+    /// 重命名文件
+    pub async fn rename(&self, old_path: &str, new_path: &str) -> ClientResult<()> {
+        let url = format!("{}/api/v1/rename", self.config.base_url);
+        let body = serde_json::json!({"old_path": old_path, "new_path": new_path});
+
+        self.http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            })?;
+        Ok(())
+    }
+
+    /// 获取文件信息
+    pub async fn stat(&self, path: &str) -> ClientResult<FileInfo> {
+        let url = format!("{}/api/v1/stat?path={}", self.config.base_url, path);
+        let response = self.http_client.get(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
+
+        let json: Value = response
+            .json()
+            .await
+            .map_err(|e| ClientError::Protocol(e.to_string()))?;
+
+        serde_json::from_value(json).map_err(|e| ClientError::Protocol(e.to_string()))
+    }
+
+    /// 健康检查
+    pub async fn health(&self) -> ClientResult<HealthInfo> {
+        let url = format!("{}/api/v1/health", self.config.base_url);
+        let response = self.http_client.get(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
+
+        let json: Value = response
+            .json()
+            .await
+            .map_err(|e| ClientError::Protocol(e.to_string()))?;
+
+        Ok(HealthInfo {
+            status: json["status"].as_str().unwrap_or("unknown").to_string(),
+            version: json["version"].as_str().unwrap_or("unknown").to_string(),
+            uptime: json["uptime"].as_u64().unwrap_or(0),
+        })
+    }
+
+    /// 挂载插件（与 evif-rest POST /api/v1/mount 契约一致）
+    pub async fn mount(&self, plugin: &str, path: &str, config: Option<&str>) -> ClientResult<()> {
+        let url = format!("{}/api/v1/mount", self.config.base_url);
+        let mut body = serde_json::json!({"plugin": plugin, "path": path});
+        if let Some(cfg) = config {
+            body["config"] = serde_json::json!(cfg);
         }
-        return Err(ClientError::Protocol(format!("HTTP {}", status.as_u16())));
+
+        self.http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            })?;
+        Ok(())
     }
 
-    // 尝试两种格式：{"mounts": [...]} 或直接的数组 [...]
-    let mounts = if let Some(mounts_array) = json.get("mounts").and_then(|v| v.as_array()) {
-        mounts_array
-    } else if let Some(array) = json.as_array() {
-        array
-    } else {
-        return Err(ClientError::Protocol("Invalid response: expected array or object with 'mounts' field".to_string()));
-    };
+    /// 卸载插件（与 evif-rest POST /api/v1/unmount 契约一致）
+    pub async fn unmount(&self, path: &str) -> ClientResult<()> {
+        let url = format!("{}/api/v1/unmount", self.config.base_url);
+        let body = serde_json::json!({"path": path});
+        self.http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            })?;
+        Ok(())
+    }
 
-    mounts.iter().map(|v| {
-        serde_json::from_value(v.clone())
-            .map_err(|e| ClientError::Protocol(e.to_string()))
-    }).collect()
-}
+    /// 列出挂载点
+    pub async fn mounts(&self) -> ClientResult<Vec<MountInfo>> {
+        let url = format!("{}/api/v1/mounts", self.config.base_url);
+        let response = self.http_client.get(&url).send().await.map_err(|e| {
+            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+        })?;
+
+        let status = response.status();
+        let json: Value = response
+            .json()
+            .await
+            .map_err(|e| ClientError::Protocol(e.to_string()))?;
+
+        // 如果返回错误，返回错误信息
+        if !status.is_success() {
+            if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+                return Err(ClientError::Protocol(msg.to_string()));
+            }
+            return Err(ClientError::Protocol(format!("HTTP {}", status.as_u16())));
+        }
+
+        // 尝试两种格式：{"mounts": [...]} 或直接的数组 [...]
+        let mounts = if let Some(mounts_array) = json.get("mounts").and_then(|v| v.as_array()) {
+            mounts_array
+        } else if let Some(array) = json.as_array() {
+            array
+        } else {
+            return Err(ClientError::Protocol(
+                "Invalid response: expected array or object with 'mounts' field".to_string(),
+            ));
+        };
+
+        mounts
+            .iter()
+            .map(|v| {
+                serde_json::from_value(v.clone()).map_err(|e| ClientError::Protocol(e.to_string()))
+            })
+            .collect()
+    }
 
     /// 计算文件摘要（Phase 10.1：POST /api/v1/digest）
-    pub async fn digest(&self, path: &str, algorithm: Option<&str>) -> ClientResult<(String, String)> {
+    pub async fn digest(
+        &self,
+        path: &str,
+        algorithm: Option<&str>,
+    ) -> ClientResult<(String, String)> {
         let url = format!("{}/api/v1/digest", self.config.base_url);
         let mut body = serde_json::json!({ "path": path });
         if let Some(algo) = algorithm {
             body["algorithm"] = serde_json::json!(algo);
         }
-        let response = self.http_client.post(&url).json(&body).send().await
-            .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-        let json: Value = response.json().await
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            })?;
+        let json: Value = response
+            .json()
+            .await
             .map_err(|e| ClientError::Protocol(e.to_string()))?;
         let algo = json["algorithm"].as_str().unwrap_or("sha256").to_string();
-        let hash = json["hash"].as_str()
+        let hash = json["hash"]
+            .as_str()
             .ok_or_else(|| ClientError::Protocol("Missing hash".to_string()))?
             .to_string();
         Ok((algo, hash))
     }
 
     /// 正则搜索（Phase 10.1：POST /api/v1/grep）
-    pub async fn grep(&self, path: &str, pattern: &str, recursive: Option<bool>) -> ClientResult<Vec<GrepMatch>> {
+    pub async fn grep(
+        &self,
+        path: &str,
+        pattern: &str,
+        recursive: Option<bool>,
+    ) -> ClientResult<Vec<GrepMatch>> {
         let url = format!("{}/api/v1/grep", self.config.base_url);
         let mut body = serde_json::json!({ "path": path, "pattern": pattern });
         if let Some(r) = recursive {
             body["recursive"] = serde_json::json!(r);
         }
-        let response = self.http_client.post(&url).json(&body).send().await
-            .map_err(|e| ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string())))?;
-        let json: Value = response.json().await
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            })?;
+        let json: Value = response
+            .json()
+            .await
             .map_err(|e| ClientError::Protocol(e.to_string()))?;
-        let matches = json["matches"].as_array()
+        let matches = json["matches"]
+            .as_array()
             .ok_or_else(|| ClientError::Protocol("Invalid grep response".to_string()))?;
-        matches.iter().map(|v| {
-            serde_json::from_value(v.clone())
-                .map_err(|e| ClientError::Protocol(e.to_string()))
-        }).collect()
+        matches
+            .iter()
+            .map(|v| {
+                serde_json::from_value(v.clone()).map_err(|e| ClientError::Protocol(e.to_string()))
+            })
+            .collect()
     }
 }
 

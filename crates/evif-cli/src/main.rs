@@ -2,9 +2,9 @@
 
 mod cli;
 mod commands;
+mod completer;
 mod repl;
 mod script;
-mod completer;
 
 use anyhow::Result;
 use clap::Parser;

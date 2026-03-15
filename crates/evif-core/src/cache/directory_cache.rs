@@ -1,8 +1,8 @@
 // 目录缓存 - 用于缓存目录列表
 
 use super::{Cache, CacheConfig, CacheKey, CacheStats};
-use async_trait::async_trait;
 use crate::FileInfo;
+use async_trait::async_trait;
 use std::sync::Arc;
 
 /// 目录缓存
@@ -20,7 +20,9 @@ impl DirectoryCache {
     pub fn with_config(config: CacheConfig) -> Self {
         use super::cache::EvifCache;
         let cache = EvifCache::<CacheKey, Vec<FileInfo>>::new("directory".to_string(), config);
-        Self { cache: Arc::new(cache) }
+        Self {
+            cache: Arc::new(cache),
+        }
     }
 
     /// 获取目录列表

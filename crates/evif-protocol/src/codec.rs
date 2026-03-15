@@ -106,7 +106,8 @@ impl ProtocolCodec for MessagePackCodec {
             .map_err(|e| ProtocolError::IoError(e.to_string()))?;
 
         // 编码头部
-        header.serialize(&mut Serializer::new(&mut buf))
+        header
+            .serialize(&mut Serializer::new(&mut buf))
             .map_err(|e| ProtocolError::SerializationError(e.to_string()))?;
 
         Ok(buf)

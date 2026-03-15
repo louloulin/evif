@@ -1,7 +1,7 @@
 // EVIF CLI Integration Tests
 
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 use tempfile::TempDir;
 
 fn workspace_root() -> std::path::PathBuf {

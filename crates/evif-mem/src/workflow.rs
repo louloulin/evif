@@ -65,7 +65,10 @@ impl std::fmt::Display for Capability {
 
 /// Function type for workflow steps - async function that takes state and returns modified state
 pub type StepFunction = Box<
-    dyn Fn(HashMap<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = MemResult<HashMap<String, serde_json::Value>>> + Send>>
+    dyn Fn(
+            HashMap<String, serde_json::Value>,
+        )
+            -> Pin<Box<dyn Future<Output = MemResult<HashMap<String, serde_json::Value>>> + Send>>
         + Send
         + Sync,
 >;
@@ -128,7 +131,11 @@ impl WorkflowStep {
     }
 
     /// Create a new function step
-    pub fn function<F, Fut>(step_id: impl Into<String>, func: F, capabilities: Vec<Capability>) -> Self
+    pub fn function<F, Fut>(
+        step_id: impl Into<String>,
+        func: F,
+        capabilities: Vec<Capability>,
+    ) -> Self
     where
         F: Fn(HashMap<String, serde_json::Value>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = MemResult<HashMap<String, serde_json::Value>>> + Send + 'static,
@@ -478,15 +485,16 @@ impl PipelineManager {
     /// Register a new pipeline
     ///
     /// Validates that all steps have required capabilities and valid LLM profiles.
-    pub async fn register(&self, name: impl Into<String>, steps: Vec<WorkflowStep>) -> MemResult<()> {
+    pub async fn register(
+        &self,
+        name: impl Into<String>,
+        steps: Vec<WorkflowStep>,
+    ) -> MemResult<()> {
         let name = name.into();
 
         // Validate capabilities
         for step in &steps {
-            let missing: Vec<_> = step
-                .capabilities
-                .difference(&self.capabilities)
-                .collect();
+            let missing: Vec<_> = step.capabilities.difference(&self.capabilities).collect();
 
             if !missing.is_empty() {
                 let missing_str: Vec<_> = missing.iter().map(|c| c.to_string()).collect();
@@ -526,10 +534,7 @@ impl PipelineManager {
     /// Validate sub-steps recursively
     fn validate_sub_steps(&self, pipeline_name: &str, steps: &[WorkflowStep]) -> MemResult<()> {
         for step in steps {
-            let missing: Vec<_> = step
-                .capabilities
-                .difference(&self.capabilities)
-                .collect();
+            let missing: Vec<_> = step.capabilities.difference(&self.capabilities).collect();
 
             if !missing.is_empty() {
                 let missing_str: Vec<_> = missing.iter().map(|c| c.to_string()).collect();
@@ -620,9 +625,9 @@ impl PipelineManager {
     ) -> MemResult<usize> {
         let mut pipelines = self.pipelines.write().await;
 
-        let steps = pipelines
-            .get_mut(pipeline_name)
-            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+        let steps = pipelines.get_mut(pipeline_name).ok_or_else(|| {
+            MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name))
+        })?;
 
         let mut modified = 0;
         for step in steps.iter_mut() {
@@ -672,14 +677,12 @@ impl PipelineManager {
 
         let mut pipelines = self.pipelines.write().await;
 
-        let steps = pipelines
-            .get_mut(pipeline_name)
-            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+        let steps = pipelines.get_mut(pipeline_name).ok_or_else(|| {
+            MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name))
+        })?;
 
         // Find target step index
-        let target_index = steps
-            .iter()
-            .position(|s| s.step_id == target_step_id);
+        let target_index = steps.iter().position(|s| s.step_id == target_step_id);
 
         match target_index {
             Some(index) => {
@@ -704,14 +707,12 @@ impl PipelineManager {
 
         let mut pipelines = self.pipelines.write().await;
 
-        let steps = pipelines
-            .get_mut(pipeline_name)
-            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+        let steps = pipelines.get_mut(pipeline_name).ok_or_else(|| {
+            MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name))
+        })?;
 
         // Find target step index
-        let target_index = steps
-            .iter()
-            .position(|s| s.step_id == target_step_id);
+        let target_index = steps.iter().position(|s| s.step_id == target_step_id);
 
         match target_index {
             Some(index) => {
@@ -736,14 +737,12 @@ impl PipelineManager {
 
         let mut pipelines = self.pipelines.write().await;
 
-        let steps = pipelines
-            .get_mut(pipeline_name)
-            .ok_or_else(|| MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name)))?;
+        let steps = pipelines.get_mut(pipeline_name).ok_or_else(|| {
+            MemError::WorkflowError(format!("Pipeline '{}' not found", pipeline_name))
+        })?;
 
         // Find target step index
-        let target_index = steps
-            .iter()
-            .position(|s| s.step_id == target_step_id);
+        let target_index = steps.iter().position(|s| s.step_id == target_step_id);
 
         match target_index {
             Some(index) => {
@@ -757,10 +756,7 @@ impl PipelineManager {
     /// Validate a single step
     fn validate_step(&self, step: &WorkflowStep) -> MemResult<()> {
         // Validate capabilities
-        let missing: Vec<_> = step
-            .capabilities
-            .difference(&self.capabilities)
-            .collect();
+        let missing: Vec<_> = step.capabilities.difference(&self.capabilities).collect();
 
         if !missing.is_empty() {
             let missing_str: Vec<_> = missing.iter().map(|c| c.to_string()).collect();
@@ -907,10 +903,9 @@ impl DefaultWorkflowRunner {
         step: &WorkflowStep,
         state: &WorkflowState,
     ) -> MemResult<serde_json::Value> {
-        let func = step
-            .function
-            .as_ref()
-            .ok_or_else(|| MemError::WorkflowError(format!("Step '{}' has no function", step.step_id)))?;
+        let func = step.function.as_ref().ok_or_else(|| {
+            MemError::WorkflowError(format!("Step '{}' has no function", step.step_id))
+        })?;
 
         let state_map = state.step_outputs.clone();
         let mut result: HashMap<String, serde_json::Value> = func(state_map).await?;
@@ -918,7 +913,9 @@ impl DefaultWorkflowRunner {
         // Merge result into state
         if let Some(global) = result.remove("global") {
             let mut state = state.clone();
-            if let Ok(global_map) = serde_json::from_value::<HashMap<String, serde_json::Value>>(global) {
+            if let Ok(global_map) =
+                serde_json::from_value::<HashMap<String, serde_json::Value>>(global)
+            {
                 for (k, v) in global_map {
                     state.set_global(k, v);
                 }
@@ -934,10 +931,9 @@ impl DefaultWorkflowRunner {
         step: &WorkflowStep,
         state: &WorkflowState,
     ) -> MemResult<serde_json::Value> {
-        let template = step
-            .prompt_template
-            .as_ref()
-            .ok_or_else(|| MemError::WorkflowError(format!("Step '{}' has no prompt template", step.step_id)))?;
+        let template = step.prompt_template.as_ref().ok_or_else(|| {
+            MemError::WorkflowError(format!("Step '{}' has no prompt template", step.step_id))
+        })?;
 
         // Render template with state
         let prompt = self.render_template(template, state)?;
@@ -956,10 +952,9 @@ impl DefaultWorkflowRunner {
         state: &mut WorkflowState,
         stats: &mut WorkflowStats,
     ) -> MemResult<serde_json::Value> {
-        let sub_steps = step
-            .sub_steps
-            .as_ref()
-            .ok_or_else(|| MemError::WorkflowError(format!("Parallel step '{}' has no sub-steps", step.step_id)))?;
+        let sub_steps = step.sub_steps.as_ref().ok_or_else(|| {
+            MemError::WorkflowError(format!("Parallel step '{}' has no sub-steps", step.step_id))
+        })?;
 
         // Spawn all sub-steps as concurrent tokio tasks
         let mut handles = Vec::new();
@@ -992,7 +987,10 @@ impl DefaultWorkflowRunner {
                     }
                     StepType::LLM => {
                         let template = prompt_template.as_ref().ok_or_else(|| {
-                            MemError::WorkflowError(format!("Step '{}' has no prompt template", step_id))
+                            MemError::WorkflowError(format!(
+                                "Step '{}' has no prompt template",
+                                step_id
+                            ))
                         })?;
 
                         // Render template
@@ -1022,11 +1020,9 @@ impl DefaultWorkflowRunner {
                         let response = llm.generate(&prompt, llm_profile.as_deref()).await?;
                         Ok(serde_json::json!({ "response": response }))
                     }
-                    StepType::Parallel => {
-                        Err(MemError::WorkflowError(
-                            "Nested parallel steps are not supported".to_string(),
-                        ))
-                    }
+                    StepType::Parallel => Err(MemError::WorkflowError(
+                        "Nested parallel steps are not supported".to_string(),
+                    )),
                 };
 
                 let elapsed = start.elapsed().as_millis() as u64;
@@ -1039,7 +1035,8 @@ impl DefaultWorkflowRunner {
         // Collect results from all concurrent tasks
         let mut results = HashMap::new();
         for handle in handles {
-            let (step_id, result, elapsed) = handle.await
+            let (step_id, result, elapsed) = handle
+                .await
                 .map_err(|e| MemError::WorkflowError(format!("Task join error: {}", e)))??;
 
             stats.step_times.insert(step_id.clone(), elapsed);
@@ -1176,13 +1173,16 @@ mod tests {
 
     #[test]
     fn test_workflow_step_llm() {
-        let step = WorkflowStep::llm("extract", "Extract memories from: {text}")
-            .with_llm_profile("gpt-4");
+        let step =
+            WorkflowStep::llm("extract", "Extract memories from: {text}").with_llm_profile("gpt-4");
 
         assert_eq!(step.step_id, "extract");
         assert_eq!(step.step_type, StepType::LLM);
         assert!(step.capabilities.contains(&Capability::LLM));
-        assert_eq!(step.prompt_template, Some("Extract memories from: {text}".to_string()));
+        assert_eq!(
+            step.prompt_template,
+            Some("Extract memories from: {text}".to_string())
+        );
         assert_eq!(step.llm_profile, Some("gpt-4".to_string()));
     }
 
@@ -1275,7 +1275,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_runner_sequential_execution() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test response")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test response")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = DefaultWorkflowRunner::with_llm(llm_provider);
 
         let steps = vec![
@@ -1295,20 +1297,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_runner_function_step() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = DefaultWorkflowRunner::with_llm(llm_provider);
 
-        let steps = vec![
-            WorkflowStep::function(
-                "transform",
-                |state| async move {
-                    let mut result = state;
-                    result.insert("transformed".to_string(), serde_json::json!(true));
-                    Ok(result)
-                },
-                vec![Capability::DB],
-            ),
-        ];
+        let steps = vec![WorkflowStep::function(
+            "transform",
+            |state| async move {
+                let mut result = state;
+                result.insert("transformed".to_string(), serde_json::json!(true));
+                Ok(result)
+            },
+            vec![Capability::DB],
+        )];
 
         let state = WorkflowState::new();
         let (final_state, stats) = runner.run(&steps, state).await.unwrap();
@@ -1320,7 +1322,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_runner_parallel_execution() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("parallel result")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("parallel result")) as Box<dyn WorkflowLLMProvider>,
+        ));
         let runner = DefaultWorkflowRunner::with_llm(llm_provider);
 
         // Create parallel step with multiple sub-steps
@@ -1351,7 +1355,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_runner_capability_validation() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
 
         // Runner without Vector capability
         let runner = DefaultWorkflowRunner::new(
@@ -1361,13 +1367,11 @@ mod tests {
         );
 
         // Step requires Vector capability
-        let steps = vec![
-            WorkflowStep::function(
-                "vector_op",
-                |_| async { Ok(HashMap::new()) },
-                vec![Capability::Vector],
-            ),
-        ];
+        let steps = vec![WorkflowStep::function(
+            "vector_op",
+            |_| async { Ok(HashMap::new()) },
+            vec![Capability::Vector],
+        )];
 
         let state = WorkflowState::new();
         let result = runner.run(&steps, state).await;
@@ -1379,15 +1383,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_runner_template_rendering() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("processed")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("processed")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = DefaultWorkflowRunner::with_llm(llm_provider);
 
         let mut initial_state = WorkflowState::new();
         initial_state.set_global("name".to_string(), serde_json::json!("Alice"));
 
-        let steps = vec![
-            WorkflowStep::llm("greet", "Hello {name}, welcome!"),
-        ];
+        let steps = vec![WorkflowStep::llm("greet", "Hello {name}, welcome!")];
 
         let (final_state, stats) = runner.run(&steps, initial_state).await.unwrap();
 
@@ -1414,9 +1418,7 @@ mod tests {
 
     impl MockInterceptor {
         fn new(name: impl Into<String>) -> Self {
-            Self {
-                name: name.into(),
-            }
+            Self { name: name.into() }
         }
     }
 
@@ -1424,8 +1426,14 @@ mod tests {
     impl Interceptor for MockInterceptor {
         async fn before(&self, context: &mut InterceptorContext) -> MemResult<()> {
             // Add metadata
-            context.metadata.insert("interceptor_name".to_string(), serde_json::Value::String(self.name.clone()));
-            context.metadata.insert("before_timestamp".to_string(), serde_json::Value::String(chrono::Utc::now().to_string()));
+            context.metadata.insert(
+                "interceptor_name".to_string(),
+                serde_json::Value::String(self.name.clone()),
+            );
+            context.metadata.insert(
+                "before_timestamp".to_string(),
+                serde_json::Value::String(chrono::Utc::now().to_string()),
+            );
             Ok(())
         }
 
@@ -1436,7 +1444,10 @@ mod tests {
         ) -> MemResult<serde_json::Value> {
             // Modify result
             let mut modified = result.as_object().unwrap().clone();
-            modified.insert("interceptor".to_string(), serde_json::Value::String(self.name.clone()));
+            modified.insert(
+                "interceptor".to_string(),
+                serde_json::Value::String(self.name.clone()),
+            );
             Ok(serde_json::to_value(modified)?)
         }
     }
@@ -1458,11 +1469,8 @@ mod tests {
 
         // Create context
         let state = WorkflowState::new();
-        let mut context = InterceptorContext::new(
-            "test_step".to_string(),
-            StepType::Function,
-            state,
-        );
+        let mut context =
+            InterceptorContext::new("test_step".to_string(), StepType::Function, state);
 
         // Execute before hook
         registry.execute_before(&mut context).await.unwrap();
@@ -1479,7 +1487,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_registration() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1488,9 +1498,7 @@ mod tests {
         let manager = PipelineManager::new(capabilities, llm_profiles, runner);
 
         // Register a simple pipeline
-        let steps = vec![
-            WorkflowStep::llm("step1", "First step").with_llm_profile("gpt-4"),
-        ];
+        let steps = vec![WorkflowStep::llm("step1", "First step").with_llm_profile("gpt-4")];
 
         manager.register("test_pipeline", steps).await.unwrap();
 
@@ -1502,7 +1510,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_capability_validation() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         // Manager without Vector capability
@@ -1512,13 +1522,11 @@ mod tests {
         let manager = PipelineManager::new(capabilities, llm_profiles, runner);
 
         // Pipeline requires Vector capability
-        let steps = vec![
-            WorkflowStep::function(
-                "vector_op",
-                |_| async { Ok(HashMap::new()) },
-                vec![Capability::Vector],
-            ),
-        ];
+        let steps = vec![WorkflowStep::function(
+            "vector_op",
+            |_| async { Ok(HashMap::new()) },
+            vec![Capability::Vector],
+        )];
 
         let result = manager.register("vector_pipeline", steps).await;
         assert!(result.is_err());
@@ -1528,7 +1536,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_llm_profile_validation() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1537,9 +1547,7 @@ mod tests {
         let manager = PipelineManager::new(capabilities, llm_profiles, runner);
 
         // Pipeline uses unknown LLM profile
-        let steps = vec![
-            WorkflowStep::llm("step1", "Process").with_llm_profile("unknown-model"),
-        ];
+        let steps = vec![WorkflowStep::llm("step1", "Process").with_llm_profile("unknown-model")];
 
         let result = manager.register("bad_profile_pipeline", steps).await;
         assert!(result.is_err());
@@ -1549,7 +1557,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_sub_steps_validation() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1558,15 +1568,13 @@ mod tests {
         let manager = PipelineManager::new(capabilities, llm_profiles, runner);
 
         // Parallel step with sub-step using unknown profile
-        let steps = vec![
-            WorkflowStep::parallel(
-                "parallel_ops",
-                vec![
-                    WorkflowStep::llm("sub1", "Sub step 1").with_llm_profile("gpt-4"),
-                    WorkflowStep::llm("sub2", "Sub step 2").with_llm_profile("unknown-model"),
-                ],
-            ),
-        ];
+        let steps = vec![WorkflowStep::parallel(
+            "parallel_ops",
+            vec![
+                WorkflowStep::llm("sub1", "Sub step 1").with_llm_profile("gpt-4"),
+                WorkflowStep::llm("sub2", "Sub step 2").with_llm_profile("unknown-model"),
+            ],
+        )];
 
         let result = manager.register("bad_sub_pipeline", steps).await;
         assert!(result.is_err());
@@ -1577,7 +1585,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_run() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("pipeline result")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("pipeline result")) as Box<dyn WorkflowLLMProvider>,
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1605,7 +1615,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_not_found() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1624,7 +1636,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_remove() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1645,7 +1659,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_manager_list_pipelines() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1673,7 +1689,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_error_propagation() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = DefaultWorkflowRunner::with_llm(llm_provider);
 
         let steps = vec![
@@ -1702,7 +1720,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_config_stop_on_error_false() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let config = WorkflowConfig {
             max_parallel: 10,
             enable_logging: true,
@@ -1740,7 +1760,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_multiple_parallel_steps() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("parallel")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("parallel")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = DefaultWorkflowRunner::with_llm(llm_provider);
 
         let steps = vec![
@@ -1781,7 +1803,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow_capability_validation_deep_nested() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
 
         // Runner with only LLM capability
         let capabilities = HashSet::from([Capability::LLM]);
@@ -1817,7 +1841,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_config_step() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1826,18 +1852,22 @@ mod tests {
         let manager = PipelineManager::new(capabilities, llm_profiles, runner);
 
         // Register a pipeline
-        let steps = vec![
-            WorkflowStep::llm("step1", "Original prompt").with_llm_profile("gpt-4"),
-        ];
+        let steps = vec![WorkflowStep::llm("step1", "Original prompt").with_llm_profile("gpt-4")];
 
         manager.register("test_pipeline", steps).await.unwrap();
 
         // Configure step - change prompt and llm_profile
         let mut configs = HashMap::new();
-        configs.insert("prompt_template".to_string(), serde_json::json!("New prompt"));
+        configs.insert(
+            "prompt_template".to_string(),
+            serde_json::json!("New prompt"),
+        );
         configs.insert("llm_profile".to_string(), serde_json::json!("claude-3"));
 
-        let modified = manager.config_step("test_pipeline", "step1", configs).await.unwrap();
+        let modified = manager
+            .config_step("test_pipeline", "step1", configs)
+            .await
+            .unwrap();
         assert_eq!(modified, 1);
 
         // Verify configuration was applied (we'd need to inspect the pipeline to verify)
@@ -1846,7 +1876,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_config_step_not_found() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM]);
@@ -1860,13 +1892,18 @@ mod tests {
 
         // Try to configure non-existent step
         let configs = HashMap::new();
-        let modified = manager.config_step("test_pipeline", "nonexistent", configs).await.unwrap();
+        let modified = manager
+            .config_step("test_pipeline", "nonexistent", configs)
+            .await
+            .unwrap();
         assert_eq!(modified, 0);
     }
 
     #[tokio::test]
     async fn test_config_step_invalid_llm_profile() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM]);
@@ -1880,7 +1917,10 @@ mod tests {
 
         // Try to configure with invalid LLM profile
         let mut configs = HashMap::new();
-        configs.insert("llm_profile".to_string(), serde_json::json!("invalid-profile"));
+        configs.insert(
+            "llm_profile".to_string(),
+            serde_json::json!("invalid-profile"),
+        );
 
         let result = manager.config_step("test_pipeline", "step1", configs).await;
         assert!(result.is_err());
@@ -1890,7 +1930,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_insert_after() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1908,7 +1950,10 @@ mod tests {
 
         // Insert step2 after step1
         let new_step = WorkflowStep::llm("step2", "Second");
-        let inserted = manager.insert_after("test_pipeline", "step1", new_step).await.unwrap();
+        let inserted = manager
+            .insert_after("test_pipeline", "step1", new_step)
+            .await
+            .unwrap();
         assert_eq!(inserted, 1);
 
         // Verify insertion by running the pipeline
@@ -1923,7 +1968,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_insert_after_not_found() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM]);
@@ -1937,13 +1984,18 @@ mod tests {
 
         // Try to insert after non-existent step
         let new_step = WorkflowStep::llm("step2", "Second");
-        let inserted = manager.insert_after("test_pipeline", "nonexistent", new_step).await.unwrap();
+        let inserted = manager
+            .insert_after("test_pipeline", "nonexistent", new_step)
+            .await
+            .unwrap();
         assert_eq!(inserted, 0);
     }
 
     #[tokio::test]
     async fn test_insert_before() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -1961,7 +2013,10 @@ mod tests {
 
         // Insert step2 before step3
         let new_step = WorkflowStep::llm("step2", "Second");
-        let inserted = manager.insert_before("test_pipeline", "step3", new_step).await.unwrap();
+        let inserted = manager
+            .insert_before("test_pipeline", "step3", new_step)
+            .await
+            .unwrap();
         assert_eq!(inserted, 1);
 
         // Verify insertion by running the pipeline
@@ -1976,7 +2031,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_insert_before_not_found() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM]);
@@ -1990,13 +2047,18 @@ mod tests {
 
         // Try to insert before non-existent step
         let new_step = WorkflowStep::llm("step2", "Second");
-        let inserted = manager.insert_before("test_pipeline", "nonexistent", new_step).await.unwrap();
+        let inserted = manager
+            .insert_before("test_pipeline", "nonexistent", new_step)
+            .await
+            .unwrap();
         assert_eq!(inserted, 0);
     }
 
     #[tokio::test]
     async fn test_replace_step() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM, Capability::DB]);
@@ -2005,15 +2067,16 @@ mod tests {
         let manager = PipelineManager::new(capabilities, llm_profiles, runner);
 
         // Register a pipeline
-        let steps = vec![
-            WorkflowStep::llm("step1", "Original prompt"),
-        ];
+        let steps = vec![WorkflowStep::llm("step1", "Original prompt")];
 
         manager.register("test_pipeline", steps).await.unwrap();
 
         // Replace step1 with new version
         let new_step = WorkflowStep::llm("step1", "Replaced prompt").with_llm_profile("gpt-4");
-        let replaced = manager.replace_step("test_pipeline", "step1", new_step).await.unwrap();
+        let replaced = manager
+            .replace_step("test_pipeline", "step1", new_step)
+            .await
+            .unwrap();
         assert_eq!(replaced, 1);
 
         // Verify replacement by running the pipeline
@@ -2024,7 +2087,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_replace_step_not_found() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM]);
@@ -2038,13 +2103,18 @@ mod tests {
 
         // Try to replace non-existent step
         let new_step = WorkflowStep::llm("step2", "Second");
-        let replaced = manager.replace_step("test_pipeline", "nonexistent", new_step).await.unwrap();
+        let replaced = manager
+            .replace_step("test_pipeline", "nonexistent", new_step)
+            .await
+            .unwrap();
         assert_eq!(replaced, 0);
     }
 
     #[tokio::test]
     async fn test_insert_with_missing_capability() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         // Only LLM capability available
@@ -2064,14 +2134,21 @@ mod tests {
             vec![Capability::Vector], // Missing capability
         );
 
-        let result = manager.insert_after("test_pipeline", "step1", new_step).await;
+        let result = manager
+            .insert_after("test_pipeline", "step1", new_step)
+            .await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("missing capabilities"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("missing capabilities"));
     }
 
     #[tokio::test]
     async fn test_insert_with_invalid_llm_profile() {
-        let llm_provider = Arc::new(RwLock::new(Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>));
+        let llm_provider = Arc::new(RwLock::new(
+            Box::new(MockLLMProvider::new("test")) as Box<dyn WorkflowLLMProvider>
+        ));
         let runner = Arc::new(DefaultWorkflowRunner::with_llm(llm_provider));
 
         let capabilities = HashSet::from([Capability::LLM]);
@@ -2086,8 +2163,13 @@ mod tests {
         // Try to insert a step with invalid LLM profile
         let new_step = WorkflowStep::llm("step2", "Second").with_llm_profile("invalid-profile");
 
-        let result = manager.insert_after("test_pipeline", "step1", new_step).await;
+        let result = manager
+            .insert_after("test_pipeline", "step1", new_step)
+            .await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unknown LLM profile"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown LLM profile"));
     }
 }

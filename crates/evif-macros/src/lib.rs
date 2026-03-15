@@ -1,8 +1,8 @@
 // EVIF 过程宏 - 代码生成工具
 
-mod node;
 mod builder;
 mod error_module;
+mod node;
 
 /// #[node] 宏 - 为结构体生成节点相关代码
 #[proc_macro]

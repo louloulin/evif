@@ -233,13 +233,12 @@ impl PostgresStorage {
     pub async fn put_item(&self, item: MemoryItem) -> MemResult<()> {
         // Check for duplicate by content_hash
         if let Some(ref hash) = item.content_hash {
-            let existing: Option<String> = sqlx::query_scalar(
-                "SELECT id FROM memory_items WHERE content_hash = $1"
-            )
-            .bind(hash)
-            .fetch_optional(&*self.pool)
-            .await
-            .map_err(|e| MemError::Storage(format!("Failed to check duplicate: {}", e)))?;
+            let existing: Option<String> =
+                sqlx::query_scalar("SELECT id FROM memory_items WHERE content_hash = $1")
+                    .bind(hash)
+                    .fetch_optional(&*self.pool)
+                    .await
+                    .map_err(|e| MemError::Storage(format!("Failed to check duplicate: {}", e)))?;
 
             if let Some(existing_id) = existing {
                 // Increment reinforcement count
@@ -350,8 +349,10 @@ impl PostgresStorage {
                 id: row.get("id"),
                 ref_id: row.get("ref_id"),
                 resource_id: row.get("resource_id"),
-                memory_type: crate::models::MemoryType::from_str(&row.get::<String, _>("memory_type"))
-                    .unwrap_or(crate::models::MemoryType::Knowledge),
+                memory_type: crate::models::MemoryType::from_str(
+                    &row.get::<String, _>("memory_type"),
+                )
+                .unwrap_or(crate::models::MemoryType::Knowledge),
                 summary: row.get("summary"),
                 content: row.get("content"),
                 embedding_id: row.get("embedding_id"),
@@ -387,8 +388,10 @@ impl PostgresStorage {
                 id: row.get("id"),
                 ref_id: row.get("ref_id"),
                 resource_id: row.get("resource_id"),
-                memory_type: crate::models::MemoryType::from_str(&row.get::<String, _>("memory_type"))
-                    .unwrap_or(crate::models::MemoryType::Knowledge),
+                memory_type: crate::models::MemoryType::from_str(
+                    &row.get::<String, _>("memory_type"),
+                )
+                .unwrap_or(crate::models::MemoryType::Knowledge),
                 summary: row.get("summary"),
                 content: row.get("content"),
                 embedding_id: row.get("embedding_id"),
@@ -425,8 +428,10 @@ impl PostgresStorage {
                 id: row.get("id"),
                 ref_id: row.get("ref_id"),
                 resource_id: row.get("resource_id"),
-                memory_type: crate::models::MemoryType::from_str(&row.get::<String, _>("memory_type"))
-                    .unwrap_or(crate::models::MemoryType::Knowledge),
+                memory_type: crate::models::MemoryType::from_str(
+                    &row.get::<String, _>("memory_type"),
+                )
+                .unwrap_or(crate::models::MemoryType::Knowledge),
                 summary: row.get("summary"),
                 content: row.get("content"),
                 embedding_id: row.get("embedding_id"),
@@ -463,8 +468,10 @@ impl PostgresStorage {
                 id: row.get("id"),
                 ref_id: row.get("ref_id"),
                 resource_id: row.get("resource_id"),
-                memory_type: crate::models::MemoryType::from_str(&row.get::<String, _>("memory_type"))
-                    .unwrap_or(crate::models::MemoryType::Knowledge),
+                memory_type: crate::models::MemoryType::from_str(
+                    &row.get::<String, _>("memory_type"),
+                )
+                .unwrap_or(crate::models::MemoryType::Knowledge),
                 summary: row.get("summary"),
                 content: row.get("content"),
                 embedding_id: row.get("embedding_id"),
@@ -484,21 +491,20 @@ impl PostgresStorage {
     }
 
     pub async fn item_belongs_to_user(&self, item_id: &str, user_id: &str) -> MemResult<bool> {
-        let result: Option<String> = sqlx::query_scalar(
-            "SELECT user_id FROM memory_items WHERE id = $1 AND user_id = $2"
-        )
-        .bind(item_id)
-        .bind(user_id)
-        .fetch_optional(&*self.pool)
-        .await
-        .map_err(|e| MemError::Storage(format!("Failed to check ownership: {}", e)))?;
+        let result: Option<String> =
+            sqlx::query_scalar("SELECT user_id FROM memory_items WHERE id = $1 AND user_id = $2")
+                .bind(item_id)
+                .bind(user_id)
+                .fetch_optional(&*self.pool)
+                .await
+                .map_err(|e| MemError::Storage(format!("Failed to check ownership: {}", e)))?;
 
         Ok(result.is_some())
     }
 
     pub async fn item_belongs_to_tenant(&self, item_id: &str, tenant_id: &str) -> MemResult<bool> {
         let result: Option<String> = sqlx::query_scalar(
-            "SELECT tenant_id FROM memory_items WHERE id = $1 AND tenant_id = $2"
+            "SELECT tenant_id FROM memory_items WHERE id = $1 AND tenant_id = $2",
         )
         .bind(item_id)
         .bind(tenant_id)
@@ -511,7 +517,7 @@ impl PostgresStorage {
 
     pub async fn get_all_tenants(&self) -> MemResult<Vec<String>> {
         let rows: Vec<String> = sqlx::query_scalar(
-            "SELECT DISTINCT tenant_id FROM memory_items WHERE tenant_id IS NOT NULL"
+            "SELECT DISTINCT tenant_id FROM memory_items WHERE tenant_id IS NOT NULL",
         )
         .fetch_all(&*self.pool)
         .await
@@ -521,13 +527,12 @@ impl PostgresStorage {
     }
 
     pub async fn item_count_by_tenant(&self, tenant_id: &str) -> MemResult<usize> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM memory_items WHERE tenant_id = $1"
-        )
-        .bind(tenant_id)
-        .fetch_one(&*self.pool)
-        .await
-        .map_err(|e| MemError::Storage(format!("Failed to count items: {}", e)))?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM memory_items WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| MemError::Storage(format!("Failed to count items: {}", e)))?;
 
         Ok(count as usize)
     }
@@ -661,13 +666,12 @@ impl PostgresStorage {
         .map_err(|e| MemError::Storage(format!("Failed to link item to category: {}", e)))?;
 
         // Update category item count
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM category_items WHERE category_id = $1"
-        )
-        .bind(category_id)
-        .fetch_one(&*self.pool)
-        .await
-        .map_err(|e| MemError::Storage(format!("Failed to count category items: {}", e)))?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM category_items WHERE category_id = $1")
+                .bind(category_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| MemError::Storage(format!("Failed to count category items: {}", e)))?;
 
         sqlx::query("UPDATE categories SET item_count = $1 WHERE id = $2")
             .bind(count)
@@ -699,8 +703,10 @@ impl PostgresStorage {
                 id: row.get("id"),
                 ref_id: row.get("ref_id"),
                 resource_id: row.get("resource_id"),
-                memory_type: crate::models::MemoryType::from_str(&row.get::<String, _>("memory_type"))
-                    .unwrap_or(crate::models::MemoryType::Knowledge),
+                memory_type: crate::models::MemoryType::from_str(
+                    &row.get::<String, _>("memory_type"),
+                )
+                .unwrap_or(crate::models::MemoryType::Knowledge),
                 summary: row.get("summary"),
                 content: row.get("content"),
                 embedding_id: row.get("embedding_id"),
@@ -806,7 +812,10 @@ impl PostgresStorage {
         Ok(resources)
     }
 
-    pub async fn get_categories_by_tenant(&self, tenant_id: &str) -> MemResult<Vec<MemoryCategory>> {
+    pub async fn get_categories_by_tenant(
+        &self,
+        tenant_id: &str,
+    ) -> MemResult<Vec<MemoryCategory>> {
         let rows = sqlx::query(
             "SELECT id, name, description, embedding_id, summary, item_count, user_id, tenant_id, created_at, updated_at FROM categories WHERE tenant_id = $1"
         )
@@ -834,40 +843,44 @@ impl PostgresStorage {
         Ok(categories)
     }
 
-    pub async fn resource_belongs_to_user(&self, resource_id: &str, user_id: &str) -> MemResult<bool> {
-        let result: Option<String> = sqlx::query_scalar(
-            "SELECT user_id FROM resources WHERE id = $1 AND user_id = $2"
-        )
-        .bind(resource_id)
-        .bind(user_id)
-        .fetch_optional(&*self.pool)
-        .await
-        .map_err(|e| MemError::Storage(format!("Failed to check ownership: {}", e)))?;
+    pub async fn resource_belongs_to_user(
+        &self,
+        resource_id: &str,
+        user_id: &str,
+    ) -> MemResult<bool> {
+        let result: Option<String> =
+            sqlx::query_scalar("SELECT user_id FROM resources WHERE id = $1 AND user_id = $2")
+                .bind(resource_id)
+                .bind(user_id)
+                .fetch_optional(&*self.pool)
+                .await
+                .map_err(|e| MemError::Storage(format!("Failed to check ownership: {}", e)))?;
 
         Ok(result.is_some())
     }
 
-    pub async fn resource_belongs_to_tenant(&self, resource_id: &str, tenant_id: &str) -> MemResult<bool> {
-        let result: Option<String> = sqlx::query_scalar(
-            "SELECT tenant_id FROM resources WHERE id = $1 AND tenant_id = $2"
-        )
-        .bind(resource_id)
-        .bind(tenant_id)
-        .fetch_optional(&*self.pool)
-        .await
-        .map_err(|e| MemError::Storage(format!("Failed to check tenant: {}", e)))?;
+    pub async fn resource_belongs_to_tenant(
+        &self,
+        resource_id: &str,
+        tenant_id: &str,
+    ) -> MemResult<bool> {
+        let result: Option<String> =
+            sqlx::query_scalar("SELECT tenant_id FROM resources WHERE id = $1 AND tenant_id = $2")
+                .bind(resource_id)
+                .bind(tenant_id)
+                .fetch_optional(&*self.pool)
+                .await
+                .map_err(|e| MemError::Storage(format!("Failed to check tenant: {}", e)))?;
 
         Ok(result.is_some())
     }
 
     pub async fn resource_count_by_tenant(&self, tenant_id: &str) -> MemResult<usize> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM resources WHERE tenant_id = $1"
-        )
-        .bind(tenant_id)
-        .fetch_one(&*self.pool)
-        .await
-        .map_err(|e| MemError::Storage(format!("Failed to count resources: {}", e)))?;
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM resources WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(&*self.pool)
+            .await
+            .map_err(|e| MemError::Storage(format!("Failed to count resources: {}", e)))?;
 
         Ok(count as usize)
     }
@@ -883,8 +896,9 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires PostgreSQL instance
     async fn test_postgres_connection() {
-        let connection_string = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:password@localhost:5432/evif_test".to_string());
+        let connection_string = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://postgres:password@localhost:5432/evif_test".to_string()
+        });
 
         let storage = PostgresStorage::new(&connection_string).await;
         assert!(storage.is_ok());
@@ -893,8 +907,9 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires PostgreSQL instance
     async fn test_postgres_item_operations() {
-        let connection_string = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:password@localhost:5432/evif_test".to_string());
+        let connection_string = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://postgres:password@localhost:5432/evif_test".to_string()
+        });
 
         let storage = PostgresStorage::new(&connection_string).await.unwrap();
 

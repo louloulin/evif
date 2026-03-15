@@ -1,6 +1,7 @@
 // Phase 9.3: 协作 API 处理器（分享/评论/权限/活动）
 // 内存存储，与 evif-web collaboration 组件对接
 
+use crate::{RestError, RestResult};
 use axum::{
     extract::{Path, Query, State},
     Json,
@@ -9,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::{RestError, RestResult};
 
 /// 协作状态（内存存储）
 #[derive(Clone, Default)]
@@ -282,7 +282,10 @@ impl CollabHandlers {
             })
             .collect();
         let total = list.len();
-        Ok(Json(ListSharesResponse { shares: list, total }))
+        Ok(Json(ListSharesResponse {
+            shares: list,
+            total,
+        }))
     }
 
     pub async fn revoke_share(
@@ -291,9 +294,15 @@ impl CollabHandlers {
     ) -> RestResult<Json<RevokeShareResponse>> {
         let mut shares = state.shares.write().await;
         if shares.remove(&req.share_id).is_some() {
-            Ok(Json(RevokeShareResponse { success: true, message: "Revoked".to_string() }))
+            Ok(Json(RevokeShareResponse {
+                success: true,
+                message: "Revoked".to_string(),
+            }))
         } else {
-            Ok(Json(RevokeShareResponse { success: false, message: "Share not found".to_string() }))
+            Ok(Json(RevokeShareResponse {
+                success: false,
+                message: "Share not found".to_string(),
+            }))
         }
     }
 
@@ -301,8 +310,15 @@ impl CollabHandlers {
         State(state): State<CollabState>,
         Json(req): Json<SetPermissionsRequest>,
     ) -> RestResult<Json<SetPermissionsResponse>> {
-        state.permissions.write().await.insert(req.file_path, req.permissions);
-        Ok(Json(SetPermissionsResponse { success: true, message: "OK".to_string() }))
+        state
+            .permissions
+            .write()
+            .await
+            .insert(req.file_path, req.permissions);
+        Ok(Json(SetPermissionsResponse {
+            success: true,
+            message: "OK".to_string(),
+        }))
     }
 
     pub async fn get_permissions(
@@ -340,7 +356,10 @@ impl CollabHandlers {
             })
             .collect();
         let total = list.len();
-        Ok(Json(ListCommentsResponse { comments: list, total }))
+        Ok(Json(ListCommentsResponse {
+            comments: list,
+            total,
+        }))
     }
 
     pub async fn add_comment(
@@ -377,7 +396,10 @@ impl CollabHandlers {
         if let Some(c) = comments.get_mut(&id) {
             c.content = req.content;
             c.updated_at = Some(updated_at.clone());
-            return Ok(Json(CommentResponse { id, created_at: c.created_at.clone() }));
+            return Ok(Json(CommentResponse {
+                id,
+                created_at: c.created_at.clone(),
+            }));
         }
         Err(RestError::NotFound(format!("Comment {}", id)))
     }
@@ -389,7 +411,10 @@ impl CollabHandlers {
         let mut comments = state.comments.write().await;
         if let Some(c) = comments.get_mut(&id) {
             c.resolved = true;
-            return Ok(Json(ResolveCommentResponse { success: true, message: "Resolved".to_string() }));
+            return Ok(Json(ResolveCommentResponse {
+                success: true,
+                message: "Resolved".to_string(),
+            }));
         }
         Err(RestError::NotFound(format!("Comment {}", id)))
     }
@@ -399,7 +424,10 @@ impl CollabHandlers {
         Path(id): Path<String>,
     ) -> RestResult<Json<DeleteCommentResponse>> {
         if state.comments.write().await.remove(&id).is_some() {
-            Ok(Json(DeleteCommentResponse { success: true, message: "Deleted".to_string() }))
+            Ok(Json(DeleteCommentResponse {
+                success: true,
+                message: "Deleted".to_string(),
+            }))
         } else {
             Err(RestError::NotFound(format!("Comment {}", id)))
         }
@@ -410,8 +438,14 @@ impl CollabHandlers {
         Query(params): Query<HashMap<String, String>>,
     ) -> RestResult<Json<ActivitiesResponse>> {
         let path = params.get("path").cloned();
-        let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(50);
-        let offset = params.get("offset").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+        let limit = params
+            .get("limit")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(50);
+        let offset = params
+            .get("offset")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(0);
         let activities = state.activities.read().await;
         let filtered: Vec<&ActivityRecord> = activities
             .iter()
@@ -434,13 +468,22 @@ impl CollabHandlers {
             })
             .collect();
         let total = activities.len();
-        Ok(Json(ActivitiesResponse { activities: list, total }))
+        Ok(Json(ActivitiesResponse {
+            activities: list,
+            total,
+        }))
     }
 
     pub async fn list_users(
         Query(params): Query<HashMap<String, String>>,
     ) -> RestResult<Json<UsersResponse>> {
         let _query = params.get("query").cloned();
-        Ok(Json(UsersResponse { users: vec![UserItem { id: "user".to_string(), name: "User".to_string(), email: None }] }))
+        Ok(Json(UsersResponse {
+            users: vec![UserItem {
+                id: "user".to_string(),
+                name: "User".to_string(),
+                email: None,
+            }],
+        }))
     }
 }

@@ -10,7 +10,7 @@
 //   cargo run --bin evif-fuse-mount -- /tmp/evif --readwrite
 
 use evif_core::RadixMountTable;
-use evif_fuse::{mount_evif_background, FuseMountConfig, FuseMountBuilder};
+use evif_fuse::{mount_evif_background, FuseMountBuilder, FuseMountConfig};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{error, info, Level};
@@ -23,8 +23,7 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(Level::DEBUG)
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     // 解析命令行参数
     let args: Vec<String> = std::env::args().collect();
@@ -130,8 +129,22 @@ async fn main() -> anyhow::Result<()> {
     info!("挂载配置:");
     info!("  挂载点: {}", config.mount_point.display());
     info!("  根路径: {}", config.root_path.display());
-    info!("  写操作: {}", if config.allow_write { "允许" } else { "禁止" });
-    info!("  其他用户: {}", if config.allow_other { "允许" } else { "禁止" });
+    info!(
+        "  写操作: {}",
+        if config.allow_write {
+            "允许"
+        } else {
+            "禁止"
+        }
+    );
+    info!(
+        "  其他用户: {}",
+        if config.allow_other {
+            "允许"
+        } else {
+            "禁止"
+        }
+    );
     info!("  缓存大小: {}", config.cache_size);
     info!("  缓存超时: {} 秒", config.cache_timeout);
 

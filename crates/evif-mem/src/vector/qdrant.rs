@@ -13,7 +13,10 @@
 use crate::error::{MemError, MemResult};
 use crate::vector::{IndexStats, SearchResult, VectorIndex, VectorIndexConfig, VectorMetric};
 use async_trait::async_trait;
-use qdrant_client::qdrant::{CreateCollectionBuilder, Distance, PointStruct, SearchPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder};
+use qdrant_client::qdrant::{
+    CreateCollectionBuilder, Distance, PointStruct, SearchPointsBuilder, UpsertPointsBuilder,
+    VectorParamsBuilder,
+};
 use qdrant_client::{Payload, Qdrant};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -192,7 +195,8 @@ impl VectorIndex for QdrantVectorIndex {
             }
 
             // Build payload
-            let mut payload_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+            let mut payload_map: serde_json::Map<String, serde_json::Value> =
+                serde_json::Map::new();
             if let Some(meta) = metadata {
                 for (k, v) in meta {
                     payload_map.insert(k, serde_json::Value::String(v));
@@ -267,7 +271,11 @@ impl VectorIndex for QdrantVectorIndex {
             results.push(SearchResult {
                 id: original_id,
                 score: point.score,
-                metadata: if metadata.is_empty() { None } else { Some(metadata) },
+                metadata: if metadata.is_empty() {
+                    None
+                } else {
+                    Some(metadata)
+                },
             });
         }
 
@@ -352,7 +360,8 @@ mod tests {
     #[ignore] // Requires Qdrant server
     async fn test_qdrant_index_creation() {
         let config = VectorIndexConfig::default();
-        let result = QdrantVectorIndex::new("http://localhost:6334", "test_collection", 128, config).await;
+        let result =
+            QdrantVectorIndex::new("http://localhost:6334", "test_collection", 128, config).await;
         //assert!(result.is_ok());
     }
 
@@ -365,10 +374,18 @@ mod tests {
             normalize: false,
             metric: VectorMetric::Cosine,
         };
-        let index = QdrantVectorIndex::new("http://localhost:6334", "test_search", 3, config).await.unwrap();
+        let index = QdrantVectorIndex::new("http://localhost:6334", "test_search", 3, config)
+            .await
+            .unwrap();
 
-        index.add("item1".to_string(), vec![1.0, 0.0, 0.0], None).await.unwrap();
-        index.add("item2".to_string(), vec![0.9, 0.1, 0.0], None).await.unwrap();
+        index
+            .add("item1".to_string(), vec![1.0, 0.0, 0.0], None)
+            .await
+            .unwrap();
+        index
+            .add("item2".to_string(), vec![0.9, 0.1, 0.0], None)
+            .await
+            .unwrap();
 
         let results = index.search(&[1.0, 0.0, 0.0], Some(2), None).await.unwrap();
         assert!(results.len() >= 1);

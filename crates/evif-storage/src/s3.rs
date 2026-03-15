@@ -1,5 +1,4 @@
 #![cfg(feature = "s3-backend")]
-
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
@@ -14,16 +13,15 @@
 
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
-use aws_sdk_s3::{Client, primitives::ByteStream};
+use aws_sdk_s3::{primitives::ByteStream, Client};
 use futures::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::{
-    backend::Transaction,
-    StorageBackend, StorageResult, StorageError,
-    StorageOp, Node, Edge, NodeId, EdgeId,
+    backend::Transaction, Edge, EdgeId, Node, NodeId, StorageBackend, StorageError, StorageOp,
+    StorageResult,
 };
 
 /// S3 存储后端配置
@@ -139,26 +137,30 @@ impl S3Storage {
 
     /// 序列化节点为字节
     fn serialize_node(node: &Node) -> StorageResult<Vec<u8>> {
-        serde_json::to_vec(node)
-            .map_err(|e| StorageError::SerializationError(format!("Failed to serialize node: {}", e)))
+        serde_json::to_vec(node).map_err(|e| {
+            StorageError::SerializationError(format!("Failed to serialize node: {}", e))
+        })
     }
 
     /// 从字节反序列化节点
     fn deserialize_node(data: &[u8]) -> StorageResult<Node> {
-        serde_json::from_slice(data)
-            .map_err(|e| StorageError::DeserializationError(format!("Failed to deserialize node: {}", e)))
+        serde_json::from_slice(data).map_err(|e| {
+            StorageError::DeserializationError(format!("Failed to deserialize node: {}", e))
+        })
     }
 
     /// 序列化边为字节
     fn serialize_edge(edge: &Edge) -> StorageResult<Vec<u8>> {
-        serde_json::to_vec(edge)
-            .map_err(|e| StorageError::SerializationError(format!("Failed to serialize edge: {}", e)))
+        serde_json::to_vec(edge).map_err(|e| {
+            StorageError::SerializationError(format!("Failed to serialize edge: {}", e))
+        })
     }
 
     /// 从字节反序列化边
     fn deserialize_edge(data: &[u8]) -> StorageResult<Edge> {
-        serde_json::from_slice(data)
-            .map_err(|e| StorageError::DeserializationError(format!("Failed to deserialize edge: {}", e)))
+        serde_json::from_slice(data).map_err(|e| {
+            StorageError::DeserializationError(format!("Failed to deserialize edge: {}", e))
+        })
     }
 
     /// 检查对象是否存在
@@ -177,7 +179,10 @@ impl S3Storage {
                 if e.to_string().contains("404") || e.to_string().contains("NotFound") {
                     Ok(false)
                 } else {
-                    Err(StorageError::IoError(format!("Failed to check object: {}", e)))
+                    Err(StorageError::IoError(format!(
+                        "Failed to check object: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -198,7 +203,8 @@ impl StorageBackend for S3Storage {
             .await
         {
             Ok(output) => {
-                let bytes = output.body
+                let bytes = output
+                    .body
                     .collect()
                     .await
                     .map_err(|e| StorageError::IoError(format!("Failed to read body: {}", e)))?
@@ -259,7 +265,8 @@ impl StorageBackend for S3Storage {
             .await
         {
             Ok(output) => {
-                let bytes = output.body
+                let bytes = output
+                    .body
                     .collect()
                     .await
                     .map_err(|e| StorageError::IoError(format!("Failed to read body: {}", e)))?
@@ -333,7 +340,9 @@ impl StorageBackend for S3Storage {
                             .body(ByteStream::new(data.into()))
                             .send()
                             .await
-                            .map_err(|e| StorageError::IoError(format!("Batch put node failed: {}", e)))?;
+                            .map_err(|e| {
+                                StorageError::IoError(format!("Batch put node failed: {}", e))
+                            })?;
                     }
                     StorageOp::DeleteNode(id) => {
                         let id_hex = hex::encode(id.as_bytes());
@@ -348,7 +357,9 @@ impl StorageBackend for S3Storage {
                             .key(&key)
                             .send()
                             .await
-                            .map_err(|e| StorageError::IoError(format!("Batch delete node failed: {}", e)))?;
+                            .map_err(|e| {
+                                StorageError::IoError(format!("Batch delete node failed: {}", e))
+                            })?;
                     }
                     StorageOp::InsertEdge(edge) | StorageOp::UpdateEdge(edge) => {
                         let id_hex = hex::encode(edge.id.as_bytes());
@@ -365,7 +376,9 @@ impl StorageBackend for S3Storage {
                             .body(ByteStream::new(data.into()))
                             .send()
                             .await
-                            .map_err(|e| StorageError::IoError(format!("Batch put edge failed: {}", e)))?;
+                            .map_err(|e| {
+                                StorageError::IoError(format!("Batch put edge failed: {}", e))
+                            })?;
                     }
                     StorageOp::DeleteEdge(id) => {
                         let id_hex = hex::encode(id.as_bytes());
@@ -380,7 +393,9 @@ impl StorageBackend for S3Storage {
                             .key(&key)
                             .send()
                             .await
-                            .map_err(|e| StorageError::IoError(format!("Batch delete edge failed: {}", e)))?;
+                            .map_err(|e| {
+                                StorageError::IoError(format!("Batch delete edge failed: {}", e))
+                            })?;
                     }
                 }
                 Ok::<(), StorageError>(())
@@ -399,9 +414,7 @@ impl StorageBackend for S3Storage {
     }
 
     async fn begin_transaction(&self) -> StorageResult<Box<dyn Transaction>> {
-        Ok(Box::new(S3Transaction {
-            committed: false,
-        }))
+        Ok(Box::new(S3Transaction { committed: false }))
     }
 
     async fn scan_nodes(&self) -> StorageResult<Pin<Box<dyn Stream<Item = Node> + Send>>> {
@@ -439,7 +452,8 @@ impl StorageBackend for S3Storage {
                                     .await
                                 {
                                     Ok(obj_output) => {
-                                        let bytes = obj_output.body
+                                        let bytes = obj_output
+                                            .body
                                             .collect()
                                             .await
                                             .map_err(|e| {
@@ -466,7 +480,10 @@ impl StorageBackend for S3Storage {
                     }
                 }
                 Err(e) => {
-                    return Err(StorageError::IoError(format!("Failed to list objects: {}", e)));
+                    return Err(StorageError::IoError(format!(
+                        "Failed to list objects: {}",
+                        e
+                    )));
                 }
             }
         }
@@ -509,7 +526,8 @@ impl StorageBackend for S3Storage {
                                     .await
                                 {
                                     Ok(obj_output) => {
-                                        let bytes = obj_output.body
+                                        let bytes = obj_output
+                                            .body
                                             .collect()
                                             .await
                                             .map_err(|e| {
@@ -536,7 +554,10 @@ impl StorageBackend for S3Storage {
                     }
                 }
                 Err(e) => {
-                    return Err(StorageError::IoError(format!("Failed to list objects: {}", e)));
+                    return Err(StorageError::IoError(format!(
+                        "Failed to list objects: {}",
+                        e
+                    )));
                 }
             }
         }
@@ -576,7 +597,7 @@ pub struct S3Stats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use evif_graph::{NodeType, EdgeType};
+    use evif_graph::{EdgeType, NodeType};
 
     // 注意：这些测试需要真实的 AWS 凭证和 S3 存储桶
     // 或者使用 LocalStack 等本地模拟服务

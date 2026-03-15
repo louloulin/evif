@@ -26,9 +26,9 @@
 //! });
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 /// Configuration for telemetry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,7 +88,12 @@ pub struct TelemetrySpan {
 
 impl TelemetrySpan {
     /// Create a new telemetry span
-    pub fn new(name: String, user_id: Option<String>, tenant_id: Option<String>, operation_type: String) -> Self {
+    pub fn new(
+        name: String,
+        user_id: Option<String>,
+        tenant_id: Option<String>,
+        operation_type: String,
+    ) -> Self {
         Self {
             name,
             user_id,
@@ -173,7 +178,12 @@ impl Telemetry {
     }
 
     /// Start a new span
-    pub fn start_span(&self, name: &str, user_id: Option<&str>, tenant_id: Option<&str>) -> TelemetrySpan {
+    pub fn start_span(
+        &self,
+        name: &str,
+        user_id: Option<&str>,
+        tenant_id: Option<&str>,
+    ) -> TelemetrySpan {
         let operation_type = self.infer_operation_type(name);
 
         TelemetrySpan::new(
@@ -248,7 +258,12 @@ impl TelemetryRegistry {
     }
 
     /// Start a span
-    pub async fn start_span(&self, name: &str, user_id: Option<&str>, tenant_id: Option<&str>) -> TelemetrySpan {
+    pub async fn start_span(
+        &self,
+        name: &str,
+        user_id: Option<&str>,
+        tenant_id: Option<&str>,
+    ) -> TelemetrySpan {
         let telemetry = self.telemetry.read().await;
         telemetry.start_span(name, user_id, tenant_id)
     }

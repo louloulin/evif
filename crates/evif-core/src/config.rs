@@ -2,9 +2,9 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// EVIF服务器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,8 +198,8 @@ impl EvifConfig {
     /// 从TOML文件加载配置
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(path)?;
-        let config: EvifConfig = toml::from_str(&content)
-            .map_err(|e| anyhow::anyhow!("Failed to parse TOML: {}", e))?;
+        let config: EvifConfig =
+            toml::from_str(&content).map_err(|e| anyhow::anyhow!("Failed to parse TOML: {}", e))?;
         Ok(config)
     }
 
@@ -223,7 +223,8 @@ impl EvifConfig {
     pub fn from_env() -> Result<Self> {
         Ok(Self {
             server: ServerConfig {
-                bind_address: std::env::var("EVIF_BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string()),
+                bind_address: std::env::var("EVIF_BIND_ADDRESS")
+                    .unwrap_or_else(|_| "0.0.0.0".to_string()),
                 port: std::env::var("EVIF_PORT")
                     .unwrap_or_else(|_| "8080".to_string())
                     .parse()
@@ -236,7 +237,8 @@ impl EvifConfig {
                     .unwrap_or_else(|_| "1000".to_string())
                     .parse()
                     .map_err(|_| anyhow::anyhow!("Invalid EVIF_MAX_CONNECTIONS"))?,
-                worker_threads: std::env::var("EVIF_WORKER_THREADS").ok()
+                worker_threads: std::env::var("EVIF_WORKER_THREADS")
+                    .ok()
                     .and_then(|s| s.parse().ok()),
             },
             plugins: PluginsConfig::default(),
@@ -253,9 +255,7 @@ impl EvifConfig {
     /// 加载配置(自动检测格式)
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
-        let extension = path.extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
         match extension.to_lowercase().as_str() {
             "toml" => Self::from_file(path),
@@ -342,11 +342,7 @@ mod dirs {
         std::env::var("HOME")
             .ok()
             .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var("USERPROFILE")
-                    .ok()
-                    .map(PathBuf::from)
-            })
+            .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
     }
 }
 

@@ -1,10 +1,10 @@
 // 路径解析器 - 将文件系统路径映射到图节点
 
 use crate::error::{VfsError, VfsResult};
-use evif_graph::{Graph, NodeId, NodeType, Attribute};
+use dashmap::DashMap;
+use evif_graph::{Attribute, Graph, NodeId, NodeType};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use dashmap::DashMap;
 
 /// 路径解析器
 ///
@@ -48,7 +48,8 @@ impl PathResolver {
 
     /// 规范化路径
     fn normalize_path(&self, path: &Path) -> VfsResult<PathBuf> {
-        let path_str = path.to_str()
+        let path_str = path
+            .to_str()
             .ok_or_else(|| VfsError::InvalidPath("路径包含无效字符".to_string()))?;
 
         if path_str.len() > 4096 {
@@ -82,7 +83,8 @@ impl PathResolver {
                     }
                 }
                 Component::Normal(name) => {
-                    let name_str = name.to_str()
+                    let name_str = name
+                        .to_str()
                         .ok_or_else(|| VfsError::InvalidPath("路径包含无效字符".to_string()))?;
 
                     if name_str.len() > 255 {
@@ -114,7 +116,8 @@ impl PathResolver {
             return Err(VfsError::SymbolicLinkLoop(path.display().to_string()));
         }
 
-        let path_str = path.to_str()
+        let path_str = path
+            .to_str()
             .ok_or_else(|| VfsError::InvalidPath("路径包含无效字符".to_string()))?;
 
         // 空路径或根路径
@@ -127,7 +130,8 @@ impl PathResolver {
         for component in path.components() {
             use std::path::Component;
             if let Component::Normal(name) = component {
-                let name_str = name.to_str()
+                let name_str = name
+                    .to_str()
                     .ok_or_else(|| VfsError::InvalidPath("路径包含无效字符".to_string()))?;
 
                 // 查找子节点
@@ -138,9 +142,7 @@ impl PathResolver {
                     if node.node_type == NodeType::Symlink {
                         // 解析符号链接目标
                         let target = self.get_symlink_target(&node)?;
-                        let target_path = path.parent()
-                            .unwrap_or(Path::new("/"))
-                            .join(&target);
+                        let target_path = path.parent().unwrap_or(Path::new("/")).join(&target);
 
                         // 递归解析
                         current_id = self.resolve_path(&target_path, depth + 1)?;
@@ -250,7 +252,10 @@ mod tests {
         let root_id = NodeId::new_v4();
         let resolver = PathResolver::new(graph, root_id);
 
-        assert_eq!(resolver.basename(Path::new("/foo/bar.txt")).unwrap(), "bar.txt");
+        assert_eq!(
+            resolver.basename(Path::new("/foo/bar.txt")).unwrap(),
+            "bar.txt"
+        );
         assert_eq!(resolver.basename(Path::new("/foo/bar/")).unwrap(), "bar");
     }
 

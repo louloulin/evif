@@ -1,11 +1,11 @@
 // Service Management Utilities for Testing
 // Manages REST server lifecycle for integration tests
 
+use once_cell::sync::Lazy;
 use std::net::TcpListener;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::Duration;
-use once_cell::sync::Lazy;
 
 /// Server process handle
 struct ServerHandle {
@@ -40,7 +40,10 @@ pub fn start_evif_rest(port: u16) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("Failed to spawn server: {}", e))?;
 
-    let mut handle = ServerHandle { process: child, port };
+    let mut handle = ServerHandle {
+        process: child,
+        port,
+    };
 
     // Wait for server to become ready
     if !wait_for_health_check(port, 30) {
@@ -90,7 +93,10 @@ pub fn wait_for_health_check(port: u16, max_secs: u64) -> bool {
         .unwrap();
 
     while start.elapsed().as_secs() < max_secs {
-        if let Ok(response) = client.get(format!("http://localhost:{}/health", port)).send() {
+        if let Ok(response) = client
+            .get(format!("http://localhost:{}/health", port))
+            .send()
+        {
             if response.status().is_success() {
                 return true;
             }
@@ -113,7 +119,10 @@ pub fn check_server_health(port: u16) -> bool {
 /// Get server PID if running
 pub fn get_server_pid(port: u16) -> Option<u32> {
     let registry = SERVER_REGISTRY.lock().unwrap();
-    registry.iter().find(|h| h.port == port).map(|h| h.process.id())
+    registry
+        .iter()
+        .find(|h| h.port == port)
+        .map(|h| h.process.id())
 }
 
 /// Cleanup on test suite completion

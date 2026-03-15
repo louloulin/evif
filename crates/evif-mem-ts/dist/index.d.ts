@@ -8,4 +8,4 @@
  */
 export { MemoryConfig, MemoryConfigOptions } from './config';
 export { EvifMemoryClient, } from './client';
-export { MemoryType, Modality, GraphQueryType, Memory, MemoryCreate, MemorySearchResult, Category, GraphQuery, GraphNode, GraphEdge, GraphResult, SearchOptions, ListMemoriesOptions, GraphQueryOptions, } from './models';
+export { MemoryType, Modality, GraphQueryType, Memory, MemoryCreate, MemorySearchResult, Category, GraphQuery, GraphNode, TimelineEvent, GraphPathInfo, GraphResult, SearchOptions, ListMemoriesOptions, GraphQueryOptions, } from './models';

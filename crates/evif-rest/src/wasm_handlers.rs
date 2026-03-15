@@ -2,8 +2,8 @@
 //
 // 运行时动态加载 WASM 插件的 REST API 端点
 
-use crate::{RestResult, RestError, handlers::AppState};
-use axum::{Json, extract::State};
+use crate::{handlers::AppState, RestError, RestResult};
+use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -121,7 +121,8 @@ impl WasmPluginHandlers {
                 .map_err(|e| RestError::Internal(format!("Failed to create WASM plugin: {}", e)))?;
 
             // 挂载插件
-            state.mount_table
+            state
+                .mount_table
                 .mount(req.mount.clone(), Arc::new(plugin))
                 .await
                 .map_err(|e| RestError::Internal(format!("Failed to mount plugin: {}", e)))?;
@@ -156,7 +157,8 @@ impl WasmPluginHandlers {
         State(state): State<AppState>,
         Json(req): Json<UnloadPluginRequest>,
     ) -> RestResult<Json<UnloadPluginResponse>> {
-        state.mount_table
+        state
+            .mount_table
             .unmount(&req.mount_point)
             .await
             .map_err(|e| RestError::Internal(format!("Failed to unload plugin: {}", e)))?;
@@ -178,9 +180,7 @@ impl WasmPluginHandlers {
         State(state): State<AppState>,
     ) -> RestResult<Json<ListPluginsResponse>> {
         // 获取所有挂载点
-        let mount_points = state.mount_table
-            .list_mounts()
-            .await;
+        let mount_points = state.mount_table.list_mounts().await;
 
         // 转换为插件信息
         let plugins: Vec<PluginInfo> = mount_points

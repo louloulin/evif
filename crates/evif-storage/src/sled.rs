@@ -1,5 +1,4 @@
 #![cfg(feature = "sled-backend")]
-
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
@@ -14,14 +13,13 @@
 use async_trait::async_trait;
 use futures::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
+use sled::IVec;
 use std::path::Path;
 use std::pin::Pin;
-use sled::IVec;
 
 use crate::{
-    backend::Transaction,
-    StorageBackend, StorageResult, StorageError,
-    StorageOp, Node, Edge, NodeId, EdgeId,
+    backend::Transaction, Edge, EdgeId, Node, NodeId, StorageBackend, StorageError, StorageOp,
+    StorageResult,
 };
 
 /// 序列化节点为字节
@@ -32,8 +30,9 @@ fn serialize_node(node: &Node) -> StorageResult<Vec<u8>> {
 
 /// 从字节反序列化节点
 fn deserialize_node(data: &[u8]) -> StorageResult<Node> {
-    serde_json::from_slice(data)
-        .map_err(|e| StorageError::DeserializationError(format!("Failed to deserialize node: {}", e)))
+    serde_json::from_slice(data).map_err(|e| {
+        StorageError::DeserializationError(format!("Failed to deserialize node: {}", e))
+    })
 }
 
 /// 序列化边为字节
@@ -44,8 +43,9 @@ fn serialize_edge(edge: &Edge) -> StorageResult<Vec<u8>> {
 
 /// 从字节反序列化边
 fn deserialize_edge(data: &[u8]) -> StorageResult<Edge> {
-    serde_json::from_slice(data)
-        .map_err(|e| StorageError::DeserializationError(format!("Failed to deserialize edge: {}", e)))
+    serde_json::from_slice(data).map_err(|e| {
+        StorageError::DeserializationError(format!("Failed to deserialize edge: {}", e))
+    })
 }
 
 /// Sled 存储后端
@@ -62,13 +62,16 @@ impl SledStorage {
         let db = sled::open(path)
             .map_err(|e| StorageError::IoError(format!("Failed to open sled database: {}", e)))?;
 
-        let nodes = db.open_tree("nodes")
+        let nodes = db
+            .open_tree("nodes")
             .map_err(|e| StorageError::IoError(format!("Failed to open nodes tree: {}", e)))?;
 
-        let edges = db.open_tree("edges")
+        let edges = db
+            .open_tree("edges")
             .map_err(|e| StorageError::IoError(format!("Failed to open edges tree: {}", e)))?;
 
-        let metadata = db.open_tree("metadata")
+        let metadata = db
+            .open_tree("metadata")
             .map_err(|e| StorageError::IoError(format!("Failed to open metadata tree: {}", e)))?;
 
         Ok(Self {
@@ -86,13 +89,16 @@ impl SledStorage {
             .open()
             .map_err(|e| StorageError::IoError(format!("Failed to create temp db: {}", e)))?;
 
-        let nodes = db.open_tree("nodes")
+        let nodes = db
+            .open_tree("nodes")
             .map_err(|e| StorageError::IoError(format!("Failed to open nodes tree: {}", e)))?;
 
-        let edges = db.open_tree("edges")
+        let edges = db
+            .open_tree("edges")
             .map_err(|e| StorageError::IoError(format!("Failed to open edges tree: {}", e)))?;
 
-        let metadata = db.open_tree("metadata")
+        let metadata = db
+            .open_tree("metadata")
             .map_err(|e| StorageError::IoError(format!("Failed to open metadata tree: {}", e)))?;
 
         Ok(Self {
@@ -120,14 +126,16 @@ impl SledStorage {
 
     /// 刷入磁盘
     pub fn flush(&self) -> StorageResult<()> {
-        self.db.flush()
+        self.db
+            .flush()
             .map_err(|e| StorageError::IoError(format!("Failed to flush: {}", e)))?;
         Ok(())
     }
 
     /// 获取数据库大小（字节）
     pub fn size_on_disk(&self) -> StorageResult<u64> {
-        self.db.size_on_disk()
+        self.db
+            .size_on_disk()
             .map_err(|e| StorageError::IoError(format!("Failed to get size: {}", e)))
     }
 
@@ -169,14 +177,16 @@ impl StorageBackend for SledStorage {
         let key = Self::node_id_to_ivec(&node.id);
         let value = serialize_node(node)?;
 
-        self.nodes.insert(key, value)
+        self.nodes
+            .insert(key, value)
             .map_err(|e| StorageError::IoError(format!("Failed to put node: {}", e)))?;
         Ok(())
     }
 
     async fn delete_node(&self, id: &NodeId) -> StorageResult<()> {
         let key = Self::node_id_to_ivec(id);
-        self.nodes.remove(key)
+        self.nodes
+            .remove(key)
             .map_err(|e| StorageError::IoError(format!("Failed to delete node: {}", e)))?;
         Ok(())
     }
@@ -197,14 +207,16 @@ impl StorageBackend for SledStorage {
         let key = Self::edge_id_to_ivec(&edge.id);
         let value = serialize_edge(edge)?;
 
-        self.edges.insert(key, value)
+        self.edges
+            .insert(key, value)
             .map_err(|e| StorageError::IoError(format!("Failed to put edge: {}", e)))?;
         Ok(())
     }
 
     async fn delete_edge(&self, id: &EdgeId) -> StorageResult<()> {
         let key = Self::edge_id_to_ivec(id);
-        self.edges.remove(key)
+        self.edges
+            .remove(key)
             .map_err(|e| StorageError::IoError(format!("Failed to delete edge: {}", e)))?;
         Ok(())
     }
@@ -240,7 +252,8 @@ impl StorageBackend for SledStorage {
     async fn scan_nodes(&self) -> StorageResult<Pin<Box<dyn Stream<Item = Node> + Send>>> {
         let mut nodes = Vec::new();
         for item in self.nodes.iter() {
-            let (_, value) = item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
+            let (_, value) =
+                item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
             let node = deserialize_node(&value)?;
             nodes.push(node);
         }
@@ -250,7 +263,8 @@ impl StorageBackend for SledStorage {
     async fn scan_edges(&self) -> StorageResult<Pin<Box<dyn Stream<Item = Edge> + Send>>> {
         let mut edges = Vec::new();
         for item in self.edges.iter() {
-            let (_, value) = item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
+            let (_, value) =
+                item.map_err(|e| StorageError::IoError(format!("Scan error: {}", e)))?;
             let edge = deserialize_edge(&value)?;
             edges.push(edge);
         }
@@ -267,7 +281,8 @@ pub struct SledTransaction {
 #[async_trait]
 impl Transaction for SledTransaction {
     async fn commit(mut self: Box<Self>) -> StorageResult<()> {
-        self.db.flush()
+        self.db
+            .flush()
             .map_err(|e| StorageError::TransactionError(format!("Commit failed: {}", e)))?;
         self.committed = true;
         Ok(())
@@ -290,7 +305,7 @@ pub struct StorageStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use evif_graph::{NodeType, EdgeType};
+    use evif_graph::{EdgeType, NodeType};
     use tempfile::TempDir;
 
     #[tokio::test]

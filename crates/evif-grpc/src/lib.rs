@@ -1,12 +1,12 @@
 // EVIF gRPC 服务
 
-mod server;
 mod client;
 mod error;
+mod server;
 
-pub use server::{EvifServer, ServerConfig};
-pub use client::{EvifClient, ClientConfig};
+pub use client::{ClientConfig, EvifClient};
 pub use error::{GrpcError, GrpcResult};
+pub use server::{EvifServer, ServerConfig};
 
 // 重新导出生成的 proto 代码
 pub mod evif {
@@ -14,11 +14,12 @@ pub mod evif {
 }
 
 // 重新导出常用的消息类型
-pub use evif::{GetNodeRequest, GetNodeResponse, PutNodeRequest, PutNodeResponse,
-               DeleteNodeRequest, DeleteNodeResponse, BatchGetNodesRequest, BatchPutNodesResponse,
-               QueryRequest, NodeResponse, ReadFileRequest, WriteFileResponse,
-               StatsRequest, StatsResponse, HealthRequest, HealthResponse,
-               Node, DataChunk, Value, value};
+pub use evif::{
+    value, BatchGetNodesRequest, BatchPutNodesResponse, DataChunk, DeleteNodeRequest,
+    DeleteNodeResponse, GetNodeRequest, GetNodeResponse, HealthRequest, HealthResponse, Node,
+    NodeResponse, PutNodeRequest, PutNodeResponse, QueryRequest, ReadFileRequest, StatsRequest,
+    StatsResponse, Value, WriteFileResponse,
+};
 
 // 重新导出服务端的 trait 和结构
 pub use evif::evif_service_server::{EvifService as EvifServerTrait, EvifServiceServer};

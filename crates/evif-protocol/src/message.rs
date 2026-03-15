@@ -48,16 +48,10 @@ pub enum Message {
     Stream(StreamChunk),
 
     /// 错误消息
-    Error {
-        code: u32,
-        message: String,
-    },
+    Error { code: u32, message: String },
 
     /// 心跳消息
-    Heartbeat {
-        timestamp: u64,
-        sequence: u64,
-    },
+    Heartbeat { timestamp: u64, sequence: u64 },
 }
 
 impl Message {

@@ -84,7 +84,11 @@ impl RadixMountTable {
     }
 
     /// 递归解析符号链接（带循环检测）
-    pub async fn resolve_symlink_recursive(&self, path: &str, max_depth: usize) -> EvifResult<String> {
+    pub async fn resolve_symlink_recursive(
+        &self,
+        path: &str,
+        max_depth: usize,
+    ) -> EvifResult<String> {
         let mut current_path = Self::normalize_path(path);
         let mut visited = std::collections::HashSet::new();
 
@@ -117,7 +121,11 @@ impl RadixMountTable {
     }
 
     /// 逐组件解析路径（处理路径中间的符号链接）
-    pub async fn resolve_path_with_symlinks(&self, path: &str, max_depth: usize) -> EvifResult<String> {
+    pub async fn resolve_path_with_symlinks(
+        &self,
+        path: &str,
+        max_depth: usize,
+    ) -> EvifResult<String> {
         let normalized_path = Self::normalize_path(path);
 
         // 分割路径为组件
@@ -396,9 +404,7 @@ impl RadixMountTable {
     /// 列出所有挂载点
     pub async fn list_mounts(&self) -> Vec<String> {
         let mounts = self.mounts.read().await;
-        let mut list: Vec<String> = mounts.iter()
-            .map(|(key, _)| format!("/{}", key))
-            .collect();
+        let mut list: Vec<String> = mounts.iter().map(|(key, _)| format!("/{}", key)).collect();
         list.sort();
         list
     }
@@ -426,15 +432,9 @@ impl RadixMountTable {
         let count = mounts.iter().count();
 
         // 计算平均路径长度
-        let total_path_len: usize = mounts.iter()
-            .map(|(key, _)| key.len())
-            .sum();
+        let total_path_len: usize = mounts.iter().map(|(key, _)| key.len()).sum();
 
-        let avg_path_len = if count > 0 {
-            total_path_len / count
-        } else {
-            0
-        };
+        let avg_path_len = if count > 0 { total_path_len / count } else { 0 };
 
         MountTableStats {
             mount_count: count,
@@ -467,7 +467,10 @@ mod tests {
         let mount_table = RadixMountTable::new();
         let plugin = Arc::new(MockPlugin::new("test"));
 
-        mount_table.mount("/test".to_string(), plugin.clone()).await.unwrap();
+        mount_table
+            .mount("/test".to_string(), plugin.clone())
+            .await
+            .unwrap();
 
         let found = mount_table.lookup("/test/file.txt").await;
         assert!(found.is_some());
@@ -480,7 +483,10 @@ mod tests {
         let plugin1 = Arc::new(MockPlugin::new("test1"));
         let plugin2 = Arc::new(MockPlugin::new("test2"));
 
-        mount_table.mount("/test".to_string(), plugin1).await.unwrap();
+        mount_table
+            .mount("/test".to_string(), plugin1)
+            .await
+            .unwrap();
         let result = mount_table.mount("/test".to_string(), plugin2).await;
 
         assert!(result.is_err());
@@ -491,7 +497,10 @@ mod tests {
         let mount_table = RadixMountTable::new();
         let plugin = Arc::new(MockPlugin::new("test"));
 
-        mount_table.mount("/test".to_string(), plugin).await.unwrap();
+        mount_table
+            .mount("/test".to_string(), plugin)
+            .await
+            .unwrap();
         mount_table.unmount("/test").await.unwrap();
 
         let found = mount_table.lookup("/test/file.txt").await;
@@ -505,17 +514,29 @@ mod tests {
         let plugin2 = Arc::new(MockPlugin::new("sub"));
 
         // 使用非空 key 避免 Trie 空串边界问题：/root 与 /root/sub
-        mount_table.mount("/root".to_string(), plugin1).await.unwrap();
-        mount_table.mount("/root/sub".to_string(), plugin2).await.unwrap();
+        mount_table
+            .mount("/root".to_string(), plugin1)
+            .await
+            .unwrap();
+        mount_table
+            .mount("/root/sub".to_string(), plugin2)
+            .await
+            .unwrap();
 
         // 应匹配更具体的 /root/sub
         let found = mount_table.lookup("/root/sub/file.txt").await;
-        assert!(found.is_some(), "lookup /root/sub/file.txt should match /root/sub");
+        assert!(
+            found.is_some(),
+            "lookup /root/sub/file.txt should match /root/sub"
+        );
         assert_eq!(found.unwrap().name(), "sub");
 
         // 应匹配 /root
         let found = mount_table.lookup("/root/other/file.txt").await;
-        assert!(found.is_some(), "lookup /root/other/file.txt should match /root");
+        assert!(
+            found.is_some(),
+            "lookup /root/other/file.txt should match /root"
+        );
         assert_eq!(found.unwrap().name(), "root");
     }
 
@@ -538,7 +559,11 @@ mod tests {
 
         assert!(found.is_some());
         // Radix Tree查找应该在微秒级完成
-        assert!(elapsed.as_micros() < 1000, "Radix lookup too slow: {:?}", elapsed);
+        assert!(
+            elapsed.as_micros() < 1000,
+            "Radix lookup too slow: {:?}",
+            elapsed
+        );
     }
 
     #[tokio::test]
@@ -553,9 +578,21 @@ mod tests {
     async fn test_radix_stats() {
         let mount_table = RadixMountTable::new();
 
-        mount_table.mount("/short".to_string(), Arc::new(MockPlugin::new("s1"))).await.unwrap();
-        mount_table.mount("/longer/path".to_string(), Arc::new(MockPlugin::new("s2"))).await.unwrap();
-        mount_table.mount("/very/long/path/here".to_string(), Arc::new(MockPlugin::new("s3"))).await.unwrap();
+        mount_table
+            .mount("/short".to_string(), Arc::new(MockPlugin::new("s1")))
+            .await
+            .unwrap();
+        mount_table
+            .mount("/longer/path".to_string(), Arc::new(MockPlugin::new("s2")))
+            .await
+            .unwrap();
+        mount_table
+            .mount(
+                "/very/long/path/here".to_string(),
+                Arc::new(MockPlugin::new("s3")),
+            )
+            .await
+            .unwrap();
 
         let stats = mount_table.stats().await;
         assert_eq!(stats.mount_count, 3);
@@ -576,7 +613,10 @@ mod tests {
     async fn test_lookup_with_path_simple() {
         let table = RadixMountTable::new();
         let plugin = Arc::new(MockPlugin::new("hello"));
-        table.mount("/hello".to_string(), plugin.clone()).await.unwrap();
+        table
+            .mount("/hello".to_string(), plugin.clone())
+            .await
+            .unwrap();
 
         // 简单挂载点：整个路径应该被剥离
         let (found, rel_path) = table.lookup_with_path("/hello").await;
@@ -628,7 +668,10 @@ mod tests {
 
         // 挂载嵌套的挂载点
         table.mount("/hello".to_string(), plugin1).await.unwrap();
-        table.mount("/hello/world".to_string(), plugin2).await.unwrap();
+        table
+            .mount("/hello/world".to_string(), plugin2)
+            .await
+            .unwrap();
 
         // 应该匹配最长前缀 /hello/world
         let (found, rel_path) = table.lookup_with_path("/hello/world/file.txt").await;
@@ -675,7 +718,13 @@ impl EvifPlugin for MockPlugin {
         Ok(Vec::new())
     }
 
-    async fn write(&self, _path: &str, _data: Vec<u8>, _offset: i64, _flags: crate::plugin::WriteFlags) -> EvifResult<u64> {
+    async fn write(
+        &self,
+        _path: &str,
+        _data: Vec<u8>,
+        _offset: i64,
+        _flags: crate::plugin::WriteFlags,
+    ) -> EvifResult<u64> {
         Ok(0)
     }
 

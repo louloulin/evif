@@ -150,12 +150,20 @@ pub fn mask_sensitive_data(input: &str, config: &MaskConfig) -> String {
                     if let Some(colon_pos) = after_field.find(':') {
                         if let Some(quote_start) = after_field[colon_pos..].find('"') {
                             let value_start = start + colon_pos + quote_start + 1;
-                            if let Some(quote_end) = after_field[colon_pos + quote_start + 1..].find('"') {
+                            if let Some(quote_end) =
+                                after_field[colon_pos + quote_start + 1..].find('"')
+                            {
                                 let value_end = value_start + quote_end;
                                 if value_end <= result.len() {
                                     let value = &result[value_start..value_end];
-                                    let masked = mask_value(value, mask_char, show_prefix, show_suffix);
-                                    result = format!("{}{}{}", &result[..value_start], masked, &result[value_end..]);
+                                    let masked =
+                                        mask_value(value, mask_char, show_prefix, show_suffix);
+                                    result = format!(
+                                        "{}{}{}",
+                                        &result[..value_start],
+                                        masked,
+                                        &result[value_end..]
+                                    );
                                 }
                             }
                         }

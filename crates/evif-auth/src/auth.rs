@@ -1,11 +1,11 @@
 // Copyright 2025 EVIF Development Team
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::{Capability, Principal, PrincipalId, CapId, AuthResult};
 use crate::audit::AuditLogManager;
+use crate::{AuthResult, CapId, Capability, Principal, PrincipalId};
 use dashmap::DashMap;
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::sync::Arc;
 
 /// 认证策略
 #[derive(Debug, Clone)]
@@ -136,7 +136,12 @@ impl AuthManager {
                             if has_permission {
                                 let _ = audit.log_access_granted(principal_id, *node, &perm_str);
                             } else {
-                                let _ = audit.log_access_denied(principal_id, *node, &perm_str, "insufficient permissions");
+                                let _ = audit.log_access_denied(
+                                    principal_id,
+                                    *node,
+                                    &perm_str,
+                                    "insufficient permissions",
+                                );
                             }
                         }
 
@@ -147,7 +152,12 @@ impl AuthManager {
                 // 没有找到匹配的能力
                 if let Some(ref audit) = self.audit_log {
                     let perm_str = format!("{:?}", required_perm);
-                    let _ = audit.log_access_denied(principal_id, *node, &perm_str, "no capability found");
+                    let _ = audit.log_access_denied(
+                        principal_id,
+                        *node,
+                        &perm_str,
+                        "no capability found",
+                    );
                 }
 
                 Ok(false)

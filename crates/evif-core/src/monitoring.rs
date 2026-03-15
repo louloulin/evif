@@ -1,11 +1,11 @@
 // EVIF 监控和指标系统
 
-use std::sync::Arc;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use chrono::Utc;
 
 /// 监控指标类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,12 +109,28 @@ impl MetricsCollector {
 
         SystemStats {
             uptime_secs: uptime as u64,
-            total_requests: self.counters.read().await.get("total_requests").copied().unwrap_or(0),
-            active_connections: *self.gauges.read().await.get("active_connections").unwrap_or(&0.0) as u64,
+            total_requests: self
+                .counters
+                .read()
+                .await
+                .get("total_requests")
+                .copied()
+                .unwrap_or(0),
+            active_connections: *self
+                .gauges
+                .read()
+                .await
+                .get("active_connections")
+                .unwrap_or(&0.0) as u64,
             memory_usage_mb: Self::get_memory_usage(),
             cpu_usage_percent: Self::get_cpu_usage(),
             disk_io_mb: *self.gauges.read().await.get("disk_io_mb").unwrap_or(&0.0) as u64,
-            network_io_mb: *self.gauges.read().await.get("network_io_mb").unwrap_or(&0.0) as u64,
+            network_io_mb: *self
+                .gauges
+                .read()
+                .await
+                .get("network_io_mb")
+                .unwrap_or(&0.0) as u64,
         }
     }
 
@@ -159,9 +175,12 @@ impl MetricsCollector {
         // 导出直方图
         for metric in metrics.iter() {
             if matches!(metric.metric_type, MetricType::Histogram) {
-                output.push_str(&format!("{}_bucket{{{}}} {}\n",
+                output.push_str(&format!(
+                    "{}_bucket{{{}}} {}\n",
                     metric.name,
-                    metric.labels.iter()
+                    metric
+                        .labels
+                        .iter()
                         .map(|(k, v)| format!("{}=\"{}\"", k, v))
                         .collect::<Vec<_>>()
                         .join(","),
@@ -222,17 +241,19 @@ impl PerformanceMonitor {
         let mut labels = HashMap::new();
         labels.insert("operation".to_string(), operation.to_string());
 
-        self.metrics_collector.record_histogram(
-            &format!("{}_latency", operation),
-            latency_ms,
-            labels,
-        ).await;
+        self.metrics_collector
+            .record_histogram(&format!("{}_latency", operation), latency_ms, labels)
+            .await;
     }
 
     /// 记录请求
     pub async fn record_request(&self, operation: &str) {
-        self.metrics_collector.increment_counter("total_requests", 1).await;
-        self.metrics_collector.increment_counter(&format!("{}_requests", operation), 1).await;
+        self.metrics_collector
+            .increment_counter("total_requests", 1)
+            .await;
+        self.metrics_collector
+            .increment_counter(&format!("{}_requests", operation), 1)
+            .await;
     }
 
     /// 获取指标收集器

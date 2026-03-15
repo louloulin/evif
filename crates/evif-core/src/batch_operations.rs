@@ -8,7 +8,7 @@
 // - 并行处理
 // - 进度回调支持
 
-use crate::error::{EvifResult, EvifError};
+use crate::error::{EvifError, EvifResult};
 use crate::plugin::EvifPlugin;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -210,8 +210,11 @@ impl BatchExecutor {
                     let source_name = source.rsplit('/').next().unwrap_or(&source);
                     format!("{}/{}", dest.trim_end_matches('/'), source_name)
                 } else {
-                    format!("{}/{}", dest.trim_end_matches('/'),
-                            source.rsplit('/').next().unwrap_or(&source))
+                    format!(
+                        "{}/{}",
+                        dest.trim_end_matches('/'),
+                        source.rsplit('/').next().unwrap_or(&source)
+                    )
                 };
 
                 match plugin.clone().rename(&source, &target_path).await {
@@ -221,7 +224,11 @@ impl BatchExecutor {
                         match plugin.clone().read(&source, 0, 0).await {
                             Ok(data) => {
                                 let write_flags = crate::plugin::WriteFlags::NONE;
-                                match plugin.clone().write(&target_path, data, -1, write_flags).await {
+                                match plugin
+                                    .clone()
+                                    .write(&target_path, data, -1, write_flags)
+                                    .await
+                                {
                                     Ok(_) => Ok((source.clone(), target_path)),
                                     Err(e) => Err((source.clone(), e.to_string())),
                                 }
@@ -247,7 +254,10 @@ impl BatchExecutor {
                 }
                 Ok(Err((path, error))) => {
                     failed += 1;
-                    errors.push(BatchError { path: path.clone(), error });
+                    errors.push(BatchError {
+                        path: path.clone(),
+                        error,
+                    });
 
                     progress.update(completed, failed, Some(path.clone()));
                     self.notify_progress(progress.clone());
@@ -297,8 +307,8 @@ impl BatchExecutor {
                 } else {
                     plugin.clone().remove(&path).await
                 }
-                    .map(|_| path.clone())
-                    .map_err(|e| (path.clone(), e.to_string()))
+                .map(|_| path.clone())
+                .map_err(|e| (path.clone(), e.to_string()))
             });
         }
 
@@ -316,7 +326,10 @@ impl BatchExecutor {
                 }
                 Ok(Err((path, error))) => {
                     failed += 1;
-                    errors.push(BatchError { path: path.clone(), error });
+                    errors.push(BatchError {
+                        path: path.clone(),
+                        error,
+                    });
 
                     progress.update(completed, failed, Some(path.clone()));
                     self.notify_progress(progress.clone());
@@ -374,7 +387,9 @@ mod tests {
 
     #[async_trait]
     impl EvifPlugin for MockPlugin {
-        fn name(&self) -> &str { "mock" }
+        fn name(&self) -> &str {
+            "mock"
+        }
 
         async fn create(&self, _path: &str, _perm: u32) -> EvifResult<()> {
             Ok(())
@@ -388,7 +403,13 @@ mod tests {
             Ok(vec![1, 2, 3])
         }
 
-        async fn write(&self, _path: &str, _data: Vec<u8>, _offset: i64, _flags: crate::plugin::WriteFlags) -> EvifResult<u64> {
+        async fn write(
+            &self,
+            _path: &str,
+            _data: Vec<u8>,
+            _offset: i64,
+            _flags: crate::plugin::WriteFlags,
+        ) -> EvifResult<u64> {
             Ok(3)
         }
 

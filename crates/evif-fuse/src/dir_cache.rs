@@ -194,7 +194,11 @@ impl DirCache {
             *size += 1;
         }
 
-        debug!("Cached: {} (now {} entries)", path, *self.current_size.read().unwrap());
+        debug!(
+            "Cached: {} (now {} entries)",
+            path,
+            *self.current_size.read().unwrap()
+        );
     }
 
     /// 使缓存失效
@@ -389,10 +393,13 @@ mod tests {
         let cache = DirCache::new(10);
 
         // 测试缓存命中
-        cache.put("/dir/".to_string(), vec![
-            DirEntry::new(10, "file1.txt".to_string(), false),
-            DirEntry::new(11, "file2.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir/".to_string(),
+            vec![
+                DirEntry::new(10, "file1.txt".to_string(), false),
+                DirEntry::new(11, "file2.txt".to_string(), false),
+            ],
+        );
 
         let entries = cache.get("/dir/");
         assert!(entries.is_some());
@@ -413,9 +420,10 @@ mod tests {
     fn test_dir_cache_invalidate() {
         let cache = DirCache::new(10);
 
-        cache.put("/dir/".to_string(), vec![
-            DirEntry::new(10, "file.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir/".to_string(),
+            vec![DirEntry::new(10, "file.txt".to_string(), false)],
+        );
 
         cache.invalidate("/dir/");
 
@@ -427,13 +435,15 @@ mod tests {
     fn test_dir_cache_clear() {
         let cache = DirCache::new(10);
 
-        cache.put("/dir1/".to_string(), vec![
-            DirEntry::new(10, "file1.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir1/".to_string(),
+            vec![DirEntry::new(10, "file1.txt".to_string(), false)],
+        );
 
-        cache.put("/dir2/".to_string(), vec![
-            DirEntry::new(11, "file2.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir2/".to_string(),
+            vec![DirEntry::new(11, "file2.txt".to_string(), false)],
+        );
 
         cache.clear();
 
@@ -445,9 +455,10 @@ mod tests {
     fn test_dir_cache_stats() {
         let cache = DirCache::new(10);
 
-        cache.put("/dir/".to_string(), vec![
-            DirEntry::new(10, "file.txt".to_string(), false),
-        ]);
+        cache.put(
+            "/dir/".to_string(),
+            vec![DirEntry::new(10, "file.txt".to_string(), false)],
+        );
 
         let (current, max, ttl) = cache.stats();
         assert_eq!(current, 1);

@@ -1,10 +1,10 @@
 // 文件系统抽象 Trait - POSIX 风格接口
 
+use crate::dir::{DirEntry, Directory};
 use crate::error::{VfsError, VfsResult};
 use crate::file::{FileHandle, FileMode, OpenFlags};
-use crate::dir::{Directory, DirEntry};
-use std::path::{Path, PathBuf};
 use async_trait::async_trait;
+use std::path::{Path, PathBuf};
 
 /// 文件系统属性
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,7 +264,9 @@ pub trait FileSystem: Send + Sync {
         let mut current_offset = offset;
 
         while total_written < data.len() {
-            let written = self.write(handle, current_offset, &data[total_written..]).await?;
+            let written = self
+                .write(handle, current_offset, &data[total_written..])
+                .await?;
             if written == 0 {
                 return Err(VfsError::NoSpaceLeft);
             }
