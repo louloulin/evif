@@ -332,12 +332,13 @@
 - `evif-rest` 为旧客户端补充了 `text`、`k`、`top_n` 反序列化兼容层，并新增 focused tests 覆盖。
 - `/health` 与 `/api/v1/health` 现在统一使用 `env!(\"CARGO_PKG_VERSION\")` 作为版本来源；根健康检查同时暴露 `uptime` 和 `timestamp`，并有集成测试保证两个出口版本一致。
 - `evif-rest` 的剩余 doctest 失败已修复：`compat_fs` 中用于说明根路径挂载树的 Unicode 示例现已标记为 `text` 代码块，不再被 rustdoc 当作 Rust 源码编译。
+- Prometheus `/metrics` 端点已实现：公开端点，返回 Prometheus text format，包含请求计数、读写字节数、操作计数、错误数、运行时间等指标。
 
 ### 4.2 第二批必须跟进
 
 1. 记忆持久化
 2. 生产模式配置和默认挂载清理
-3. Prometheus `/metrics` 与 tracing 接线
+3. tracing 接线
 4. CI/CD 与容器化发布
 
 ### 4.3 第三批用于拉齐稳定交付

@@ -45,8 +45,9 @@ evif-vfs = { path = "../evif-vfs" }
 evif-protocol = { path = "../evif-protocol" }
 evif-graph = { path = "../evif-graph" }
 evif-plugins = { path = "../evif-plugins" }
-evif-mem = { path = "../evif-mem" }
+evif-mem = { path = "../evif-mem", features = ["sqlite"] }
 evif-auth = { path = "../evif-auth" }
+evif-metrics = { path = "../evif-metrics", features = ["prometheus"] }
 
 # Config file formats (re-export from evif-core for mount config)
 toml = "0.8"
@@ -58,5 +59,6 @@ default = []
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+tempfile = { workspace = true }
 tower-test = "0.4.0"
 reqwest = { version = "0.11", default-features = false, features = ["json"] }

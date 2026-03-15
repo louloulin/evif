@@ -3,10 +3,14 @@
 // 流量监控 HTTP 接口
 // 对标 AGFS Traffic Monitor
 
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use evif_core::MountTable;
@@ -156,9 +160,7 @@ impl MetricsHandlers {
 
     /// 获取系统健康状态
     /// GET /api/v1/health
-    pub async fn get_health(
-        State(state): State<MetricsState>,
-    ) -> Json<HealthStatus> {
+    pub async fn get_health(State(state): State<MetricsState>) -> Json<HealthStatus> {
         let mounts = state.mount_table.list_mounts().await;
         let mount_count = mounts.len();
 
@@ -177,9 +179,7 @@ impl MetricsHandlers {
 
     /// 重置统计
     /// POST /api/v1/metrics/reset
-    pub async fn reset_metrics(
-        State(state): State<MetricsState>,
-    ) -> Json<serde_json::Value> {
+    pub async fn reset_metrics(State(state): State<MetricsState>) -> Json<serde_json::Value> {
         let stats = &state.traffic_stats;
 
         stats.total_requests.store(0, Ordering::Relaxed);
@@ -198,9 +198,7 @@ impl MetricsHandlers {
 
     /// 获取详细的系统状态
     /// GET /api/v1/metrics/status
-    pub async fn get_system_status(
-        State(state): State<MetricsState>,
-    ) -> Json<serde_json::Value> {
+    pub async fn get_system_status(State(state): State<MetricsState>) -> Json<serde_json::Value> {
         let mounts = state.mount_table.list_mounts().await;
         let health = Self::get_health(State(state.clone())).await;
         let traffic = Self::get_traffic_stats(State(state.clone())).await;

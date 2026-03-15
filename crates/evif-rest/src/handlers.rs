@@ -1,18 +1,25 @@
 // REST API 处理器
 
+use crate::metrics_handlers::TrafficStats;
+use crate::{RestError, RestResult};
+use axum::{
+    extract::{Path, Query, State},
+    response::{IntoResponse, Response},
+    Json,
+};
 use base64::Engine;
-use crate::{RestResult, RestError};
-use axum::{Json, extract::{Path, State, Query}};
+use chrono::Utc;
+use evif_core::FileInfo as EvifFileInfo;
+use evif_core::{
+    DynamicPluginLoader, EvifPlugin, OpenFlags, PluginConfigParam, PluginRegistry,
+    PluginState as RegistryPluginState, RadixMountTable, RegisteredPlugin, WriteFlags,
+};
+use evif_graph::{Graph, Metadata, Node, NodeBuilder, NodeId, NodeType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use evif_core::{RadixMountTable, EvifPlugin, WriteFlags, OpenFlags, PluginConfigParam, DynamicPluginLoader, PluginRegistry, PluginState as RegistryPluginState, RegisteredPlugin};
-use evif_core::FileInfo as EvifFileInfo;
-use evif_graph::{Graph, Node, NodeId, Metadata, NodeType, NodeBuilder};
-use crate::metrics_handlers::TrafficStats;
-use std::time::Instant;
 use std::sync::atomic::Ordering;
-use chrono::Utc;
+use std::sync::Arc;
+use std::time::Instant;
 
 /// 应用状态
 #[derive(Clone)]
@@ -95,6 +102,93 @@ impl EvifHandlers {
         Json(Self::health_response(uptime_secs, false))
     }
 
+    /// GET /metrics：Prometheus 格式的指标
+    pub async fn prometheus_metrics(State(state): State<AppState>) -> Response {
+        use std::sync::atomic::Ordering;
+
+        let stats = &state.traffic_stats;
+
+        // Collect current metric values
+        let total_requests = stats.total_requests.load(Ordering::Relaxed);
+        let total_bytes_read = stats.total_bytes_read.load(Ordering::Relaxed);
+        let total_bytes_written = stats.total_bytes_written.load(Ordering::Relaxed);
+        let total_errors = stats.total_errors.load(Ordering::Relaxed);
+        let read_count = stats.read_count.load(Ordering::Relaxed);
+        let write_count = stats.write_count.load(Ordering::Relaxed);
+        let list_count = stats.list_count.load(Ordering::Relaxed);
+        let other_count = stats.other_count.load(Ordering::Relaxed);
+        let uptime_secs = state.start_time.elapsed().as_secs();
+
+        // Build Prometheus text format output
+        let metrics = format!(
+            r#"# HELP evif_total_requests Total number of requests processed
+# TYPE evif_total_requests counter
+evif_total_requests {}
+
+# HELP evif_total_bytes_read Total bytes read
+# TYPE evif_total_bytes_read counter
+evif_total_bytes_read {}
+
+# HELP evif_total_bytes_written Total bytes written
+# TYPE evif_total_bytes_written counter
+evif_total_bytes_written {}
+
+# HELP evif_total_errors Total number of errors
+# TYPE evif_total_errors counter
+evif_total_errors {}
+
+# HELP evif_read_count Number of read operations
+# TYPE evif_read_count counter
+evif_read_count {}
+
+# HELP evif_write_count Number of write operations
+# TYPE evif_write_count counter
+evif_write_count {}
+
+# HELP evif_list_count Number of list operations
+# TYPE evif_list_count counter
+evif_list_count {}
+
+# HELP evif_other_count Number of other operations
+# TYPE evif_other_count counter
+evif_other_count {}
+
+# HELP evif_uptime_seconds Server uptime in seconds
+# TYPE evif_uptime_seconds gauge
+evif_uptime_seconds {}
+
+# HELP evif_average_read_size Average bytes per read operation
+# TYPE evif_average_read_size gauge
+evif_average_read_size {}
+
+# HELP evif_average_write_size Average bytes per write operation
+# TYPE evif_average_write_size gauge
+evif_average_write_size {}
+"#,
+            total_requests,
+            total_bytes_read,
+            total_bytes_written,
+            total_errors,
+            read_count,
+            write_count,
+            list_count,
+            other_count,
+            uptime_secs,
+            if read_count > 0 {
+                total_bytes_read / read_count
+            } else {
+                0
+            },
+            if write_count > 0 {
+                total_bytes_written / write_count
+            } else {
+                0
+            }
+        );
+
+        metrics.into_response()
+    }
+
     /// 获取节点
     pub async fn get_node(
         State(state): State<AppState>,
@@ -131,8 +225,7 @@ impl EvifHandlers {
             other => NodeType::Custom(other.to_string()),
         };
 
-        let node = NodeBuilder::new(node_type, payload.name)
-            .build();
+        let node = NodeBuilder::new(node_type, payload.name).build();
 
         match state.graph.add_node(node) {
             Ok(node_id) => {
@@ -168,9 +261,7 @@ impl EvifHandlers {
 
     /// 查询图
     /// NOTE: Graph functionality intentionally not implemented (confirmed not required for EVIF 1.8)
-    pub async fn query(
-        Json(payload): Json<QueryRequest>,
-    ) -> RestResult<Json<QueryResponse>> {
+    pub async fn query(Json(payload): Json<QueryRequest>) -> RestResult<Json<QueryResponse>> {
         Err(RestError::Internal(
             "Graph functionality not implemented. Filesystem queries available via /api/v1/files/list.".to_string()
         ))
@@ -178,9 +269,7 @@ impl EvifHandlers {
 
     /// 获取子节点
     /// NOTE: Graph functionality intentionally not implemented (confirmed not required for EVIF 1.8)
-    pub async fn get_children(
-        Path(id): Path<String>,
-    ) -> RestResult<Json<Vec<String>>> {
+    pub async fn get_children(Path(id): Path<String>) -> RestResult<Json<Vec<String>>> {
         Err(RestError::Internal(
             "Graph functionality not implemented. Use /api/v1/directories/list for filesystem operations.".to_string()
         ))
@@ -200,17 +289,23 @@ impl EvifHandlers {
     // ============== Metrics API（Phase 9：与 AppState 对接，返回真实 uptime/mount_count/traffic）==============
 
     /// 获取流量统计
-    pub async fn get_traffic_stats(
-        State(state): State<AppState>,
-    ) -> Json<serde_json::Value> {
+    pub async fn get_traffic_stats(State(state): State<AppState>) -> Json<serde_json::Value> {
         let s = &state.traffic_stats;
         let total_requests = s.total_requests.load(Ordering::Relaxed);
         let total_bytes_read = s.total_bytes_read.load(Ordering::Relaxed);
         let total_bytes_written = s.total_bytes_written.load(Ordering::Relaxed);
         let read_count = s.read_count.load(Ordering::Relaxed);
         let write_count = s.write_count.load(Ordering::Relaxed);
-        let avg_read = if read_count > 0 { total_bytes_read / read_count } else { 0 };
-        let avg_write = if write_count > 0 { total_bytes_written / write_count } else { 0 };
+        let avg_read = if read_count > 0 {
+            total_bytes_read / read_count
+        } else {
+            0
+        };
+        let avg_write = if write_count > 0 {
+            total_bytes_written / write_count
+        } else {
+            0
+        };
         Json(serde_json::json!({
             "total_requests": total_requests,
             "total_bytes_read": total_bytes_read,
@@ -239,9 +334,7 @@ impl EvifHandlers {
     }
 
     /// 获取系统状态
-    pub async fn get_system_status(
-        State(state): State<AppState>,
-    ) -> Json<serde_json::Value> {
+    pub async fn get_system_status(State(state): State<AppState>) -> Json<serde_json::Value> {
         let mount_paths = state.mount_table.list_mounts().await;
         let uptime_secs = state.start_time.elapsed().as_secs();
         let traffic = Self::get_traffic_stats(State(state.clone())).await;
@@ -257,9 +350,7 @@ impl EvifHandlers {
     }
 
     /// 重置 metrics
-    pub async fn reset_metrics(
-        State(state): State<AppState>,
-    ) -> Json<serde_json::Value> {
+    pub async fn reset_metrics(State(state): State<AppState>) -> Json<serde_json::Value> {
         let s = &state.traffic_stats;
         s.total_requests.store(0, Ordering::Relaxed);
         s.total_bytes_read.store(0, Ordering::Relaxed);
@@ -290,13 +381,12 @@ impl EvifHandlers {
     ) -> RestResult<Json<FileReadResponse>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
 
         let offset = params.offset.unwrap_or(0);
         let size = params.size.unwrap_or(0); // 0 表示读全部
-        let data = plugin
-            .read(&relative_path, offset, size)
-            .await?;
+        let data = plugin.read(&relative_path, offset, size).await?;
 
         let size_u64 = data.len() as u64;
         let content = String::from_utf8_lossy(&data).to_string();
@@ -327,10 +417,12 @@ impl EvifHandlers {
     ) -> RestResult<Json<FileWriteResponse>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
 
         let offset = params.offset.unwrap_or(0) as i64;
-        let flags = params.flags
+        let flags = params
+            .flags
             .and_then(|f| Self::parse_write_flags(&f))
             .unwrap_or(WriteFlags::NONE);
 
@@ -342,9 +434,7 @@ impl EvifHandlers {
             payload.data.into_bytes()
         };
 
-        let bytes_written = plugin
-            .write(&relative_path, data, offset, flags)
-            .await?;
+        let bytes_written = plugin.write(&relative_path, data, offset, flags).await?;
 
         Ok(Json(FileWriteResponse {
             bytes_written,
@@ -369,12 +459,10 @@ impl EvifHandlers {
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&payload.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
 
-        plugin
-            .create(&relative_path, 0o644)
-            .await
-            ?;
+        plugin.create(&relative_path, 0o644).await?;
 
         Ok(Json(serde_json::json!({
             "message": "File created",
@@ -389,12 +477,10 @@ impl EvifHandlers {
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
 
-        plugin
-            .remove(&relative_path)
-            .await
-            ?;
+        plugin.remove(&relative_path).await?;
 
         Ok(Json(serde_json::json!({
             "message": "File deleted",
@@ -410,22 +496,23 @@ impl EvifHandlers {
         Query(params): Query<FileQueryParams>,
     ) -> RestResult<Json<DirectoryListResponse>> {
         // Task 05: 使用 lookup_with_path 替代 lookup，支持路径翻译
-        let (plugin_opt, relative_path) = state.mount_table
-            .lookup_with_path(&params.path)
-            .await;
+        let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
 
         // 特殊情况：根路径 "/" 返回所有挂载点
         if relative_path == "/" && plugin_opt.is_none() {
             let mounts = state.mount_table.list_mounts().await;
-            let files: Vec<FileInfo> = mounts.into_iter().map(|name| FileInfo {
-                id: None,
-                name: name.clone(),
-                path: format!("/{}", name),
-                is_dir: true,
-                size: 0,
-                modified: Utc::now().to_rfc3339(),
-                created: Utc::now().to_rfc3339(),
-            }).collect();
+            let files: Vec<FileInfo> = mounts
+                .into_iter()
+                .map(|name| FileInfo {
+                    id: None,
+                    name: name.clone(),
+                    path: format!("/{}", name),
+                    is_dir: true,
+                    size: 0,
+                    modified: Utc::now().to_rfc3339(),
+                    created: Utc::now().to_rfc3339(),
+                })
+                .collect();
 
             return Ok(Json(DirectoryListResponse {
                 path: "/".to_string(),
@@ -434,28 +521,29 @@ impl EvifHandlers {
         }
 
         // 非根路径：使用相对路径调用插件
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
 
         // List files using readdir with relative path
-        let evif_file_infos = plugin
-            .readdir(&relative_path)
-            .await
-            ?;
+        let evif_file_infos = plugin.readdir(&relative_path).await?;
 
-        let files = evif_file_infos.into_iter().map(|info| {
-            // Build full path by combining original request path with file name
-            // Use params.path (not relative_path) to ensure correct full paths
-            let base_path = params.path.trim_end_matches('/');
-            FileInfo {
-                id: None,
-                name: info.name.clone(),
-                path: format!("{}/{}", base_path, info.name),
-                is_dir: info.is_dir,
-                size: info.size,
-                modified: info.modified.to_rfc3339(),
-                created: info.modified.to_rfc3339(), // Use modified as created
-            }
-        }).collect();
+        let files = evif_file_infos
+            .into_iter()
+            .map(|info| {
+                // Build full path by combining original request path with file name
+                // Use params.path (not relative_path) to ensure correct full paths
+                let base_path = params.path.trim_end_matches('/');
+                FileInfo {
+                    id: None,
+                    name: info.name.clone(),
+                    path: format!("{}/{}", base_path, info.name),
+                    is_dir: info.is_dir,
+                    size: info.size,
+                    modified: info.modified.to_rfc3339(),
+                    created: info.modified.to_rfc3339(), // Use modified as created
+                }
+            })
+            .collect();
 
         Ok(Json(DirectoryListResponse {
             path: params.path.clone(),
@@ -478,11 +566,10 @@ impl EvifHandlers {
         Json(payload): Json<CreateDirectoryRequest>,
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
-        let (plugin_opt, relative_path) = state.mount_table
-            .lookup_with_path(&payload.path)
-            .await;
+        let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&payload.path).await;
 
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
 
         // Create parent directories if requested
         if payload.parents.unwrap_or(false) {
@@ -491,16 +578,14 @@ impl EvifHandlers {
                 if !parent_path.is_empty() && parent_path != "/" {
                     plugin
                         .mkdir(parent_path, payload.mode.unwrap_or(0o755))
-                        .await
-                        ?;
+                        .await?;
                 }
             }
         }
 
         plugin
             .mkdir(&relative_path, payload.mode.unwrap_or(0o755))
-            .await
-            ?;
+            .await?;
 
         Ok(Json(serde_json::json!({
             "message": "Directory created",
@@ -524,13 +609,11 @@ impl EvifHandlers {
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
 
         // Note: EvifPlugin doesn't have rmdir/rmdir_all, just use remove
-        plugin
-            .remove(&relative_path)
-            .await
-            ?;
+        plugin.remove(&relative_path).await?;
 
         Ok(Json(serde_json::json!({
             "message": "Directory deleted",
@@ -556,12 +639,10 @@ impl EvifHandlers {
     ) -> RestResult<Json<FileStat>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
 
-        let info = plugin
-            .stat(&relative_path)
-            .await
-            ?;
+        let info = plugin.stat(&relative_path).await?;
 
         Ok(Json(FileStat {
             path: params.path.clone(),
@@ -593,30 +674,33 @@ impl EvifHandlers {
     ) -> RestResult<Json<FileDigestResponse>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&payload.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
 
-        let data = plugin
-            .read(&relative_path, 0, 0)
-            .await
-            ?;
+        let data = plugin.read(&relative_path, 0, 0).await?;
 
         let algorithm = payload.algorithm.unwrap_or_else(|| "sha256".to_string());
         let hash = match algorithm.to_lowercase().as_str() {
             "sha256" => {
-                use sha2::Sha256;
                 use digest::Digest;
+                use sha2::Sha256;
                 let mut hasher = Sha256::new();
                 digest::Digest::update(&mut hasher, &data);
                 format!("{:x}", digest::Digest::finalize(hasher))
             }
             "sha512" => {
-                use sha2::Sha512;
                 use digest::Digest;
+                use sha2::Sha512;
                 let mut hasher = Sha512::new();
                 digest::Digest::update(&mut hasher, &data);
                 format!("{:x}", digest::Digest::finalize(hasher))
             }
-            _ => return Err(RestError::Internal(format!("Unsupported algorithm: {}", algorithm))),
+            _ => {
+                return Err(RestError::Internal(format!(
+                    "Unsupported algorithm: {}",
+                    algorithm
+                )))
+            }
         };
 
         Ok(Json(FileDigestResponse {
@@ -643,20 +727,17 @@ impl EvifHandlers {
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&payload.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
 
         // Create file if it doesn't exist, update timestamp if it does
         if let Err(_) = plugin.stat(&relative_path).await {
-            plugin
-                .create(&relative_path, 0o644)
-                .await
-                ?;
+            plugin.create(&relative_path, 0o644).await?;
         } else {
             // Update timestamp by writing empty data with append flag
             plugin
                 .write(&relative_path, vec![], -1, WriteFlags::APPEND)
-                .await
-                ?;
+                .await?;
         }
 
         Ok(Json(serde_json::json!({
@@ -683,13 +764,21 @@ impl EvifHandlers {
     ) -> RestResult<Json<GrepResponse>> {
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&payload.path).await;
-        let plugin = plugin_opt.ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
 
         let pattern = regex::Regex::new(&payload.pattern)
             .map_err(|e| RestError::Internal(format!("Invalid regex: {}", e)))?;
 
         let mut matches = Vec::new();
-        Self::grep_recursive(Arc::new(state), &plugin, &relative_path, &pattern, &mut matches).await?;
+        Self::grep_recursive(
+            Arc::new(state),
+            &plugin,
+            &relative_path,
+            &pattern,
+            &mut matches,
+        )
+        .await?;
 
         Ok(Json(GrepResponse {
             pattern: payload.pattern,
@@ -717,21 +806,28 @@ impl EvifHandlers {
         Json(payload): Json<RenameRequest>,
     ) -> RestResult<Json<serde_json::Value>> {
         // 使用 lookup_with_path() 进行路径翻译，获取源和目标的插件及相对路径
-        let (src_plugin_opt, src_relative_path) = state.mount_table.lookup_with_path(&payload.from).await;
-        let (dst_plugin_opt, dst_relative_path) = state.mount_table.lookup_with_path(&payload.to).await;
+        let (src_plugin_opt, src_relative_path) =
+            state.mount_table.lookup_with_path(&payload.from).await;
+        let (dst_plugin_opt, dst_relative_path) =
+            state.mount_table.lookup_with_path(&payload.to).await;
 
-        let src_plugin = src_plugin_opt.ok_or_else(|| RestError::NotFound(format!("Source path not found: {}", payload.from)))?;
-        let dst_plugin = dst_plugin_opt.ok_or_else(|| RestError::NotFound(format!("Destination path not found: {}", payload.to)))?;
+        let src_plugin = src_plugin_opt.ok_or_else(|| {
+            RestError::NotFound(format!("Source path not found: {}", payload.from))
+        })?;
+        let dst_plugin = dst_plugin_opt.ok_or_else(|| {
+            RestError::NotFound(format!("Destination path not found: {}", payload.to))
+        })?;
 
         // 确保两个路径在同一个插件中（使用指针比较）
         if !Arc::ptr_eq(&src_plugin, &dst_plugin) {
-            return Err(RestError::BadRequest("Cannot rename across mount points".to_string()));
+            return Err(RestError::BadRequest(
+                "Cannot rename across mount points".to_string(),
+            ));
         }
 
         src_plugin
             .rename(&src_relative_path, &dst_relative_path)
-            .await
-            ?;
+            .await?;
 
         Ok(Json(serde_json::json!({
             "message": "File renamed",
@@ -770,14 +866,17 @@ impl EvifHandlers {
     ) -> RestResult<Json<serde_json::Value>> {
         let path = payload.path.trim().to_string();
         if path.is_empty() || !path.starts_with('/') {
-            return Err(RestError::BadRequest("path must be non-empty and start with /".to_string()));
+            return Err(RestError::BadRequest(
+                "path must be non-empty and start with /".to_string(),
+            ));
         }
         let plugin_name = payload.plugin.to_lowercase();
         let plugin: Arc<dyn EvifPlugin> = match plugin_name.as_str() {
             "mem" | "memfs" => Arc::new(evif_plugins::MemFsPlugin::new()),
             "hello" | "hellofs" => Arc::new(evif_plugins::HelloFsPlugin::new()),
             "local" | "localfs" => {
-                let root = payload.config
+                let root = payload
+                    .config
                     .as_ref()
                     .and_then(|c| c.get("root"))
                     .and_then(|v| v.as_str())
@@ -785,14 +884,23 @@ impl EvifHandlers {
                     .to_string();
                 Arc::new(evif_plugins::LocalFsPlugin::new(&root))
             }
-            _ => return Err(RestError::BadRequest(format!(
-                "Unknown plugin '{}'. Supported: mem, hello, local",
-                payload.plugin
-            ))),
+            _ => {
+                return Err(RestError::BadRequest(format!(
+                    "Unknown plugin '{}'. Supported: mem, hello, local",
+                    payload.plugin
+                )))
+            }
         };
-        plugin.validate(payload.config.as_ref()).await
-            .map_err(|e| RestError::BadRequest(format!("Plugin config validation failed: {}", e)))?;
-        state.mount_table.mount(path.clone(), plugin).await
+        plugin
+            .validate(payload.config.as_ref())
+            .await
+            .map_err(|e| {
+                RestError::BadRequest(format!("Plugin config validation failed: {}", e))
+            })?;
+        state
+            .mount_table
+            .mount(path.clone(), plugin)
+            .await
             .map_err(|e| RestError::Internal(format!("Mount failed: {}", e)))?;
         Ok(Json(serde_json::json!({
             "message": "Mounted",
@@ -810,7 +918,10 @@ impl EvifHandlers {
         if path.is_empty() {
             return Err(RestError::BadRequest("path must be non-empty".to_string()));
         }
-        state.mount_table.unmount(&path).await
+        state
+            .mount_table
+            .unmount(&path)
+            .await
             .map_err(|e| RestError::Internal(format!("Unmount failed: {}", e)))?;
         Ok(Json(serde_json::json!({
             "message": "Unmounted",
@@ -855,9 +966,7 @@ impl EvifHandlers {
     // ============== 插件管理 API ==============
 
     /// 列出插件
-    pub async fn list_plugins(
-        State(state): State<AppState>,
-    ) -> RestResult<Json<Vec<PluginInfo>>> {
+    pub async fn list_plugins(State(state): State<AppState>) -> RestResult<Json<Vec<PluginInfo>>> {
         let mount_paths = state.mount_table.list_mounts().await;
         let mut plugins = std::collections::HashMap::new();
 
@@ -866,12 +975,10 @@ impl EvifHandlers {
             let (plugin_opt, _relative_path) = state.mount_table.lookup_with_path(&path).await;
             if let Some(plugin) = plugin_opt {
                 let name = plugin.name().to_string();
-                plugins.entry(name.clone()).or_insert_with(|| {
-                    PluginInfo {
-                        name: name.clone(),
-                        version: "1.0.0".to_string(),
-                        description: format!("{} plugin", name),
-                    }
+                plugins.entry(name.clone()).or_insert_with(|| PluginInfo {
+                    name: name.clone(),
+                    version: "1.0.0".to_string(),
+                    description: format!("{} plugin", name),
                 });
             }
         }
@@ -889,21 +996,37 @@ impl EvifHandlers {
         let mount_path = format!("/{}", library_name);
 
         // 加载动态库
-        let plugin_info = state.dynamic_loader.load_plugin(&library_name)
-            .map_err(|e| RestError::Internal(format!("Failed to load dynamic library '{}': {}", library_name, e)))?;
+        let plugin_info = state
+            .dynamic_loader
+            .load_plugin(&library_name)
+            .map_err(|e| {
+                RestError::Internal(format!(
+                    "Failed to load dynamic library '{}': {}",
+                    library_name, e
+                ))
+            })?;
 
         // 创建插件实例
-        let plugin = state.dynamic_loader.create_plugin(&library_name)
+        let plugin = state
+            .dynamic_loader
+            .create_plugin(&library_name)
             .map_err(|e| RestError::Internal(format!("Failed to create plugin instance: {}", e)))?;
 
         // 验证插件配置
         let config = payload.config.as_ref();
-        plugin.validate(config).await
+        plugin
+            .validate(config)
+            .await
             .map_err(|e| RestError::Internal(format!("Plugin validation failed: {}", e)))?;
 
         // 挂载插件
-        state.mount_table.mount(mount_path.clone(), plugin).await
-            .map_err(|e| RestError::Internal(format!("Failed to mount plugin at '{}': {}", mount_path, e)))?;
+        state
+            .mount_table
+            .mount(mount_path.clone(), plugin)
+            .await
+            .map_err(|e| {
+                RestError::Internal(format!("Failed to mount plugin at '{}': {}", mount_path, e))
+            })?;
 
         Ok(Json(serde_json::json!({
             "message": format!("Dynamic plugin '{}' loaded and mounted at '{}'", plugin_info.name(), mount_path),
@@ -965,8 +1088,9 @@ impl EvifHandlers {
         Path(name): Path<String>,
     ) -> RestResult<Json<serde_json::Value>> {
         // 1. 从 registry 获取插件信息
-        let plugin_info = state.plugin_registry.get(&name)
-            .ok_or_else(|| RestError::NotFound(format!("Plugin '{}' not found in registry", name)))?;
+        let plugin_info = state.plugin_registry.get(&name).ok_or_else(|| {
+            RestError::NotFound(format!("Plugin '{}' not found in registry", name))
+        })?;
 
         let library_path = plugin_info.library_path.clone();
 
@@ -976,19 +1100,27 @@ impl EvifHandlers {
         let _ = state.dynamic_loader.unload_plugin(&name);
 
         // 3. 重新加载插件
-        let new_info = state.dynamic_loader.load_plugin(&name)
-            .map_err(|e| RestError::Internal(format!("Failed to reload plugin '{}': {}", name, e)))?;
+        let new_info = state.dynamic_loader.load_plugin(&name).map_err(|e| {
+            RestError::Internal(format!("Failed to reload plugin '{}': {}", name, e))
+        })?;
 
         // 4. 创建新实例
-        let plugin = state.dynamic_loader.create_plugin(&name)
+        let plugin = state
+            .dynamic_loader
+            .create_plugin(&name)
             .map_err(|e| RestError::Internal(format!("Failed to create plugin instance: {}", e)))?;
 
         // 5. 重新挂载
-        state.mount_table.mount(mount_path.clone(), plugin).await
+        state
+            .mount_table
+            .mount(mount_path.clone(), plugin)
+            .await
             .map_err(|e| RestError::Internal(format!("Failed to mount plugin: {}", e)))?;
 
         // 6. 更新 registry 状态
-        state.plugin_registry.activate(&name, mount_path.clone())
+        state
+            .plugin_registry
+            .activate(&name, mount_path.clone())
             .map_err(|e| RestError::Internal(format!("Failed to update registry: {}", e)))?;
 
         Ok(Json(serde_json::json!({
@@ -1033,9 +1165,21 @@ impl EvifHandlers {
 
         // 添加内置插件（未注册的）
         let built_in = vec![
-            "localfs", "s3fs", "memoryfs", "httpfs", "queuefs",
-            "sqlfs", "gitfs", "encryptfs", "tieredfs", "webdavfs",
-            "tarfs", "zipfs", "httpcachefs", "redisfs", "mongofs"
+            "localfs",
+            "s3fs",
+            "memoryfs",
+            "httpfs",
+            "queuefs",
+            "sqlfs",
+            "gitfs",
+            "encryptfs",
+            "tieredfs",
+            "webdavfs",
+            "tarfs",
+            "zipfs",
+            "httpcachefs",
+            "redisfs",
+            "mongofs",
         ];
 
         for name in built_in {
@@ -1083,28 +1227,26 @@ impl EvifHandlers {
         matches: &mut Vec<GrepMatch>,
     ) -> Result<(), RestError> {
         // Check if path is a directory
-        let info = plugin
-            .stat(path)
-            .await
-            ?;
+        let info = plugin.stat(path).await?;
 
         if info.is_dir {
             // List directory and recurse using readdir
-            let evif_file_infos = plugin
-                .readdir(path)
-                .await
-                ?;
+            let evif_file_infos = plugin.readdir(path).await?;
 
             for evif_info in evif_file_infos {
                 let child_path = format!("{}/{}", path.trim_end_matches('/'), evif_info.name);
-                Box::pin(Self::grep_recursive(state.clone(), plugin, &child_path, pattern, matches)).await?;
+                Box::pin(Self::grep_recursive(
+                    state.clone(),
+                    plugin,
+                    &child_path,
+                    pattern,
+                    matches,
+                ))
+                .await?;
             }
         } else {
             // Read file and search for pattern
-            let data = plugin
-                .read(path, 0, 0)
-                .await
-                ?;
+            let data = plugin.read(path, 0, 0).await?;
 
             let content = String::from_utf8_lossy(&data);
             for (line_num, line) in content.lines().enumerate() {

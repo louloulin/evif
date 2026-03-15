@@ -434,9 +434,7 @@ impl SQLiteStorage {
              ) WHERE id = ?1",
             params![category_id],
         )
-        .map_err(|e| {
-            MemError::Storage(format!("Failed to update category item count: {}", e))
-        })?;
+        .map_err(|e| MemError::Storage(format!("Failed to update category item count: {}", e)))?;
 
         Ok(())
     }
@@ -478,6 +476,8 @@ impl SQLiteStorage {
             local_path: row.get(3)?,
             caption: row.get(4)?,
             embedding_id: row.get(5)?,
+            user_id: None,
+            tenant_id: None,
             created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
                 .map(|dt| dt.with_timezone(&chrono::Utc))
                 .unwrap_or_else(|_| chrono::Utc::now()),
@@ -516,6 +516,8 @@ impl SQLiteStorage {
             reinforcement_count: row.get(9)?,
             last_reinforced_at,
             category_id: row.get(11)?,
+            user_id: None,
+            tenant_id: None,
             created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(12)?)
                 .map(|dt| dt.with_timezone(&chrono::Utc))
                 .unwrap_or_else(|_| chrono::Utc::now()),
@@ -533,6 +535,8 @@ impl SQLiteStorage {
             embedding_id: row.get(3)?,
             summary: row.get(4)?,
             item_count: row.get(5)?,
+            user_id: None,
+            tenant_id: None,
             created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
                 .map(|dt| dt.with_timezone(&chrono::Utc))
                 .unwrap_or_else(|_| chrono::Utc::now()),
