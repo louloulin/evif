@@ -258,7 +258,7 @@
 目标：让服务重启、故障、配置错误时仍然可控。
 
 工作项：
-- 为记忆子系统接入持久化后端，并增加初始化与迁移流程。
+- [x] 为记忆子系统接入持久化后端，并增加初始化与迁移流程。
 - 调整默认挂载和插件策略，生产模式下严格失败。
 - 引入 Request ID、Timeout、Concurrency Limit、Graceful Shutdown。
 - 明确 CORS、配置加载优先级、生产环境变量规范。
@@ -333,10 +333,12 @@
 - `/health` 与 `/api/v1/health` 现在统一使用 `env!(\"CARGO_PKG_VERSION\")` 作为版本来源；根健康检查同时暴露 `uptime` 和 `timestamp`，并有集成测试保证两个出口版本一致。
 - `evif-rest` 的剩余 doctest 失败已修复：`compat_fs` 中用于说明根路径挂载树的 Unicode 示例现已标记为 `text` 代码块，不再被 rustdoc 当作 Rust 源码编译。
 - Prometheus `/metrics` 端点已实现：公开端点，返回 Prometheus text format，包含请求计数、读写字节数、操作计数、错误数、运行时间等指标。
+- 生产模式持久化记忆后端已接线：新增 `EVIF_REST_PRODUCTION_MODE` 环境变量，当设为 `true` 或 `1` 时强制要求使用持久化后端（SQLite），拒绝使用 in-memory 后端（防止服务重启后数据丢失）。生产模式下必须设置 `EVIF_REST_MEMORY_BACKEND=sqlite` 和 `EVIF_REST_MEMORY_SQLITE_PATH=/path/to/db`。
+- 新增 6 个单元测试覆盖生产模式验证逻辑。
 
 ### 4.2 第二批必须跟进
 
-1. 记忆持久化
+1. [x] 记忆持久化
 2. 生产模式配置和默认挂载清理
 3. tracing 接线
 4. CI/CD 与容器化发布

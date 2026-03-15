@@ -1,35 +1,39 @@
 // EVIF REST API - HTTP/JSON 接口
 
-mod server;
-mod handlers;
-mod routes;
-mod middleware;
+mod batch_handlers;
+mod collab_handlers;
+mod compat_fs;
 mod fs_handlers;
 mod handle_handlers;
-mod plugin_handlers;
-mod metrics_handlers;
-mod wasm_handlers;
-mod batch_handlers;
-mod ws_handlers;
-mod compat_fs;
-mod collab_handlers;
+mod handlers;
 mod memory_handlers;
+mod metrics_handlers;
+mod middleware;
+mod plugin_handlers;
+mod routes;
+mod server;
+mod wasm_handlers;
+mod ws_handlers;
 
-pub use server::{EvifServer, ServerConfig};
-pub use handlers::{EvifHandlers, AppState, NodeResponse, QueryResponse, StatsResponse};
+pub use batch_handlers::{
+    create_batch_routes, BatchCopyRequestJson, BatchDeleteRequestJson, BatchOperationInfo,
+    BatchOperationManager, OperationStatus,
+};
+pub use compat_fs::CompatFsHandlers;
 pub use fs_handlers::{FsHandlers, FsState};
 pub use handle_handlers::{HandleHandlers, HandleState};
-pub use plugin_handlers::{PluginHandlers, PluginState};
-pub use metrics_handlers::{MetricsHandlers, MetricsState, TrafficStats};
-pub use ws_handlers::{WebSocketHandlers, WebSocketState, WSMessage};
-pub use compat_fs::CompatFsHandlers;
-pub use routes::{create_routes, create_routes_with_auth};
-pub use middleware::{LoggingMiddleware, AuthMiddleware, RestAuthState};
-pub use batch_handlers::{
-    BatchOperationManager, BatchOperationInfo, OperationStatus,
-    create_batch_routes, BatchCopyRequestJson, BatchDeleteRequestJson
+pub use handlers::{AppState, EvifHandlers, NodeResponse, QueryResponse, StatsResponse};
+pub use memory_handlers::{
+    create_memory_state, create_memory_state_from_config, create_memory_state_from_env,
+    init_memory_pipelines, is_production_mode, validate_memory_for_production, MemoryBackendConfig,
+    MemoryBackendKind, MemoryHandlers, MemoryState,
 };
-pub use memory_handlers::{MemoryHandlers, MemoryState, create_memory_state, init_memory_pipelines};
+pub use metrics_handlers::{MetricsHandlers, MetricsState, TrafficStats};
+pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState};
+pub use plugin_handlers::{PluginHandlers, PluginState};
+pub use routes::{create_routes, create_routes_with_auth, create_routes_with_memory_state};
+pub use server::{EvifServer, ServerConfig};
+pub use ws_handlers::{WSMessage, WebSocketHandlers, WebSocketState};
 
 use axum::{
     http::StatusCode,
@@ -91,7 +95,9 @@ impl IntoResponse for RestError {
             RestError::Vfs(err) => match err {
                 evif_vfs::VfsError::PathNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
                 evif_vfs::VfsError::FileNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-                evif_vfs::VfsError::DirectoryNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
+                evif_vfs::VfsError::DirectoryNotFound(_) => {
+                    (StatusCode::NOT_FOUND, err.to_string())
+                }
                 evif_vfs::VfsError::FileExists(_) => (StatusCode::CONFLICT, err.to_string()),
                 evif_vfs::VfsError::DirectoryExists(_) => (StatusCode::CONFLICT, err.to_string()),
                 evif_vfs::VfsError::NotADirectory(_) => (StatusCode::BAD_REQUEST, err.to_string()),
@@ -100,20 +106,36 @@ impl IntoResponse for RestError {
                 evif_vfs::VfsError::InvalidPath(_) => (StatusCode::BAD_REQUEST, err.to_string()),
                 evif_vfs::VfsError::PathTooLong => (StatusCode::BAD_REQUEST, err.to_string()),
                 evif_vfs::VfsError::NameTooLong => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::InvalidFileHandle(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+                evif_vfs::VfsError::InvalidFileHandle(_) => {
+                    (StatusCode::BAD_REQUEST, err.to_string())
+                }
                 evif_vfs::VfsError::FileClosed => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::InvalidOperation(_) => (StatusCode::BAD_REQUEST, err.to_string()),
+                evif_vfs::VfsError::InvalidOperation(_) => {
+                    (StatusCode::BAD_REQUEST, err.to_string())
+                }
                 evif_vfs::VfsError::DirectoryNotEmpty(_) => (StatusCode::CONFLICT, err.to_string()),
                 evif_vfs::VfsError::SymbolicLinkLoop(_) => (StatusCode::CONFLICT, err.to_string()),
                 evif_vfs::VfsError::ReadOnlyFileSystem => (StatusCode::FORBIDDEN, err.to_string()),
-                evif_vfs::VfsError::NoSpaceLeft => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-                evif_vfs::VfsError::QuotaExceeded => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-                evif_vfs::VfsError::IoError(_) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+                evif_vfs::VfsError::NoSpaceLeft => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                }
+                evif_vfs::VfsError::QuotaExceeded => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                }
+                evif_vfs::VfsError::IoError(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                }
                 evif_vfs::VfsError::AuthError(_) => (StatusCode::UNAUTHORIZED, err.to_string()),
                 evif_vfs::VfsError::Timeout => (StatusCode::GATEWAY_TIMEOUT, err.to_string()),
-                evif_vfs::VfsError::ConnectionLost => (StatusCode::SERVICE_UNAVAILABLE, err.to_string()),
-                evif_vfs::VfsError::InternalError(_) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-                evif_vfs::VfsError::Unsupported(_) => (StatusCode::NOT_IMPLEMENTED, err.to_string()),
+                evif_vfs::VfsError::ConnectionLost => {
+                    (StatusCode::SERVICE_UNAVAILABLE, err.to_string())
+                }
+                evif_vfs::VfsError::InternalError(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                }
+                evif_vfs::VfsError::Unsupported(_) => {
+                    (StatusCode::NOT_IMPLEMENTED, err.to_string())
+                }
             },
             RestError::Io(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => (StatusCode::NOT_FOUND, err.to_string()),

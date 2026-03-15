@@ -3,15 +3,15 @@
 // Phase 7.2: 支持从配置文件或环境变量 EVIF_CONFIG / EVIF_MOUNTS 读取挂载列表
 // Phase 7.3: 支持动态 .so 插件加载（对标 AGFS PluginFactory）
 
-use crate::{RestResult, RestError, create_routes_with_auth, LoggingMiddleware, RestAuthState};
+use crate::{create_memory_state_from_env, validate_memory_for_production, LoggingMiddleware, RestAuthState, RestError, RestResult};
 use axum::middleware;
+use evif_core::{DynamicPluginLoader, EvifPlugin, RadixMountTable};
+use evif_plugins::{HelloFsPlugin, LocalFsPlugin, MemFsPlugin};
+use std::path::Path;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
-use evif_core::{RadixMountTable, EvifPlugin, DynamicPluginLoader};
-use evif_plugins::{MemFsPlugin, LocalFsPlugin, HelloFsPlugin};
-use std::sync::Arc;
-use std::path::Path;
 
 /// 全局动态插件加载器（单例）
 static DYNAMIC_LOADER: OnceLock<Arc<DynamicPluginLoader>> = OnceLock::new();
@@ -28,7 +28,10 @@ pub struct MountConfigEntry {
 
 /// 从配置创建插件实例（与 handlers::mount 逻辑一致）
 /// 支持动态加载 .so 插件（对标 AGFS PluginFactory）
-fn create_plugin_from_config(plugin: &str, config: Option<&serde_json::Value>) -> Arc<dyn EvifPlugin> {
+fn create_plugin_from_config(
+    plugin: &str,
+    config: Option<&serde_json::Value>,
+) -> Arc<dyn EvifPlugin> {
     let name = plugin.to_lowercase();
     match name.as_str() {
         "mem" | "memfs" => Arc::new(MemFsPlugin::new()),
@@ -43,7 +46,10 @@ fn create_plugin_from_config(plugin: &str, config: Option<&serde_json::Value>) -
         }
         _ => {
             // 尝试从动态库加载
-            info!("Attempting to load plugin '{}' from dynamic library", plugin);
+            info!(
+                "Attempting to load plugin '{}' from dynamic library",
+                plugin
+            );
 
             // 初始化全局动态加载器
             let loader = DYNAMIC_LOADER.get_or_init(|| {
@@ -57,7 +63,10 @@ fn create_plugin_from_config(plugin: &str, config: Option<&serde_json::Value>) -
                     info!("Loaded dynamic plugin: {} v{}", info.name(), info.version());
                     match loader.create_plugin(&name) {
                         Ok(plugin) => {
-                            info!("Successfully created dynamic plugin instance: {}", plugin.name());
+                            info!(
+                                "Successfully created dynamic plugin instance: {}",
+                                plugin.name()
+                            );
                             return plugin;
                         }
                         Err(e) => {
@@ -67,7 +76,10 @@ fn create_plugin_from_config(plugin: &str, config: Option<&serde_json::Value>) -
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to load dynamic plugin '{}': {}, falling back to MemFS", plugin, e);
+                    warn!(
+                        "Failed to load dynamic plugin '{}': {}, falling back to MemFS",
+                        plugin, e
+                    );
                     Arc::new(MemFsPlugin::new())
                 }
             }
@@ -95,7 +107,16 @@ fn load_mount_config() -> Vec<MountConfigEntry> {
     }
 
     // 3. 当前目录下的配置文件（按优先级：evif.json > evif.yaml > evif.yml > evif.toml）
-    for name in ["evif.json", "evif.yaml", "evif.yml", "evif.toml", "./evif.json", "./evif.yaml", "./evif.yml", "./evif.toml"] {
+    for name in [
+        "evif.json",
+        "evif.yaml",
+        "evif.yml",
+        "evif.toml",
+        "./evif.json",
+        "./evif.yaml",
+        "./evif.yml",
+        "./evif.toml",
+    ] {
         if Path::new(name).exists() {
             if let Ok(entries) = load_config_file(name) {
                 info!("Loaded {} mounts from {}", entries.len(), name);
@@ -107,8 +128,16 @@ fn load_mount_config() -> Vec<MountConfigEntry> {
     // 4. 默认挂载（与原先写死行为一致）
     info!("Using default mount config (no EVIF_CONFIG/EVIF_MOUNTS/evif config files)");
     vec![
-        MountConfigEntry { path: "/mem".to_string(), plugin: "mem".to_string(), config: None },
-        MountConfigEntry { path: "/hello".to_string(), plugin: "hello".to_string(), config: None },
+        MountConfigEntry {
+            path: "/mem".to_string(),
+            plugin: "mem".to_string(),
+            config: None,
+        },
+        MountConfigEntry {
+            path: "/hello".to_string(),
+            plugin: "hello".to_string(),
+            config: None,
+        },
         MountConfigEntry {
             path: "/local".to_string(),
             plugin: "local".to_string(),
@@ -119,8 +148,8 @@ fn load_mount_config() -> Vec<MountConfigEntry> {
 
 /// 从文件加载配置（自动检测格式：JSON/YAML/TOML）
 fn load_config_file(path: &str) -> Result<Vec<MountConfigEntry>, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read config file: {}", e))?;
+    let content =
+        std::fs::read_to_string(path).map_err(|e| format!("Failed to read config file: {}", e))?;
 
     parse_mounts_from_string(&content)
 }
@@ -135,7 +164,8 @@ fn parse_mounts_from_string(content: &str) -> Result<Vec<MountConfigEntry>, Stri
     // 尝试 JSON（对象形式：{ mounts: [...] }）
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
         if let Some(arr) = parsed.get("mounts").and_then(|m| m.as_array()) {
-            let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
+            let entries: Result<Vec<MountConfigEntry>, _> = arr
+                .iter()
                 .map(|v| serde_json::from_value(v.clone()))
                 .collect();
             if let Ok(entries) = entries {
@@ -153,7 +183,8 @@ fn parse_mounts_from_string(content: &str) -> Result<Vec<MountConfigEntry>, Stri
     if let Ok(parsed) = serde_yaml::from_str::<serde_yaml::Value>(content) {
         if let Some(arr) = parsed.get("mounts") {
             if let Some(arr) = arr.as_sequence() {
-                let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
+                let entries: Result<Vec<MountConfigEntry>, _> = arr
+                    .iter()
                     .map(|v| serde_yaml::from_value(v.clone()))
                     .collect();
                 if let Ok(entries) = entries {
@@ -172,7 +203,8 @@ fn parse_mounts_from_string(content: &str) -> Result<Vec<MountConfigEntry>, Stri
     if let Ok(parsed) = toml::from_str::<toml::Value>(content) {
         if let Some(arr) = parsed.get("mounts") {
             if let Some(arr) = arr.as_array() {
-                let entries: Result<Vec<MountConfigEntry>, _> = arr.iter()
+                let entries: Result<Vec<MountConfigEntry>, _> = arr
+                    .iter()
                     .map(|v| serde::Deserialize::deserialize(v.clone()))
                     .collect();
                 if let Ok(entries) = entries {
@@ -196,6 +228,9 @@ pub struct ServerConfig {
 
     /// 启用 CORS
     pub enable_cors: bool,
+
+    /// 生产模式：严格检查配置，不允许使用不安全的默认值
+    pub production_mode: bool,
 }
 
 impl Default for ServerConfig {
@@ -204,6 +239,9 @@ impl Default for ServerConfig {
             bind_addr: "0.0.0.0".to_string(),
             port: 8081,
             enable_cors: true,
+            production_mode: std::env::var("EVIF_REST_PRODUCTION_MODE")
+                .map(|v| v.trim().to_ascii_lowercase() == "true" || v == "1")
+                .unwrap_or(false),
         }
     }
 }
@@ -223,19 +261,40 @@ impl EvifServer {
     pub async fn run(self) -> RestResult<()> {
         let mount_table = Arc::new(RadixMountTable::new());
         let mounts = load_mount_config();
+        let memory_config = crate::memory_handlers::MemoryBackendConfig::from_env()
+            .map_err(|e| RestError::Internal(e))?;
+
+        // Validate memory backend for production mode
+        if let Err(e) = validate_memory_for_production(&memory_config) {
+            return Err(RestError::Internal(e));
+        }
+
+        let memory_state = create_memory_state_from_env().map_err(RestError::Internal)?;
 
         info!("Loading plugins ({} mount(s))...", mounts.len());
         for entry in mounts {
             let plugin = create_plugin_from_config(&entry.plugin, entry.config.as_ref());
             let path = entry.path.clone();
-            mount_table.mount(path.clone(), plugin).await
-                .map_err(|e| RestError::Internal(format!("Failed to mount {} at {}: {}", entry.plugin, path, e)))?;
+            mount_table.mount(path.clone(), plugin).await.map_err(|e| {
+                RestError::Internal(format!(
+                    "Failed to mount {} at {}: {}",
+                    entry.plugin, path, e
+                ))
+            })?;
             info!("✓ Mounted {} at {}", entry.plugin, path);
         }
         info!("All plugins loaded successfully");
+        info!(
+            "Configured REST memory backend: {}",
+            memory_state.backend_name()
+        );
 
-        let app = create_routes_with_auth(mount_table, Arc::new(RestAuthState::from_env()))
-            .layer(middleware::from_fn(LoggingMiddleware));
+        let app = crate::routes::create_routes_with_auth_and_memory_state(
+            mount_table,
+            Arc::new(RestAuthState::from_env()),
+            memory_state,
+        )
+        .layer(middleware::from_fn(LoggingMiddleware));
 
         let addr = format!("{}:{}", self.config.bind_addr, self.config.port);
         let listener = TcpListener::bind(&addr).await?;

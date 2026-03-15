@@ -9,24 +9,242 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{
+    env, fs,
+    path::{Path as FsPath, PathBuf},
+    sync::Arc,
+};
 
-use evif_mem::models::{MemoryItem, MemoryType};
-use evif_mem::storage::memory::MemoryStorage;
+use evif_mem::models::{MemoryCategory, MemoryItem, MemoryType};
+use evif_mem::storage::{MemoryStorage, SQLiteStorage};
+
+trait MemoryStore: Send + Sync {
+    fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()>;
+    fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem>;
+    fn get_all_items(&self) -> Vec<MemoryItem>;
+    fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory>;
+    fn get_all_categories(&self) -> Vec<MemoryCategory>;
+    fn get_items_in_category(&self, category_id: &str) -> Vec<MemoryItem>;
+}
+
+impl MemoryStore for MemoryStorage {
+    fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()> {
+        MemoryStorage::put_item(self, item)
+    }
+
+    fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem> {
+        MemoryStorage::get_item(self, id)
+    }
+
+    fn get_all_items(&self) -> Vec<MemoryItem> {
+        MemoryStorage::get_all_items(self)
+    }
+
+    fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory> {
+        MemoryStorage::get_category(self, id)
+    }
+
+    fn get_all_categories(&self) -> Vec<MemoryCategory> {
+        MemoryStorage::get_all_categories(self)
+    }
+
+    fn get_items_in_category(&self, category_id: &str) -> Vec<MemoryItem> {
+        MemoryStorage::get_items_in_category(self, category_id)
+    }
+}
+
+impl MemoryStore for SQLiteStorage {
+    fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()> {
+        SQLiteStorage::put_item(self, item)
+    }
+
+    fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem> {
+        SQLiteStorage::get_item(self, id)
+    }
+
+    fn get_all_items(&self) -> Vec<MemoryItem> {
+        SQLiteStorage::get_all_items(self)
+    }
+
+    fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory> {
+        SQLiteStorage::get_category(self, id)
+    }
+
+    fn get_all_categories(&self) -> Vec<MemoryCategory> {
+        SQLiteStorage::get_all_categories(self)
+    }
+
+    fn get_items_in_category(&self, category_id: &str) -> Vec<MemoryItem> {
+        SQLiteStorage::get_items_in_category(self, category_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemoryBackendKind {
+    InMemory,
+    SQLite,
+}
+
+impl MemoryBackendKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::InMemory => "memory",
+            Self::SQLite => "sqlite",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryBackendConfig {
+    backend: MemoryBackendKind,
+    sqlite_path: Option<PathBuf>,
+}
+
+impl MemoryBackendConfig {
+    pub fn in_memory() -> Self {
+        Self {
+            backend: MemoryBackendKind::InMemory,
+            sqlite_path: None,
+        }
+    }
+
+    pub fn sqlite<P: Into<PathBuf>>(path: P) -> Self {
+        Self {
+            backend: MemoryBackendKind::SQLite,
+            sqlite_path: Some(path.into()),
+        }
+    }
+
+    pub fn backend(&self) -> &MemoryBackendKind {
+        &self.backend
+    }
+
+    pub fn sqlite_path(&self) -> Option<&FsPath> {
+        self.sqlite_path.as_deref()
+    }
+
+    pub fn from_env() -> Result<Self, String> {
+        let backend = env::var("EVIF_REST_MEMORY_BACKEND")
+            .unwrap_or_else(|_| "memory".to_string())
+            .trim()
+            .to_ascii_lowercase();
+
+        match backend.as_str() {
+            "" | "memory" | "in-memory" | "in_memory" => Ok(Self::in_memory()),
+            "sqlite" => {
+                let path = env::var("EVIF_REST_MEMORY_SQLITE_PATH").map_err(|_| {
+                    "EVIF_REST_MEMORY_SQLITE_PATH is required when EVIF_REST_MEMORY_BACKEND=sqlite"
+                        .to_string()
+                })?;
+                let trimmed = path.trim();
+                if trimmed.is_empty() {
+                    return Err(
+                        "EVIF_REST_MEMORY_SQLITE_PATH cannot be empty when SQLite backend is enabled"
+                            .to_string(),
+                    );
+                }
+                Ok(Self::sqlite(trimmed))
+            }
+            other => Err(format!(
+                "Unsupported EVIF_REST_MEMORY_BACKEND '{}'. Expected one of: memory, sqlite",
+                other
+            )),
+        }
+    }
+}
+
+/// Check if production mode is enabled
+pub fn is_production_mode() -> bool {
+    std::env::var("EVIF_REST_PRODUCTION_MODE")
+        .map(|v| v.trim().to_ascii_lowercase() == "true" || v == "1")
+        .unwrap_or(false)
+}
+
+/// Validate memory backend configuration for production mode
+/// In production mode, in-memory backend is not allowed (data would be lost on restart)
+pub fn validate_memory_for_production(config: &MemoryBackendConfig) -> Result<(), String> {
+    if !is_production_mode() {
+        return Ok(());
+    }
+
+    match config.backend() {
+        MemoryBackendKind::InMemory => Err(
+            "EVIF_REST_PRODUCTION_MODE requires persistent memory backend. \
+             Set EVIF_REST_MEMORY_BACKEND=sqlite and EVIF_REST_MEMORY_SQLITE_PATH=/path/to/db".to_string()
+        ),
+        MemoryBackendKind::SQLite => {
+            // SQLite for is acceptable production
+            Ok(())
+        }
+    }
+}
+
+impl Default for MemoryBackendConfig {
+    fn default() -> Self {
+        Self::in_memory()
+    }
+}
+
+fn ensure_sqlite_parent(path: &FsPath) -> Result<(), String> {
+    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "Failed to create SQLite parent directory '{}': {}",
+                parent.display(),
+                err
+            )
+        })?;
+    }
+
+    Ok(())
+}
 
 /// Memory state shared across handlers
 #[derive(Clone)]
 pub struct MemoryState {
     /// Storage for memory items
-    pub storage: Arc<MemoryStorage>,
+    storage: Arc<dyn MemoryStore>,
+    backend: MemoryBackendKind,
 }
 
 impl MemoryState {
     /// Create new memory state with storage
     pub fn new() -> Self {
+        Self::in_memory()
+    }
+
+    pub fn in_memory() -> Self {
         Self {
             storage: Arc::new(MemoryStorage::new()),
+            backend: MemoryBackendKind::InMemory,
         }
+    }
+
+    pub fn from_config(config: &MemoryBackendConfig) -> Result<Self, String> {
+        match config.backend() {
+            MemoryBackendKind::InMemory => Ok(Self::in_memory()),
+            MemoryBackendKind::SQLite => {
+                let path = config.sqlite_path().ok_or_else(|| {
+                    "SQLite backend requires a configured database path".to_string()
+                })?;
+                ensure_sqlite_parent(path)?;
+                let storage = SQLiteStorage::new(path).map_err(|err| {
+                    format!(
+                        "Failed to initialize SQLite memory backend at '{}': {}",
+                        path.display(),
+                        err
+                    )
+                })?;
+                Ok(Self {
+                    storage: Arc::new(storage),
+                    backend: MemoryBackendKind::SQLite,
+                })
+            }
+        }
+    }
+
+    pub fn backend_name(&self) -> &'static str {
+        self.backend.as_str()
     }
 }
 
@@ -39,6 +257,17 @@ impl Default for MemoryState {
 /// Initialize memory state
 pub fn create_memory_state() -> MemoryState {
     MemoryState::new()
+}
+
+/// Initialize memory state from explicit backend config
+pub fn create_memory_state_from_config(config: &MemoryBackendConfig) -> Result<MemoryState, String> {
+    MemoryState::from_config(config)
+}
+
+/// Initialize memory state from environment variables
+pub fn create_memory_state_from_env() -> Result<MemoryState, String> {
+    let config = MemoryBackendConfig::from_env()?;
+    create_memory_state_from_config(&config)
 }
 
 /// Initialize memory pipelines (to be called on startup with proper dependencies)
@@ -835,5 +1064,91 @@ mod tests {
         let json = serde_json::to_string(&path).unwrap();
         assert!(json.contains("Before"));
         assert!(json.contains("Causes"));
+    }
+
+    #[test]
+    fn test_is_production_mode_default() {
+        // Clear the env var if set
+        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
+        assert!(!is_production_mode());
+    }
+
+    #[test]
+    fn test_is_production_mode_true_variants() {
+        // Test "true"
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "true");
+        assert!(is_production_mode());
+
+        // Test "1"
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "1");
+        assert!(is_production_mode());
+
+        // Test "TRUE" (uppercase)
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "TRUE");
+        assert!(is_production_mode());
+
+        // Clean up
+        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
+    }
+
+    #[test]
+    fn test_is_production_mode_false_variants() {
+        // Test "false"
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "false");
+        assert!(!is_production_mode());
+
+        // Test "0"
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "0");
+        assert!(!is_production_mode());
+
+        // Test empty
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "");
+        assert!(!is_production_mode());
+
+        // Clean up
+        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
+    }
+
+    #[test]
+    fn test_validate_memory_for_production_in_memory_fails() {
+        // Set production mode
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "true");
+
+        let config = MemoryBackendConfig::in_memory();
+        let result = validate_memory_for_production(&config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("persistent memory backend"));
+
+        // Clean up
+        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
+    }
+
+    #[test]
+    fn test_validate_memory_for_production_sqlite_passes() {
+        // Set production mode
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "true");
+
+        // Use temp path for SQLite (it won't actually create the file in validation)
+        std::env::set_var("EVIF_REST_MEMORY_SQLITE_PATH", "/tmp/test-evif-memory.db");
+        std::env::set_var("EVIF_REST_MEMORY_BACKEND", "sqlite");
+
+        let config = MemoryBackendConfig::from_env().unwrap();
+        let result = validate_memory_for_production(&config);
+        assert!(result.is_ok());
+
+        // Clean up
+        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
+        std::env::remove_var("EVIF_REST_MEMORY_SQLITE_PATH");
+        std::env::remove_var("EVIF_REST_MEMORY_BACKEND");
+    }
+
+    #[test]
+    fn test_validate_memory_for_production_non_production_allows_memory() {
+        // Make sure production mode is NOT set
+        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
+
+        let config = MemoryBackendConfig::in_memory();
+        let result = validate_memory_for_production(&config);
+        assert!(result.is_ok());
     }
 }
