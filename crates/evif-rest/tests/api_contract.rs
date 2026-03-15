@@ -270,12 +270,57 @@ async fn test_api_v1_health_returns_status_version_uptime() {
                 assert!(json.get("status").is_some(), "response must have 'status': {:?}", json);
                 assert_eq!(json["status"], "healthy");
                 assert!(json.get("version").is_some(), "response must have 'version': {:?}", json);
+                assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
                 assert!(json.get("uptime").is_some(), "response must have 'uptime' (seconds): {:?}", json);
                 return;
             }
         }
     }
     panic!("GET /api/v1/health did not succeed in time");
+}
+
+#[tokio::test]
+async fn test_root_health_matches_canonical_version_and_reports_timestamp() {
+    let mount_table = Arc::new(RadixMountTable::new());
+    let app = create_routes(mount_table);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app.into_make_service())
+            .await
+            .expect("serve");
+    });
+
+    let base = format!("http://127.0.0.1:{}", port);
+    let client = reqwest::Client::new();
+
+    for _ in 0..50 {
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+
+        let root_url = format!("{}/health", base);
+        let api_url = format!("{}/api/v1/health", base);
+
+        if let (Ok(root_res), Ok(api_res)) = (
+            client.get(&root_url).send().await,
+            client.get(&api_url).send().await,
+        ) {
+            if root_res.status().is_success() && api_res.status().is_success() {
+                let root_json: serde_json::Value = root_res.json().await.unwrap();
+                let api_json: serde_json::Value = api_res.json().await.unwrap();
+
+                assert_eq!(root_json["status"], "healthy");
+                assert_eq!(api_json["status"], "healthy");
+                assert_eq!(root_json["version"], env!("CARGO_PKG_VERSION"));
+                assert_eq!(root_json["version"], api_json["version"]);
+                assert!(root_json.get("uptime").is_some(), "root health must include uptime: {:?}", root_json);
+                assert!(root_json.get("timestamp").is_some(), "root health must include timestamp: {:?}", root_json);
+                return;
+            }
+        }
+    }
+
+    panic!("GET /health and /api/v1/health did not succeed in time");
 }
 
 // ---------- Phase 12.3: 关键路径集成测试（mount → list → create → write → read → unmount）----------

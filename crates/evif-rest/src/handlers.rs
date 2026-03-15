@@ -61,27 +61,38 @@ pub struct ErrorResponse {
     pub message: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct HealthResponse {
+    pub status: &'static str,
+    pub version: &'static str,
+    pub uptime: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
 /// EVIF 处理器
 pub struct EvifHandlers;
 
 impl EvifHandlers {
-    /// 健康检查（根路径 /health，无状态）
-    pub async fn health() -> Json<serde_json::Value> {
-        Json(serde_json::json!({
-            "status": "healthy",
-            "version": "1.0.0",
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        }))
+    fn health_response(uptime_secs: u64, include_timestamp: bool) -> HealthResponse {
+        HealthResponse {
+            status: "healthy",
+            version: env!("CARGO_PKG_VERSION"),
+            uptime: uptime_secs,
+            timestamp: include_timestamp.then(|| Utc::now().to_rfc3339()),
+        }
+    }
+
+    /// 健康检查（根路径 /health）
+    pub async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
+        let uptime_secs = state.start_time.elapsed().as_secs();
+        Json(Self::health_response(uptime_secs, true))
     }
 
     /// GET /api/v1/health：与 evif-client/CLI 契约一致，返回 status、version、uptime（秒）
-    pub async fn health_v1(State(state): State<AppState>) -> Json<serde_json::Value> {
+    pub async fn health_v1(State(state): State<AppState>) -> Json<HealthResponse> {
         let uptime_secs = state.start_time.elapsed().as_secs();
-        Json(serde_json::json!({
-            "status": "healthy",
-            "version": env!("CARGO_PKG_VERSION"),
-            "uptime": uptime_secs
-        }))
+        Json(Self::health_response(uptime_secs, false))
     }
 
     /// 获取节点
