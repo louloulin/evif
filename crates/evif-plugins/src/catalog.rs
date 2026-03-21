@@ -1,0 +1,201 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginSupportTier {
+    Core,
+    Experimental,
+}
+
+impl PluginSupportTier {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Core => "core",
+            Self::Experimental => "experimental",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PluginCatalogEntry {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub description: &'static str,
+    pub plugin_type: &'static str,
+    pub support_tier: PluginSupportTier,
+    pub aliases: &'static [&'static str],
+    pub is_mountable: bool,
+}
+
+const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 10] = [
+    PluginCatalogEntry {
+        id: "memfs",
+        display_name: "MemFS",
+        description: "High-speed in-memory filesystem for temporary data",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Core,
+        aliases: &["mem", "memoryfs"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "localfs",
+        display_name: "LocalFS",
+        description: "Mount a host directory into the EVIF namespace",
+        plugin_type: "local",
+        support_tier: PluginSupportTier::Core,
+        aliases: &["local"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "hellofs",
+        display_name: "HelloFS",
+        description: "Minimal demo filesystem for smoke testing and onboarding",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Core,
+        aliases: &["hello"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "kvfs",
+        display_name: "KVFS",
+        description: "Key-value storage exposed through file and directory semantics",
+        plugin_type: "database",
+        support_tier: PluginSupportTier::Core,
+        aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "queuefs",
+        display_name: "QueueFS",
+        description: "FIFO queue interface for task and message workflows",
+        plugin_type: "database",
+        support_tier: PluginSupportTier::Core,
+        aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "sqlfs2",
+        display_name: "SQLFS2",
+        description: "SQLite-backed file interface for structured data access",
+        plugin_type: "database",
+        support_tier: PluginSupportTier::Core,
+        aliases: &["sqlfs"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "streamfs",
+        display_name: "StreamFS",
+        description: "Streaming read and append workflows for event-style data",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Core,
+        aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "heartbeatfs",
+        display_name: "HeartbeatFS",
+        description: "Liveness and lease heartbeat filesystem primitives",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Core,
+        aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "proxyfs",
+        display_name: "ProxyFS",
+        description: "Proxy file operations to another EVIF-compatible endpoint",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Core,
+        aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "serverinfofs",
+        display_name: "ServerInfoFS",
+        description: "Expose server health, version, and runtime metadata as files",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Core,
+        aliases: &[],
+        is_mountable: true,
+    },
+];
+
+const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 5] = [
+    PluginCatalogEntry {
+        id: "devfs",
+        display_name: "DevFS",
+        description: "Device and pseudo-file examples for experimentation",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "httpfs",
+        display_name: "HTTPFS",
+        description: "HTTP-backed filesystem adapter for remote content access",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "handlefs",
+        display_name: "HandleFS",
+        description: "Handle-oriented filesystem wrapper that needs a backing plugin",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &[],
+        is_mountable: false,
+    },
+    PluginCatalogEntry {
+        id: "tieredfs",
+        display_name: "TieredFS",
+        description: "Multi-tier storage orchestration that needs explicit backend wiring",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &[],
+        is_mountable: false,
+    },
+    PluginCatalogEntry {
+        id: "encryptedfs",
+        display_name: "EncryptedFS",
+        description: "Encryption wrapper plugin that must be composed with another mount",
+        plugin_type: "other",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &[],
+        is_mountable: false,
+    },
+];
+
+pub fn normalize_plugin_id(name: &str) -> String {
+    match name.to_ascii_lowercase().as_str() {
+        "mem" | "memoryfs" => "memfs".to_string(),
+        "hello" => "hellofs".to_string(),
+        "local" => "localfs".to_string(),
+        "sqlfs" => "sqlfs2".to_string(),
+        other => other.to_string(),
+    }
+}
+
+pub fn core_supported_plugins() -> Vec<PluginCatalogEntry> {
+    CORE_PLUGIN_CATALOG.to_vec()
+}
+
+pub fn experimental_plugins() -> Vec<PluginCatalogEntry> {
+    EXPERIMENTAL_PLUGIN_CATALOG.to_vec()
+}
+
+pub fn plugin_catalog() -> Vec<PluginCatalogEntry> {
+    let mut plugins = core_supported_plugins();
+    plugins.extend(experimental_plugins());
+    plugins
+}
+
+pub fn find_plugin_catalog_entry(name: &str) -> Option<PluginCatalogEntry> {
+    let normalized = normalize_plugin_id(name);
+    plugin_catalog().into_iter().find(|entry| {
+        entry.id == normalized
+            || entry
+                .aliases
+                .iter()
+                .any(|alias| normalize_plugin_id(alias) == normalized)
+    })
+}

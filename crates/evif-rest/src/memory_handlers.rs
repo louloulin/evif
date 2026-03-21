@@ -600,9 +600,9 @@ impl MemoryHandlers {
     }
 }
 
-/// Graph query request
+/// Memory query request
 #[derive(Debug, Deserialize)]
-pub struct GraphQueryRequest {
+pub struct MemoryQueryRequest {
     /// Query type: causal_chain, timeline, temporal_bfs, temporal_path
     #[serde(rename = "query_type")]
     pub query_type: String,
@@ -628,27 +628,27 @@ fn default_max_depth() -> usize {
     5
 }
 
-fn graph_timestamp(item: &MemoryItem) -> DateTime<Utc> {
+fn memory_query_timestamp(item: &MemoryItem) -> DateTime<Utc> {
     item.happened_at.unwrap_or(item.created_at)
 }
 
-fn graph_node_type(item: &MemoryItem) -> &'static str {
+fn memory_query_node_type(item: &MemoryItem) -> &'static str {
     match item.memory_type {
         MemoryType::Event => "event",
         _ => "memory",
     }
 }
 
-fn to_graph_node(item: &MemoryItem) -> GraphNodeInfo {
-    GraphNodeInfo {
+fn to_memory_query_node(item: &MemoryItem) -> MemoryQueryNodeInfo {
+    MemoryQueryNodeInfo {
         id: item.id.clone(),
-        node_type: graph_node_type(item).to_string(),
+        node_type: memory_query_node_type(item).to_string(),
         label: item.summary.clone(),
-        timestamp: Some(graph_timestamp(item).to_rfc3339()),
+        timestamp: Some(memory_query_timestamp(item).to_rfc3339()),
     }
 }
 
-fn parse_graph_time(
+fn parse_memory_query_time(
     field_name: &str,
     value: Option<&str>,
 ) -> Result<Option<DateTime<Utc>>, MemoryError> {
@@ -666,12 +666,12 @@ fn parse_graph_time(
         .transpose()
 }
 
-fn filtered_graph_memories(
+fn filtered_memory_query_memories(
     state: &MemoryState,
-    req: &GraphQueryRequest,
+    req: &MemoryQueryRequest,
 ) -> Result<Vec<MemoryItem>, MemoryError> {
-    let start_time = parse_graph_time("start_time", req.start_time.as_deref())?;
-    let end_time = parse_graph_time("end_time", req.end_time.as_deref())?;
+    let start_time = parse_memory_query_time("start_time", req.start_time.as_deref())?;
+    let end_time = parse_memory_query_time("end_time", req.end_time.as_deref())?;
     if let (Some(start), Some(end)) = (start_time, end_time) {
         if start > end {
             return Err(MemoryError::BadRequest(
@@ -688,7 +688,7 @@ fn filtered_graph_memories(
         .get_all_items()
         .into_iter()
         .filter(|item| {
-            let timestamp = graph_timestamp(item);
+            let timestamp = memory_query_timestamp(item);
             let category_matches = category_filter
                 .map(|category| item.category_id.as_deref() == Some(category))
                 .unwrap_or(true);
@@ -704,32 +704,32 @@ fn filtered_graph_memories(
         .collect();
 
     items.sort_by(|left, right| {
-        graph_timestamp(left)
-            .cmp(&graph_timestamp(right))
+        memory_query_timestamp(left)
+            .cmp(&memory_query_timestamp(right))
             .then_with(|| left.id.cmp(&right.id))
     });
 
     Ok(items)
 }
 
-fn find_graph_node_index(items: &[MemoryItem], node_id: &str) -> Result<usize, MemoryError> {
+fn find_memory_query_node_index(items: &[MemoryItem], node_id: &str) -> Result<usize, MemoryError> {
     items
         .iter()
         .position(|item| item.id == node_id)
-        .ok_or_else(|| MemoryError::NotFound(format!("Graph node '{}' not found", node_id)))
+        .ok_or_else(|| MemoryError::NotFound(format!("Memory node '{}' not found", node_id)))
 }
 
-/// Graph query response
+/// Memory query response
 #[derive(Debug, Serialize)]
-pub struct GraphQueryResponse {
+pub struct MemoryQueryResponse {
     /// Query type that was executed
     pub query_type: String,
     /// Result nodes (for causal_chain, temporal_bfs)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub nodes: Option<Vec<GraphNodeInfo>>,
+    pub nodes: Option<Vec<MemoryQueryNodeInfo>>,
     /// Result paths (for temporal_path)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub paths: Option<Vec<GraphPathInfo>>,
+    pub paths: Option<Vec<MemoryQueryPathInfo>>,
     /// Timeline events (for timeline queries)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeline: Option<Vec<TimelineEventInfo>>,
@@ -737,9 +737,9 @@ pub struct GraphQueryResponse {
     pub total: usize,
 }
 
-/// Graph node info for response
+/// Memory query node info for response
 #[derive(Debug, Serialize)]
-pub struct GraphNodeInfo {
+pub struct MemoryQueryNodeInfo {
     pub id: String,
     #[serde(rename = "type")]
     pub node_type: String,
@@ -748,9 +748,9 @@ pub struct GraphNodeInfo {
     pub timestamp: Option<String>,
 }
 
-/// Graph path info for response
+/// Memory query path info for response
 #[derive(Debug, Serialize)]
-pub struct GraphPathInfo {
+pub struct MemoryQueryPathInfo {
     pub nodes: Vec<String>,
     pub edges: Vec<String>,
     pub narrative: String,
@@ -765,28 +765,28 @@ pub struct TimelineEventInfo {
 }
 
 impl MemoryHandlers {
-    /// Query graph (POST /api/v1/graph/query)
+    /// Query memories (POST /api/v1/memories/query)
     ///
-    /// Projects a temporal graph from stored memories for timeline and traversal queries.
-    pub async fn query_graph(
+    /// Projects timeline and relationship views from stored memories.
+    pub async fn query_memories(
         State(state): State<MemoryState>,
-        Json(req): Json<GraphQueryRequest>,
-    ) -> Result<Json<GraphQueryResponse>, MemoryError> {
+        Json(req): Json<MemoryQueryRequest>,
+    ) -> Result<Json<MemoryQueryResponse>, MemoryError> {
         match req.query_type.as_str() {
             "causal_chain" => {
                 let start_node = req.start_node.as_deref().ok_or_else(|| {
                     MemoryError::BadRequest("start_node required for causal_chain query".to_string())
                 })?;
-                let items = filtered_graph_memories(&state, &req)?;
-                let start_index = find_graph_node_index(&items, start_node)?;
+                let items = filtered_memory_query_memories(&state, &req)?;
+                let start_index = find_memory_query_node_index(&items, start_node)?;
                 let chain_start = start_index.saturating_sub(req.max_depth);
                 let nodes = items[chain_start..=start_index]
                     .iter()
-                    .map(to_graph_node)
+                    .map(to_memory_query_node)
                     .collect::<Vec<_>>();
                 let total = nodes.len();
 
-                Ok(Json(GraphQueryResponse {
+                Ok(Json(MemoryQueryResponse {
                     query_type: req.query_type,
                     nodes: Some(nodes),
                     paths: None,
@@ -796,26 +796,26 @@ impl MemoryHandlers {
             }
 
             "timeline" => {
-                let mut items = filtered_graph_memories(&state, &req)?;
+                let mut items = filtered_memory_query_memories(&state, &req)?;
 
                 if let Some(start_node) = req.start_node.as_deref() {
-                    let start_index = find_graph_node_index(&items, start_node)?;
+                    let start_index = find_memory_query_node_index(&items, start_node)?;
                     let end_index = std::cmp::min(items.len(), start_index + req.max_depth + 1);
                     items = items[start_index..end_index].to_vec();
                 }
 
-                let nodes = items.iter().map(to_graph_node).collect::<Vec<_>>();
+                let nodes = items.iter().map(to_memory_query_node).collect::<Vec<_>>();
                 let timeline = items
                     .iter()
                     .map(|item| TimelineEventInfo {
                         node_id: item.id.clone(),
-                        timestamp: graph_timestamp(item).to_rfc3339(),
+                        timestamp: memory_query_timestamp(item).to_rfc3339(),
                         event_type: item.memory_type.as_str().to_string(),
                     })
                     .collect::<Vec<_>>();
                 let total = timeline.len();
 
-                Ok(Json(GraphQueryResponse {
+                Ok(Json(MemoryQueryResponse {
                     query_type: req.query_type,
                     nodes: Some(nodes),
                     paths: None,
@@ -828,16 +828,16 @@ impl MemoryHandlers {
                 let start_node = req.start_node.as_deref().ok_or_else(|| {
                     MemoryError::BadRequest("start_node required for temporal_bfs query".to_string())
                 })?;
-                let items = filtered_graph_memories(&state, &req)?;
-                let start_index = find_graph_node_index(&items, start_node)?;
+                let items = filtered_memory_query_memories(&state, &req)?;
+                let start_index = find_memory_query_node_index(&items, start_node)?;
                 let end_index = std::cmp::min(items.len(), start_index + req.max_depth + 1);
                 let nodes = items[start_index..end_index]
                     .iter()
-                    .map(to_graph_node)
+                    .map(to_memory_query_node)
                     .collect::<Vec<_>>();
                 let total = nodes.len();
 
-                Ok(Json(GraphQueryResponse {
+                Ok(Json(MemoryQueryResponse {
                     query_type: req.query_type,
                     nodes: Some(nodes),
                     paths: None,
@@ -853,9 +853,9 @@ impl MemoryHandlers {
                 let end_node = req.end_node.as_deref().ok_or_else(|| {
                     MemoryError::BadRequest("end_node required for temporal_path query".to_string())
                 })?;
-                let items = filtered_graph_memories(&state, &req)?;
-                let start_index = find_graph_node_index(&items, start_node)?;
-                let end_index = find_graph_node_index(&items, end_node)?;
+                let items = filtered_memory_query_memories(&state, &req)?;
+                let start_index = find_memory_query_node_index(&items, start_node)?;
+                let end_index = find_memory_query_node_index(&items, end_node)?;
 
                 let (nodes, edge_name, narrative) = if start_index <= end_index {
                     (
@@ -884,13 +884,13 @@ impl MemoryHandlers {
                     )
                 };
                 let edges = vec![edge_name.to_string(); nodes.len().saturating_sub(1)];
-                let paths = vec![GraphPathInfo {
+                let paths = vec![MemoryQueryPathInfo {
                     nodes,
                     edges,
                     narrative,
                 }];
 
-                Ok(Json(GraphQueryResponse {
+                Ok(Json(MemoryQueryResponse {
                     query_type: req.query_type,
                     nodes: None,
                     paths: Some(paths),
@@ -978,41 +978,41 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_query_request_deserialization() {
+    fn test_memory_query_request_deserialization() {
         let json = r#"{
             "query_type": "causal_chain",
             "start_node": "node-123",
             "max_depth": 10
         }"#;
 
-        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        let req: MemoryQueryRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.query_type, "causal_chain");
         assert_eq!(req.start_node, Some("node-123".to_string()));
         assert_eq!(req.max_depth, 10);
     }
 
     #[test]
-    fn test_graph_query_request_accepts_legacy_node_id_alias() {
+    fn test_memory_query_request_accepts_legacy_node_id_alias() {
         let json = r#"{
             "query_type": "temporal_bfs",
             "node_id": "node-legacy"
         }"#;
 
-        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        let req: MemoryQueryRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.query_type, "temporal_bfs");
         assert_eq!(req.start_node, Some("node-legacy".to_string()));
         assert_eq!(req.max_depth, 5);
     }
 
     #[test]
-    fn test_graph_query_request_temporal_path() {
+    fn test_memory_query_request_temporal_path() {
         let json = r#"{
             "query_type": "temporal_path",
             "start_node": "node-a",
             "end_node": "node-b"
         }"#;
 
-        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        let req: MemoryQueryRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.query_type, "temporal_path");
         assert_eq!(req.start_node, Some("node-a".to_string()));
         assert_eq!(req.end_node, Some("node-b".to_string()));
@@ -1020,24 +1020,24 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_query_request_timeline() {
+    fn test_memory_query_request_timeline() {
         let json = r#"{
             "query_type": "timeline",
             "event_type": "learning",
             "category": "programming"
         }"#;
 
-        let req: GraphQueryRequest = serde_json::from_str(json).unwrap();
+        let req: MemoryQueryRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.query_type, "timeline");
         assert_eq!(req.event_type, Some("learning".to_string()));
         assert_eq!(req.category, Some("programming".to_string()));
     }
 
     #[test]
-    fn test_graph_query_response_serialization() {
-        let response = GraphQueryResponse {
+    fn test_memory_query_response_serialization() {
+        let response = MemoryQueryResponse {
             query_type: "causal_chain".to_string(),
-            nodes: Some(vec![GraphNodeInfo {
+            nodes: Some(vec![MemoryQueryNodeInfo {
                 id: "node-1".to_string(),
                 node_type: "memory".to_string(),
                 label: "Start".to_string(),
@@ -1054,8 +1054,8 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_path_info() {
-        let path = GraphPathInfo {
+    fn test_memory_query_path_info() {
+        let path = MemoryQueryPathInfo {
             nodes: vec!["a".to_string(), "b".to_string(), "c".to_string()],
             edges: vec!["Before".to_string(), "Causes".to_string()],
             narrative: "A before B causes C".to_string(),

@@ -1,6 +1,6 @@
 # EVIF 2.2 - Web UI
 
-Web-based user interface for EVIF (Extensible Virtual Interface Framework) 2.2, providing a VS Code-like experience for graph file system management.
+Web-based user interface for EVIF (Extensible Virtual Interface Framework) 2.2, providing a VS Code-like experience for plugin file system management.
 
 ## Features
 

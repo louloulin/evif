@@ -9,9 +9,10 @@ from evif_mem.models import (
     Memory,
     Category,
     MemorySearchResult,
-    GraphResult,
-    GraphNode,
-    GraphEdge,
+    MemoryQueryResult,
+    MemoryQueryNode,
+    MemoryQueryPath,
+    TimelineEvent,
 )
 
 
@@ -191,38 +192,36 @@ class TestEvifMemoryClient:
         assert categories[0].name == "Test Category"
 
     @pytest.mark.asyncio
-    async def test_query_graph(self, client, mock_response):
-        """Test querying the knowledge graph."""
+    async def test_query_memories(self, client, mock_response):
+        """Test querying memory timeline/relationships."""
         mock_response.json.return_value = {
-            "data": {
-                "nodes": [
-                    {
-                        "id": "node-1",
-                        "node_type": "memory",
-                        "label": "Test Node",
-                        "metadata": {},
-                    }
-                ],
-                "edges": [
-                    {
-                        "id": "edge-1",
-                        "source": "node-1",
-                        "target": "node-2",
-                        "edge_type": "references",
-                        "metadata": {},
-                    }
-                ],
-                "metadata": {},
-            }
+            "query_type": "timeline",
+            "nodes": [
+                {
+                    "id": "node-1",
+                    "node_type": "memory",
+                    "label": "Test Node",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                }
+            ],
+            "timeline": [
+                {
+                    "node_id": "node-1",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "event_type": "knowledge",
+                }
+            ],
+            "paths": [],
+            "total": 1,
         }
         client._client.request = AsyncMock(return_value=mock_response)
 
-        result = await client.query_graph("test query", query_type="causal_chain")
+        result = await client.query_memories(query_type="timeline")
 
         assert len(result.nodes) == 1
         assert result.nodes[0].id == "node-1"
-        assert len(result.edges) == 1
-        assert result.edges[0].edge_type == "references"
+        assert len(result.timeline) == 1
+        assert result.timeline[0].event_type == "knowledge"
 
     @pytest.mark.asyncio
     async def test_context_manager(self, config):

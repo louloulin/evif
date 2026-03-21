@@ -22,7 +22,7 @@ pub use batch_handlers::{
 pub use compat_fs::CompatFsHandlers;
 pub use fs_handlers::{FsHandlers, FsState};
 pub use handle_handlers::{HandleHandlers, HandleState};
-pub use handlers::{AppState, EvifHandlers, NodeResponse, QueryResponse, StatsResponse};
+pub use handlers::{AppState, EvifHandlers};
 pub use memory_handlers::{
     create_memory_state, create_memory_state_from_config, create_memory_state_from_env,
     init_memory_pipelines, is_production_mode, validate_memory_for_production, MemoryBackendConfig,
@@ -47,9 +47,6 @@ use serde_json::json;
 pub enum RestError {
     #[error("HTTP error: {0}")]
     Http(#[from] axum::http::Error),
-
-    #[error("VFS error: {0}")]
-    Vfs(#[from] evif_vfs::VfsError),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -92,51 +89,6 @@ impl IntoResponse for RestError {
         let (status, message) = match self {
             RestError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             RestError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            RestError::Vfs(err) => match err {
-                evif_vfs::VfsError::PathNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-                evif_vfs::VfsError::FileNotFound(_) => (StatusCode::NOT_FOUND, err.to_string()),
-                evif_vfs::VfsError::DirectoryNotFound(_) => {
-                    (StatusCode::NOT_FOUND, err.to_string())
-                }
-                evif_vfs::VfsError::FileExists(_) => (StatusCode::CONFLICT, err.to_string()),
-                evif_vfs::VfsError::DirectoryExists(_) => (StatusCode::CONFLICT, err.to_string()),
-                evif_vfs::VfsError::NotADirectory(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::NotAFile(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::PermissionDenied(_) => (StatusCode::FORBIDDEN, err.to_string()),
-                evif_vfs::VfsError::InvalidPath(_) => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::PathTooLong => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::NameTooLong => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::InvalidFileHandle(_) => {
-                    (StatusCode::BAD_REQUEST, err.to_string())
-                }
-                evif_vfs::VfsError::FileClosed => (StatusCode::BAD_REQUEST, err.to_string()),
-                evif_vfs::VfsError::InvalidOperation(_) => {
-                    (StatusCode::BAD_REQUEST, err.to_string())
-                }
-                evif_vfs::VfsError::DirectoryNotEmpty(_) => (StatusCode::CONFLICT, err.to_string()),
-                evif_vfs::VfsError::SymbolicLinkLoop(_) => (StatusCode::CONFLICT, err.to_string()),
-                evif_vfs::VfsError::ReadOnlyFileSystem => (StatusCode::FORBIDDEN, err.to_string()),
-                evif_vfs::VfsError::NoSpaceLeft => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-                }
-                evif_vfs::VfsError::QuotaExceeded => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-                }
-                evif_vfs::VfsError::IoError(_) => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-                }
-                evif_vfs::VfsError::AuthError(_) => (StatusCode::UNAUTHORIZED, err.to_string()),
-                evif_vfs::VfsError::Timeout => (StatusCode::GATEWAY_TIMEOUT, err.to_string()),
-                evif_vfs::VfsError::ConnectionLost => {
-                    (StatusCode::SERVICE_UNAVAILABLE, err.to_string())
-                }
-                evif_vfs::VfsError::InternalError(_) => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-                }
-                evif_vfs::VfsError::Unsupported(_) => {
-                    (StatusCode::NOT_IMPLEMENTED, err.to_string())
-                }
-            },
             RestError::Io(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => (StatusCode::NOT_FOUND, err.to_string()),
                 std::io::ErrorKind::PermissionDenied => (StatusCode::FORBIDDEN, err.to_string()),

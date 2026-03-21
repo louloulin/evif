@@ -30,8 +30,8 @@ class Modality(str, Enum):
     AUDIO = "audio"
 
 
-class GraphQueryType(str, Enum):
-    """Types of graph queries."""
+class MemoryQueryType(str, Enum):
+    """Types of memory timeline/relationship queries."""
 
     CAUSAL_CHAIN = "causal_chain"
     TIMELINE = "timeline"
@@ -89,38 +89,56 @@ class Category(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
 
-class GraphQuery(BaseModel):
-    """Graph query model."""
+class MemoryQuery(BaseModel):
+    """Memory query model."""
 
-    query: str = Field(..., description="Query string")
-    query_type: GraphQueryType = Field(..., description="Type of graph query")
-    node_id: Optional[str] = Field(default=None, description="Starting node ID")
+    query_type: MemoryQueryType = Field(..., description="Type of memory query")
+    start_node: Optional[str] = Field(default=None, description="Starting memory ID")
+    end_node: Optional[str] = Field(default=None, description="Ending memory ID")
     max_depth: Optional[int] = Field(default=3, description="Maximum traversal depth")
-    limit: Optional[int] = Field(default=10, description="Maximum results")
+    event_type: Optional[str] = Field(default=None, description="Event type filter")
+    category: Optional[str] = Field(default=None, description="Category filter")
+    start_time: Optional[str] = Field(default=None, description="RFC3339 start time")
+    end_time: Optional[str] = Field(default=None, description="RFC3339 end time")
 
 
-class GraphNode(BaseModel):
-    """Graph node model."""
+class MemoryQueryNode(BaseModel):
+    """Memory query node model."""
 
     id: str = Field(..., description="Node ID")
     node_type: str = Field(..., description="Node type")
     label: str = Field(..., description="Node label")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Node metadata")
+    timestamp: Optional[str] = Field(default=None, description="Node timestamp")
 
 
-class GraphEdge(BaseModel):
-    """Graph edge model."""
+class TimelineEvent(BaseModel):
+    """Timeline event model."""
 
-    id: str = Field(..., description="Edge ID")
-    source: str = Field(..., description="Source node ID")
-    target: str = Field(..., description="Target node ID")
-    edge_type: str = Field(..., description="Edge type")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Edge metadata")
+    node_id: str = Field(..., description="Memory ID")
+    timestamp: str = Field(..., description="Event timestamp")
+    event_type: str = Field(..., description="Event type")
 
 
-class GraphResult(BaseModel):
-    """Graph query result."""
+class MemoryQueryPath(BaseModel):
+    """Memory query path model."""
 
-    nodes: List[GraphNode] = Field(default_factory=list, description="Result nodes")
-    edges: List[GraphEdge] = Field(default_factory=list, description="Result edges")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Query metadata")
+    nodes: List[str] = Field(default_factory=list, description="Path nodes")
+    edges: List[str] = Field(default_factory=list, description="Path edge labels")
+    narrative: str = Field(default="", description="Path narrative")
+
+
+class MemoryQueryResult(BaseModel):
+    """Memory query result."""
+
+    query_type: str = Field(..., description="Executed query type")
+    nodes: List[MemoryQueryNode] = Field(default_factory=list, description="Result nodes")
+    timeline: List[TimelineEvent] = Field(default_factory=list, description="Timeline events")
+    paths: List[MemoryQueryPath] = Field(default_factory=list, description="Result paths")
+    total: int = Field(default=0, description="Total result count")
+
+
+# Backward-compatible aliases. Prefer the MemoryQuery* names going forward.
+GraphQueryType = MemoryQueryType
+GraphQuery = MemoryQuery
+GraphNode = MemoryQueryNode
+GraphResult = MemoryQueryResult

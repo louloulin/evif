@@ -34,11 +34,7 @@ impl EvifCommand {
     pub fn new(server: String, verbose: bool) -> Self {
         let base_url = normalize_base_url(&server);
         let config = evif_client::ClientConfig {
-            server_addr: server.clone(),
-            connect_timeout: 10,
             request_timeout: 30,
-            cache_size: 1000,
-            enable_cache: true,
             base_url,
             timeout: std::time::Duration::from_secs(30),
         };
@@ -259,15 +255,6 @@ impl EvifCommand {
         repl.run().await
     }
 
-    /// 图查询
-    /// NOTE: Graph functionality not implemented (confirmed not required for EVIF 1.8)
-    pub async fn query(&self, query: String) -> Result<()> {
-        println!("Error: Graph functionality not implemented");
-        println!("Use filesystem commands instead: ls, cat, write, mkdir, etc.");
-        println!("Query: {}", query);
-        Ok(())
-    }
-
     /// 统计信息
     pub async fn stats(&self) -> Result<()> {
         println!("EVIF Statistics");
@@ -280,35 +267,6 @@ impl EvifCommand {
             println!("Version: {}", h.version);
             println!("Uptime: {}s", h.uptime);
         }
-        Ok(())
-    }
-
-    /// 获取节点
-    /// NOTE: Graph functionality not implemented (confirmed not required for EVIF 1.8)
-    pub async fn get(&self, id: String) -> Result<()> {
-        println!("Error: Graph functionality not implemented");
-        println!("Use 'ls' and 'cat' for filesystem operations instead.");
-        Ok(())
-    }
-
-    /// 创建节点
-    /// NOTE: Graph functionality not implemented (confirmed not required for EVIF 1.8)
-    pub async fn create(
-        &self,
-        node_type: String,
-        name: String,
-        parent: Option<String>,
-    ) -> Result<()> {
-        println!("Error: Graph functionality not implemented");
-        println!("Use 'mkdir' and 'write' for filesystem operations instead.");
-        Ok(())
-    }
-
-    /// 删除节点
-    /// NOTE: Graph functionality not implemented (confirmed not required for EVIF 1.8)
-    pub async fn delete(&self, id: String) -> Result<()> {
-        println!("Error: Graph functionality not implemented");
-        println!("Use 'rm' and 'rmdir' for filesystem operations instead.");
         Ok(())
     }
 

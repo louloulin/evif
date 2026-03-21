@@ -194,14 +194,18 @@ impl RadixMountTable {
 
     /// 卸载插件
     pub async fn unmount(&self, path: &str) -> EvifResult<()> {
-        let mut mounts = self.mounts.write().await;
         let normalized_path = Self::normalize_path(path);
         let key = normalized_path.trim_start_matches('/').to_string();
 
-        if mounts.get(&key).is_none() {
-            return Err(EvifError::NotFound(format!("Mount point: {}", path)));
+        let plugin = {
+            let mounts = self.mounts.read().await;
+            mounts.get(&key).cloned()
         }
+        .ok_or_else(|| EvifError::NotFound(format!("Mount point: {}", path)))?;
 
+        plugin.shutdown().await?;
+
+        let mut mounts = self.mounts.write().await;
         mounts.remove(&key);
         Ok(())
     }

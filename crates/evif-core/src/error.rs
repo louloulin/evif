@@ -114,13 +114,6 @@ pub enum EvifError {
     Other(String),
 }
 
-// 从 evif-storage 错误转换（简化处理）
-impl From<evif_storage::StorageError> for EvifError {
-    fn from(err: evif_storage::StorageError) -> Self {
-        EvifError::Storage(err.to_string())
-    }
-}
-
 // 从 String 转换
 impl From<String> for EvifError {
     fn from(s: String) -> Self {

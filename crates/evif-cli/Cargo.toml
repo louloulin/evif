@@ -32,9 +32,7 @@ regex = "1.10"
 dirs = "5.0"
 
 # Local crates
-evif-runtime = { path = "../evif-runtime" }
 evif-client = { path = "../evif-client" }
-evif-graph = { path = "../evif-graph" }
 evif-core = { path = "../evif-core", optional = true }
 
 # FUSE support (optional)

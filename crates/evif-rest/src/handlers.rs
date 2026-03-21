@@ -14,7 +14,7 @@ use evif_core::{
     DynamicPluginLoader, EvifPlugin, OpenFlags, PluginConfigParam, PluginRegistry,
     PluginState as RegistryPluginState, RadixMountTable, RegisteredPlugin, WriteFlags,
 };
-use evif_graph::{Graph, Metadata, Node, NodeBuilder, NodeId, NodeType};
+use evif_plugins::{normalize_plugin_id, plugin_catalog, PluginCatalogEntry};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -32,33 +32,6 @@ pub struct AppState {
     pub dynamic_loader: Arc<DynamicPluginLoader>,
     /// 插件注册表
     pub plugin_registry: Arc<PluginRegistry>,
-    /// 图引擎实例
-    pub graph: Arc<Graph>,
-}
-
-/// 节点响应
-#[derive(Debug, Serialize)]
-pub struct NodeResponse {
-    pub id: String,
-    pub node_type: String,
-    pub name: String,
-    pub metadata: Metadata,
-}
-
-/// 查询响应
-#[derive(Debug, Serialize)]
-pub struct QueryResponse {
-    pub ids: Vec<String>,
-    pub count: usize,
-}
-
-/// 统计响应
-#[derive(Debug, Serialize)]
-pub struct StatsResponse {
-    pub uptime_secs: u64,
-    pub total_nodes: usize,
-    pub total_edges: usize,
-    pub status: String,
 }
 
 /// 错误响应
@@ -187,103 +160,6 @@ evif_average_write_size {}
         );
 
         metrics.into_response()
-    }
-
-    /// 获取节点
-    pub async fn get_node(
-        State(state): State<AppState>,
-        Path(id): Path<String>,
-    ) -> RestResult<Json<NodeResponse>> {
-        let node_id = match uuid::Uuid::parse_str(&id) {
-            Ok(id) => id,
-            Err(e) => return Err(RestError::BadRequest(format!("Invalid UUID format: {}", e))),
-        };
-        match state.graph.get_node(&node_id) {
-            Ok(node) => Ok(Json(NodeResponse {
-                id: node.id.to_string(),
-                node_type: node.node_type.as_str().to_string(),
-                name: node.name.clone(),
-                metadata: node.metadata.clone(),
-            })),
-            Err(e) => Err(RestError::NotFound(format!("Node not found: {}", e))),
-        }
-    }
-
-    /// 创建节点
-    pub async fn create_node(
-        State(state): State<AppState>,
-        Path(node_type): Path<String>,
-        Json(payload): Json<CreateNodeRequest>,
-    ) -> RestResult<Json<NodeResponse>> {
-        let node_type = match node_type.to_lowercase().as_str() {
-            "file" => NodeType::File,
-            "directory" | "dir" => NodeType::Directory,
-            "symlink" => NodeType::Symlink,
-            "device" => NodeType::Device,
-            "process" => NodeType::Process,
-            "network" => NodeType::Network,
-            other => NodeType::Custom(other.to_string()),
-        };
-
-        let node = NodeBuilder::new(node_type, payload.name).build();
-
-        match state.graph.add_node(node) {
-            Ok(node_id) => {
-                let node = state.graph.get_node(&node_id).unwrap();
-                Ok(Json(NodeResponse {
-                    id: node.id.to_string(),
-                    node_type: node.node_type.as_str().to_string(),
-                    name: node.name.clone(),
-                    metadata: node.metadata.clone(),
-                }))
-            }
-            Err(e) => Err(RestError::Internal(format!("Failed to create node: {}", e))),
-        }
-    }
-
-    /// 删除节点
-    pub async fn delete_node(
-        State(state): State<AppState>,
-        Path(id): Path<String>,
-    ) -> RestResult<Json<serde_json::Value>> {
-        let node_id = match uuid::Uuid::parse_str(&id) {
-            Ok(id) => id,
-            Err(e) => return Err(RestError::BadRequest(format!("Invalid UUID format: {}", e))),
-        };
-        match state.graph.remove_node(&node_id) {
-            Ok(_) => Ok(Json(serde_json::json!({
-                "success": true,
-                "message": format!("Node {} deleted", id)
-            }))),
-            Err(e) => Err(RestError::NotFound(format!("Failed to delete node: {}", e))),
-        }
-    }
-
-    /// 查询图
-    /// NOTE: Graph functionality intentionally not implemented (confirmed not required for EVIF 1.8)
-    pub async fn query(Json(payload): Json<QueryRequest>) -> RestResult<Json<QueryResponse>> {
-        Err(RestError::Internal(
-            "Graph functionality not implemented. Filesystem queries available via /api/v1/files/list.".to_string()
-        ))
-    }
-
-    /// 获取子节点
-    /// NOTE: Graph functionality intentionally not implemented (confirmed not required for EVIF 1.8)
-    pub async fn get_children(Path(id): Path<String>) -> RestResult<Json<Vec<String>>> {
-        Err(RestError::Internal(
-            "Graph functionality not implemented. Use /api/v1/directories/list for filesystem operations.".to_string()
-        ))
-    }
-
-    /// 获取统计信息
-    pub async fn stats(State(state): State<AppState>) -> Json<StatsResponse> {
-        let uptime_secs = state.start_time.elapsed().as_secs();
-        Json(StatsResponse {
-            uptime_secs,
-            total_nodes: state.graph.node_count(),
-            total_edges: state.graph.edge_count(),
-            status: "running".to_string(),
-        })
     }
 
     // ============== Metrics API（Phase 9：与 AppState 对接，返回真实 uptime/mount_count/traffic）==============
@@ -870,32 +746,16 @@ evif_average_write_size {}
                 "path must be non-empty and start with /".to_string(),
             ));
         }
-        let plugin_name = payload.plugin.to_lowercase();
-        let plugin: Arc<dyn EvifPlugin> = match plugin_name.as_str() {
-            "mem" | "memfs" => Arc::new(evif_plugins::MemFsPlugin::new()),
-            "hello" | "hellofs" => Arc::new(evif_plugins::HelloFsPlugin::new()),
-            "local" | "localfs" => {
-                let root = payload
-                    .config
-                    .as_ref()
-                    .and_then(|c| c.get("root"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("/tmp/evif-local")
-                    .to_string();
-                Arc::new(evif_plugins::LocalFsPlugin::new(&root))
-            }
-            _ => {
-                return Err(RestError::BadRequest(format!(
-                    "Unknown plugin '{}'. Supported: mem, hello, local",
-                    payload.plugin
-                )))
-            }
-        };
-        plugin
-            .validate(payload.config.as_ref())
+        let plugin = crate::server::create_plugin_from_config(&payload.plugin, payload.config.as_ref())
             .await
-            .map_err(|e| {
-                RestError::BadRequest(format!("Plugin config validation failed: {}", e))
+            .map_err(|e| match e {
+                evif_core::EvifError::InvalidInput(_)
+                | evif_core::EvifError::InvalidArgument(_)
+                | evif_core::EvifError::InvalidPath(_)
+                | evif_core::EvifError::Configuration(_) => {
+                    RestError::BadRequest(e.to_string())
+                }
+                _ => RestError::Internal(format!("Mount failed: {}", e)),
             })?;
         state
             .mount_table
@@ -933,9 +793,10 @@ evif_average_write_size {}
     pub async fn get_plugin_readme(
         Path(name): Path<String>,
     ) -> RestResult<Json<PluginReadmeResponse>> {
-        let plugin = Self::plugin_by_name(&name)?;
+        let normalized = normalize_plugin_id(&name);
+        let plugin = Self::plugin_by_name(&normalized)?;
         Ok(Json(PluginReadmeResponse {
-            name: plugin.name().to_string(),
+            name: normalized,
             readme: plugin.get_readme(),
         }))
     }
@@ -944,23 +805,19 @@ evif_average_write_size {}
     pub async fn get_plugin_config(
         Path(name): Path<String>,
     ) -> RestResult<Json<PluginConfigParamsResponse>> {
-        let plugin = Self::plugin_by_name(&name)?;
+        let normalized = normalize_plugin_id(&name);
+        let plugin = Self::plugin_by_name(&normalized)?;
         Ok(Json(PluginConfigParamsResponse {
-            name: plugin.name().to_string(),
+            name: normalized,
             params: plugin.get_config_params(),
         }))
     }
 
     /// 根据插件名创建实例（用于 readme/config 等无需挂载状态的接口）
     fn plugin_by_name(name: &str) -> RestResult<Arc<dyn EvifPlugin>> {
-        let name_lower = name.to_lowercase();
-        let plugin: Arc<dyn EvifPlugin> = match name_lower.as_str() {
-            "mem" | "memfs" => Arc::new(evif_plugins::MemFsPlugin::new()),
-            "hello" | "hellofs" => Arc::new(evif_plugins::HelloFsPlugin::new()),
-            "local" | "localfs" => Arc::new(evif_plugins::LocalFsPlugin::new("/tmp/evif-local")),
-            _ => return Err(RestError::NotFound(format!("Plugin '{}' not found", name))),
-        };
-        Ok(plugin)
+        crate::server::create_builtin_plugin_from_config(name, None)
+            .map_err(|e| RestError::Internal(format!("Failed to prepare plugin '{}': {}", name, e)))?
+            .ok_or_else(|| RestError::NotFound(format!("Plugin '{}' not found", name)))
     }
 
     // ============== 插件管理 API ==============
@@ -1014,10 +871,9 @@ evif_average_write_size {}
 
         // 验证插件配置
         let config = payload.config.as_ref();
-        plugin
-            .validate(config)
+        evif_core::validate_and_initialize_plugin(plugin.as_ref(), config)
             .await
-            .map_err(|e| RestError::Internal(format!("Plugin validation failed: {}", e)))?;
+            .map_err(|e| RestError::Internal(format!("Plugin preparation failed: {}", e)))?;
 
         // 挂载插件
         state
@@ -1110,6 +966,10 @@ evif_average_write_size {}
             .create_plugin(&name)
             .map_err(|e| RestError::Internal(format!("Failed to create plugin instance: {}", e)))?;
 
+        evif_core::validate_and_initialize_plugin(plugin.as_ref(), None)
+            .await
+            .map_err(|e| RestError::Internal(format!("Failed to initialize plugin: {}", e)))?;
+
         // 5. 重新挂载
         state
             .mount_table
@@ -1135,7 +995,7 @@ evif_average_write_size {}
     /// GET /api/v1/plugins/available
     pub async fn list_available_plugins(
         State(state): State<AppState>,
-    ) -> RestResult<Json<serde_json::Value>> {
+    ) -> RestResult<Json<AvailablePluginsResponse>> {
         // 获取已注册的插件
         let registered = state.plugin_registry.list_all();
         let registered_names: Vec<String> = registered.iter().map(|p| p.name.clone()).collect();
@@ -1146,59 +1006,59 @@ evif_average_write_size {}
         for path in mount_paths {
             let (plugin_opt, _relative_path) = state.mount_table.lookup_with_path(&path).await;
             if let Some(plugin) = plugin_opt {
-                mounted.insert(plugin.name().to_string(), path);
+                mounted.insert(normalize_plugin_id(plugin.name()), path);
             }
         }
 
         let mut plugins = Vec::new();
+        let registered_normalized: std::collections::HashSet<String> =
+            registered_names.iter().map(|name| normalize_plugin_id(name)).collect();
 
         // 添加已注册的插件
         for plugin in registered {
-            plugins.push(serde_json::json!({
-                "name": plugin.name,
-                "version": plugin.version,
-                "state": plugin.state.to_string(),
-                "is_loaded": true,
-                "is_mounted": mounted.contains_key(&plugin.name),
-            }));
+            let plugin_name = plugin.name.clone();
+            let normalized = normalize_plugin_id(&plugin_name);
+            let mount_path = mounted.get(&normalized).cloned();
+            plugins.push(AvailablePluginInfo {
+                id: normalized.clone(),
+                name: normalized,
+                display_name: plugin_name,
+                version: plugin.version,
+                description: plugin.description,
+                plugin_type: "other".to_string(),
+                support_tier: "dynamic".to_string(),
+                is_mountable: true,
+                is_loaded: true,
+                is_mounted: mount_path.is_some(),
+                mount_path,
+                aliases: vec![],
+            });
         }
 
-        // 添加内置插件（未注册的）
-        let built_in = vec![
-            "localfs",
-            "s3fs",
-            "memoryfs",
-            "httpfs",
-            "queuefs",
-            "sqlfs",
-            "gitfs",
-            "encryptfs",
-            "tieredfs",
-            "webdavfs",
-            "tarfs",
-            "zipfs",
-            "httpcachefs",
-            "redisfs",
-            "mongofs",
-        ];
-
-        for name in built_in {
-            if !registered_names.contains(&name.to_string()) {
-                let is_mounted = mounted.contains_key(name);
-                plugins.push(serde_json::json!({
-                    "name": name,
-                    "version": "1.0.0",
-                    "state": if is_mounted { "active" } else { "available" },
-                    "is_loaded": false,
-                    "is_mounted": is_mounted,
-                }));
+        for entry in plugin_catalog() {
+            if !registered_normalized.contains(entry.id) {
+                let mut plugin = AvailablePluginInfo::from_catalog(entry);
+                plugin.is_mounted = mounted.contains_key(&plugin.id);
+                plugin.mount_path = mounted.get(&plugin.id).cloned();
+                plugins.push(plugin);
             }
         }
 
-        Ok(Json(serde_json::json!({
-            "plugins": plugins,
-            "total": plugins.len(),
-        })))
+        plugins.sort_by(|left, right| {
+            let tier_rank = |tier: &str| match tier {
+                "core" => 0,
+                "dynamic" => 1,
+                "experimental" => 2,
+                _ => 3,
+            };
+
+            tier_rank(&left.support_tier)
+                .cmp(&tier_rank(&right.support_tier))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
+        let total = plugins.len();
+        Ok(Json(AvailablePluginsResponse { plugins, total }))
     }
 
     // ============== Helper Functions ==============
@@ -1446,6 +1306,50 @@ pub struct PluginInfo {
     pub description: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct AvailablePluginInfo {
+    pub id: String,
+    pub name: String,
+    pub display_name: String,
+    pub version: String,
+    pub description: String,
+    #[serde(rename = "type")]
+    pub plugin_type: String,
+    pub support_tier: String,
+    pub is_mountable: bool,
+    pub is_loaded: bool,
+    pub is_mounted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mount_path: Option<String>,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+}
+
+impl AvailablePluginInfo {
+    fn from_catalog(entry: PluginCatalogEntry) -> Self {
+        Self {
+            id: entry.id.to_string(),
+            name: entry.id.to_string(),
+            display_name: entry.display_name.to_string(),
+            version: "1.0.0".to_string(),
+            description: entry.description.to_string(),
+            plugin_type: entry.plugin_type.to_string(),
+            support_tier: entry.support_tier.as_str().to_string(),
+            is_mountable: entry.is_mountable,
+            is_loaded: false,
+            is_mounted: false,
+            mount_path: None,
+            aliases: entry.aliases.iter().map(|alias| alias.to_string()).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct AvailablePluginsResponse {
+    pub plugins: Vec<AvailablePluginInfo>,
+    pub total: usize,
+}
+
 /// 插件 README 响应（Phase 8.2）
 #[derive(Debug, Serialize)]
 pub struct PluginReadmeResponse {
@@ -1466,24 +1370,6 @@ pub struct LoadPluginRequest {
     pub path: String,
     #[serde(default)]
     pub config: Option<serde_json::Value>,
-}
-
-/// 创建节点请求
-#[derive(Debug, Deserialize)]
-pub struct CreateNodeRequest {
-    pub name: String,
-    #[serde(default)]
-    pub parent_id: Option<String>,
-    #[serde(default)]
-    pub metadata: Option<HashMap<String, serde_json::Value>>,
-}
-
-/// 查询请求
-#[derive(Debug, Deserialize)]
-pub struct QueryRequest {
-    pub query: String,
-    #[serde(default)]
-    pub limit: Option<usize>,
 }
 
 #[cfg(test)]
@@ -1517,66 +1403,4 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    #[test]
-    fn test_error_mapping_vfs_file_not_found() {
-        let vfs_err = evif_vfs::VfsError::FileNotFound("test.txt".to_string());
-        let rest_err = RestError::Vfs(vfs_err);
-        let response = rest_err.into_response();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[test]
-    fn test_error_mapping_vfs_invalid_path() {
-        let vfs_err = evif_vfs::VfsError::InvalidPath("invalid".to_string());
-        let rest_err = RestError::Vfs(vfs_err);
-        let response = rest_err.into_response();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[test]
-    fn test_error_mapping_vfs_permission_denied() {
-        let vfs_err = evif_vfs::VfsError::PermissionDenied("access denied".to_string());
-        let rest_err = RestError::Vfs(vfs_err);
-        let response = rest_err.into_response();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
-
-    #[test]
-    fn test_error_mapping_vfs_timeout() {
-        let vfs_err = evif_vfs::VfsError::Timeout;
-        let rest_err = RestError::Vfs(vfs_err);
-        let response = rest_err.into_response();
-        assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
-    }
-
-    #[test]
-    fn test_create_node_request() {
-        let req = CreateNodeRequest {
-            name: "test".to_string(),
-            parent_id: None,
-            metadata: None,
-        };
-        assert_eq!(req.name, "test");
-    }
-
-    #[test]
-    fn test_query_request() {
-        let req = QueryRequest {
-            query: "test".to_string(),
-            limit: Some(10),
-        };
-        assert_eq!(req.query, "test");
-        assert_eq!(req.limit, Some(10));
-    }
-
-    #[test]
-    fn test_node_response() {
-        let resp = NodeResponse {
-            id: "123".to_string(),
-            node_type: "file".to_string(),
-            name: "test".to_string(),
-            metadata: Metadata::default(),
-        };
-        assert_eq!(resp.id, "123");
-    }
 }

@@ -3,10 +3,19 @@
 // Phase 7.2: 支持从配置文件或环境变量 EVIF_CONFIG / EVIF_MOUNTS 读取挂载列表
 // Phase 7.3: 支持动态 .so 插件加载（对标 AGFS PluginFactory）
 
-use crate::{create_memory_state_from_env, validate_memory_for_production, LoggingMiddleware, RestAuthState, RestError, RestResult};
+use crate::{
+    create_memory_state_from_env, validate_memory_for_production, LoggingMiddleware,
+    RestAuthState, RestError, RestResult,
+};
 use axum::middleware;
-use evif_core::{DynamicPluginLoader, EvifPlugin, RadixMountTable};
-use evif_plugins::{HelloFsPlugin, LocalFsPlugin, MemFsPlugin};
+use evif_core::{
+    validate_and_initialize_plugin, DynamicPluginLoader, EvifError, EvifPlugin, RadixMountTable,
+};
+use evif_plugins::{
+    normalize_plugin_id, DevFsPlugin, HeartbeatFsPlugin, HelloFsPlugin, HttpFsPlugin, KvfsPlugin,
+    LocalFsPlugin, MemFsPlugin, ProxyFsPlugin, QueueFsPlugin, ServerInfoFsPlugin, SqlfsConfig,
+    SqlfsPlugin, StreamFsPlugin,
+};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -28,63 +37,135 @@ pub struct MountConfigEntry {
 
 /// 从配置创建插件实例（与 handlers::mount 逻辑一致）
 /// 支持动态加载 .so 插件（对标 AGFS PluginFactory）
-fn create_plugin_from_config(
+pub(crate) async fn create_plugin_from_config(
     plugin: &str,
     config: Option<&serde_json::Value>,
-) -> Arc<dyn EvifPlugin> {
-    let name = plugin.to_lowercase();
-    match name.as_str() {
-        "mem" | "memfs" => Arc::new(MemFsPlugin::new()),
-        "hello" | "hellofs" => Arc::new(HelloFsPlugin::new()),
-        "local" | "localfs" => {
+) -> Result<Arc<dyn EvifPlugin>, EvifError> {
+    let normalized = normalize_plugin_id(plugin);
+    let plugin_instance: Arc<dyn EvifPlugin> = if let Some(plugin_instance) =
+        create_builtin_plugin_from_config(&normalized, config)?
+    {
+        plugin_instance
+    } else {
+        info!(
+            "Attempting to load plugin '{}' from dynamic library",
+            plugin
+        );
+
+        let loader = DYNAMIC_LOADER.get_or_init(|| {
+            info!("Initializing dynamic plugin loader");
+            Arc::new(DynamicPluginLoader::new())
+        });
+
+        match loader.load_plugin(&normalized) {
+            Ok(info) => {
+                info!("Loaded dynamic plugin: {} v{}", info.name(), info.version());
+                match loader.create_plugin(&normalized) {
+                    Ok(plugin) => {
+                        info!(
+                            "Successfully created dynamic plugin instance: {}",
+                            plugin.name()
+                        );
+                        plugin
+                    }
+                    Err(e) => {
+                        return Err(EvifError::PluginLoadError(format!(
+                            "Failed to create dynamic plugin instance '{}': {}",
+                            plugin, e
+                        )));
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(EvifError::PluginLoadError(format!(
+                    "Failed to load dynamic plugin '{}': {}",
+                    plugin, e
+                )));
+            }
+        }
+    };
+
+    validate_and_initialize_plugin(plugin_instance.as_ref(), config).await?;
+    Ok(plugin_instance)
+}
+
+pub(crate) fn create_builtin_plugin_from_config(
+    plugin: &str,
+    config: Option<&serde_json::Value>,
+) -> Result<Option<Arc<dyn EvifPlugin>>, EvifError> {
+    let normalized = normalize_plugin_id(plugin);
+    let plugin_instance: Arc<dyn EvifPlugin> = match normalized.as_str() {
+        "memfs" => Arc::new(MemFsPlugin::new()),
+        "hellofs" => Arc::new(HelloFsPlugin::new()),
+        "localfs" => {
             let root = config
                 .and_then(|c| c.get("root"))
                 .and_then(|v| v.as_str())
-                .unwrap_or("/tmp/evif-local")
+                .unwrap_or("/tmp/evif-local");
+            Arc::new(LocalFsPlugin::new(root))
+        }
+        "kvfs" => {
+            let prefix = config
+                .and_then(|c| c.get("prefix"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("evif");
+            Arc::new(KvfsPlugin::new(prefix))
+        }
+        "queuefs" => Arc::new(QueueFsPlugin::new()),
+        "sqlfs2" => {
+            let mut sql_config = SqlfsConfig::default();
+            sql_config.db_path = config
+                .and_then(|c| c.get("db_path"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("/tmp/evif-sqlfs2.db")
                 .to_string();
-            Arc::new(LocalFsPlugin::new(&root))
+            sql_config.cache_enabled = config
+                .and_then(|c| c.get("cache_enabled"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(sql_config.cache_enabled);
+            sql_config.cache_max_size = config
+                .and_then(|c| c.get("cache_max_size"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or(sql_config.cache_max_size);
+            sql_config.cache_ttl_seconds = config
+                .and_then(|c| c.get("cache_ttl_seconds"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(sql_config.cache_ttl_seconds);
+            Arc::new(SqlfsPlugin::new(sql_config)?)
         }
-        _ => {
-            // 尝试从动态库加载
-            info!(
-                "Attempting to load plugin '{}' from dynamic library",
-                plugin
-            );
-
-            // 初始化全局动态加载器
-            let loader = DYNAMIC_LOADER.get_or_init(|| {
-                info!("Initializing dynamic plugin loader");
-                Arc::new(DynamicPluginLoader::new())
-            });
-
-            // 尝试加载插件库
-            match loader.load_plugin(&name) {
-                Ok(info) => {
-                    info!("Loaded dynamic plugin: {} v{}", info.name(), info.version());
-                    match loader.create_plugin(&name) {
-                        Ok(plugin) => {
-                            info!(
-                                "Successfully created dynamic plugin instance: {}",
-                                plugin.name()
-                            );
-                            return plugin;
-                        }
-                        Err(e) => {
-                            warn!("Failed to create dynamic plugin instance: {}, falling back to MemFS", e);
-                            Arc::new(MemFsPlugin::new())
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to load dynamic plugin '{}': {}, falling back to MemFS",
-                        plugin, e
-                    );
-                    Arc::new(MemFsPlugin::new())
-                }
-            }
+        "streamfs" => Arc::new(StreamFsPlugin::new()),
+        "heartbeatfs" => Arc::new(HeartbeatFsPlugin::new()),
+        "proxyfs" => {
+            let base_url = config
+                .and_then(|c| c.get("base_url"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("http://127.0.0.1:8081/api/v1");
+            Arc::new(ProxyFsPlugin::new(base_url))
         }
-    }
+        "serverinfofs" => {
+            let version = config
+                .and_then(|c| c.get("version"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(env!("CARGO_PKG_VERSION"));
+            Arc::new(ServerInfoFsPlugin::new(version))
+        }
+        "devfs" => Arc::new(DevFsPlugin::new()),
+        "httpfs" => {
+            let base_url = config
+                .and_then(|c| c.get("base_url"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("https://example.invalid");
+            let timeout_seconds = config
+                .and_then(|c| c.get("timeout_seconds"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(30);
+            Arc::new(HttpFsPlugin::new(base_url, timeout_seconds))
+        }
+        _ => return Ok(None),
+    };
+
+    Ok(Some(plugin_instance))
 }
 
 /// 加载挂载配置：优先 EVIF_CONFIG 文件，其次 EVIF_MOUNTS 环境变量（JSON/YAML/TOML 数组），否则返回默认列表
@@ -273,7 +354,14 @@ impl EvifServer {
 
         info!("Loading plugins ({} mount(s))...", mounts.len());
         for entry in mounts {
-            let plugin = create_plugin_from_config(&entry.plugin, entry.config.as_ref());
+            let plugin = create_plugin_from_config(&entry.plugin, entry.config.as_ref())
+                .await
+                .map_err(|e| {
+                    RestError::Internal(format!(
+                        "Failed to prepare plugin '{}' for '{}': {}",
+                        entry.plugin, entry.path, e
+                    ))
+                })?;
             let path = entry.path.clone();
             mount_table.mount(path.clone(), plugin).await.map_err(|e| {
                 RestError::Internal(format!(
@@ -324,6 +412,14 @@ mod tests {
         let config = ServerConfig::default();
         let server = EvifServer::new(config);
         assert_eq!(server.config.bind_addr, "0.0.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_from_config_unknown_plugin_returns_error() {
+        let result = create_plugin_from_config("definitely-missing-plugin", None).await;
+        assert!(result.is_err());
+        let err = result.err().expect("unknown plugin should return error");
+        assert!(err.to_string().contains("definitely-missing-plugin"));
     }
 
     #[test]

@@ -2,11 +2,11 @@
  * MemoryTimeline - 记忆时间线组件
  *
  * 展示记忆的时间线视图
- * 使用 Graph API 的 timeline 查询
+ * 使用 Memory Query API 的 timeline 查询
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { queryGraph, type TimelineEvent } from '@/services/memory-api'
+import { queryMemories, type TimelineEvent } from '@/services/memory-api'
 import {
   FileText,
   Link,
@@ -41,7 +41,7 @@ const MemoryTimeline: React.FC<MemoryTimelineProps> = ({
       setLoading(true)
       setError(null)
       try {
-        const response = await queryGraph('timeline', {
+        const response = await queryMemories('timeline', {
           category: categoryId,
           eventType: eventType,
           startTime: startTime,

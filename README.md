@@ -3,18 +3,18 @@
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](https://opensource.org/licenses/)
 
-> A powerful, extensible graph-based virtual file system built in Rust, following the Plan 9 "Everything Is a File" philosophy.
+> A powerful, extensible plugin-based virtual file system built in Rust, following the Plan 9 "Everything Is a File" philosophy.
 
 [中文文档](README-CN.md)
 
 ## Overview
 
-EVIF is a modular virtual file system that provides a unified interface to various storage backends through a plugin architecture. It combines the power of graph data structures with traditional file system semantics, enabling advanced querying capabilities while maintaining POSIX compatibility.
+EVIF is a modular plugin filesystem platform that exposes multiple backends through one mount table, one plugin lifecycle, and one file-oriented surface. The supported product path is centered on mount routing, plugin lifecycle management, file and directory operations, handle management, and access surfaces such as REST, CLI, and FUSE.
 
 ### Key Features
 
 - **Plugin Architecture**: 30+ built-in plugins for various storage backends
-- **Graph Engine**: Advanced graph data structures with indexing and query capabilities
+- **Plugin Kernel**: Mountable plugin filesystem with radix-tree routing and handle management
 - **Multiple Access Methods**: REST API, CLI, FUSE mount, and WebSocket
 - **Storage Backends**: Memory, Local FS, S3, Azure Blob, GCS, Aliyun OSS, and more
 - **Advanced Features**: Batch operations, streaming, encryption, tiering, and monitoring
@@ -99,33 +99,30 @@ evif list-mounts
 | Crate | Description |
 |-------|-------------|
 | **evif-core** | Core abstractions, plugin system, mount table, handle manager |
-| **evif-graph** | Graph data structures, nodes, edges, indexing, query execution |
-| **evif-storage** | Pluggable storage backends (Memory, Sled, RocksDB, S3) |
-| **evif-vfs** | Virtual filesystem abstraction layer |
-| **evif-protocol** | Wire protocol definitions and serialization |
 | **evif-rest** | HTTP/JSON REST API server |
 | **evif-cli** | Command-line interface (60+ commands) |
 | **evif-client** | Rust client SDK |
 | **evif-fuse** | FUSE filesystem integration (Linux/macOS) |
-| **evif-grpc** | gRPC service (currently disabled) |
 | **evif-auth** | Authentication and authorization layer |
 | **evif-macros** | Procedural macros (`#[node]`, `#[builder]`, `#[error_macro]`) |
 | **evif-metrics** | Prometheus metrics collection and export |
+| **evif-mem** | Optional memory subsystem with timeline and relation queries |
 
 ## Available Plugins
 
-### Core Plugins
+### Core Supported Plugins
 | Plugin | Description | Default Mount |
 |--------|-------------|---------------|
 | `memfs` | In-memory filesystem | `/mem` |
 | `localfs` | Local filesystem access | - |
 | `hellofs` | Hello world example plugin | `/hello` |
-| `devfs` | Device and system information | `/dev` |
 | `serverinfofs` | Server status and metrics | `/serverinfo` |
 | `kvfs` | Key-value store interface | `/kv` |
 | `queuefs` | Message queue interface | `/queue` |
+| `sqlfs2` | SQLite-backed structured data filesystem | `/sqlfs2` |
 | `proxyfs` | Proxy to other paths | - |
 | `streamfs` | Streaming data interface | - |
+| `heartbeatfs` | Health and lease heartbeat interface | - |
 
 ### Cloud Storage Plugins
 | Plugin | Description | Feature Flag |
@@ -141,15 +138,14 @@ evif list-mounts
 ### OpenDAL Plugins (EVIF 2.1)
 Based on OpenDAL 0.50.x for unified storage interface. See `evif-plugins/src/opendal.rs` for available services.
 
-### Special Purpose Plugins
+### Experimental Plugins
 | Plugin | Description | Feature Flag |
 |--------|-------------|--------------|
 | `httpfs` | HTTP-based filesystem | - |
+| `devfs` | Device and pseudo-file examples | - |
 | `encryptedfs` | Encrypted filesystem layer | - |
 | `tieredfs` | Tiered storage (hot/warm/cold) | - |
 | `handlefs` | File handle management | - |
-| `heartbeatfs` | Health monitoring | - |
-| `sqlfs` | SQL database interface | `sqlfs` |
 | `gptfs` | GPT/AI model interface | `gptfs` |
 | `vectorfs` | Vector database interface | `vectorfs` |
 | `streamrotatefs` | Stream rotation | `streamrotatefs` |
@@ -353,19 +349,15 @@ level = "info"
 evif/
 ├── crates/
 │   ├── evif-core/        # Core abstractions and plugin system
-│   ├── evif-graph/       # Graph engine
-│   ├── evif-storage/     # Storage backends
-│   ├── evif-vfs/         # VFS abstraction
-│   ├── evif-protocol/    # Wire protocol
 │   ├── evif-rest/        # REST API server
 │   ├── evif-cli/         # CLI tool
 │   ├── evif-client/      # Client SDK
 │   ├── evif-fuse/        # FUSE integration
-│   ├── evif-grpc/        # gRPC service (disabled)
 │   ├── evif-auth/        # Authentication layer
 │   ├── evif-macros/      # Procedural macros
 │   ├── evif-metrics/     # Metrics collection
-│   └── evif-plugins/     # Plugin implementations (30+)
+│   ├── evif-mem/         # Optional memory subsystem
+│   └── evif-plugins/     # Plugin implementations and catalog
 ├── docs/                  # Documentation
 ├── benches/               # Benchmarks
 ├── tests/                 # Integration tests
@@ -402,7 +394,6 @@ EVIF uses a Radix tree-based mount table for O(k) path lookup, where k is the pa
 ### In Progress 🚧
 - [ ] Two-layer caching system
 - [ ] Configurable mount system
-- [ ] Temporal knowledge graph
 - [ ] Vector retrieval optimization
 - [ ] Enhanced MCP integration
 
@@ -413,8 +404,7 @@ EVIF uses a Radix tree-based mount table for O(k) path lookup, where k is the pa
 cargo test --workspace
 
 # Run specific crate tests
-cargo test -p evif-graph
-cargo test -p evif-storage
+cargo test -p evif-plugins core_supported_plugins
 cargo test -p evif-rest
 
 # Run with all features

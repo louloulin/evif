@@ -53,7 +53,8 @@ pub use monitoring::{
 };
 pub use mount_table::MountTable;
 pub use plugin::{
-    EvifPlugin, FileHandle, FileInfo, HandleFS, OpenFlags, PluginConfigParam, WriteFlags,
+    validate_and_initialize_plugin, EvifPlugin, FileHandle, FileInfo, HandleFS, OpenFlags,
+    PluginConfigParam, WriteFlags,
 };
 pub use plugin_registry::{PluginRegistry, PluginRegistryRef, PluginState, RegisteredPlugin};
 pub use radix_mount_table::{MountTableStats, RadixMountTable};

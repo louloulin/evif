@@ -6,7 +6,6 @@ use crate::{
 };
 use axum::{middleware, Router};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
-use evif_graph::Graph;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -54,7 +53,6 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         start_time: Instant::now(),
         dynamic_loader,
         plugin_registry: Arc::new(PluginRegistry::new()),
-        graph: Arc::new(Graph::new()),
     };
 
     // 创建批量操作管理器
@@ -256,30 +254,6 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
             "/api/v1/metrics/reset",
             axum::routing::post(handlers::EvifHandlers::reset_metrics),
         )
-        // ============== 图操作 (兼容原有API) ==============
-        // 节点操作
-        .route(
-            "/nodes/:id",
-            axum::routing::get(handlers::EvifHandlers::get_node),
-        )
-        .route(
-            "/nodes/:id",
-            axum::routing::delete(handlers::EvifHandlers::delete_node),
-        )
-        // 创建节点
-        .route(
-            "/nodes/create/:node_type",
-            axum::routing::post(handlers::EvifHandlers::create_node),
-        )
-        // 查询
-        .route("/query", axum::routing::post(handlers::EvifHandlers::query))
-        // 子节点
-        .route(
-            "/nodes/:id/children",
-            axum::routing::get(handlers::EvifHandlers::get_children),
-        )
-        // 统计
-        .route("/stats", axum::routing::get(handlers::EvifHandlers::stats))
         .with_state(app_state);
 
     // 创建 WebSocket 状态
@@ -448,11 +422,11 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
             "/api/v1/categories/:id/memories",
             axum::routing::get(memory_handlers::MemoryHandlers::get_category_memories),
         )
-        // ============== 图谱操作 ==============
-        // 图谱查询
+        // ============== 记忆查询 ==============
+        // 时间线/关系查询
         .route(
-            "/api/v1/graph/query",
-            axum::routing::post(memory_handlers::MemoryHandlers::query_graph),
+            "/api/v1/memories/query",
+            axum::routing::post(memory_handlers::MemoryHandlers::query_memories),
         )
         .with_state(memory_state);
 

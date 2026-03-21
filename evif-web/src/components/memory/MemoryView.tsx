@@ -2,7 +2,7 @@
  * MemoryView - 记忆管理视图
  *
  * 主容器组件，包含 MemoryExplorer、CategoryView、MemoryTimeline、
- * KnowledgeGraph、AIChatPanel 和 MemoryInsights
+ * 关系视图、AIChatPanel 和 MemoryInsights
  */
 
 import React, { useState } from 'react'
@@ -67,7 +67,7 @@ const MemoryView: React.FC = () => {
           className={`tab-button ${activeTab === 'graph' ? 'active' : ''}`}
           onClick={() => setActiveTab('graph')}
         >
-          知识图谱
+          关系视图
         </button>
         <button
           className={`tab-button ${activeTab === 'ai-chat' ? 'active' : ''}`}

@@ -9,32 +9,17 @@ homepage.workspace = true
 description = "Client SDK for accessing EVIF"
 
 [dependencies]
-# Workspace dependencies
-tokio = { workspace = true }
-async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-anyhow = { workspace = true }
 thiserror = { workspace = true }
-uuid = { workspace = true }
-tracing = { workspace = true }
 
 # Local crates
-evif-graph = { path = "../evif-graph" }
-evif-protocol = { path = "../evif-protocol" }
-evif-grpc = { path = "../evif-grpc", optional = true }
 evif-core = { path = "../evif-core" }
 
 # Additional dependencies
-lru = "0.12.2"
-parking_lot = "0.12.1"
 reqwest = { version = "0.11", features = ["json"] }
 base64 = "0.21"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
 mockito = "1.2.0"
-
-[features]
-default = ["grpc"]
-grpc = ["evif-grpc"]

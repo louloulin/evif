@@ -23,9 +23,7 @@ fuser = "0.13.0"
 libc = "0.2"
 
 # Local crates
-evif-vfs = { path = "../evif-vfs", default-features = false }
 evif-core = { path = "../evif-core", default-features = false, features = [] }
-evif-graph = { path = "../evif-graph" }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

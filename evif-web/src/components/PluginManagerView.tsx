@@ -10,40 +10,56 @@ import { MountModal } from '@/components/plugin-manager/MountModal'
 import { PluginModal } from '@/components/plugin-manager/PluginModal'
 import type { Plugin, MountPoint, PluginConfig } from '@/types/plugin'
 import {
+  getAvailablePlugins,
   getMounts,
   mount as apiMount,
   unmount as apiUnmount,
   getPluginReadme,
   getPluginConfig,
-  KNOWN_PLUGIN_IDS,
+  type AvailablePluginInfo,
 } from '@/services/plugin-api'
 
-const PLUGIN_DISPLAY_NAMES: Record<string, string> = {
-  memfs: '内存文件系统',
-  hellofs: 'HelloFS',
-  localfs: '本地文件系统',
+function normalizePluginId(name: string): string {
+  const lower = name.toLowerCase()
+  if (lower === 'mem') return 'memfs'
+  if (lower === 'hello') return 'hellofs'
+  if (lower === 'local') return 'localfs'
+  if (lower === 'sqlfs') return 'sqlfs2'
+  return lower
 }
 
-function buildPluginsFromMounts(mounts: { path: string; plugin: string }[]): Plugin[] {
-  const byPlugin = new Map<string, string>()
-  for (const m of mounts) {
-    const name = m.plugin.toLowerCase()
-    const normalized = name === 'mem' ? 'memfs' : name === 'hello' ? 'hellofs' : name === 'local' ? 'localfs' : name
-    byPlugin.set(normalized, m.path)
+function buildPlugins(
+  availablePlugins: AvailablePluginInfo[],
+  mounts: { path: string; plugin: string }[]
+): Plugin[] {
+  const mountedByPlugin = new Map<string, string>()
+  for (const mount of mounts) {
+    mountedByPlugin.set(normalizePluginId(mount.plugin), mount.path)
   }
-  return KNOWN_PLUGIN_IDS.map((id) => {
-    const mountPath = byPlugin.get(id)
+
+  return availablePlugins.map((plugin) => {
+    const mountPoint = plugin.mount_path ?? mountedByPlugin.get(normalizePluginId(plugin.id))
     return {
-      id,
-      name: PLUGIN_DISPLAY_NAMES[id] ?? id,
-      version: '1.0.0',
-      author: 'EVIF',
-      description: id === 'memfs' ? '内存文件系统' : id === 'hellofs' ? '演示插件' : '本地目录挂载',
-      type: id === 'localfs' ? 'local' : 'other',
-      status: mountPath ? 'loaded' : 'unloaded',
-      mountPoint: mountPath,
+      id: plugin.id,
+      name: plugin.display_name || plugin.name,
+      version: plugin.version,
+      author:
+        plugin.support_tier === 'dynamic'
+          ? 'Dynamic Plugin'
+          : plugin.support_tier === 'experimental'
+            ? 'Experimental'
+            : 'EVIF Core',
+      description: plugin.description,
+      type: plugin.type,
+      supportTier: plugin.support_tier,
+      mountable: plugin.is_mountable,
+      status: mountPoint ? 'loaded' : plugin.support_tier === 'dynamic' && plugin.is_loaded ? 'loaded' : 'unloaded',
+      mountPoint,
       capabilities: ['read', 'write'],
     }
+  }).sort((left, right) => {
+    const rank = (tier: string) => tier === 'core' ? 0 : tier === 'dynamic' ? 1 : 2
+    return rank(left.supportTier) - rank(right.supportTier) || left.name.localeCompare(right.name)
   })
 }
 
@@ -59,11 +75,14 @@ export const PluginManagerView: React.FC = () => {
   const fetchMounts = useCallback(async () => {
     try {
       setError(null)
-      const data = await getMounts()
-      setPlugins(buildPluginsFromMounts(data.mounts))
+      const [available, mounts] = await Promise.all([
+        getAvailablePlugins(),
+        getMounts(),
+      ])
+      setPlugins(buildPlugins(available.plugins, mounts.mounts))
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载挂载点失败')
-      setPlugins(buildPluginsFromMounts([]))
+      setPlugins([])
     } finally {
       setLoading(false)
     }

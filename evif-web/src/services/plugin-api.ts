@@ -33,8 +33,25 @@ export interface PluginConfigResponse {
   params: PluginConfigParam[]
 }
 
-/** 后端支持的插件名（用于创建实例），与 evif-rest handlers 一致 */
-export const KNOWN_PLUGIN_IDS = ['memfs', 'hellofs', 'localfs'] as const
+export interface AvailablePluginInfo {
+  id: string
+  name: string
+  display_name: string
+  version: string
+  description: string
+  type: 'local' | 'cloud-storage' | 'ai' | 'database' | 'other'
+  support_tier: 'core' | 'dynamic' | 'experimental' | string
+  is_mountable: boolean
+  is_loaded: boolean
+  is_mounted: boolean
+  mount_path?: string
+  aliases?: string[]
+}
+
+export interface AvailablePluginsResponse {
+  plugins: AvailablePluginInfo[]
+  total: number
+}
 
 /** 插件名到 API 名称的映射（后端接受 mem | memfs 等） */
 export function toApiPluginName(id: string): string {
@@ -42,6 +59,7 @@ export function toApiPluginName(id: string): string {
   if (lower === 'memfs') return 'mem'
   if (lower === 'hellofs') return 'hello'
   if (lower === 'localfs') return 'local'
+  if (lower === 'sqlfs2') return 'sqlfs2'
   return id
 }
 
@@ -50,6 +68,15 @@ export async function getMounts(): Promise<MountsResponse> {
   if (!res.ok) {
     const t = await res.text()
     throw new Error(t || 'Failed to fetch mounts')
+  }
+  return res.json()
+}
+
+export async function getAvailablePlugins(): Promise<AvailablePluginsResponse> {
+  const res = await httpFetch('/api/v1/plugins/available')
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(t || 'Failed to fetch available plugins')
   }
   return res.json()
 }

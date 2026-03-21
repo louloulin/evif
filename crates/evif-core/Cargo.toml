@@ -43,9 +43,6 @@ serde_yaml = "0.9"
 # Radix Tree for routing optimization
 radix_trie = "0.3"
 
-# Workspace dependencies
-evif-storage = { path = "../evif-storage" }
-
 # Extism for WASM plugin support (optional)
 extism = { version = "1.0", optional = true }
 extism-pdk = { version = "1.0", optional = true }

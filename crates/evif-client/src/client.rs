@@ -1,32 +1,17 @@
 // EVIF 客户端实现
 
-use crate::{ClientCache, ClientError, ClientResult, Transport};
+use crate::{ClientError, ClientResult};
 use base64::Engine;
 use evif_core::FileInfo;
-use evif_graph::{Node, NodeId};
-use evif_protocol::{Message, Request, Response};
 use reqwest::Client as HttpClient;
 use serde_json::Value;
 use std::path::Path;
-use std::sync::Arc;
 
 /// 客户端配置
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
-    /// 服务器地址
-    pub server_addr: String,
-
-    /// 连接超时（秒）
-    pub connect_timeout: u64,
-
     /// 请求超时（秒）
     pub request_timeout: u64,
-
-    /// 缓存大小
-    pub cache_size: usize,
-
-    /// 启用缓存
-    pub enable_cache: bool,
 
     /// HTTP基础URL (用于REST API)
     pub base_url: String,
@@ -38,11 +23,7 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            server_addr: "localhost:8081".to_string(),
-            connect_timeout: 10,
             request_timeout: 30,
-            cache_size: 1000,
-            enable_cache: true,
             base_url: "http://localhost:8081".to_string(),
             timeout: std::time::Duration::from_secs(30),
         }
@@ -52,25 +33,14 @@ impl Default for ClientConfig {
 /// EVIF 客户端
 pub struct EvifClient {
     config: ClientConfig,
-    transport: Arc<dyn Transport>,
-    cache: Option<ClientCache>,
     http_client: HttpClient,
 }
 
 impl EvifClient {
     /// 创建新客户端(异步)
     pub async fn new(config: ClientConfig) -> ClientResult<Self> {
-        let transport = crate::transport::create_transport(&config.server_addr).await?;
-        let cache = if config.enable_cache {
-            Some(ClientCache::new(config.cache_size))
-        } else {
-            None
-        };
-
         Ok(Self {
             config,
-            transport,
-            cache,
             http_client: HttpClient::new(),
         })
     }
@@ -79,141 +49,13 @@ impl EvifClient {
     pub fn new_sync(config: ClientConfig) -> Self {
         Self {
             config: config.clone(),
-            transport: std::sync::Arc::new(crate::transport::DummyTransport),
-            cache: None,
             http_client: HttpClient::new(),
-        }
-    }
-
-    /// 获取节点
-    pub async fn get_node(&self, id: NodeId) -> ClientResult<Option<Node>> {
-        // 检查缓存
-        if let Some(cache) = &self.cache {
-            if let Some(node) = cache.get(&id).await {
-                return Ok(Some(node));
-            }
-        }
-
-        // 创建请求
-        let request = Request::get_node(id);
-        let response = self.send_request(request).await?;
-
-        match response.kind {
-            evif_protocol::ResponseKind::Node { node } => {
-                if let Some(cache) = &self.cache {
-                    if let Some(ref node) = node {
-                        cache.put(id, node.clone()).await;
-                    }
-                }
-                Ok(node)
-            }
-            _ => Err(ClientError::Protocol(
-                "Unexpected response type".to_string(),
-            )),
-        }
-    }
-
-    /// 创建节点
-    pub async fn create_node(
-        &self,
-        node_type: evif_graph::NodeType,
-        name: String,
-        parent_id: Option<NodeId>,
-    ) -> ClientResult<NodeId> {
-        let request = Request::create_node(node_type, name, parent_id);
-        let response = self.send_request(request).await?;
-
-        match response.kind {
-            evif_protocol::ResponseKind::Created { id } => Ok(id),
-            _ => Err(ClientError::Protocol(
-                "Unexpected response type".to_string(),
-            )),
-        }
-    }
-
-    /// 删除节点
-    pub async fn delete_node(&self, id: NodeId) -> ClientResult<()> {
-        let request = Request::delete_node(id);
-        let _response = self.send_request(request).await?;
-
-        if let Some(cache) = &self.cache {
-            cache.remove(&id).await;
-        }
-
-        Ok(())
-    }
-
-    /// 查询图
-    pub async fn query(&self, query: String) -> ClientResult<Vec<NodeId>> {
-        let request = Request::query_graph(query);
-        let response = self.send_request(request).await?;
-
-        match response.kind {
-            evif_protocol::ResponseKind::QueryResult { ids, .. } => Ok(ids),
-            _ => Err(ClientError::Protocol(
-                "Unexpected response type".to_string(),
-            )),
-        }
-    }
-
-    /// 获取子节点
-    pub async fn get_children(&self, id: NodeId) -> ClientResult<Vec<NodeId>> {
-        let request = Request::get_children(id);
-        let response = self.send_request(request).await?;
-
-        match response.kind {
-            evif_protocol::ResponseKind::Children { ids } => Ok(ids),
-            _ => Err(ClientError::Protocol(
-                "Unexpected response type".to_string(),
-            )),
         }
     }
 
     /// 读取文件
     pub async fn read_file(&self, path: &Path) -> ClientResult<Vec<u8>> {
-        let request = Request::new(evif_protocol::RequestKind::FileOperation {
-            path: path.to_path_buf(),
-            operation: evif_protocol::FileOperation::Read {
-                handle: 0,
-                offset: 0,
-                size: 4096,
-            },
-        });
-
-        let response = self.send_request(request).await?;
-
-        match response.kind {
-            evif_protocol::ResponseKind::FileResult { data, .. } => {
-                data.ok_or_else(|| ClientError::Protocol("No data in response".to_string()))
-            }
-            _ => Err(ClientError::Protocol(
-                "Unexpected response type".to_string(),
-            )),
-        }
-    }
-
-    /// 发送请求
-    async fn send_request(&self, request: Request) -> ClientResult<Response> {
-        let message = Message::Request(request);
-
-        // 发送消息
-        let response_msg = tokio::time::timeout(
-            std::time::Duration::from_secs(self.config.request_timeout),
-            self.transport.send(message),
-        )
-        .await
-        .map_err(|_| ClientError::Timeout)?
-        .map_err(|e| ClientError::Transport(e))?;
-
-        // 解析响应
-        match response_msg {
-            Message::Response(response) => Ok(response),
-            Message::Error { code, message } => Err(ClientError::Protocol(format!(
-                "Error {}: {}",
-                code, message
-            ))),
-            _ => Err(ClientError::Protocol("Unexpected message type".to_string())),
-        }
+        self.cat_bytes(path.to_string_lossy().as_ref()).await
     }
 
     // ==================== HTTP REST API 方法 ====================
@@ -222,7 +64,7 @@ impl EvifClient {
     pub async fn ls(&self, path: &str) -> ClientResult<Vec<FileInfo>> {
         let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
         let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            ClientError::Transport(e.to_string())
         })?;
 
         let status = response.status();
@@ -261,7 +103,7 @@ impl EvifClient {
     pub async fn cat_bytes(&self, path: &str) -> ClientResult<Vec<u8>> {
         let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
         let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            ClientError::Transport(e.to_string())
         })?;
 
         let json: Value = response
@@ -295,9 +137,7 @@ impl EvifClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-            })?;
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
 
         Ok(())
     }
@@ -305,27 +145,33 @@ impl EvifClient {
     /// 创建目录
     pub async fn mkdir(&self, path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
-        self.http_client.post(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-        })?;
+        self.http_client
+            .post(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         Ok(())
     }
 
     /// 删除文件
     pub async fn remove(&self, path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
-        self.http_client.delete(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-        })?;
+        self.http_client
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         Ok(())
     }
 
     /// 递归删除
     pub async fn remove_all(&self, path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
-        self.http_client.delete(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-        })?;
+        self.http_client
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         Ok(())
     }
 
@@ -339,9 +185,7 @@ impl EvifClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-            })?;
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         Ok(())
     }
 
@@ -349,7 +193,7 @@ impl EvifClient {
     pub async fn stat(&self, path: &str) -> ClientResult<FileInfo> {
         let url = format!("{}/api/v1/stat?path={}", self.config.base_url, path);
         let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            ClientError::Transport(e.to_string())
         })?;
 
         let json: Value = response
@@ -364,7 +208,7 @@ impl EvifClient {
     pub async fn health(&self) -> ClientResult<HealthInfo> {
         let url = format!("{}/api/v1/health", self.config.base_url);
         let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            ClientError::Transport(e.to_string())
         })?;
 
         let json: Value = response
@@ -392,9 +236,7 @@ impl EvifClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-            })?;
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         Ok(())
     }
 
@@ -407,9 +249,7 @@ impl EvifClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-            })?;
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         Ok(())
     }
 
@@ -417,7 +257,7 @@ impl EvifClient {
     pub async fn mounts(&self) -> ClientResult<Vec<MountInfo>> {
         let url = format!("{}/api/v1/mounts", self.config.base_url);
         let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
+            ClientError::Transport(e.to_string())
         })?;
 
         let status = response.status();
@@ -470,9 +310,7 @@ impl EvifClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-            })?;
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         let json: Value = response
             .json()
             .await
@@ -503,9 +341,7 @@ impl EvifClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                ClientError::Transport(crate::TransportError::ConnectionFailed(e.to_string()))
-            })?;
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         let json: Value = response
             .json()
             .await
@@ -552,26 +388,19 @@ mod tests {
     #[test]
     fn test_client_config_default() {
         let config = ClientConfig::default();
-        assert_eq!(config.server_addr, "localhost:8081");
         assert_eq!(config.base_url, "http://localhost:8081");
-        assert_eq!(config.connect_timeout, 10);
-        assert!(config.enable_cache);
+        assert_eq!(config.request_timeout, 30);
     }
 
     #[test]
     fn test_client_config_custom() {
         let config = ClientConfig {
-            server_addr: "example.com:8080".to_string(),
-            connect_timeout: 30,
             request_timeout: 60,
-            cache_size: 2000,
-            enable_cache: false,
             base_url: "http://localhost:8080".to_string(),
             timeout: std::time::Duration::from_secs(30),
         };
 
-        assert_eq!(config.server_addr, "example.com:8080");
-        assert_eq!(config.connect_timeout, 30);
-        assert!(!config.enable_cache);
+        assert_eq!(config.request_timeout, 60);
+        assert_eq!(config.base_url, "http://localhost:8080");
     }
 }

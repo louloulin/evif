@@ -13,8 +13,9 @@ from .models import (
     MemoryCreate,
     MemorySearchResult,
     Category,
-    GraphQuery,
-    GraphQueryType,
+    MemoryQuery,
+    MemoryQueryType,
+    MemoryQueryResult,
 )
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "MemoryCreate",
     "MemorySearchResult",
     "Category",
-    "GraphQuery",
-    "GraphQueryType",
+    "MemoryQuery",
+    "MemoryQueryType",
+    "MemoryQueryResult",
 ]

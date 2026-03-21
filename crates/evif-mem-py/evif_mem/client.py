@@ -11,11 +11,12 @@ from .models import (
     MemoryCreate,
     MemorySearchResult,
     Category,
-    GraphQuery,
-    GraphQueryType,
-    GraphResult,
-    GraphNode,
-    GraphEdge,
+    MemoryQuery,
+    MemoryQueryType,
+    MemoryQueryResult,
+    MemoryQueryNode,
+    MemoryQueryPath,
+    TimelineEvent,
 )
 
 
@@ -250,6 +251,58 @@ class EvifMemoryClient:
         )
         return [Memory(**item) for item in result.get("data", [])]
 
+    async def query_memories(
+        self,
+        query_type: str = "causal_chain",
+        start_node: Optional[str] = None,
+        end_node: Optional[str] = None,
+        max_depth: int = 3,
+        event_type: Optional[str] = None,
+        category: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+    ) -> MemoryQueryResult:
+        """Query memory timeline and relationship views.
+
+        Args:
+            query_type: Type of query (causal_chain, timeline, temporal_bfs, temporal_path)
+            start_node: Starting memory ID
+            end_node: Ending memory ID
+            max_depth: Maximum traversal depth
+            event_type: Event type filter
+            category: Category filter
+            start_time: RFC3339 start time
+            end_time: RFC3339 end time
+
+        Returns:
+            Memory query result
+
+        Example:
+            >>> result = await client.query_memories(
+            ...     query_type="causal_chain"
+            ... )
+            >>> for node in result.nodes:
+            ...     print(node.label)
+        """
+        data = {
+            "query_type": query_type,
+            "start_node": start_node,
+            "end_node": end_node,
+            "max_depth": max_depth,
+            "event_type": event_type,
+            "category": category,
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+        result = await self._request("POST", "/api/v1/memories/query", json=data)
+        return MemoryQueryResult(
+            query_type=result.get("query_type", query_type),
+            nodes=[MemoryQueryNode(**node) for node in result.get("nodes", [])],
+            timeline=[TimelineEvent(**item) for item in result.get("timeline", [])],
+            paths=[MemoryQueryPath(**item) for item in result.get("paths", [])],
+            total=result.get("total", 0),
+        )
+
     async def query_graph(
         self,
         query: str,
@@ -257,40 +310,15 @@ class EvifMemoryClient:
         node_id: Optional[str] = None,
         max_depth: int = 3,
         limit: int = 10,
-    ) -> GraphResult:
-        """Query the knowledge graph.
+    ) -> MemoryQueryResult:
+        """Backward-compatible wrapper for `query_memories`.
 
-        Args:
-            query: Query string
-            query_type: Type of query (causal_chain, timeline, temporal_bfs, temporal_path)
-            node_id: Starting node ID
-            max_depth: Maximum traversal depth
-            limit: Maximum results
-
-        Returns:
-            Graph query result
-
-        Example:
-            >>> result = await client.query_graph(
-            ...     "related events",
-            ...     query_type="causal_chain"
-            ... )
-            >>> for node in result.nodes:
-            ...     print(node.label)
+        Prefer `query_memories()` in new code.
         """
-        data = {
-            "query": query,
-            "query_type": query_type,
-            "node_id": node_id,
-            "max_depth": max_depth,
-            "limit": limit,
-        }
-        result = await self._request("POST", "/api/v1/graph/query", json=data)
-        data = result.get("data", {})
-        return GraphResult(
-            nodes=[GraphNode(**node) for node in data.get("nodes", [])],
-            edges=[GraphEdge(**edge) for edge in data.get("edges", [])],
-            metadata=data.get("metadata", {}),
+        return await self.query_memories(
+            query_type=query_type,
+            start_node=node_id,
+            max_depth=max_depth,
         )
 
     async def close(self) -> None:

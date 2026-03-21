@@ -5,7 +5,6 @@
 use evif_auth::{
     AuthManager, Capability, Permissions, Principal, AuthPolicy,
 };
-use evif_graph::{NodeId, NodeType};
 use std::time::SystemTime;
 use uuid::Uuid;
 
@@ -26,8 +25,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. 创建资源节点
     println!("3. 创建资源节点...");
-    let file_node = NodeId::new();
-    let dir_node = NodeId::new();
+    let file_node = Uuid::new_v4();
+    let dir_node = Uuid::new_v4();
     println!("✓ 创建资源: file_node, dir_node\n");
 
     // 4. 授予Alice权限

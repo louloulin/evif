@@ -22,12 +22,6 @@ pub struct EvifCli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Query the graph
-    Query {
-        /// Query string
-        query: String,
-    },
-
     /// List directory contents
     Ls {
         /// Directory path
@@ -155,32 +149,6 @@ pub enum Commands {
 
     /// Start interactive REPL
     Repl,
-
-    /// Get node by ID
-    Get {
-        /// Node ID
-        id: String,
-    },
-
-    /// Create a new node
-    Create {
-        /// Node type (file, directory, device)
-        #[arg(short, long)]
-        node_type: String,
-
-        /// Node name
-        name: String,
-
-        /// Parent ID (optional)
-        #[arg(short, long)]
-        parent: Option<String>,
-    },
-
-    /// Delete a node
-    Delete {
-        /// Node ID
-        id: String,
-    },
 
     /// Mount EVIF as a FUSE filesystem
     Mount {
@@ -510,9 +478,6 @@ impl EvifCli {
         let command = EvifCommand::new(self.server.clone(), self.verbose);
 
         match &self.command {
-            Commands::Query { query } => {
-                command.query(query.clone()).await?;
-            }
             Commands::Ls { path } => {
                 command.ls(Some(path.clone()), false, false).await?;
             }
@@ -575,21 +540,6 @@ impl EvifCli {
             }
             Commands::Repl => {
                 command.repl().await?;
-            }
-            Commands::Get { id } => {
-                command.get(id.clone()).await?;
-            }
-            Commands::Create {
-                node_type,
-                name,
-                parent,
-            } => {
-                command
-                    .create(node_type.clone(), name.clone(), parent.clone())
-                    .await?;
-            }
-            Commands::Delete { id } => {
-                command.delete(id.clone()).await?;
             }
             Commands::Mount {
                 mount_point,

@@ -10,7 +10,6 @@ homepage.workspace = true
 [dependencies]
 # Core
 evif-core = { path = "../evif-core" }
-evif-storage = { path = "../evif-storage" }
 
 # Async
 tokio = { workspace = true }

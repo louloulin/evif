@@ -1,13 +1,7 @@
 [workspace]
 members = [
-    "crates/evif-runtime",
-    "crates/evif-graph",
-    "crates/evif-storage",
     "crates/evif-auth",
-    "crates/evif-vfs",
-    "crates/evif-protocol",
     "crates/evif-fuse", # FUSE 集成支持
-    "crates/evif-grpc",
     "crates/evif-rest",
     "crates/evif-macros",
     "crates/evif-client",
@@ -21,6 +15,16 @@ members = [
     "tests/common",
     "tests/cli",
     "tests/api",
+]
+default-members = [
+    "crates/evif-auth",
+    "crates/evif-core",
+    "crates/evif-plugins",
+    "crates/evif-rest",
+    "crates/evif-cli",
+    "crates/evif-fuse",
+    "crates/evif-mcp",
+    "crates/evif-mem",
 ]
 resolver = "2"
 
@@ -49,9 +53,6 @@ bytes = "1.5.0"
 # Error handling
 anyhow = "1.0.79"
 thiserror = "1.0.56"
-
-# Graph and algorithms
-petgraph = "0.6.4"
 
 # Concurrent data structures
 dashmap = "5.5.3"

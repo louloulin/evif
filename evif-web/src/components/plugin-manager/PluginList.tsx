@@ -44,6 +44,12 @@ const STATUS_LABELS: Record<string, string> = {
   'error': '错误',
 }
 
+const SUPPORT_TIER_LABELS: Record<string, string> = {
+  core: '核心支持',
+  dynamic: '动态加载',
+  experimental: '实验性',
+}
+
 interface PluginListProps {
   plugins: Plugin[]
   onPluginToggle?: (pluginId: string, load: boolean) => void
@@ -99,6 +105,9 @@ export const PluginList: React.FC<PluginListProps> = ({
               <Badge variant={plugin.status === 'loaded' ? 'default' : 'secondary'}>
                 {STATUS_LABELS[plugin.status] || plugin.status}
               </Badge>
+              <Badge variant="outline">
+                {SUPPORT_TIER_LABELS[plugin.supportTier] || plugin.supportTier}
+              </Badge>
             </div>
           </div>
         </CardHeader>
@@ -130,6 +139,7 @@ export const PluginList: React.FC<PluginListProps> = ({
                   variant="outline"
                   onClick={() => onPluginMount?.(plugin.id)}
                   className="flex-1"
+                  disabled={!plugin.mountable}
                 >
                   <Folder className="h-4 w-4 mr-1" />
                   挂载
@@ -154,9 +164,10 @@ export const PluginList: React.FC<PluginListProps> = ({
                 size="sm"
                 onClick={() => onPluginToggle?.(plugin.id, true)}
                 className="flex-1"
+                disabled={!plugin.mountable}
               >
                 <Power className="h-4 w-4 mr-1" />
-                加载插件
+                {plugin.mountable ? '加载插件' : '需后端装配'}
               </Button>
             )}
           </div>
@@ -164,6 +175,11 @@ export const PluginList: React.FC<PluginListProps> = ({
           {plugin.mountPoint && (
             <div className="text-xs text-muted-foreground mt-2">
               <span className="font-medium">挂载于:</span> {plugin.mountPoint}
+            </div>
+          )}
+          {!plugin.mountable && (
+            <div className="text-xs text-muted-foreground mt-2">
+              该插件需要额外后端装配，当前 UI 不直接提供一键挂载。
             </div>
           )}
         </CardContent>

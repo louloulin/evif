@@ -283,6 +283,20 @@ pub trait EvifPlugin: Send + Sync {
         Ok(())
     }
 
+    /// 初始化插件
+    ///
+    /// 在 validate 成功后、正式挂载前调用。
+    async fn initialize(&self, _config: Option<&serde_json::Value>) -> EvifResult<()> {
+        Ok(())
+    }
+
+    /// 优雅关闭插件
+    ///
+    /// 在卸载或替换插件前调用。
+    async fn shutdown(&self) -> EvifResult<()> {
+        Ok(())
+    }
+
     /// 返回插件 README 文档（Phase 8.2，对标 AGFS GetReadme）
     fn get_readme(&self) -> String {
         String::new()
@@ -312,4 +326,14 @@ pub trait EvifPlugin: Send + Sync {
     fn as_streamer(&self) -> Option<&dyn crate::streaming::Streamer> {
         None
     }
+}
+
+/// 统一执行插件生命周期前置步骤：先校验，再初始化。
+pub async fn validate_and_initialize_plugin(
+    plugin: &dyn EvifPlugin,
+    config: Option<&serde_json::Value>,
+) -> EvifResult<()> {
+    plugin.validate(config).await?;
+    plugin.initialize(config).await?;
+    Ok(())
 }

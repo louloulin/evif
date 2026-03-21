@@ -1,10 +1,8 @@
 //! EVIF Prometheus监控指标示例
 //!
-//! 演示如何使用evif-metrics收集和导出监控指标
+//! 演示如何在不依赖 graph 引擎的前提下使用 evif-metrics 收集和导出监控指标
 
 use evif_metrics::PrometheusMetricsRegistry;
-use evif_graph::{Graph, Node, NodeType};
-use std::collections::HashMap;
 use tokio::time::{Duration, Instant};
 
 #[tokio::main]
@@ -62,40 +60,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. 模拟操作并记录指标
     println!("5. 模拟操作并记录指标...\n");
 
-    // 创建图并记录节点创建
-    println!("a) 创建图节点...");
-    let graph = Graph::new();
-
+    // 模拟核心文件操作并记录指标
+    println!("a) 记录文件创建操作...");
     for i in 0..5 {
-        let node = Node {
-            id: evif_graph::NodeId::new(),
-            node_type: NodeType::File,
-            metadata: HashMap::new(),
-            attributes: [
-                ("name".to_string(), format!("file{}.txt", i).into()),
-            ].into(),
-            content_handle: None,
-        };
-
         let start = Instant::now();
-        graph.add_node(node).await?;
+        tokio::time::sleep(Duration::from_millis(5)).await;
         let duration = start.elapsed();
 
-        // 记录节点创建
         registry.counter_inc("evif_nodes_created_total", &["file"]).await?;
 
-        // 记录操作耗时
         registry.histogram_observe(
             "evif_operation_duration_seconds",
-            &["add_node"],
+            &["create_file"],
             duration.as_secs_f64()
         ).await?;
 
-        println!("  - 创建节点 {} ({:.2}ms)", i + 1, duration.as_millis());
+        println!("  - 创建文件 {} ({:.2}ms)", i + 1, duration.as_millis());
     }
 
-    // 记录总操作数
-    registry.counter_inc_by("evif_operations_total", &["add_node"], 5.0).await?;
+    registry.counter_inc_by("evif_operations_total", &["create_file"], 5.0).await?;
     println!();
 
     // 模拟连接数变化
@@ -124,21 +107,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Storage: 2048000 bytes");
     println!("  - Cache: 512000 bytes\n");
 
-    // 6. 模拟查询操作
-    println!("d) 执行查询操作...");
+    // 6. 模拟读取操作
+    println!("d) 执行读取操作...");
     for i in 0..3 {
         let start = Instant::now();
-        let _count = graph.node_count().await;
+        tokio::time::sleep(Duration::from_millis(3)).await;
         let duration = start.elapsed();
 
-        registry.counter_inc("evif_operations_total", &["query"]).await?;
+        registry.counter_inc("evif_operations_total", &["read"]).await?;
         registry.histogram_observe(
             "evif_operation_duration_seconds",
-            &["query"],
+            &["read"],
             duration.as_secs_f64()
         ).await?;
 
-        println!("  - 查询 {} ({:.2}ms)", i + 1, duration.as_millis());
+        println!("  - 读取 {} ({:.2}ms)", i + 1, duration.as_millis());
     }
     println!();
 
@@ -155,7 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Counter指标: 2个");
     println!("  - Gauge指标: 2个");
     println!("  - Histogram指标: 1个");
-    println!("  - 总操作数: 8次 (5次创建节点 + 3次查询)");
+    println!("  - 总操作数: 8次 (5次创建文件 + 3次读取)");
     println!("  - 活跃连接: 11个");
     println!();
 

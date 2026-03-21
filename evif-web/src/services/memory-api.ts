@@ -45,7 +45,7 @@ export interface SearchResponse {
   total: number
 }
 
-export interface GraphNode {
+export interface MemoryQueryNode {
   id: string
   type: string
   label: string
@@ -58,17 +58,17 @@ export interface TimelineEvent {
   event_type: string
 }
 
-export interface GraphPathInfo {
+export interface MemoryQueryPathInfo {
   nodes: string[]
   edges: string[]
   narrative: string
 }
 
-export interface GraphQueryResponse {
+export interface MemoryQueryResponse {
   query_type: string
-  nodes?: GraphNode[]
+  nodes?: MemoryQueryNode[]
   timeline?: TimelineEvent[]
-  paths?: GraphPathInfo[]
+  paths?: MemoryQueryPathInfo[]
   total: number
 }
 
@@ -147,7 +147,7 @@ export async function getCategoryMemories(id: string): Promise<CategoryWithMemor
   return res.json()
 }
 
-export async function queryGraph(
+export async function queryMemories(
   queryType: string,
   options?: {
     startNode?: string
@@ -158,8 +158,8 @@ export async function queryGraph(
     startTime?: string
     endTime?: string
   }
-): Promise<GraphQueryResponse> {
-  const res = await httpFetch('/api/v1/graph/query', {
+): Promise<MemoryQueryResponse> {
+  const res = await httpFetch('/api/v1/memories/query', {
     method: 'POST',
     body: JSON.stringify({
       query_type: queryType,
@@ -173,7 +173,7 @@ export async function queryGraph(
     }),
   })
   if (!res.ok) {
-    throw new Error('Failed to query graph')
+    throw new Error('Failed to query memories')
   }
   return res.json()
 }

@@ -64,7 +64,7 @@ Main client for interacting with the EVIF Memory API.
 - `list_categories()`: List all categories
 - `get_category(category_id)`: Get a specific category
 - `get_category_memories(category_id)`: Get memories in a category
-- `query_graph(query, query_type)`: Query the knowledge graph
+- `query_memories(query_type, ...)`: Query memory timeline and relationship views
 
 ### MemoryConfig
 

@@ -2,6 +2,7 @@
 //
 // 完全对标 AGFS 的插件集合
 
+pub mod catalog;
 pub mod localfs;
 pub mod kvfs;
 pub mod queuefs;
@@ -81,6 +82,10 @@ pub use heartbeatfs::{HeartbeatFsPlugin, HeartbeatConfig};
 pub use handlefs::{HandleFsPlugin, FileHandle, OpenFlags, HandleFsConfig};
 pub use tieredfs::{TieredFsPlugin, TieredConfig, StorageTier, TierStats};
 pub use encryptedfs::{EncryptedFsPlugin, EncryptedConfig};
+pub use catalog::{
+    core_supported_plugins, experimental_plugins, find_plugin_catalog_entry, normalize_plugin_id,
+    plugin_catalog, PluginCatalogEntry, PluginSupportTier,
+};
 
 #[cfg(feature = "s3fs")]
 pub use s3fs::{S3fsPlugin, S3Config, DirCache, StatCache};

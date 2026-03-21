@@ -5,6 +5,8 @@ export interface Plugin {
   author: string
   description: string
   type: 'local' | 'cloud-storage' | 'ai' | 'database' | 'other'
+  supportTier: 'core' | 'dynamic' | 'experimental' | string
+  mountable: boolean
   status: 'loaded' | 'unloaded' | 'error'
   mountPoint?: string
   config?: Record<string, any>

@@ -1,11 +1,11 @@
 /**
  * KnowledgeGraph 组件
- * 知识图谱可视化 - 展示记忆节点和关系
- * 支持图查询 UI: 因果链、时间线、时序 BFS、时序路径
+ * 记忆关系视图 - 展示记忆节点和时间关系
+ * 支持记忆查询 UI: 因果链、时间线、时序 BFS、时序路径
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { queryGraph, type GraphNode, type TimelineEvent, type GraphQueryResponse } from '@/services/memory-api'
+import { queryMemories, type MemoryQueryNode, type TimelineEvent, type MemoryQueryResponse } from '@/services/memory-api'
 import { Network, GitBranch, Clock, ChevronRight, ZoomIn, ZoomOut, RotateCcw, Search, Play, X, Filter, CheckSquare, Square } from 'lucide-react'
 
 // 查询类型
@@ -21,7 +21,7 @@ interface QueryParams {
 }
 
 interface GraphData {
-  nodes: GraphNode[]
+  nodes: MemoryQueryNode[]
   edges: { source: string; target: string; type: string }[]
 }
 
@@ -33,7 +33,7 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
+  const [selectedNode, setSelectedNode] = useState<MemoryQueryNode | null>(null)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
@@ -50,7 +50,7 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
     startTime: '',
     endTime: ''
   })
-  const [queryResult, setQueryResult] = useState<GraphQueryResponse | null>(null)
+  const [queryResult, setQueryResult] = useState<MemoryQueryResponse | null>(null)
   const [queryLoading, setQueryLoading] = useState(false)
 
   // 边类型过滤状态
@@ -69,7 +69,7 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
     setError(null)
     try {
       // 获取所有记忆节点
-      const nodesResponse = await queryGraph('timeline', { maxDepth: 3 })
+      const nodesResponse = await queryMemories('timeline', { maxDepth: 3 })
       
       // 模拟边数据（基于时间顺序）
       const nodes = nodesResponse.nodes || []
@@ -98,7 +98,7 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
     setQueryLoading(true)
     setError(null)
     try {
-      const result = await queryGraph(queryType, {
+      const result = await queryMemories(queryType, {
         startNode: queryParams.startNode || undefined,
         endNode: queryParams.endNode || undefined,
         maxDepth: queryParams.maxDepth,
@@ -178,7 +178,7 @@ export function KnowledgeGraph({ onNodeClick }: KnowledgeGraphProps) {
   }
 
   // 处理节点点击
-  const handleNodeClick = (node: GraphNode) => {
+  const handleNodeClick = (node: MemoryQueryNode) => {
     setSelectedNode(node)
     onNodeClick?.(node.id)
   }

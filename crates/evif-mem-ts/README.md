@@ -146,12 +146,12 @@ Get memories in a category.
 const memories = await client.getCategoryMemories('cat-123', 100);
 ```
 
-#### `queryGraph(queryType, options?)`
+#### `queryMemories(queryType, options?)`
 
-Query the knowledge graph.
+Query memory timeline and relationship views.
 
 ```typescript
-const result = await client.queryGraph(GraphQueryType.TIMELINE, {
+const result = await client.queryMemories(MemoryQueryType.TIMELINE, {
   startNode: 'mem-123',
   maxDepth: 3,
   eventType: 'knowledge',
@@ -192,10 +192,10 @@ enum Modality {
 }
 ```
 
-### GraphQueryType
+### MemoryQueryType
 
 ```typescript
-enum GraphQueryType {
+enum MemoryQueryType {
   CAUSAL_CHAIN = 'causal_chain',
   TIMELINE = 'timeline',
   TEMPORAL_BFS = 'temporal_bfs',
