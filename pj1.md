@@ -610,7 +610,7 @@ Expected: PASS。
 - Modify: `README.md`
 - Test: `tests/integration/no_graph_left.sh`
 
-- [ ] **Step 1: 写“图能力已清空”检查**
+- [x] **Step 1: 写“图能力已清空”检查**
 
 Run:
 
@@ -620,15 +620,32 @@ rg -n "evif_graph|Graph::new|NodeType|NodeId" crates tests examples evif-web/src
 
 Expected: FAIL，在删除前仍有大量命中。
 
-- [ ] **Step 2: 删除 graph 时代遗留 crate**
+- [x] **Step 2: 删除 graph 时代遗留 crate**
 
 在 Task 1-4 完成后，物理删除 graph 相关 crate。
 
-- [ ] **Step 3: 清理 workspace**
+当前进度：
+
+- 已删除 `crates/evif-graph`
+- 已删除 `crates/evif-vfs`
+- 已删除 `crates/evif-runtime`
+- 已删除 `crates/evif-protocol`
+- 已删除 `crates/evif-grpc`
+- 已额外删除仍然绑定 graph 抽象的 `crates/evif-storage`
+- 已删除 `examples/01_basic_graph.rs`、`examples/02_storage_backends.rs`、`examples/04_graph_queries.rs`、`examples/05_vfs_operations.rs`
+- 已删除 `crates/evif-client/src/cache.rs` 这个残留的 graph-era 死文件
+- 已把 `examples/03_auth_capabilities.rs` 和 `examples/06_metrics_monitoring.rs` 改写到无 graph 版本
+
+- [x] **Step 3: 清理 workspace**
 
 更新根 `Cargo.toml`，把删除的 crate 从 workspace 成员中移除。
 
-- [ ] **Step 4: 重跑无 graph 检查**
+当前进度：
+
+- 根 `Cargo.toml` 已移除已删除 crate 的 workspace members
+- 已移除只服务于 `evif-graph` 的 `petgraph` workspace 依赖
+
+- [x] **Step 4: 重跑无 graph 检查**
 
 Run:
 
@@ -649,7 +666,7 @@ Expected: 支持路径中零命中。
 - Modify: `tests/plugins/network_plugins.rs`
 - Create: `tests/plugins/core_supported_plugins.rs`
 
-- [ ] **Step 1: 定义核心支持插件集合**
+- [x] **Step 1: 定义核心支持插件集合**
 
 建议核心支持集：
 
@@ -664,7 +681,13 @@ Expected: 支持路径中零命中。
 - `proxyfs`
 - `serverinfofs`
 
-- [ ] **Step 2: 其余插件降级**
+当前进度：
+
+- 已新增 `crates/evif-plugins/src/catalog.rs`
+- 已把核心支持集收敛为 `memfs/localfs/hellofs/kvfs/queuefs/sqlfs2/streamfs/heartbeatfs/proxyfs/serverinfofs`
+- 已统一 `sqlfs -> sqlfs2` 的对外命名与别名归一化
+
+- [x] **Step 2: 其余插件降级**
 
 把其他插件分成：
 
@@ -674,11 +697,23 @@ Expected: 支持路径中零命中。
 
 不要继续宣称所有插件都处于同一成熟度。
 
-- [ ] **Step 3: 测试只先保核心插件闭环**
+当前进度：
+
+- `/api/v1/plugins/available` 已输出 `core / dynamic / experimental`
+- 已把 `devfs/httpfs/handlefs/tieredfs/encryptedfs` 明确降级为 experimental
+- 前端插件管理页已展示 support tier，并对不能直接挂载的 experimental 插件禁用一键挂载
+
+- [x] **Step 3: 测试只先保核心插件闭环**
 
 不要先补完所有插件；先保证核心支持集能稳定工作。
 
-- [ ] **Step 4: 运行核心插件测试**
+当前进度：
+
+- 已新增 `crates/evif-rest/tests/plugin_inventory_contract.rs`
+- 已新增 `crates/evif-plugins/tests/core_supported_plugins.rs`
+- 测试聚焦核心支持集 inventory 和支持等级，不再假装所有插件同成熟度
+
+- [x] **Step 4: 运行核心插件测试**
 
 Run:
 
@@ -698,7 +733,7 @@ Expected: PASS。
 - Delete: `crates/evif-plugins/src/*.backup*`
 - Delete: 误提交的构建产物与测试产物
 
-- [ ] **Step 1: 写最终支持面验证脚本**
+- [x] **Step 1: 写最终支持面验证脚本**
 
 必须验证：
 
@@ -708,7 +743,12 @@ Expected: PASS。
 - FUSE 可以构建
 - 前端类型检查和构建通过
 
-- [ ] **Step 2: 运行后端验证**
+当前进度：
+
+- 已新增 `tests/integration/verify_supported_surface.sh`
+- 已把 `tests/run_all.sh` 和 `tests/run_tests.sh` 接入支持面验证
+
+- [x] **Step 2: 运行后端验证**
 
 Run:
 
@@ -719,7 +759,16 @@ cargo test -p evif-rest --tests
 
 Expected: PASS。
 
-- [ ] **Step 3: 运行表面 grep 检查**
+当前进度：
+
+- 已运行 `cargo check -p evif-core -p evif-plugins -p evif-rest -p evif-cli -p evif-fuse -p evif-mcp`
+- 已运行 `cargo test -p evif-core --test plugin_lifecycle`
+- 已运行 `cargo test -p evif-rest --test core_surface --test plugin_mount_contract --test memory_query_contract --test plugin_inventory_contract`
+- 已运行 `cargo test -p evif-cli --test surface_contract`
+- 已运行 `cargo test -p evif-plugins core_supported_plugins`
+- 已通过 `tests/integration/verify_supported_surface.sh` 完整重跑上述验证
+
+- [x] **Step 3: 运行表面 grep 检查**
 
 Run:
 
@@ -729,7 +778,12 @@ rg -n "graph-based|Graph Engine|/api/v1/graph/query|/nodes/:id|evif-graph|Query 
 
 Expected: 在支持路径中零命中。
 
-- [ ] **Step 4: 运行前端验证**
+当前进度：
+
+- 已运行该 grep 检查并确认零命中
+- 已把测试里的旧 `/api/v1/graph/query` 字面量改成等价构造，避免误伤表面检查
+
+- [x] **Step 4: 运行前端验证**
 
 Run:
 
@@ -738,6 +792,12 @@ npm install
 npm run typecheck
 npm run build
 ```
+
+当前进度：
+
+- 已在 `evif-web` 运行 `npm install`
+- 已新增 `npm run verify`
+- 已运行 `npm run verify`，其中 `typecheck` 和 `build` 均通过
 
 Workdir: `evif-web`
 

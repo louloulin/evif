@@ -40,6 +40,8 @@ doc/
 *.bak
 *.backup
 .cache/
+__pycache__/
+*.pyc
 
 # Debug and test files
 debug_mount

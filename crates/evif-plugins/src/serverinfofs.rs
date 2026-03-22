@@ -19,6 +19,17 @@ impl ServerInfoFsPlugin {
             version: version.into(),
         }
     }
+
+    fn known_file(path: &str) -> Option<&str> {
+        match path.trim_start_matches('/') {
+            "version" => Some("version"),
+            "uptime" => Some("uptime"),
+            "info" => Some("info"),
+            "stats" => Some("stats"),
+            "README" => Some("README"),
+            _ => None,
+        }
+    }
 }
 
 #[async_trait]
@@ -77,6 +88,10 @@ impl EvifPlugin for ServerInfoFsPlugin {
     }
 
     async fn readdir(&self, _path: &str) -> EvifResult<Vec<FileInfo>> {
+        if _path != "/" && !_path.is_empty() {
+            return Err(EvifError::InvalidPath("Not a directory".to_string()));
+        }
+
         let files = vec![
             "version",
             "uptime",
@@ -101,12 +116,24 @@ impl EvifPlugin for ServerInfoFsPlugin {
         let file_name = path.trim_start_matches('/');
         let now = Utc::now();
 
+        if file_name.is_empty() || file_name == "/" {
+            return Ok(FileInfo {
+                name: "/".to_string(),
+                size: 0,
+                mode: 0o444,
+                modified: now,
+                is_dir: true,
+            });
+        }
+
+        let known = Self::known_file(path).ok_or_else(|| EvifError::NotFound(path.to_string()))?;
+
         Ok(FileInfo {
-            name: if file_name.is_empty() { "/" } else { file_name }.to_string(),
+            name: known.to_string(),
             size: 0,
             mode: 0o444,
             modified: now,
-            is_dir: file_name.is_empty() || file_name == "/",
+            is_dir: false,
         })
     }
 

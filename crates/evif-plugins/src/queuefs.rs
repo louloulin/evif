@@ -376,6 +376,10 @@ impl QueueFsPlugin {
         }
     }
 
+    fn readme(&self) -> &'static str {
+        "QueueFS Plugin - File-oriented queue controls\n\nCreate queues with mkdir, enqueue by writing to enqueue, and consume via dequeue/peek/size control files."
+    }
+
     /// 解析队列路径
     /// 返回 (queue_name, operation, is_dir)
     fn parse_path(&self, path: &str) -> EvifResult<(String, String, bool)> {
@@ -451,6 +455,10 @@ impl EvifPlugin for QueueFsPlugin {
     }
 
     async fn read(&self, path: &str, _offset: u64, _size: u64) -> EvifResult<Vec<u8>> {
+        if path.trim_start_matches('/') == "README" {
+            return Ok(self.readme().as_bytes().to_vec());
+        }
+
         let (queue_name, operation, is_dir) = self.parse_path(path)?;
 
         if is_dir {
@@ -552,6 +560,10 @@ impl EvifPlugin for QueueFsPlugin {
             return Ok(entries);
         }
 
+        if !self.store.queue_exists(&queue_name).await {
+            return Err(EvifError::NotFound(queue_name));
+        }
+
         // 队列目录 - 返回控制文件
         let control_files = vec![
             ("enqueue", 0o222, false),
@@ -576,6 +588,16 @@ impl EvifPlugin for QueueFsPlugin {
     }
 
     async fn stat(&self, path: &str) -> EvifResult<FileInfo> {
+        if path.trim_start_matches('/') == "README" {
+            return Ok(FileInfo {
+                name: "README".to_string(),
+                size: self.readme().len() as u64,
+                mode: 0o444,
+                modified: Utc::now(),
+                is_dir: false,
+            });
+        }
+
         let (queue_name, operation, is_dir) = self.parse_path(path)?;
 
         let now = Utc::now();

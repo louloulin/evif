@@ -217,6 +217,19 @@ impl HeartbeatFsPlugin {
             Err(EvifError::NotFound(name.to_string()))
         }
     }
+
+    fn readme(&self) -> &'static str {
+        r#"HeartbeatFS Plugin - Heartbeat Monitoring Service
+
+This plugin provides heartbeat liveness tracking through file operations.
+
+USAGE:
+  mkdir /heartbeatfs/<name>
+  touch /heartbeatfs/<name>/keepalive
+  echo "timeout=60" > /heartbeatfs/<name>/ctl
+  cat /heartbeatfs/<name>/ctl
+"#
+    }
 }
 
 impl Default for HeartbeatFsPlugin {
@@ -275,53 +288,14 @@ impl EvifPlugin for HeartbeatFsPlugin {
     }
 
     async fn read(&self, path: &str, _offset: u64, _size: u64) -> EvifResult<Vec<u8>> {
+        if path.trim_start_matches('/') == "README" {
+            return Ok(self.readme().as_bytes().to_vec());
+        }
+
         let (name, file) = self.parse_path(path)?;
 
         if name.is_empty() {
             return Err(EvifError::InvalidPath("is a directory".to_string()));
-        }
-
-        if name == "README" {
-            let readme = r#"HeartbeatFS Plugin - Heartbeat Monitoring Service
-
-This plugin provides a heartbeat monitoring service through a file system interface.
-
-USAGE:
-  Create a new heartbeat item:
-    mkdir /heartbeatfs/<name>
-
-  Update heartbeat (keepalive):
-    touch /heartbeatfs/<name>/keepalive
-    echo "ping" > /heartbeatfs/<name>/keepalive
-
-  Update timeout:
-    echo "timeout=60" > /heartbeatfs/<name>/ctl
-
-  Check heartbeat status:
-    cat /heartbeatfs/<name>/ctl
-
-  Check if heartbeat is alive (stat will fail if expired):
-    stat /heartbeatfs/<name>
-
-  List all heartbeat items:
-    ls /heartbeatfs
-
-  Remove heartbeat item:
-    rm -r /heartbeatfs/<name>
-
-STRUCTURE:
-  /<name>/           - Directory for each heartbeat item (auto-deleted when expired)
-  /<name>/keepalive  - Touch or write to update heartbeat
-  /<name>/ctl        - Read to get status, write to update timeout (timeout=N in seconds)
-  /README            - This file
-
-BEHAVIOR:
-  - Default timeout: 5 minutes (300 seconds) from last heartbeat
-  - Timeout can be customized per item by writing to ctl file
-  - Expired items are automatically removed by the system
-  - Use stat to check if an item still exists (alive)
-"#;
-            return Ok(readme.as_bytes().to_vec());
         }
 
         let file = file.ok_or_else(|| EvifError::InvalidPath("invalid path".to_string()))?;
@@ -405,6 +379,10 @@ BEHAVIOR:
 
             Ok(files)
         } else {
+            if !self.items.read().await.contains_key(&name) {
+                return Err(EvifError::NotFound(name));
+            }
+
             // 心跳项目录
             Ok(vec![
                 FileInfo {
@@ -426,6 +404,16 @@ BEHAVIOR:
     }
 
     async fn stat(&self, path: &str) -> EvifResult<FileInfo> {
+        if path.trim_start_matches('/') == "README" {
+            return Ok(FileInfo {
+                name: "README".to_string(),
+                size: self.readme().len() as u64,
+                mode: 0o444,
+                modified: Utc::now(),
+                is_dir: false,
+            });
+        }
+
         let (name, file) = self.parse_path(path)?;
 
         if name.is_empty() {
@@ -435,16 +423,6 @@ BEHAVIOR:
                 mode: 0o755,
                 modified: Utc::now(),
                 is_dir: true,
-            });
-        }
-
-        if name == "README" {
-            return Ok(FileInfo {
-                name: "README".to_string(),
-                size: 0,
-                mode: 0o444,
-                modified: Utc::now(),
-                is_dir: false,
             });
         }
 

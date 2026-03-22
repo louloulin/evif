@@ -3,6 +3,7 @@
 // 用途: 分布式文件系统、远程备份、负载均衡、故障转移
 
 use async_trait::async_trait;
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use evif_core::{EvifError, EvifPlugin, EvifResult, FileInfo, WriteFlags};
 use serde::{Deserialize, Serialize};
@@ -23,37 +24,49 @@ pub struct ProxyConfig {
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
-            base_url: "http://localhost:8080/api/v1".to_string(),
+            base_url: "http://localhost:8081/api/v1".to_string(),
             timeout_seconds: 30,
             max_retries: 3,
         }
     }
 }
 
-/// EVIF/AGFS API响应格式
 #[derive(Debug, Serialize, Deserialize)]
-struct ApiResponse<T> {
-    status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ReadResponse {
+struct EvifReadResponse {
+    content: String,
     data: String,
-    size: usize,
+    size: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct WriteResponse {
+struct EvifWriteResponse {
     bytes_written: u64,
+    path: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct ReaddirResponse {
-    entries: Vec<FileInfo>,
+struct EvifDirectoryEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+    size: u64,
+    modified: String,
+    created: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EvifDirectoryListResponse {
+    path: String,
+    files: Vec<EvifDirectoryEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EvifFileStatResponse {
+    path: String,
+    size: u64,
+    is_dir: bool,
+    modified: String,
+    created: String,
 }
 
 /// ProxyFS插件
@@ -88,38 +101,30 @@ impl ProxyFsPlugin {
         }
     }
 
-    /// 构建API URL
-    fn build_api_url(&self, operation: &str, path: &str) -> String {
-        let clean_path = path.trim_start_matches('/');
-        let encoded_path = urlencoding::encode(clean_path);
-        format!("{}/{}/{}", self.config.base_url, operation, encoded_path)
+    fn endpoint_url(&self, endpoint: &str) -> String {
+        format!("{}/{}", self.config.base_url.trim_end_matches('/'), endpoint)
     }
 
-    /// 执行HTTP GET请求(读取操作)
-    async fn http_get<T: for<'de> Deserialize<'de>>(&self, url: &str) -> EvifResult<T> {
+    async fn http_get<T: for<'de> Deserialize<'de>>(
+        &self,
+        endpoint: &str,
+        path: &str,
+    ) -> EvifResult<T> {
+        let url = self.endpoint_url(endpoint);
         let response = self.client
             .get(url)
+            .query(&[("path", path)])
             .send()
             .await
             .map_err(|e| EvifError::InvalidPath(format!("HTTP GET failed: {}", e)))?;
 
         if response.status().is_success() {
-            let api_response: ApiResponse<T> = response
+            response
                 .json()
                 .await
-                .map_err(|e| EvifError::InvalidPath(format!("Failed to parse JSON: {}", e)))?;
-
-            if api_response.status == "success" {
-                api_response.data.ok_or_else(|| {
-                    EvifError::InvalidPath("Empty response data".to_string())
-                })
-            } else {
-                Err(EvifError::InvalidPath(
-                    api_response.error.unwrap_or_else(|| "Unknown error".to_string())
-                ))
-            }
+                .map_err(|e| EvifError::InvalidPath(format!("Failed to parse JSON: {}", e)))
         } else if response.status() == 404 {
-            Err(EvifError::NotFound(url.to_string()))
+            Err(EvifError::NotFound(path.to_string()))
         } else {
             Err(EvifError::InvalidPath(format!(
                 "HTTP error: {}",
@@ -128,12 +133,12 @@ impl ProxyFsPlugin {
         }
     }
 
-    /// 执行HTTP POST请求(写入操作)
     async fn http_post<T: for<'de> Deserialize<'de>, B: Serialize>(
         &self,
-        url: &str,
+        endpoint: &str,
         body: &B,
     ) -> EvifResult<T> {
+        let url = self.endpoint_url(endpoint);
         let response = self.client
             .post(url)
             .json(body)
@@ -142,20 +147,10 @@ impl ProxyFsPlugin {
             .map_err(|e| EvifError::InvalidPath(format!("HTTP POST failed: {}", e)))?;
 
         if response.status().is_success() {
-            let api_response: ApiResponse<T> = response
+            response
                 .json()
                 .await
-                .map_err(|e| EvifError::InvalidPath(format!("Failed to parse JSON: {}", e)))?;
-
-            if api_response.status == "success" {
-                api_response.data.ok_or_else(|| {
-                    EvifError::InvalidPath("Empty response data".to_string())
-                })
-            } else {
-                Err(EvifError::InvalidPath(
-                    api_response.error.unwrap_or_else(|| "Unknown error".to_string())
-                ))
-            }
+                .map_err(|e| EvifError::InvalidPath(format!("Failed to parse JSON: {}", e)))
         } else {
             Err(EvifError::InvalidPath(format!(
                 "HTTP error: {}",
@@ -164,10 +159,39 @@ impl ProxyFsPlugin {
         }
     }
 
-    /// 执行HTTP DELETE请求
-    async fn http_delete(&self, url: &str) -> EvifResult<()> {
+    async fn http_put<T: for<'de> Deserialize<'de>, B: Serialize>(
+        &self,
+        endpoint: &str,
+        path: &str,
+        body: &B,
+    ) -> EvifResult<T> {
+        let url = self.endpoint_url(endpoint);
+        let response = self.client
+            .put(url)
+            .query(&[("path", path), ("offset", "0")])
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| EvifError::InvalidPath(format!("HTTP PUT failed: {}", e)))?;
+
+        if response.status().is_success() {
+            response
+                .json()
+                .await
+                .map_err(|e| EvifError::InvalidPath(format!("Failed to parse JSON: {}", e)))
+        } else {
+            Err(EvifError::InvalidPath(format!(
+                "HTTP error: {}",
+                response.status()
+            )))
+        }
+    }
+
+    async fn http_delete(&self, endpoint: &str, path: &str) -> EvifResult<()> {
+        let url = self.endpoint_url(endpoint);
         let response = self.client
             .delete(url)
+            .query(&[("path", path)])
             .send()
             .await
             .map_err(|e| EvifError::InvalidPath(format!("HTTP DELETE failed: {}", e)))?;
@@ -185,7 +209,7 @@ impl ProxyFsPlugin {
     /// 热重载连接
     pub async fn reload(&self) -> EvifResult<()> {
         // 测试连接
-        let health_url = format!("{}/health", self.config.base_url);
+        let health_url = self.endpoint_url("health");
         let response = self.client
             .get(&health_url)
             .send()
@@ -211,19 +235,15 @@ impl EvifPlugin for ProxyFsPlugin {
     }
 
     async fn create(&self, path: &str, _perm: u32) -> EvifResult<()> {
-        // 通过写入空文件创建
-        let url = self.build_api_url("write", path);
-        let body = serde_json::json!({"data": ""});
-
-        let _: WriteResponse = self.http_post(&url, &body).await?;
+        let body = serde_json::json!({ "path": path });
+        let _: serde_json::Value = self.http_post("files", &body).await?;
         Ok(())
     }
 
-    async fn mkdir(&self, _path: &str, _perm: u32) -> EvifResult<()> {
-        // 远程服务器可能不支持mkdir
-        Err(EvifError::InvalidPath(
-            "Remote mkdir not supported via HTTP API".to_string(),
-        ))
+    async fn mkdir(&self, path: &str, _perm: u32) -> EvifResult<()> {
+        let body = serde_json::json!({ "path": path, "parents": false });
+        let _: serde_json::Value = self.http_post("directories", &body).await?;
+        Ok(())
     }
 
     async fn read(&self, path: &str, _offset: u64, _size: u64) -> EvifResult<Vec<u8>> {
@@ -236,9 +256,10 @@ impl EvifPlugin for ProxyFsPlugin {
             .into_bytes());
         }
 
-        let url = self.build_api_url("read", path);
-        let response: ReadResponse = self.http_get(&url).await?;
-        Ok(response.data.into_bytes())
+        let response: EvifReadResponse = self.http_get("files", path).await?;
+        base64::engine::general_purpose::STANDARD
+            .decode(response.data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid base64 response: {}", e)))
     }
 
     async fn write(
@@ -254,22 +275,33 @@ impl EvifPlugin for ProxyFsPlugin {
             return Ok(data.len() as u64);
         }
 
-        let url = self.build_api_url("write", path);
         let body = serde_json::json!({
-            "data": String::from_utf8_lossy(&data)
+            "data": base64::engine::general_purpose::STANDARD.encode(&data),
+            "encoding": "base64"
         });
 
-        let response: WriteResponse = self.http_post(&url, &body).await?;
+        let response: EvifWriteResponse = self.http_put("files", path, &body).await?;
         Ok(response.bytes_written)
     }
 
     async fn readdir(&self, path: &str) -> EvifResult<Vec<FileInfo>> {
-        let url = self.build_api_url("readdir", path);
-        let response: ReaddirResponse = self.http_get(&url).await?;
+        let response: EvifDirectoryListResponse = self.http_get("directories", path).await?;
+        let mut entries: Vec<FileInfo> = response
+            .files
+            .into_iter()
+            .map(|entry| FileInfo {
+                name: entry.name,
+                size: entry.size,
+                mode: if entry.is_dir { 0o755 } else { 0o644 },
+                modified: DateTime::parse_from_rfc3339(&entry.modified)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                is_dir: entry.is_dir,
+            })
+            .collect();
 
         // 添加 /reload 虚拟文件到根目录
         if path == "/" || path.is_empty() {
-            let mut entries = response.entries;
             entries.push(FileInfo {
                 name: "reload".to_string(),
                 size: 0,
@@ -277,10 +309,9 @@ impl EvifPlugin for ProxyFsPlugin {
                 modified: Utc::now(),
                 is_dir: false,
             });
-            Ok(entries)
-        } else {
-            Ok(response.entries)
         }
+
+        Ok(entries)
     }
 
     async fn stat(&self, path: &str) -> EvifResult<FileInfo> {
@@ -295,8 +326,21 @@ impl EvifPlugin for ProxyFsPlugin {
             });
         }
 
-        let url = self.build_api_url("stat", path);
-        self.http_get(&url).await
+        let response: EvifFileStatResponse = self.http_get("stat", path).await?;
+        Ok(FileInfo {
+            name: path
+                .trim_start_matches('/')
+                .rsplit('/')
+                .next()
+                .unwrap_or(path)
+                .to_string(),
+            size: response.size,
+            mode: if response.is_dir { 0o755 } else { 0o644 },
+            modified: DateTime::parse_from_rfc3339(&response.modified)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now()),
+            is_dir: response.is_dir,
+        })
     }
 
     async fn remove(&self, path: &str) -> EvifResult<()> {
@@ -306,8 +350,7 @@ impl EvifPlugin for ProxyFsPlugin {
             ));
         }
 
-        let url = self.build_api_url("remove", path);
-        self.http_delete(&url).await
+        self.http_delete("files", path).await
     }
 
     async fn rename(&self, _old_path: &str, _new_path: &str) -> EvifResult<()> {
@@ -324,9 +367,7 @@ impl EvifPlugin for ProxyFsPlugin {
             ));
         }
 
-        // 通过HTTP API调用远程的remove_all
-        let url = self.build_api_url("remove_all", path);
-        self.http_delete(&url).await
+        self.http_delete("directories", path).await
     }
 }
 
@@ -336,30 +377,30 @@ mod tests {
 
     #[test]
     fn test_proxyfs_url_building() {
-        let plugin = ProxyFsPlugin::new("http://localhost:8080/api/v1");
+        let plugin = ProxyFsPlugin::new("http://localhost:8081/api/v1");
 
         assert_eq!(
-            plugin.build_api_url("read", "/test/file.txt"),
-            "http://localhost:8080/api/v1/read/test%2Ffile.txt"
+            plugin.endpoint_url("files"),
+            "http://localhost:8081/api/v1/files"
         );
 
         assert_eq!(
-            plugin.build_api_url("write", "/data"),
-            "http://localhost:8080/api/v1/write/data"
+            plugin.endpoint_url("directories"),
+            "http://localhost:8081/api/v1/directories"
         );
     }
 
     #[test]
     fn test_proxyfs_config_default() {
         let config = ProxyConfig::default();
-        assert_eq!(config.base_url, "http://localhost:8080/api/v1");
+        assert_eq!(config.base_url, "http://localhost:8081/api/v1");
         assert_eq!(config.timeout_seconds, 30);
         assert_eq!(config.max_retries, 3);
     }
 
     #[test]
     fn test_proxyfs_reload_file() {
-        let plugin = ProxyFsPlugin::new("http://localhost:8080/api/v1");
+        let plugin = ProxyFsPlugin::new("http://localhost:8081/api/v1");
 
         // /reload 应该返回特殊响应
         // 注意: 这个测试不会真正连接,只是验证逻辑

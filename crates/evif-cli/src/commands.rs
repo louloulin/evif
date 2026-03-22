@@ -50,17 +50,17 @@ impl EvifCommand {
         }
     }
 
-    /// 列出目录内容
-    pub async fn ls(&self, path: Option<String>, recursive: bool, long: bool) -> Result<()> {
+    pub async fn ls_output(&self, path: Option<String>, long: bool) -> Result<String> {
         let path = path.unwrap_or_else(|| "/".to_string());
         let files = self.client.ls(&path).await?;
 
+        let mut lines = Vec::new();
         if long {
-            println!(
+            lines.push(format!(
                 "{:<8} {:<12} {:<20} {:<40}",
                 "Mode", "Size", "Modified", "Name"
-            );
-            println!("{}", "-".repeat(80));
+            ));
+            lines.push("-".repeat(80));
             for file in files {
                 let mode = if file.is_dir {
                     "drwxr-xr-x"
@@ -73,26 +73,42 @@ impl EvifCommand {
                 } else {
                     format!("{}", file.size)
                 };
-                println!(
+                lines.push(format!(
                     "{:<8} {:<12} {:<20} {:<40}",
                     mode, size, modified, file.name
-                );
+                ));
             }
         } else {
             for file in files {
                 if file.is_dir {
-                    println!("{}/", file.name);
+                    lines.push(format!("{}/", file.name));
                 } else {
-                    println!("{}", file.name);
+                    lines.push(file.name);
                 }
             }
         }
+
+        Ok(if lines.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n", lines.join("\n"))
+        })
+    }
+
+    /// 列出目录内容
+    pub async fn ls(&self, path: Option<String>, recursive: bool, long: bool) -> Result<()> {
+        let output = self.ls_output(path, long).await?;
+        print!("{}", output);
         Ok(())
+    }
+
+    pub async fn cat_output(&self, path: String) -> Result<String> {
+        self.client.cat(&path).await.map_err(Into::into)
     }
 
     /// 显示文件内容
     pub async fn cat(&self, path: String) -> Result<()> {
-        let content = self.client.cat(&path).await?;
+        let content = self.cat_output(path).await?;
         print!("{}", content);
         Ok(())
     }
@@ -253,6 +269,10 @@ impl EvifCommand {
     pub async fn repl(&self) -> Result<()> {
         let mut repl = Repl::new(self.server.clone(), self.verbose);
         repl.run().await
+    }
+
+    pub async fn script(&self, path: String) -> Result<()> {
+        crate::script::ScriptExecutor::execute_script_with_client(&path, self).await
     }
 
     /// 统计信息
@@ -790,8 +810,12 @@ impl EvifCommand {
 
     /// 输出文本
     pub async fn echo(&self, text: String) -> Result<()> {
-        println!("{}", text);
+        print!("{}", self.echo_output(text));
         Ok(())
+    }
+
+    pub fn echo_output(&self, text: String) -> String {
+        format!("{}\n", text)
     }
 
     /// 切换当前工作目录
@@ -817,8 +841,12 @@ impl EvifCommand {
 
     /// 打印当前工作目录
     pub async fn pwd(&self) -> Result<()> {
-        println!("{}", self.cwd.lock().unwrap());
+        print!("{}", self.pwd_output());
         Ok(())
+    }
+
+    pub fn pwd_output(&self) -> String {
+        format!("{}\n", self.cwd.lock().unwrap())
     }
 
     /// 排序文本行

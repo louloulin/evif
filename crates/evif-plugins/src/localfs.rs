@@ -182,7 +182,11 @@ impl EvifPlugin for LocalFsPlugin {
                 tokio::fs::File::create(full_path).await?
             }
         } else {
-            tokio::fs::File::open(full_path).await?
+            tokio::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(full_path)
+                .await?
         };
 
         if flags.contains(WriteFlags::TRUNCATE) {

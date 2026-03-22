@@ -307,6 +307,17 @@ impl EvifPlugin for StreamFsPlugin {
     }
 
     async fn stat(&self, path: &str) -> EvifResult<FileInfo> {
+        let clean_path = path.trim_start_matches('/');
+        if clean_path.is_empty() || clean_path == "/" {
+            return Ok(FileInfo {
+                name: "/".to_string(),
+                size: 0,
+                mode: 0o755,
+                modified: Utc::now(),
+                is_dir: true,
+            });
+        }
+
         let name = self.parse_path(path)?;
         let streams = self.streams.read().await;
 

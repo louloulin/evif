@@ -86,6 +86,8 @@ export const PluginList: React.FC<PluginListProps> = ({
   const PluginCard: React.FC<{ plugin: Plugin }> = ({ plugin }) => {
     const Icon = PLUGIN_ICONS[plugin.type] || Puzzle
     const StatusIcon = STATUS_ICONS[plugin.status]
+    const supportTier = plugin.supportTier ?? 'experimental'
+    const mountable = plugin.mountable ?? true
 
     return (
       <Card className="hover:shadow-md transition-shadow">
@@ -106,7 +108,7 @@ export const PluginList: React.FC<PluginListProps> = ({
                 {STATUS_LABELS[plugin.status] || plugin.status}
               </Badge>
               <Badge variant="outline">
-                {SUPPORT_TIER_LABELS[plugin.supportTier] || plugin.supportTier}
+                {SUPPORT_TIER_LABELS[supportTier] || supportTier}
               </Badge>
             </div>
           </div>
@@ -139,7 +141,7 @@ export const PluginList: React.FC<PluginListProps> = ({
                   variant="outline"
                   onClick={() => onPluginMount?.(plugin.id)}
                   className="flex-1"
-                  disabled={!plugin.mountable}
+                  disabled={!mountable}
                 >
                   <Folder className="h-4 w-4 mr-1" />
                   挂载
@@ -164,10 +166,10 @@ export const PluginList: React.FC<PluginListProps> = ({
                 size="sm"
                 onClick={() => onPluginToggle?.(plugin.id, true)}
                 className="flex-1"
-                disabled={!plugin.mountable}
+                disabled={!mountable}
               >
                 <Power className="h-4 w-4 mr-1" />
-                {plugin.mountable ? '加载插件' : '需后端装配'}
+                {mountable ? '加载插件' : '需后端装配'}
               </Button>
             )}
           </div>
@@ -177,7 +179,7 @@ export const PluginList: React.FC<PluginListProps> = ({
               <span className="font-medium">挂载于:</span> {plugin.mountPoint}
             </div>
           )}
-          {!plugin.mountable && (
+          {!mountable && (
             <div className="text-xs text-muted-foreground mt-2">
               该插件需要额外后端装配，当前 UI 不直接提供一键挂载。
             </div>

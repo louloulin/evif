@@ -271,7 +271,7 @@ impl SqlfsPlugin {
 #[async_trait]
 impl EvifPlugin for SqlfsPlugin {
     fn name(&self) -> &str {
-        "sqlfs"
+        "sqlfs2"
     }
 
     async fn create(&self, path: &str, _perm: u32) -> EvifResult<()> {

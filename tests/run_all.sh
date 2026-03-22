@@ -116,6 +116,7 @@ main() {
     # P1 Tests
     log_section "P1 Tests"
     run_suite "API Handle Management" "$TEST_DIR/integration/api/handle_management.sh"
+    run_suite "Supported Surface Verification" "$TEST_DIR/integration/verify_supported_surface.sh"
 
     # Performance Tests
     log_section "Performance Tests"

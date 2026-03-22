@@ -39,6 +39,8 @@ function buildPlugins(
 
   return availablePlugins.map((plugin) => {
     const mountPoint = plugin.mount_path ?? mountedByPlugin.get(normalizePluginId(plugin.id))
+    const status: Plugin['status'] =
+      mountPoint ? 'loaded' : plugin.support_tier === 'dynamic' && plugin.is_loaded ? 'loaded' : 'unloaded'
     return {
       id: plugin.id,
       name: plugin.display_name || plugin.name,
@@ -53,7 +55,7 @@ function buildPlugins(
       type: plugin.type,
       supportTier: plugin.support_tier,
       mountable: plugin.is_mountable,
-      status: mountPoint ? 'loaded' : plugin.support_tier === 'dynamic' && plugin.is_loaded ? 'loaded' : 'unloaded',
+      status,
       mountPoint,
       capabilities: ['read', 'write'],
     }

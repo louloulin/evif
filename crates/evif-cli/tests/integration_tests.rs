@@ -44,15 +44,11 @@ fn test_cli_script_execution() {
     let script_path = temp_dir.path().join("test.evif");
 
     let script_content = r#"
-# EVIF Test Script
-VAR name=value
-echo "Testing variable expansion: $name"
+echo script-ok
 "#;
 
     std::fs::write(&script_path, script_content).unwrap();
 
-    // This test requires a running evif-server
-    // In CI/CD, start a test server first
     let output = Command::new("cargo")
         .args(&[
             "run",
@@ -68,8 +64,10 @@ echo "Testing variable expansion: $name"
         .output()
         .expect("Failed to execute evif script");
 
-    // For now, just check it doesn't crash
-    // In production, validate output
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("script-ok"));
 }
 
 #[test]

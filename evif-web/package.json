@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --port 3000",
     "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run build",
     "test:e2e": "playwright test",
     "test:e2e:no-server": "playwright test --config=playwright.no-server.config.ts",
     "test:e2e:ui": "playwright test --ui",

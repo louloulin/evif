@@ -66,10 +66,18 @@ log_info "Starting EVIF Test Runner"
 log_info "Test port: $TEST_PORT"
 log_info "Build mode: $BUILD_MODE"
 
+log_info "Running supported surface checks..."
+bash tests/integration/no_graph_deps.sh
+bash tests/integration/no_graph_left.sh
+
 # Build tests if not skipped
 if [ "$SKIP_BUILD" = false ]; then
     log_info "Building test packages..."
     cargo test --no-run --package cli-tests --package api-tests
+    cargo test --no-run -p evif-core --test plugin_lifecycle
+    cargo test --no-run -p evif-rest --test core_surface --test plugin_mount_contract --test memory_query_contract --test plugin_inventory_contract
+    cargo test --no-run -p evif-cli --test surface_contract
+    cargo test --no-run -p evif-plugins core_supported_plugins
 fi
 
 # Start server if requested
@@ -100,12 +108,28 @@ fi
 log_info "Running CLI file operations tests..."
 cargo test --package cli-tests -- --test-threads=1 2>&1 || log_warn "Some CLI tests may have failed"
 
+log_info "Running supported surface regression tests..."
+cargo test -p evif-core --test plugin_lifecycle 2>&1 || log_warn "Plugin lifecycle regression test failed"
+cargo test -p evif-rest --test core_surface --test plugin_mount_contract --test memory_query_contract --test plugin_inventory_contract 2>&1 || log_warn "REST surface regression tests failed"
+cargo test -p evif-cli --test surface_contract 2>&1 || log_warn "CLI surface regression test failed"
+cargo test -p evif-plugins core_supported_plugins 2>&1 || log_warn "Plugin catalog regression test failed"
+
 # Run API tests (requires server)
 if [ "$RUN_SERVER" = true ]; then
     log_info "Running API endpoint tests..."
     cargo test --package api-tests 2>&1 || log_warn "Some API tests may have failed"
 else
     log_warn "Skipping API tests (server not running). Use --with-server to run API tests."
+fi
+
+if [ -d "evif-web/node_modules" ]; then
+    log_info "Running evif-web verify..."
+    (
+        cd evif-web
+        npm run verify
+    ) 2>&1 || log_warn "evif-web verify failed"
+else
+    log_warn "Skipping evif-web verify (evif-web/node_modules missing)"
 fi
 
 log_info "Test run complete!"

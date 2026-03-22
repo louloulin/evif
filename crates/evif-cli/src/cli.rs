@@ -150,6 +150,12 @@ pub enum Commands {
     /// Start interactive REPL
     Repl,
 
+    /// Execute an EVIF script file
+    Script {
+        /// Script path
+        path: String,
+    },
+
     /// Mount EVIF as a FUSE filesystem
     Mount {
         /// Mount point path
@@ -540,6 +546,9 @@ impl EvifCli {
             }
             Commands::Repl => {
                 command.repl().await?;
+            }
+            Commands::Script { path } => {
+                command.script(path.clone()).await?;
             }
             Commands::Mount {
                 mount_point,

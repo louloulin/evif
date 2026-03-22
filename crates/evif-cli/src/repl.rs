@@ -5,6 +5,7 @@ use crate::completer::EvifCompleter;
 use anyhow::Result;
 use reedline::DefaultPromptSegment;
 use reedline::{DefaultPrompt, FileBackedHistory, Reedline, Signal};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -78,7 +79,7 @@ impl Repl {
 
                     // 支持管道和重定向
                     if line.contains('|') || line.contains('>') {
-                        if let Err(e) = self.handle_pipeline(line).await {
+                        if let Err(e) = self.handle_shell_syntax(line).await {
                             eprintln!("Error: {}", e);
                         }
                         continue;
@@ -101,102 +102,168 @@ impl Repl {
         Ok(())
     }
 
-    /// 处理管道（简化实现：仅支持外部命令管道）
-    async fn handle_pipeline(&mut self, line: &str) -> Result<()> {
-        use std::process::{Command, Stdio};
-
-        // 分割管道符
-        let commands: Vec<&str> = line.split('|').collect();
-
-        if commands.len() == 1 {
-            // 单个命令，直接执行
-            let cmd = commands[0].trim();
-            if !cmd.is_empty() {
-                if let Err(e) = self.handle_command(cmd).await {
-                    eprintln!("Error: {}", e);
-                }
+    async fn handle_shell_syntax(&mut self, line: &str) -> Result<()> {
+        if line.contains('|') {
+            let output = self.execute_pipeline_capture(line).await?;
+            if !output.is_empty() {
+                print!("{}", output);
             }
             return Ok(());
         }
 
-        // 检查是否有内置命令（内置命令暂不支持管道）
-        let builtin_commands = [
-            "ls", "cat", "write", "mkdir", "rm", "mv", "cp", "stat", "touch", "head", "tail",
-            "tree", "find", "grep", "digest", "mount", "unmount", "mounts", "health", "stats",
-            "clear", "echo", "cd", "pwd", "sort", "uniq", "wc", "date", "sleep", "diff", "du",
-            "cut", "tr", "base", "env", "export", "unset", "true", "false", "basename", "dirname",
-            "ln", "readlink", "realpath", "rev", "tac", "truncate", "split", "locate", "which",
-            "type", "file", "help", "exit", "quit", "source",
-        ];
+        self.handle_redirection(line).await
+    }
 
-        for cmd_str in &commands {
-            let cmd_str = cmd_str.trim();
-            if !cmd_str.is_empty() {
-                let first_word = cmd_str.split_whitespace().next().unwrap_or("");
-                if builtin_commands.contains(&first_word) {
-                    eprintln!(
-                        "Pipeline error: Built-in command '{}' not supported in pipes",
-                        first_word
-                    );
-                    eprintln!("Hint: Use shell redirection or external commands for pipelines");
-                    return Ok(());
-                }
+    async fn builtin_output(&self, line: &str) -> Result<Option<String>> {
+        let expanded_line = self.command.expand_variables(line);
+        let parts: Vec<&str> = expanded_line.split_whitespace().collect();
+        let cmd = parts.first().copied().unwrap_or("");
+
+        let output = match cmd {
+            "echo" => Some(self.command.echo_output(parts.get(1..).unwrap_or(&[]).join(" "))),
+            "pwd" => Some(self.command.pwd_output()),
+            "cat" => {
+                let path = parts
+                    .get(1)
+                    .ok_or_else(|| anyhow::anyhow!("Usage: cat <file>"))?;
+                Some(self.command.cat_output((*path).to_string()).await?)
             }
-        }
+            "ls" => {
+                let path = parts.get(1).map(|s| s.to_string()).or_else(|| Some("/".to_string()));
+                Some(self.command.ls_output(path, false).await?)
+            }
+            _ => None,
+        };
 
-        // 执行外部命令管道
+        Ok(output)
+    }
+
+    fn spawn_external_pipeline(
+        &self,
+        commands: &[&str],
+        mut initial_input: Option<Vec<u8>>,
+    ) -> Result<String> {
+        use std::process::{Command, Stdio};
+
         let mut prev_stdout: Option<std::process::ChildStdout> = None;
         let mut children = Vec::new();
 
-        for (i, cmd_str) in commands.iter().enumerate() {
-            let cmd_str = cmd_str.trim();
-            if cmd_str.is_empty() {
+        for command_str in commands {
+            let command_str = command_str.trim();
+            if command_str.is_empty() {
                 continue;
             }
 
-            let parts: Vec<&str> = cmd_str.split_whitespace().collect();
+            let parts: Vec<&str> = command_str.split_whitespace().collect();
             if parts.is_empty() {
                 continue;
             }
 
             let cmd = parts[0];
-            let args: Vec<&str> = parts[1..].to_vec();
+            let args = &parts[1..];
 
             let mut process = Command::new(cmd);
-            process.args(&args);
+            process.args(args);
 
+            let needs_piped_input = prev_stdout.is_some() || initial_input.is_some();
             if let Some(stdout) = prev_stdout.take() {
-                // 使用上一个命令的输出作为stdin
                 process.stdin(Stdio::from(stdout));
+            } else if needs_piped_input {
+                process.stdin(Stdio::piped());
             } else {
                 process.stdin(Stdio::inherit());
             }
 
-            if i < commands.len() - 1 {
-                // 不是最后一个命令，管道stdout
-                process.stdout(Stdio::piped());
-            } else {
-                // 最后一个命令，输出到终端
-                process.stdout(Stdio::inherit());
-            }
-
+            process.stdout(Stdio::piped());
             process.stderr(Stdio::inherit());
 
-            match process.spawn() {
-                Ok(mut child) => {
-                    prev_stdout = child.stdout.take();
-                    children.push(child);
-                }
-                Err(e) => {
-                    eprintln!("Failed to execute {}: {}", cmd, e);
-                    return Ok(());
+            let mut child = process.spawn()?;
+
+            if let Some(input) = initial_input.take() {
+                if let Some(mut stdin) = child.stdin.take() {
+                    stdin.write_all(&input)?;
                 }
             }
+
+            prev_stdout = child.stdout.take();
+            children.push(child);
         }
 
-        // 等待所有外部进程完成
+        let mut output = String::new();
+        if let Some(mut stdout) = prev_stdout {
+            let mut buffer = Vec::new();
+            stdout.read_to_end(&mut buffer)?;
+            output = String::from_utf8_lossy(&buffer).to_string();
+        }
+
         for mut child in children {
             let _ = child.wait();
+        }
+
+        Ok(output)
+    }
+
+    async fn execute_pipeline_capture(&mut self, line: &str) -> Result<String> {
+        let commands: Vec<&str> = line.split('|').collect();
+
+        if commands.len() == 1 {
+            if let Some(output) = self.builtin_output(commands[0].trim()).await? {
+                return Ok(output);
+            }
+            return self.spawn_external_pipeline(&commands, None);
+        }
+
+        if let Some(output) = self.builtin_output(commands[0].trim()).await? {
+            for stage in commands.iter().skip(1) {
+                if self.builtin_output(stage.trim()).await?.is_some() {
+                    return Err(anyhow::anyhow!(
+                        "Built-in commands are only supported as the first stage of a pipeline in this phase"
+                    ));
+                }
+            }
+
+            return self.spawn_external_pipeline(&commands[1..], Some(output.into_bytes()));
+        }
+
+        self.spawn_external_pipeline(&commands, None)
+    }
+
+    async fn handle_redirection(&mut self, line: &str) -> Result<()> {
+        let (command_part, target, append) = if let Some((left, right)) = line.split_once(">>") {
+            (left.trim(), right.trim(), true)
+        } else if let Some((left, right)) = line.split_once('>') {
+            (left.trim(), right.trim(), false)
+        } else {
+            return Ok(());
+        };
+
+        let output = if let Some(output) = self.builtin_output(command_part).await? {
+            output
+        } else {
+            self.spawn_external_pipeline(&[command_part], None)?
+        };
+
+        let target_path = std::path::Path::new(target);
+        let treat_as_local = !target.starts_with('/')
+            || target_path
+                .parent()
+                .map(|parent| parent.exists())
+                .unwrap_or(false);
+
+        if treat_as_local {
+            if append {
+                let mut file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(target)?;
+                file.write_all(output.as_bytes())?;
+            } else {
+                std::fs::write(target, output)?;
+            }
+        } else {
+            self.command
+                .write(target.to_string(), output.trim_end_matches('\n').to_string(), append)
+                .await?;
         }
 
         Ok(())
@@ -555,11 +622,37 @@ impl Repl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_repl_creation() {
         let repl = Repl::new("localhost:50051".to_string(), false);
         // REPL creation successful
         assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_builtin_echo_can_feed_external_pipeline() {
+        let mut repl = Repl::new("localhost:50051".to_string(), false);
+        let output = repl
+            .execute_pipeline_capture("echo hello-from-evif | grep hello")
+            .await
+            .expect("pipeline");
+
+        assert_eq!(output.trim(), "hello-from-evif");
+    }
+
+    #[tokio::test]
+    async fn test_builtin_echo_can_redirect_to_local_file() {
+        let mut repl = Repl::new("localhost:50051".to_string(), false);
+        let temp_dir = tempdir().expect("tempdir");
+        let target = temp_dir.path().join("redirect.txt");
+
+        repl.handle_redirection(&format!("echo redirected > {}", target.display()))
+            .await
+            .expect("redirect");
+
+        let content = std::fs::read_to_string(&target).expect("read file");
+        assert_eq!(content, "redirected\n");
     }
 }

@@ -72,6 +72,7 @@ impl EvifCompleter {
             "upload".to_string(),
             "download".to_string(),
             // 脚本操作
+            "script".to_string(),
             "source".to_string(),
             ".".to_string(),
             // 其他
