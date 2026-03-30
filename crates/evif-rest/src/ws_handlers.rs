@@ -3,7 +3,7 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Query, State,
     },
     response::IntoResponse,
 };
@@ -11,12 +11,20 @@ use evif_core::RadixMountTable;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// WebSocket 应用状态
 #[derive(Clone)]
 pub struct WebSocketState {
     pub mount_table: Arc<RadixMountTable>,
+    /// If set, WebSocket connections must present a valid token.
+    pub api_keys: Option<Vec<String>>,
+}
+
+/// Query parameters for WebSocket upgrade (token-based auth).
+#[derive(Debug, Deserialize)]
+pub struct WsAuthQuery {
+    pub token: Option<String>,
 }
 
 /// WebSocket 消息类型
@@ -41,11 +49,35 @@ pub enum WSMessage {
 pub struct WebSocketHandlers;
 
 impl WebSocketHandlers {
-    /// WebSocket 升级处理器
+    /// WebSocket 升级处理器 — validates token when API keys are configured.
     pub async fn websocket_handler(
         ws: WebSocketUpgrade,
+        Query(query): Query<WsAuthQuery>,
         State(state): State<WebSocketState>,
     ) -> impl IntoResponse {
+        // Auth check: if api_keys are configured, require a matching token.
+        if let Some(ref keys) = state.api_keys {
+            let token = match &query.token {
+                Some(t) => t,
+                None => {
+                    warn!("WebSocket rejected: missing token");
+                    return (
+                        axum::http::StatusCode::UNAUTHORIZED,
+                        "Missing authentication token",
+                    )
+                        .into_response();
+                }
+            };
+            if !keys.iter().any(|k| k == token) {
+                warn!("WebSocket rejected: invalid token");
+                return (
+                    axum::http::StatusCode::FORBIDDEN,
+                    "Invalid authentication token",
+                )
+                    .into_response();
+            }
+        }
+
         ws.on_upgrade(move |socket| Self::handle_socket(socket, state))
     }
 
@@ -284,5 +316,44 @@ mod tests {
             }
             _ => panic!("Expected Command message"),
         }
+    }
+
+    #[test]
+    fn test_ws_auth_query_with_token() {
+        let json = r#"{"token":"sk-test-key"}"#;
+        let parsed: WsAuthQuery = serde_json::from_str(json).expect("Failed to parse WsAuthQuery");
+        assert_eq!(parsed.token.as_deref(), Some("sk-test-key"));
+    }
+
+    #[test]
+    fn test_ws_auth_query_missing_token() {
+        let json = r#"{}"#;
+        let parsed: WsAuthQuery = serde_json::from_str(json).expect("Failed to parse WsAuthQuery");
+        assert!(parsed.token.is_none());
+    }
+
+    #[test]
+    fn test_ws_state_api_keys_validation() {
+        let state = WebSocketState {
+            mount_table: Arc::new(RadixMountTable::new()),
+            api_keys: Some(vec!["key-a".to_string(), "key-b".to_string()]),
+        };
+
+        // Valid key
+        let keys = state.api_keys.as_ref().unwrap();
+        assert!(keys.iter().any(|k| k == "key-a"));
+        assert!(keys.iter().any(|k| k == "key-b"));
+
+        // Invalid key
+        assert!(!keys.iter().any(|k| k == "key-c"));
+    }
+
+    #[test]
+    fn test_ws_state_no_auth() {
+        let state = WebSocketState {
+            mount_table: Arc::new(RadixMountTable::new()),
+            api_keys: None,
+        };
+        assert!(state.api_keys.is_none());
     }
 }

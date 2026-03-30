@@ -714,23 +714,20 @@ evif_average_write_size {}
 
     // ============== 挂载管理 API ==============
 
-    /// 列出挂载点（返回 { "mounts": [...] }，与 evif-client 契约一致）
+    /// 列出挂载点（返回 { "mounts": [...] }，含实例名称）
     pub async fn list_mounts(
         State(state): State<AppState>,
     ) -> RestResult<Json<ListMountsResponse>> {
-        let mount_paths = state.mount_table.list_mounts().await;
+        let mounts_info = state.mount_table.list_mounts_info().await;
 
-        let mut mounts = Vec::new();
-        for path in mount_paths {
-            // 使用 lookup_with_path() 保持与其他处理器一致
-            let (plugin_opt, _relative_path) = state.mount_table.lookup_with_path(&path).await;
-            if let Some(plugin) = plugin_opt {
-                mounts.push(MountInfo {
-                    plugin: plugin.name().to_string(),
-                    path,
-                });
-            }
-        }
+        let mounts = mounts_info
+            .into_iter()
+            .map(|(path, meta)| MountInfo {
+                plugin: meta.plugin_name,
+                path,
+                instance_name: Some(meta.instance_name),
+            })
+            .collect();
 
         Ok(Json(ListMountsResponse { mounts }))
     }
@@ -757,9 +754,11 @@ evif_average_write_size {}
                 }
                 _ => RestError::Internal(format!("Mount failed: {}", e)),
             })?;
+        let instance_name = payload.instance_name
+            .unwrap_or_else(|| payload.plugin.clone());
         state
             .mount_table
-            .mount(path.clone(), plugin)
+            .mount_with_metadata(path.clone(), plugin, payload.plugin.clone(), instance_name)
             .await
             .map_err(|e| RestError::Internal(format!("Mount failed: {}", e)))?;
         Ok(Json(serde_json::json!({
@@ -1275,6 +1274,8 @@ pub struct RenameRequest {
 pub struct MountInfo {
     pub plugin: String,
     pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance_name: Option<String>,
 }
 
 /// 列出挂载点响应（与 evif-client 期望的 json["mounts"] 一致）
@@ -1290,6 +1291,9 @@ pub struct MountRequest {
     pub path: String,
     #[serde(default)]
     pub config: Option<serde_json::Value>,
+    /// 实例名称（可选，用于多实例区分）
+    #[serde(default)]
+    pub instance_name: Option<String>,
 }
 
 /// 卸载请求

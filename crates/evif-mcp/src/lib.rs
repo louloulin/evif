@@ -1103,6 +1103,40 @@ mod tests {
         (format!("http://{}", address), captured_body, handle)
     }
 
+    /// Spawn a server that captures GET query params and returns JSON.
+    async fn spawn_get_json_server(
+        route: &str,
+        response_body: Value,
+    ) -> (String, Arc<Mutex<Option<Value>>>, JoinHandle<()>) {
+        let captured_params = Arc::new(Mutex::new(None::<Value>));
+        let state = captured_params.clone();
+        let app = Router::new()
+            .route(route, axum::routing::get(get_capture_query))
+            .with_state((state, response_body));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        (format!("http://{}", address), captured_params, handle)
+    }
+
+    async fn get_capture_query(
+        State((captured_params, response_body)): State<(
+            Arc<Mutex<Option<Value>>>,
+            Value,
+        )>,
+        axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    ) -> Json<Value> {
+        let map: serde_json::Map<String, Value> = params
+            .into_iter()
+            .map(|(k, v)| (k, Value::String(v)))
+            .collect();
+        *captured_params.lock().await = Some(Value::Object(map));
+        Json(response_body)
+    }
+
     async fn capture_json(
         State((captured_body, response_body)): State<(Arc<Mutex<Option<Value>>>, Value)>,
         Json(body): Json<Value>,
@@ -1265,5 +1299,240 @@ mod tests {
         assert!(captured.get("mode_params").is_none());
 
         handle.abort();
+    }
+
+    // ── Agent workflow tests: file system tools ──────────────────
+
+    #[tokio::test]
+    async fn test_evif_ls_calls_rest_get() {
+        let (base_url, captured, handle) = spawn_get_json_server(
+            "/api/v1/fs/list",
+            json!({
+                "data": [
+                    {"name": "file1.txt", "size": 100, "is_dir": false},
+                    {"name": "subdir", "size": 0, "is_dir": true},
+                ]
+            }),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_ls", json!({"path": "/memfs"}))
+            .await
+            .unwrap();
+
+        let entries = result["data"].as_array().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["name"], "file1.txt");
+
+        let params = captured.lock().await.clone().unwrap();
+        assert_eq!(params.get("path").unwrap(), "/memfs");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_cat_calls_rest_get() {
+        let (base_url, captured, handle) = spawn_get_json_server(
+            "/api/v1/fs/read",
+            json!({"data": {"content": "hello world", "size": 11}}),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_cat", json!({"path": "/memfs/test.txt"}))
+            .await
+            .unwrap();
+
+        assert_eq!(result["data"]["content"], "hello world");
+
+        let params = captured.lock().await.clone().unwrap();
+        assert_eq!(params.get("path").unwrap(), "/memfs/test.txt");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_stat_calls_rest_get() {
+        let (base_url, captured, handle) = spawn_get_json_server(
+            "/api/v1/stat",
+            json!({
+                "data": {"name": "test.txt", "size": 42, "is_dir": false, "mode": 420}
+            }),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_stat", json!({"path": "/memfs/test.txt"}))
+            .await
+            .unwrap();
+
+        assert_eq!(result["data"]["name"], "test.txt");
+        assert_eq!(result["data"]["size"], 42);
+
+        let params = captured.lock().await.clone().unwrap();
+        assert_eq!(params.get("path").unwrap(), "/memfs/test.txt");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_write_calls_rest_post() {
+        let (base_url, captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/fs/write",
+            json!({"data": {"bytes_written": 5}}),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_write", json!({"path": "/memfs/hello.txt", "content": "hello"}))
+            .await
+            .unwrap();
+
+        assert_eq!(result["data"]["bytes_written"], 5);
+
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert_eq!(captured["content"], "hello");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_mkdir_calls_rest_post() {
+        let (base_url, captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/directories",
+            json!({"data": {}}),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_mkdir", json!({"path": "/memfs/newdir"}))
+            .await
+            .unwrap();
+
+        // Should succeed
+        assert!(result["data"].is_object());
+
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert_eq!(captured["path"], "/memfs/newdir");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_mount_calls_rest_post() {
+        let (base_url, captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/mount",
+            json!({"data": {"path": "/s3", "plugin_type": "s3fs"}}),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_mount", json!({
+                "plugin": "s3fs",
+                "path": "/s3",
+                "config": {"region": "us-west-1"}
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["data"]["path"], "/s3");
+        assert_eq!(result["data"]["plugin_type"], "s3fs");
+
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert_eq!(captured["plugin"], "s3fs");
+        assert_eq!(captured["path"], "/s3");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_grep_calls_rest_post() {
+        let (base_url, captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/grep",
+            json!({"data": {"matches": [{"file": "a.txt", "line": 1, "content": "found"}], "count": 1}}),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_grep", json!({
+                "path": "/memfs",
+                "pattern": "TODO",
+                "recursive": true
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["data"]["count"], 1);
+
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert_eq!(captured["path"], "/memfs");
+        assert_eq!(captured["pattern"], "TODO");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_agent_workflow_write_read_stat() {
+        // Simulate a complete agent workflow: write → cat → stat
+        let (base_url, _captured_body, handle) = spawn_json_capture_server(
+            "/api/v1/fs/write",
+            json!({"data": {"bytes_written": 12}}),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        // Write
+        let write_result = server
+            .call_tool("evif_write", json!({"path": "/memfs/agent.txt", "content": "hello agent"}))
+            .await
+            .unwrap();
+        assert_eq!(write_result["data"]["bytes_written"], 12);
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_all_tools_have_required_fields() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+        let tools = wait_for_tools(&server).await;
+
+        for tool in &tools {
+            assert!(!tool.name.is_empty(), "tool name should not be empty");
+            assert!(!tool.description.is_empty(), "tool {} description should not be empty", tool.name);
+            assert!(tool.input_schema.is_object(), "tool {} input_schema should be an object", tool.name);
+            assert!(tool.input_schema.get("type").is_some(), "tool {} input_schema should have type", tool.name);
+        }
     }
 }

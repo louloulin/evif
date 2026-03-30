@@ -77,10 +77,11 @@ r2d2_sqlite = { version = "0.25", optional = true }
 rusqlite2 = { version = "0.32", optional = true, features = ["bundled"], package = "rusqlite" }
 
 [features]
-default = ["sqlfs"]
+default = ["sqlfs", "queuefs-sqlite"]
 s3fs = ["aws-config", "aws-sdk-s3", "aws-smithy-types"]
 sqlfs = ["rusqlite", "r2d2", "r2d2_sqlite"]
 sqlfs2 = ["rusqlite2"]
+queuefs-sqlite = ["rusqlite"]
 gptfs = []
 vectorfs = ["aws-config", "aws-sdk-s3", "aws-smithy-types"]
 streamrotatefs = []

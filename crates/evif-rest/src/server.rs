@@ -33,6 +33,9 @@ pub struct MountConfigEntry {
     pub plugin: String,
     #[serde(default)]
     pub config: Option<serde_json::Value>,
+    /// 实例名称（可选，用于多实例区分，默认使用插件名）
+    #[serde(default)]
+    pub instance_name: Option<String>,
 }
 
 /// 从配置创建插件实例（与 handlers::mount 逻辑一致）
@@ -213,16 +216,19 @@ fn load_mount_config() -> Vec<MountConfigEntry> {
             path: "/mem".to_string(),
             plugin: "mem".to_string(),
             config: None,
+            instance_name: None,
         },
         MountConfigEntry {
             path: "/hello".to_string(),
             plugin: "hello".to_string(),
             config: None,
+            instance_name: None,
         },
         MountConfigEntry {
             path: "/local".to_string(),
             plugin: "local".to_string(),
             config: Some(serde_json::json!({ "root": "/tmp/evif-local" })),
+            instance_name: None,
         },
     ]
 }
@@ -310,19 +316,29 @@ pub struct ServerConfig {
     /// 启用 CORS
     pub enable_cors: bool,
 
-    /// 生产模式：严格检查配置，不允许使用不安全的默认值
+    /// CORS allowed origins (empty = allow all when enable_cors is true)
+    pub cors_origins: Vec<String>,
+
+    /// Production mode: strict config checks
     pub production_mode: bool,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
+        let production_mode = std::env::var("EVIF_REST_PRODUCTION_MODE")
+            .map(|v| v.trim().to_ascii_lowercase() == "true" || v == "1")
+            .unwrap_or(false);
+
         Self {
             bind_addr: "0.0.0.0".to_string(),
             port: 8081,
-            enable_cors: true,
-            production_mode: std::env::var("EVIF_REST_PRODUCTION_MODE")
-                .map(|v| v.trim().to_ascii_lowercase() == "true" || v == "1")
-                .unwrap_or(false),
+            enable_cors: std::env::var("EVIF_CORS_ENABLED")
+                .map(|v| v.trim().to_ascii_lowercase() != "false" && v != "0")
+                .unwrap_or(true),
+            cors_origins: std::env::var("EVIF_CORS_ORIGINS")
+                .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+                .unwrap_or_default(),
+            production_mode,
         }
     }
 }
@@ -363,12 +379,17 @@ impl EvifServer {
                     ))
                 })?;
             let path = entry.path.clone();
-            mount_table.mount(path.clone(), plugin).await.map_err(|e| {
-                RestError::Internal(format!(
-                    "Failed to mount {} at {}: {}",
-                    entry.plugin, path, e
-                ))
-            })?;
+            let plugin_name = entry.plugin.clone();
+            let instance_name = entry.instance_name.clone().unwrap_or_else(|| plugin_name.clone());
+            mount_table
+                .mount_with_metadata(path.clone(), plugin, plugin_name.clone(), instance_name)
+                .await
+                .map_err(|e| {
+                    RestError::Internal(format!(
+                        "Failed to mount {} at {}: {}",
+                        entry.plugin, path, e
+                    ))
+                })?;
             info!("✓ Mounted {} at {}", entry.plugin, path);
         }
         info!("All plugins loaded successfully");
@@ -377,19 +398,68 @@ impl EvifServer {
             memory_state.backend_name()
         );
 
-        let app = crate::routes::create_routes_with_auth_and_memory_state(
+        let mut app = crate::routes::create_routes_with_auth_and_memory_state(
             mount_table,
             Arc::new(RestAuthState::from_env()),
             memory_state,
         )
+        .layer(middleware::from_fn(crate::middleware::PathValidationMiddleware))
         .layer(middleware::from_fn(LoggingMiddleware));
+
+        // Apply CORS configuration
+        if self.config.enable_cors {
+            use tower_http::cors::{CorsLayer, Any};
+            let cors = if self.config.cors_origins.is_empty() {
+                // No specific origins configured: allow all
+                if self.config.production_mode {
+                    warn!("CORS enabled in production mode with no origin restrictions - consider setting EVIF_CORS_ORIGINS");
+                }
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::PUT, axum::http::Method::DELETE, axum::http::Method::PATCH])
+                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key")])
+                    .max_age(std::time::Duration::from_secs(3600))
+            } else {
+                // Specific origins configured
+                let origins: Vec<_> = self.config.cors_origins.iter()
+                    .filter_map(|o| o.parse().ok())
+                    .collect();
+                CorsLayer::new()
+                    .allow_origin(origins)
+                    .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::PUT, axum::http::Method::DELETE, axum::http::Method::PATCH])
+                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key")])
+                    .max_age(std::time::Duration::from_secs(3600))
+            };
+            app = app.layer(cors);
+            info!("CORS enabled (origins: {})", if self.config.cors_origins.is_empty() { "any".to_string() } else { self.config.cors_origins.join(", ") });
+        } else {
+            info!("CORS disabled");
+        }
 
         let addr = format!("{}:{}", self.config.bind_addr, self.config.port);
         let listener = TcpListener::bind(&addr).await?;
 
         info!("EVIF REST API listening on http://{}", addr);
 
-        axum::serve(listener, app.layer(TraceLayer::new_for_http())).await?;
+        let graceful_timeout = std::env::var("EVIF_SHUTDOWN_TIMEOUT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30u64);
+
+        // Build the graceful shutdown signal
+        let shutdown_signal = async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to install Ctrl+C handler");
+            info!("Received SIGINT/Ctrl+C, shutting down gracefully...");
+        };
+
+        // Run with graceful shutdown
+        axum::serve(listener, app.layer(TraceLayer::new_for_http()))
+            .with_graceful_shutdown(shutdown_signal)
+            .await?;
+
+        info!("EVIF REST API shutdown complete");
 
         Ok(())
     }

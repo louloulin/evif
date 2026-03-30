@@ -296,42 +296,57 @@ export const createNotificationSocket = (): WebSocket => {
 }
 
 /**
- * 订阅通知
+ * 订阅通知，支持自动重连（指数退避，最多 maxRetries 次）。
  */
 export const subscribeToNotifications = (
   onNotification: (notification: Notification) => void,
-  onError?: (error: Event) => void
+  onError?: (error: Event) => void,
+  maxRetries: number = 5,
 ): (() => void) => {
-  const ws = createNotificationSocket()
+  let ws: WebSocket | null = null;
+  let attempt = 0;
+  let disposed = false;
 
-  ws.onopen = () => {
-    console.log('Notification WebSocket connected')
-  }
+  const connect = () => {
+    if (disposed) return;
+    ws = createNotificationSocket();
 
-  ws.onmessage = (event) => {
-    try {
-      const notification = JSON.parse(event.data) as Notification
-      onNotification(notification)
-    } catch (error) {
-      console.error('Failed to parse notification:', error)
-    }
-  }
+    ws.onopen = () => {
+      attempt = 0;
+    };
 
-  ws.onerror = (error) => {
-    console.error('Notification WebSocket error:', error)
-    onError?.(error)
-  }
+    ws.onmessage = (event) => {
+      try {
+        const notification = JSON.parse(event.data) as Notification;
+        onNotification(notification);
+      } catch (error) {
+        console.error('Failed to parse notification:', error);
+      }
+    };
 
-  ws.onclose = () => {
-    console.log('Notification WebSocket closed')
-  }
+    ws.onerror = (error) => {
+      console.error('Notification WebSocket error:', error);
+      onError?.(error);
+    };
 
-  // 返回清理函数
+    ws.onclose = () => {
+      if (disposed) return;
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+        attempt++;
+        setTimeout(connect, delay);
+      }
+    };
+  };
+
+  connect();
+
   return () => {
-    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-      ws.close()
+    disposed = true;
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      ws.close();
     }
-  }
+  };
 }
 
 // ========== 批量操作 ==========

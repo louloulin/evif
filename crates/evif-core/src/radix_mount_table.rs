@@ -23,6 +23,15 @@ use tokio::sync::RwLock;
 /// 最大符号链接递归深度（防止循环）
 const MAX_SYMLINK_DEPTH: usize = 40;
 
+/// 挂载点元数据
+#[derive(Debug, Clone)]
+pub struct MountMetadata {
+    /// 插件类型名称 (e.g. "s3fs", "memfs")
+    pub plugin_name: String,
+    /// 官方实例名称 (e.g. "aws", "minio")
+    pub instance_name: String,
+}
+
 /// 使用Radix Tree的插件挂载表
 ///
 /// 性能对比:
@@ -40,6 +49,9 @@ pub struct RadixMountTable {
 
     /// 虚拟符号链接映射表
     symlinks: Arc<RwLock<HashMap<String, String>>>,
+
+    /// 挂载点元数据 (key = mount path without leading /)
+    metadata: Arc<RwLock<HashMap<String, MountMetadata>>>,
 }
 
 impl RadixMountTable {
@@ -48,6 +60,7 @@ impl RadixMountTable {
         Self {
             mounts: Arc::new(RwLock::new(Trie::new())),
             symlinks: Arc::new(RwLock::new(HashMap::new())),
+            metadata: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -177,6 +190,24 @@ impl RadixMountTable {
     /// # 性能
     /// Radix Tree插入: O(k) where k=路径长度
     pub async fn mount(&self, path: String, plugin: Arc<dyn EvifPlugin>) -> EvifResult<()> {
+        let plugin_name = plugin.name().to_string();
+        let instance_name = plugin_name.clone();
+        self.mount_with_metadata(path, plugin, plugin_name, instance_name).await
+    }
+
+    /// 挂载插件（带实例名称）
+    ///
+    /// 支持同一插件类型多实例挂载，例如：
+    /// - s3fs 实例 "aws" 挂载到 /s3/aws
+    /// - s3fs 实例 "minio" 挂载到 /s3/minio
+    /// - memfs 实例 "cache" 挂载到 /cache
+    pub async fn mount_with_metadata(
+        &self,
+        path: String,
+        plugin: Arc<dyn EvifPlugin>,
+        plugin_name: String,
+        instance_name: String,
+    ) -> EvifResult<()> {
         let mut mounts = self.mounts.write().await;
 
         // 标准化路径并移除前导斜杠（Radix Tree key）
@@ -188,7 +219,18 @@ impl RadixMountTable {
             return Err(EvifError::AlreadyMounted(normalized_path));
         }
 
-        mounts.insert(key, plugin);
+        mounts.insert(key.clone(), plugin);
+
+        // 存储元数据
+        let mut metadata = self.metadata.write().await;
+        metadata.insert(
+            key,
+            MountMetadata {
+                plugin_name,
+                instance_name,
+            },
+        );
+
         Ok(())
     }
 
@@ -207,6 +249,11 @@ impl RadixMountTable {
 
         let mut mounts = self.mounts.write().await;
         mounts.remove(&key);
+
+        // 清理元数据
+        let mut metadata = self.metadata.write().await;
+        metadata.remove(&key);
+
         Ok(())
     }
 
@@ -378,7 +425,11 @@ impl RadixMountTable {
 
         // 如果找到匹配的挂载点
         if let Some(match_key) = best_match {
-            let plugin = mounts.get(match_key).unwrap();
+            // SAFETY: best_match was derived by iterating mounts.keys(), so .get() must succeed
+            let Some(plugin) = mounts.get(match_key) else {
+                // Defensive: this should never happen since best_match came from keys()
+                return (None, normalized_path);
+            };
 
             // 计算相对路径：剥离挂载点前缀
             // normalized_path格式: "/prefix/rest" 或 "/prefix"
@@ -411,6 +462,20 @@ impl RadixMountTable {
         let mut list: Vec<String> = mounts.iter().map(|(key, _)| format!("/{}", key)).collect();
         list.sort();
         list
+    }
+
+    /// 列出所有挂载点（带元数据：插件名 + 实例名）
+    pub async fn list_mounts_info(&self) -> Vec<(String, MountMetadata)> {
+        let mounts = self.mounts.read().await;
+        let metadata = self.metadata.read().await;
+        let mut result = Vec::new();
+        for (key, _) in mounts.iter() {
+            if let Some(meta) = metadata.get(key) {
+                result.push((format!("/{}", key), meta.clone()));
+            }
+        }
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+        result
     }
 
     /// 获取挂载点数量

@@ -1067,41 +1067,33 @@ mod tests {
     }
 
     #[test]
-    fn test_is_production_mode_default() {
-        // Clear the env var if set
+    fn test_is_production_mode_env_var() {
+        // All env var tests merged into one to avoid parallel test race condition
+        // Default: not set → false
         std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
         assert!(!is_production_mode());
-    }
 
-    #[test]
-    fn test_is_production_mode_true_variants() {
-        // Test "true"
+        // "true" → true
         std::env::set_var("EVIF_REST_PRODUCTION_MODE", "true");
         assert!(is_production_mode());
 
-        // Test "1"
+        // "1" → true
         std::env::set_var("EVIF_REST_PRODUCTION_MODE", "1");
         assert!(is_production_mode());
 
-        // Test "TRUE" (uppercase)
+        // "TRUE" (uppercase) → true
         std::env::set_var("EVIF_REST_PRODUCTION_MODE", "TRUE");
         assert!(is_production_mode());
 
-        // Clean up
-        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
-    }
-
-    #[test]
-    fn test_is_production_mode_false_variants() {
-        // Test "false"
+        // "false" → false
         std::env::set_var("EVIF_REST_PRODUCTION_MODE", "false");
         assert!(!is_production_mode());
 
-        // Test "0"
+        // "0" → false
         std::env::set_var("EVIF_REST_PRODUCTION_MODE", "0");
         assert!(!is_production_mode());
 
-        // Test empty
+        // empty → false
         std::env::set_var("EVIF_REST_PRODUCTION_MODE", "");
         assert!(!is_production_mode());
 
@@ -1110,28 +1102,24 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_memory_for_production_in_memory_fails() {
-        // Set production mode
-        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "true");
+    fn test_validate_memory_for_production_env() {
+        // All production-mode-dependent validation tests merged to avoid env var race
+        // Non-production mode allows in-memory backend
+        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
+        let config = MemoryBackendConfig::in_memory();
+        let result = validate_memory_for_production(&config);
+        assert!(result.is_ok());
 
+        // Production mode rejects in-memory backend
+        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "true");
         let config = MemoryBackendConfig::in_memory();
         let result = validate_memory_for_production(&config);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("persistent memory backend"));
 
-        // Clean up
-        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
-    }
-
-    #[test]
-    fn test_validate_memory_for_production_sqlite_passes() {
-        // Set production mode
-        std::env::set_var("EVIF_REST_PRODUCTION_MODE", "true");
-
-        // Use temp path for SQLite (it won't actually create the file in validation)
+        // Production mode accepts SQLite backend
         std::env::set_var("EVIF_REST_MEMORY_SQLITE_PATH", "/tmp/test-evif-memory.db");
         std::env::set_var("EVIF_REST_MEMORY_BACKEND", "sqlite");
-
         let config = MemoryBackendConfig::from_env().unwrap();
         let result = validate_memory_for_production(&config);
         assert!(result.is_ok());
@@ -1140,15 +1128,5 @@ mod tests {
         std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
         std::env::remove_var("EVIF_REST_MEMORY_SQLITE_PATH");
         std::env::remove_var("EVIF_REST_MEMORY_BACKEND");
-    }
-
-    #[test]
-    fn test_validate_memory_for_production_non_production_allows_memory() {
-        // Make sure production mode is NOT set
-        std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
-
-        let config = MemoryBackendConfig::in_memory();
-        let result = validate_memory_for_production(&config);
-        assert!(result.is_ok());
     }
 }

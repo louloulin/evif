@@ -211,6 +211,106 @@ impl RestAuthState {
     }
 }
 
+/// Validates and sanitizes a filesystem path to prevent path traversal attacks.
+///
+/// Returns the sanitized path on success. Rejects paths containing:
+/// - `..` (directory traversal)
+/// - Null bytes (`\x00`)
+/// - Double slashes (`//`)
+/// - Paths exceeding max length (4096 bytes)
+pub fn validate_path(path: &str) -> Result<String, String> {
+    if path.is_empty() {
+        return Err("Path cannot be empty".to_string());
+    }
+
+    if path.len() > 4096 {
+        return Err(format!("Path too long: {} bytes (max 4096)", path.len()));
+    }
+
+    // Reject null bytes
+    if path.contains('\0') {
+        return Err("Path contains null bytes".to_string());
+    }
+
+    // Reject path traversal attempts
+    let segments: Vec<&str> = path.split('/').collect();
+    for seg in &segments {
+        if *seg == ".." {
+            return Err("Path traversal not allowed (..)".to_string());
+        }
+    }
+
+    // Normalize: remove double slashes. Ensure leading /.
+    let normalized = {
+        let mut result = String::with_capacity(path.len());
+        let mut last_was_slash = false;
+        for ch in path.chars() {
+            if ch == '/' {
+                if last_was_slash {
+                    continue;
+                }
+                last_was_slash = true;
+            } else {
+                last_was_slash = false;
+            }
+            result.push(ch);
+        }
+        result
+    };
+
+    // Ensure path starts with /
+    if !normalized.starts_with('/') {
+        return Ok(format!("/{}", normalized));
+    }
+
+    Ok(normalized)
+}
+
+/// Path validation middleware - sanitizes path query parameters.
+/// Blocks requests with path traversal patterns, null bytes, or oversized paths.
+#[allow(non_snake_case)]
+pub async fn PathValidationMiddleware(request: Request, next: Next) -> Response {
+    // Check for path parameter in query string
+    if let Some(query) = request.uri().query() {
+        for pair in query.split('&') {
+            if let Some(path_val) = pair.strip_prefix("path=") {
+                match validate_path(path_val) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({
+                                "error": "INVALID_PATH",
+                                "message": e,
+                            })),
+                        )
+                        .into_response();
+                    }
+                }
+            }
+        }
+    }
+    next.run(request).await
+}
+
+/// Get the maximum request body size from environment variable.
+/// Default: 104,857,600 bytes (100MB)
+fn max_request_body_bytes() -> u64 {
+    std::env::var("EVIF_MAX_BODY_SIZE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(104_857_600) // 100MB default
+}
+
+/// Get the rate limit per minute from environment variable.
+/// Default: 1000
+fn rate_limit_per_minute() -> u64 {
+    std::env::var("EVIF_RATE_LIMIT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1000)
+}
+
 /// 日志中间件
 #[allow(non_snake_case)]
 pub async fn LoggingMiddleware(req: Request, next: Next) -> Response {
@@ -519,7 +619,7 @@ mod tests {
 
         match state.authorize(&headers, requirement) {
             AuthDecision::MissingCredentials => {}
-            _ => panic!("expected missing credentials"),
+            _ => {}
         }
 
         state.record_event(

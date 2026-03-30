@@ -29,50 +29,11 @@ const Terminal = forwardRef<TerminalRef, {}>((props, ref) => {
   }));
 
   const websocketRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const isUnmountedRef = useRef(false);
+  const maxReconnectAttempts = 5;
 
-  useEffect(() => {
-    if (!terminalRef.current) return;
-
-    // Create XTerm instance
-    const xterm = new XTerm({
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#d4d4d4',
-        black: '#000000',
-        red: '#cd3131',
-        green: '#0dbc79',
-        yellow: '#e5e510',
-        blue: '#2472c8',
-        magenta: '#bc3fbc',
-        cyan: '#11a8cd',
-        white: '#e5e5e5',
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#ffffff',
-      },
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      fontSize: 14,
-      cursorBlink: true,
-      cursorStyle: 'block',
-    });
-
-    // Mount terminal
-    xterm.open(terminalRef.current);
-
-    xtermRef.current = xterm;
-
-    // Welcome message
-    xterm.write('\r\n\x1b[1;36mEVIF 2.2 - 图文件系统终端\x1b[0m\r\n');
-    xterm.write('输入 \x1b[1;33mhelp\x1b[0m 查看可用命令\r\n\r\n');
-    xterm.write('$ ');
-
-    // Setup WebSocket connection — connect to same origin so Vite/proxy or reverse proxy can forward to backend
+  const connectWebSocket = (xterm: XTerm) => {
     let wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws';
     const token = getToken()
     if (token) {
@@ -83,6 +44,7 @@ const Terminal = forwardRef<TerminalRef, {}>((props, ref) => {
 
     ws.onopen = () => {
       console.log('WebSocket connected');
+      reconnectAttemptRef.current = 0;
     };
 
     ws.onmessage = (event) => {
@@ -145,52 +107,101 @@ const Terminal = forwardRef<TerminalRef, {}>((props, ref) => {
     };
 
     ws.onclose = () => {
-      xterm.write('\r\n\x1b[2;90m[WebSocket 已断开，终端命令需后端支持]\x1b[0m\r\n');
+      if (isUnmountedRef.current) return;
+      const attempt = reconnectAttemptRef.current;
+      if (attempt < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+        reconnectAttemptRef.current = attempt + 1;
+        xterm.write(`\r\n\x1b[2;90m[WebSocket 断开，${(delay / 1000).toFixed(0)}s 后重连 (${attempt + 1}/${maxReconnectAttempts})]\x1b[0m\r\n`);
+        setTimeout(() => {
+          if (!isUnmountedRef.current) {
+            connectWebSocket(xterm);
+          }
+        }, delay);
+      } else {
+        xterm.write('\r\n\x1b[2;90m[WebSocket 已断开，已达最大重连次数。终端命令需后端支持]\x1b[0m\r\n');
+      }
     };
 
     websocketRef.current = ws;
+  };
+
+  useEffect(() => {
+    if (!terminalRef.current) return;
+    isUnmountedRef.current = false;
+
+    // Create XTerm instance
+    const xterm = new XTerm({
+      theme: {
+        background: '#1e1e1e',
+        foreground: '#d4d4d4',
+        cursor: '#d4d4d4',
+        black: '#000000',
+        red: '#cd3131',
+        green: '#0dbc79',
+        yellow: '#e5e510',
+        blue: '#2472c8',
+        magenta: '#bc3fbc',
+        cyan: '#11a8cd',
+        white: '#e5e5e5',
+        brightBlack: '#666666',
+        brightRed: '#f14c4c',
+        brightGreen: '#23d18b',
+        brightYellow: '#f5f543',
+        brightBlue: '#3b8eea',
+        brightMagenta: '#d670d6',
+        brightCyan: '#29b8db',
+        brightWhite: '#ffffff',
+      },
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 14,
+      cursorBlink: true,
+      cursorStyle: 'block',
+    });
+
+    xterm.open(terminalRef.current);
+    xtermRef.current = xterm;
+
+    // Welcome message
+    xterm.write('\r\n\x1b[1;36mEVIF 2.2 - 图文件系统终端\x1b[0m\r\n');
+    xterm.write('输入 \x1b[1;33mhelp\x1b[0m 查看可用命令\r\n\r\n');
+    xterm.write('$ ');
+
+    // Connect WebSocket with auto-reconnect
+    connectWebSocket(xterm);
 
     // Handle user input
     let currentLine = '';
     xterm.onData((data) => {
       if (data === '\r' || data === '\n') {
-        // Enter key - execute command
         if (currentLine.trim()) {
-          if (ws.readyState === WebSocket.OPEN) {
+          const ws = websocketRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               type: 'command',
               command: currentLine.trim()
             }));
           } else {
-            // Fallback to local command handling
             const command = currentLine.trim().split(' ')[0];
-            const args = currentLine.trim().split(' ').slice(1);
-
             if (command === 'clear') {
               xterm.clear();
             } else if (command === 'help') {
               xterm.write('\r\nAvailable commands:\r\n');
               xterm.write('  clear    - Clear terminal\r\n');
               xterm.write('  help     - Show this help\r\n');
-              xterm.write('  ls       - List files (via API)\r\n');
-              xterm.write('  cat      - Read file (via API)\r\n');
-            } else if (command === 'ls') {
-              xterm.write('\r\nFetching files...\r\n');
             } else {
-              xterm.write(`\r\nCommand not found: ${command}\r\n`);
+              xterm.write(`\r\n\x1b[2;90m[后端未连接，命令无法执行]\x1b[0m\r\n`);
             }
           }
         }
         currentLine = '';
         xterm.write('\r\n$ ');
       } else if (data === '\u007f' || data === '\b') {
-        // Backspace
         if (currentLine.length > 0) {
           currentLine = currentLine.slice(0, -1);
           xterm.write('\b \b');
         }
       } else if (data >= String.fromCharCode(0x20) && data <= String.fromCharCode(0x7E)) {
-        // Printable characters
         currentLine += data;
         xterm.write(data);
       }
@@ -249,11 +260,14 @@ const Terminal = forwardRef<TerminalRef, {}>((props, ref) => {
 
     // Cleanup
     return () => {
+      isUnmountedRef.current = true;
       window.removeEventListener('resize', handleResize);
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
-      ws.close();
+      if (websocketRef.current) {
+        websocketRef.current.close();
+      }
       xterm.dispose();
     };
   }, []);

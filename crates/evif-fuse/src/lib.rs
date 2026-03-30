@@ -107,7 +107,7 @@ impl EvifFuseFuse {
 
     /// 分配文件句柄
     pub fn allocate_handle(&self, ino: u64) -> u64 {
-        let mut handles = self.file_handles.write().unwrap();
+        let mut handles = self.file_handles.write().unwrap_or_else(|e| e.into_inner());
         let handle = ino; // 使用 inode 作为句柄
         handles.insert(handle, ino);
         debug!("Allocated handle {} for inode {}", handle, ino);
@@ -116,14 +116,14 @@ impl EvifFuseFuse {
 
     /// 释放文件句柄
     pub fn deallocate_handle(&self, ino: u64) {
-        let mut handles = self.file_handles.write().unwrap();
+        let mut handles = self.file_handles.write().unwrap_or_else(|e| e.into_inner());
         handles.remove(&ino);
         debug!("Deallocated handle for inode {}", ino);
     }
 
     /// 获取文件句柄对应的 inode
     pub fn get_handle_inode(&self, handle: u64) -> Option<u64> {
-        let handles = self.file_handles.read().unwrap();
+        let handles = self.file_handles.read().unwrap_or_else(|e| e.into_inner());
         handles.get(&handle).copied()
     }
 
@@ -270,14 +270,14 @@ impl Filesystem for EvifFuseFuse {
 
     /// 获取文件属性
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
-        let path = self.inode_manager.get_path(ino);
-        if path.is_none() {
-            error!("Invalid inode: {}", ino);
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let path = PathBuf::from(path.unwrap());
+        let path = match self.inode_manager.get_path(ino) {
+            Some(p) => PathBuf::from(p),
+            None => {
+                error!("Invalid inode: {}", ino);
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let rt = self.runtime.clone();
 
         match rt.block_on(self.get_attr_async(&path)) {
@@ -317,13 +317,13 @@ impl Filesystem for EvifFuseFuse {
             return;
         }
 
-        let path = self.inode_manager.get_path(ino);
-        if path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let path_str = path.unwrap();
+        let path_str = match self.inode_manager.get_path(ino) {
+            Some(p) => p,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let path_str_for_outer = path_str.clone();
         let path = PathBuf::from(&path_str);
         let rt = self.runtime.clone();
@@ -455,14 +455,15 @@ impl Filesystem for EvifFuseFuse {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        let path = self.inode_manager.get_path(ino);
-        if path.is_none() {
-            error!("Invalid inode: {}", ino);
-            reply.error(libc::ENOENT);
-            return;
-        }
+        let path = match self.inode_manager.get_path(ino) {
+            Some(p) => PathBuf::from(p),
+            None => {
+                error!("Invalid inode: {}", ino);
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
 
-        let path = PathBuf::from(path.unwrap());
         let rt = { self.runtime.clone() };
 
         match rt.block_on(self.readdir_async(&path)) {
@@ -516,14 +517,14 @@ impl Filesystem for EvifFuseFuse {
     fn open(&mut self, _req: &Request<'_>, ino: u64, _flags: i32, reply: ReplyOpen) {
         debug!("open called for inode {} (flags={:#x})", ino, _flags);
 
-        let path = self.inode_manager.get_path(ino);
-        if path.is_none() {
-            error!("Invalid inode: {}", ino);
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let path_str = path.unwrap();
+        let path_str = match self.inode_manager.get_path(ino) {
+            Some(p) => p,
+            None => {
+                error!("Invalid inode: {}", ino);
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let rt = self.runtime.clone();
         let mount_table = self.mount_table.clone();
         let allow_write = self.allow_write;
@@ -585,13 +586,13 @@ impl Filesystem for EvifFuseFuse {
         _lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
-        let path = self.inode_manager.get_path(ino);
-        if path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let path = PathBuf::from(path.unwrap());
+        let path = match self.inode_manager.get_path(ino) {
+            Some(p) => PathBuf::from(p),
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let rt = self.runtime.clone();
 
         match rt.block_on(self.read_async(&path, offset as u64, size)) {
@@ -624,13 +625,13 @@ impl Filesystem for EvifFuseFuse {
             return;
         }
 
-        let path = self.inode_manager.get_path(ino);
-        if path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let path = PathBuf::from(path.unwrap());
+        let path = match self.inode_manager.get_path(ino) {
+            Some(p) => PathBuf::from(p),
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let rt = self.runtime.clone();
 
         match rt.block_on(self.write_async(&path, offset as u64, data)) {
@@ -662,13 +663,13 @@ impl Filesystem for EvifFuseFuse {
         }
 
         // 构建完整路径
-        let parent_path = self.inode_manager.get_path(parent);
-        if parent_path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let parent_path = parent_path.unwrap();
+        let parent_path = match self.inode_manager.get_path(parent) {
+            Some(p) => p,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let file_name = name.to_string_lossy().to_string();
         let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), file_name);
 
@@ -732,13 +733,13 @@ impl Filesystem for EvifFuseFuse {
         }
 
         // 构建完整路径
-        let parent_path = self.inode_manager.get_path(_parent);
-        if parent_path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let parent_path = parent_path.unwrap();
+        let parent_path = match self.inode_manager.get_path(_parent) {
+            Some(p) => p,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let file_name = name.to_string_lossy().to_string();
         let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), file_name);
 
@@ -788,13 +789,13 @@ impl Filesystem for EvifFuseFuse {
         }
 
         // 构建完整路径
-        let parent_path = self.inode_manager.get_path(parent);
-        if parent_path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let parent_path = parent_path.unwrap();
+        let parent_path = match self.inode_manager.get_path(parent) {
+            Some(p) => p,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let dir_name = name.to_string_lossy().to_string();
         let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), dir_name);
 
@@ -858,13 +859,13 @@ impl Filesystem for EvifFuseFuse {
         }
 
         // 构建完整路径
-        let parent_path = self.inode_manager.get_path(parent);
-        if parent_path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let parent_path = parent_path.unwrap();
+        let parent_path = match self.inode_manager.get_path(parent) {
+            Some(p) => p,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let dir_name = name.to_string_lossy().to_string();
         let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), dir_name);
 
@@ -915,16 +916,16 @@ impl Filesystem for EvifFuseFuse {
         }
 
         // 构建源路径和目标路径
-        let parent_path = self.inode_manager.get_path(parent);
-        let newparent_path = self.inode_manager.get_path(newparent);
-
-        if parent_path.is_none() || newparent_path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let old_parent_str = parent_path.as_ref().unwrap().clone();
-        let new_parent_str = newparent_path.as_ref().unwrap().clone();
+        let (old_parent_str, new_parent_str) = match (
+            self.inode_manager.get_path(parent),
+            self.inode_manager.get_path(newparent),
+        ) {
+            (Some(old), Some(new)) => (old, new),
+            _ => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let old_path = format!(
             "{}/{}",
             old_parent_str.trim_end_matches('/'),
@@ -984,13 +985,13 @@ impl Filesystem for EvifFuseFuse {
             _ino, _fh, _datasync
         );
 
-        let path = self.inode_manager.get_path(_ino);
-        if path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let path_str = path.unwrap();
+        let path_str = match self.inode_manager.get_path(_ino) {
+            Some(p) => p,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let rt = self.runtime.clone();
         let mount_table = self.mount_table.clone();
 
@@ -1033,13 +1034,13 @@ impl Filesystem for EvifFuseFuse {
             _ino, _fh, _datasync
         );
 
-        let path = self.inode_manager.get_path(_ino);
-        if path.is_none() {
-            reply.error(libc::ENOENT);
-            return;
-        }
-
-        let path_str = path.unwrap();
+        let path_str = match self.inode_manager.get_path(_ino) {
+            Some(p) => p,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
         let rt = self.runtime.clone();
         let mount_table = self.mount_table.clone();
 

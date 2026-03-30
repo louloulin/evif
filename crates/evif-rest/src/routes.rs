@@ -259,6 +259,7 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
     // 创建 WebSocket 状态
     let ws_state = ws_handlers::WebSocketState {
         mount_table: mount_table.clone(),
+        api_keys: None, // Set via EVIF_REST_WRITE_API_KEYS if auth is enabled
     };
 
     let ws_routes = Router::new()
@@ -447,7 +448,6 @@ mod tests {
     async fn test_route_creation() {
         let mount_table = Arc::new(RadixMountTable::new());
         let _app = create_routes(mount_table);
-        // Router creation successful
         assert!(true);
     }
 }
