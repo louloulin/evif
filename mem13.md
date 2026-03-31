@@ -1,440 +1,503 @@
-# EVIF mem13.md — 定位、架构重设计与后续计划
+# EVIF mem13.md — 定位、架构重设计与后续计划（v2）
 
 > 创建时间：2026-03-31
-> 基于：EVIF 代码全面审计 + AGFS 对标分析 + AI Agent 文件系统行业调研
+> 更新时间：2026-03-31（v2：基于深度调研重写）
+> 基于：EVIF 全面代码审计 + AGFS 源码分析 + 行业深度调研（20+ 源）
+> 调研范围：AGFS/OpenViking/Claude Code/Codex CLI/MCP/Skills/arXiv 论文
 
 ---
 
-## 一、项目定位重定义
+## 一、核心理念：从 "Everything is File" 到 "Context is File"
 
-### 1.1 当前定位（模糊）
+### 1.1 哲学基础
 
-EVIF 目前是一个"虚拟文件系统插件平台"——功能丰富但定位不清，缺乏核心叙事。
+Unix 的伟大创新是 "Everything is a file"——将设备、管道、网络、进程统一为文件接口。
+Plan 9 进一步强化了这个理念。AGFS 将其引入 AI 时代："Everything is a file, for AI agents."
 
-### 1.2 建议定位
-
-**EVIF = AI Agent 的 Meta Tool 基础设施**
-
-核心理念（对标 AGFS "Everything is a File" + OpenViking Context DB）：
+**EVIF 的核心哲学升级为：**
 
 ```
-给 AI Agent 一个文件系统 + bash + MCP，让它自己组合工作流，
-而不是给它 50 个硬编码的 API 函数。
+Everything is Context → Context is File → File is the Meta Tool
 ```
 
-**一句话定位**：
-> EVIF 是面向 AI Agent 的统一文件系统抽象层（Meta Tool），为 Claude Code / Codex / Cursor 等 AI 编程助手提供可组合的存储、协调、记忆基础设施。
+这意味着：
+1. AI Agent 需要的一切都是「上下文」（代码、记忆、知识、技能、任务、状态）
+2. 所有上下文都可以映射为文件（目录 = 组织，文件 = 内容，管道 = 通信）
+3. 文件操作（ls/cat/grep/write）就是 Agent 的 Meta Tool——无需学习新 API
 
-### 1.3 竞品对比
+### 1.2 为什么文件系统是 AI Agent 的最佳接口
 
-| 维度 | AGFS (Go) | EVIF (Rust) | 差距 |
-|------|-----------|-------------|------|
-| 核心语言 | Go | Rust | EVIF 性能更优 |
-| 文件系统插件 | 14 种 | 32 种 | **EVIF 领先 2x** |
-| WASM 插件 | Extism 单后端 | Extism + Wasmtime 双后端 | **EVIF 领先** |
-| S3 支持 | 基础 | AWS SDK + OpenDAL 双通道 | **EVIF 领先** |
-| 中国云支持 | 无 | 阿里云/腾讯云/华为云 OSS | **EVIF 独有** |
-| MCP 工具 | 基础 6 个 | 17 个工具 | **EVIF 领先** |
-| CLI 命令 | 基础 | 40+ Unix 风格命令 | **EVIF 领先** |
-| REST API | 基础 | 完整 CRUD + WebSocket | **EVIF 领先** |
-| FUSE 挂载 | 仅 Linux | Linux + macOS | **EVIF 领先** |
-| 认证系统 | 无 | RBAC + 审计日志 | **EVIF 独有** |
-| 多 Agent 协调 | QueueFS 邮箱 | QueueFS（Memory/SQLite/MySQL） | **持平** |
-| Vector/语义搜索 | VectorFS (S3+TiDB) | VectorFS (SQLite) | **AGFS 领先** |
-| Context DB | OpenViking (L0/L1/L2) | 无 | **AGFS 大幅领先** |
-| SDK 语言 | Go + Python | Go | **AGFS 领先** |
-| Shell/Web UI | agfs-shell + Web | 无 | **AGFS 领先** |
-| Meta Tool 叙事 | 清晰突出 | 无 | **AGFS 领先** |
-| 生产案例 | OpenViking/字节跳动 | 无 | **AGFS 领先** |
+**学术验证**：
+- arXiv:2512.05470 "Everything is Context: Agentic File System Abstraction for Context Engineering" (CSIRO/Data61, 2025) — 明确提出文件系统抽象是上下文工程的最佳接口
+- arXiv:2601.22037 "Optimizing Agentic Workflows using Meta-tools" (2026) — 实证 Meta Tool 减少 11.9% LLM 调用，提升 4.2% 任务成功率
 
-### 1.4 核心差距分析
+**工业验证**：
+- Anthropic 的 Claude Code **核心上下文管理基于 ls/grep/write/read 等元命令**，而非 MCP 工具
+- OpenViking（字节跳动）采用 `viking://` 文件系统协议作为 Context DB 的统一接口
+- OpenAI Codex CLI 使用 `AGENTS.md` 文件作为 Agent 配置接口
+- LangChain 和 LlamaIndex 均验证 "Files are all you need" 范式
 
-**EVIF 的技术实现 > AGFS，但叙事和生态 < AGFS。**
+**关键洞察**：
+> Anthropic 自己说："Claude Code employs a hybrid model: CLAUDE.md files are loaded upfront,
+> while **primitives like glob and grep allow it to navigate its environment just-in-time**."
+> 文件系统元命令是 Claude Code 的核心，MCP 是补充。
 
-EVIF 在插件数量、WASM 能力、CLI、认证等维度全面超越 AGFS，但：
-1. **没有 Context DB** — 无法作为 AI Agent 的长期记忆层
-2. **没有 Web Shell** — 缺少交互式调试界面
-3. **SDK 不全** — 缺少 Python/TypeScript SDK
-4. **叙事不清** — 没有 "Meta Tool" 定位
-5. **没有实际 AI Agent 集成案例** — 未与 Claude Code / Codex 深度整合
+### 1.3 MCP 的角色定位：补充而非核心
+
+**当前 EVIF 的误区**：把 MCP 作为 AI Agent 的主要接入方式。
+
+**修正**：
+```
+Layer 0（核心）：文件系统元命令 — ls/cat/grep/write/mkdir/rm
+  → 任何 LLM 都天生理解，无需学习
+  → Claude Code 的主要工作方式
+  → 通过 FUSE 挂载、CLI、REST API 暴露
+
+Layer 1（可选）：MCP Tools — 结构化工具调用
+  → 用于需要类型安全的场景
+  → 用于 Claude Desktop 等不支持直接文件操作的客户端
+  → 17 个现有 MCP 工具保留，作为便捷入口
+
+Layer 2（高阶）：Skills / Meta-Tools — 组合式工作流
+  → 基于 Claude Code SKILL.md 格式
+  → 声明式 YAML 发现 + Markdown 指令
+  → Agent 通过 ls /skills 发现，cat /skills/*/manifest.yaml 理解
+```
 
 ---
 
-## 二、架构重设计
+## 二、项目定位
 
-### 2.1 当前架构
+### 2.1 一句话定位
 
-```
-┌──────────────────────────────────────────┐
-│  CLI  │  REST API  │  FUSE  │  MCP Tools │  ← 接入层
-├──────────────────────────────────────────┤
-│  Mount Table (Radix) │ Plugin System     │  ← 核心层
-├──────────────────────────────────────────┤
-│  MemFS │ S3FS │ SQLFS │ QueueFS │ ...   │  ← 插件层
-└──────────────────────────────────────────┘
-```
+> **EVIF = AI Agent 的 Context FileSystem（上下文文件系统）**
+> 为 Claude Code / Codex / Cursor 提供 "Context is File" 的统一基础设施。
 
-### 2.2 目标架构（AI Agent Meta Tool）
+### 2.2 与 AGFS 的战略差异
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                      接入层 (Access Layer)                      │
-│  ┌─────────┐ ┌──────────┐ ┌──────┐ ┌────────┐ ┌────────────┐ │
-│  │Claude   │ │ Codex    │ │ REST │ │  FUSE  │ │  Web Shell │ │
-│  │Code MCP │ │ CLI MCP  │ │ API  │ │ Mount  │ │  (新增)    │ │
-│  └────┬────┘ └────┬─────┘ └──┬───┘ └───┬────┘ └─────┬──────┘ │
-├───────┴───────────┴──────────┴─────────┴─────────────┴────────┤
-│                    核心层 (Core Engine)                         │
-│  ┌──────────────┐ ┌──────────────┐ ┌────────────────────────┐ │
-│  │ Radix Mount  │ │ Plugin Loader│ │ Context Engine (新增)  │ │
-│  │ Table        │ │ (WASM/Native)│ │ L0/L1/L2 分层加载     │ │
-│  └──────────────┘ └──────────────┘ └────────────────────────┘ │
-├────────────────────────────────────────────────────────────────┤
-│                   存储层 (Storage Plugins)                      │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ Agent Memory Plugins (新增)                              │  │
-│  │ ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌────────────┐ │  │
-│  │ │ContextFS │ │MemoryFS  │ │SessionFS  │ │SkillFS     │ │  │
-│  │ │L0/L1/L2  │ │长期记忆  │ │会话存储   │ │技能注册    │ │  │
-│  │ └──────────┘ └──────────┘ └───────────┘ └────────────┘ │  │
-│  ├──────────────────────────────────────────────────────────┤  │
-│  │ Coordination Plugins                                     │  │
-│  │ ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌────────────┐ │  │
-│  │ │QueueFS   │ │StreamFS  │ │HeartbeatFS│ │PipeFS(新增)│ │  │
-│  │ │消息队列  │ │流式数据  │ │心跳监控   │ │Agent管道   │ │  │
-│  │ └──────────┘ └──────────┘ └───────────┘ └────────────┘ │  │
-│  ├──────────────────────────────────────────────────────────┤  │
-│  │ Storage Plugins                                          │  │
-│  │ ┌────┐┌────┐┌────┐┌──────┐┌──────┐┌─────┐┌────────────┐│  │
-│  │ │Mem ││S3  ││SQL ││Azure ││ GCS  ││ OSS ││ Encrypted  ││  │
-│  │ └────┘└────┘└────┘└──────┘└──────┘└─────┘└────────────┘│  │
-│  └──────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────┘
-```
+AGFS 的定位是 "File System for AI Agents" — 一个通用的虚拟文件系统。
+EVIF 的定位是 **"Context FileSystem for AI Agents"** — 专注于上下文管理。
 
-### 2.3 关键新增组件
+| 维度 | AGFS | EVIF | 战略差异 |
+|------|------|------|----------|
+| 核心语言 | Go | Rust | 性能和安全性 |
+| 定位 | 通用虚拟文件系统 | **上下文文件系统** | EVIF 聚焦 Agent 上下文 |
+| Context DB | OpenViking（外挂） | **内建 L0/L1/L2** | EVIF 原生集成 |
+| Agent 集成 | MCP 为主 | **文件元命令为主，MCP 为辅** | EVIF 更贴近 Claude Code |
+| 技能系统 | 无 | **SkillFS 声明式技能发现** | EVIF 独有 |
+| 中国云 | 无 | 阿里云/腾讯云/华为云 | EVIF 独有 |
+| WASM 插件 | Extism 单后端 | Extism + Wasmtime 双后端 | EVIF 领先 |
+| CLI | 基础 | 40+ Unix 命令 | EVIF 领先 |
+| 认证 | 无 | RBAC + 审计 | EVIF 领先 |
+| 语义搜索 | S3+TiDB（重） | SQLite（轻） | 各有优势 |
+| SDK | Go+Python | Go（Python/TS 待实现） | 待补齐 |
 
-#### A. Context Engine（上下文引擎）— 核心差异化
+### 2.3 核心差异化：三件 AGFS 没做到的事
 
-对标 OpenViking 的 L0/L1/L2 分层加载：
+1. **Context Engine（上下文引擎）** — 内建 L0/L1/L2 分层上下文，不是外挂数据库
+2. **SkillFS（技能文件系统）** — Agent 通过文件系统发现和注册技能（对标 Claude Code SKILL.md）
+3. **原生文件元命令优先** — 不依赖 MCP，直接通过 ls/cat/grep/write 工作
+
+---
+
+## 三、架构设计
+
+### 3.1 三层架构
 
 ```
-L0 (Immediate)  → 当前文件、当前工作上下文        — 毫秒级
-L1 (Session)    → 本次会话的记忆、中间结果         — 秒级
-L2 (Background) → 项目知识库、历史经验、最佳实践    — 分钟级
+┌─────────────────────────────────────────────────────────────┐
+│                   Agent Access Layer                         │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  File Primitives (Primary)                          │    │
+│  │  ls / cat / grep / write / mkdir / rm / find        │    │
+│  │  → FUSE mount: Agent 直接操作文件路径                 │    │
+│  │  → CLI: evif cat /evif/context/L0/current           │    │
+│  │  → REST: GET /api/v1/files?path=/context/L0/...     │    │
+│  └─────────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  MCP Tools (Secondary)                              │    │
+│  │  17 structured tools for Claude Desktop / MCP clients│   │
+│  └─────────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  Skills (Tertiary)                                  │    │
+│  │  SKILL.md format, declarative discovery              │    │
+│  │  ls /skills → discover, cat → understand             │    │
+│  └─────────────────────────────────────────────────────┘    │
+├─────────────────────────────────────────────────────────────┤
+│                    Core Engine                               │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
+│  │ Radix Mount  │ │ Plugin Loader│ │ Context Engine       │ │
+│  │ Table (O(k)) │ │ WASM/Native  │ │ L0/L1/L2 管理器      │ │
+│  └──────────────┘ └──────────────┘ └──────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│                    Plugin Layer                              │
+│                                                             │
+│  ┌─ Context Plugins ──────────────────────────────────────┐ │
+│  │ ContextFS (L0/L1/L2) │ MemoryFS │ SessionFS │ SkillFS │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│  ┌─ Coordination Plugins ─────────────────────────────────┐ │
+│  │ QueueFS │ PipeFS (Agent管道) │ HeartbeatFS │ StreamFS  │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│  ┌─ Storage Plugins ──────────────────────────────────────┐ │
+│  │ MemFS │ S3FS │ SQLFS │ Azure │ GCS │ OSS │ EncryptFS  │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│  ┌─ Compute Plugins ──────────────────────────────────────┐ │
+│  │ VectorFS │ GPTFS │ ProxyFS │ WASM Runtime             │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-实现方式：
-- ContextFS 插件 — 自动管理 L0/L1/L2 层级
-- 基于 VectorFS 的语义检索
-- YAML frontmatter 元数据（已有 evif-mem 基础）
-- 自动上下文压缩和摘要
+### 3.2 Context Engine 设计（核心差异化）
 
-#### B. Web Shell（Web 交互界面）— 运维 + Agent 调试
+**对标**：OpenViking 的 L0/L1/L2 分层 + Anthropic 的上下文压缩策略
 
-对标 AGFS Shell + Web UI：
-- React/Vite 前端
-- 实时文件浏览和操作
-- Agent 会话监控
-- 队列可视化
-- 插件状态仪表盘
-
-#### C. PipeFS（Agent 管道文件系统）— 多 Agent 协调
+**设计原则**：
+- **Progressive Disclosure**：先加载 L0 摘要（~100 tokens/项），按需深入 L1/L2
+- **Compaction**：自动压缩长上下文为摘要，保留关键决策
+- **Just-in-Time**：维护轻量级标识符（路径、查询、链接），运行时按需加载
 
 ```
-# Agent A 写入任务
-echo "analyze https://example.com" > /pipes/task-001/input
-
-# Agent B 读取任务
-cat /pipes/task-001/input
-
-# Agent B 写入结果
-echo "analysis result..." > /pipes/task-001/output
-
-# 监控管道状态
-cat /pipes/task-001/status    # → "completed"
+/context/
+├── L0/                          # 即时上下文（毫秒级，~200 tokens）
+│   ├── current                  # 当前工作上下文
+│   ├── recent_ops               # 最近操作记录
+│   └── active_files/            # 当前打开的文件
+│       ├── main.rs              # 文件摘要（前 20 行 + 结构概要）
+│       └── config.toml
+│
+├── L1/                          # 会话上下文（秒级，~2000 tokens）
+│   ├── session_id               # 当前会话标识
+│   ├── decisions.md             # 本次会话的决策记录
+│   ├── intermediate/            # 中间结果
+│   │   ├── analysis_001.json
+│   │   └── draft_plan.md
+│   └── scratch/                 # 临时笔记（Agent 写入的推理过程）
+│
+├── L2/                          # 项目知识库（按需加载）
+│   ├── architecture.md          # 项目架构文档
+│   ├── patterns.md              # 代码模式和约定
+│   ├── best_practices.md        # 最佳实践
+│   ├── history/                 # 历史经验（成功/失败案例）
+│   │   ├── bug_fix_001.md
+│   │   └── feature_impl_002.md
+│   └── embeddings/              # 语义索引（VectorFS）
+│       └── *.vec
+│
+├── README                       # 上下文导航指南
+└── .meta                        # 元数据（压缩策略、过期策略）
 ```
 
-#### D. SkillFS（技能注册文件系统）— Meta Tool 体现
+**Agent 交互方式**：
+```bash
+# 查看 L0 上下文（总是加载）
+cat /context/L0/current
+
+# 查看会话决策
+cat /context/L1/decisions.md
+
+# 搜索项目知识
+grep "authentication" /context/L2/
+
+# 语义搜索（通过 VectorFS）
+echo "how does auth work?" > /context/L2/embeddings/search
+cat /context/L2/embeddings/results
+
+# 保存当前上下文
+echo "decision: use JWT for auth" >> /context/L1/decisions.md
+```
+
+### 3.3 SkillFS 设计（对标 Claude Code SKILL.md）
+
+**核心思想**：技能 = 一个目录 + manifest.yaml + 指令文件
 
 ```
 /skills/
-├── code-review/          # 代码审查技能
-│   ├── manifest.yaml     # 技能描述
-│   ├── input/            # 输入规范
-│   └── output/           # 输出规范
-├── test-gen/             # 测试生成技能
-├── doc-gen/              # 文档生成技能
-└── deploy/               # 部署技能
+├── README                       # 技能导航
+├── code-review/                 # 代码审查技能
+│   ├── manifest.yaml            # 声明式描述（对标 SKILL.md frontmatter）
+│   │   ---
+│   │   name: code-review
+│   │   description: "Review code for bugs, security issues, and best practices"
+│   │   triggers: ["review", "code review", "check my code"]
+│   │   input_schema:
+│   │     path: { type: string, required: true }
+│   │     focus: { type: string, enum: [security, performance, style, all] }
+│   │   ---
+│   ├── instructions.md          # 执行指令（对标 SKILL.md body）
+│   ├── examples/                # 示例输入/输出
+│   └── templates/               # 模板文件
+│
+├── test-gen/                    # 测试生成技能
+├── doc-gen/                     # 文档生成技能
+├── deploy/                      # 部署技能
+└── refactor/                    # 重构技能
 ```
 
-Agent 通过 `ls /skills` 发现可用技能，通过 `cat /skills/code-review/manifest.yaml` 了解如何调用。
+**Agent 发现和使用技能**：
+```bash
+# 发现所有技能
+ls /skills/
+# → code-review  test-gen  doc-gen  deploy  refactor
+
+# 理解某个技能
+cat /skills/code-review/manifest.yaml
+cat /skills/code-review/instructions.md
+
+# 执行技能（写入输入，读取输出）
+echo '{"path":"/src/auth.rs","focus":"security"}' > /skills/code-review/input
+cat /skills/code-review/output
+```
+
+**与 Claude Code Skills 的对应关系**：
+```
+SKILL.md frontmatter  → /skills/*/manifest.yaml
+SKILL.md body         → /skills/*/instructions.md
+Skill invocation      → write to /skills/*/input, read from /skills/*/output
+Skill discovery       → ls /skills/, cat manifest.yaml
+```
+
+### 3.4 PipeFS 设计（多 Agent 协调）
+
+```
+/pipes/
+├── README
+├── task-001/
+│   ├── input           # Agent A 写入任务描述
+│   ├── output          # Agent B 写入处理结果
+│   ├── status          # pending → running → completed/failed
+│   ├── assignee        # 当前处理者
+│   └── timeout         # 超时时间
+├── task-002/
+└── broadcast/
+    ├── input           # 一个写入，多个读取
+    └── subscribers/    # 订阅者列表
+```
 
 ---
 
-## 三、问题清单（从代码审计中发现）
+## 四、问题清单
 
-### 3.1 架构级问题
+### 4.1 战略级问题（P0）
 
-| # | 问题 | 影响 | 优先级 |
-|---|------|------|--------|
-| A1 | 无 Context Engine — Agent 无长期记忆 | AI Agent 无法跨会话学习 | P0 |
-| A2 | 无 Web Shell — 缺少交互式调试 | 开发体验差 | P1 |
-| A3 | MCP 工具未与 Claude Code 深度集成 | Meta Tool 叙事无法落地 | P0 |
-| A4 | evif-mem 未被任何插件实际使用 | 记忆系统形同虚设 | P0 |
-| A5 | 无多 Agent 协调原语（PipeFS） | 多 Agent 场景受限 | P1 |
-| A6 | 无 SDK 生成器（Python/TS） | 生态覆盖不足 | P1 |
+| # | 问题 | 根因 | 解决方案 |
+|---|------|------|----------|
+| S1 | MCP 被当作主要接入方式 | 误解了 Claude Code 的工作模式 | 文件元命令优先，MCP 降级为辅助 |
+| S2 | 无 Context Engine | evif-mem 未被实际使用 | 新建 ContextFS 插件，集成 evif-mem |
+| S3 | 无 SkillFS | 未考虑技能发现场景 | 新建 SkillFS，对标 SKILL.md |
+| S4 | 缺少 Claude Code 原生集成示例 | 无 FUSE + CLAUDE.md 指南 | 编写集成指南和示例 |
+| S5 | 叙事不清 | 定位模糊 | 重写 README：Context FileSystem |
 
-### 3.2 代码级问题
+### 4.2 架构级问题（P1）
 
-| # | 问题 | 文件 | 优先级 |
-|---|------|------|--------|
-| C1 | WebDAV/FTP/SFTP 因 OpenDAL TLS 冲突禁用 | evif-plugins/Cargo.toml | P2 |
-| C2 | TypeScript SDK 空壳 | evif-sdk-ts/ | P1 |
-| C3 | Python SDK 空壳 | evif-sdk-python/ | P1 |
-| C4 | evif-metrics 仅基础框架 | evif-metrics/src/ | P2 |
-| C5 | 部分插件缺少独立单元测试 | 多个插件 | P2 |
-| C6 | 示例 WASM 插件 extism-pdk API 不稳定 | examples/wasm-plugin/ | P2 |
-| C7 | Go SDK 缺少错误重试和断路器 | evif-sdk-go/ | P2 |
-| C8 | REST API 缺少 OpenAPI/Swagger 文档 | evif-rest/ | P2 |
+| # | 问题 | 解决方案 |
+|---|------|----------|
+| A1 | 无 L0/L1/L2 分层 | ContextFS 实现 OpenViking 式分层加载 |
+| A2 | 无 Agent 间通信原语 | PipeFS 基于 QueueFS 扩展 |
+| A3 | SDK 不全（Python/TS） | 实现 Python + TypeScript SDK |
+| A4 | 无 Web Shell | React + Vite 管理界面 |
+| A5 | OpenAPI 文档缺失 | 自动生成 OpenAPI 3.0 spec |
 
-### 3.3 定位与叙事问题
+### 4.3 代码级问题（P2）
 
-| # | 问题 | 影响 | 优先级 |
-|---|------|------|--------|
-| N1 | 无 "Meta Tool" 定位叙事 | 与 AGFS 竞争时缺乏故事 | P0 |
-| N2 | 无 README.md 重写 | 访客无法快速理解价值 | P0 |
-| N3 | 无架构图和快速上手指南 | 新用户门槛高 | P1 |
-| N4 | 无 AI Agent 集成示例 | 潜在用户看不到用途 | P0 |
+| # | 问题 | 文件 |
+|---|------|------|
+| C1 | WebDAV/FTP/SFTP 因 OpenDAL TLS 冲突禁用 | evif-plugins/Cargo.toml |
+| C2 | TypeScript SDK 空壳 | evif-sdk-ts/ |
+| C3 | Python SDK 空壳 | evif-sdk-python/ |
+| C4 | evif-metrics 仅基础框架 | evif-metrics/src/ |
+| C5 | Go SDK 缺少错误重试和断路器 | evif-sdk-go/ |
+| C6 | REST API 缺少 OpenAPI 文档 | evif-rest/ |
 
 ---
 
-## 四、后续实施计划
+## 五、实施计划
 
-### Phase 8: AI Agent 集成层（核心差异化，预估 40h）
+### Phase 8: Context Engine（核心差异化，P0，预估 20h）
 
-**目标**：让 EVIF 成为 Claude Code / Codex 的 Meta Tool
+**目标**：EVIF 内建 L0/L1/L2 上下文管理，成为 AI Agent 的长期记忆层
 
-#### 8.1 Context Engine — 上下文引擎（P0，15h）
+#### 8.1 ContextFS 插件（12h）
 
-- [ ] `ContextFS` 插件 — L0/L1/L2 分层上下文管理
-  - [ ] L0: 当前工作上下文（文件内容 + 光标位置 + 最近操作）
-  - [ ] L1: 会话记忆（中间结果 + 推理链 + 决策记录）
-  - [ ] L2: 项目知识库（架构文档 + 最佳实践 + 历史经验）
-- [ ] 自动上下文压缩（长上下文 → 摘要 + 关键信息）
-- [ ] 上下文持久化（跨会话恢复）
-- [ ] 与 evif-mem 集成（利用现有 Memory Platform）
-- [ ] MCP 工具暴露：`context_load`、`context_save`、`context_search`
+- [ ] `ContextFS` 插件实现
+  - [ ] L0 即时层：`/context/L0/current`、`/context/L0/active_files/`
+  - [ ] L1 会话层：`/context/L1/decisions.md`、`/context/L1/scratch/`
+  - [ ] L2 知识层：`/context/L2/architecture.md`、`/context/L2/patterns.md`
+  - [ ] 自动压缩：长文件 → 摘要 + 关键信息（L2 → L1 → L0）
+  - [ ] 持久化：跨会话恢复，基于 SQLite + evif-mem
+  - [ ] 语义检索：集成 VectorFS 搜索 L2 知识库
+- [ ] Context Manager 服务
+  - [ ] 上下文生命周期管理（创建、更新、过期、归档）
+  - [ ] Token 预算管理（Anthropic 的 "smallest possible set" 原则）
+  - [ ] 自动摘要生成（调用 LLM 或本地摘要）
+- [ ] 测试：ContextFS 完整单元测试
 
-#### 8.2 Claude Code 深度集成（P0，10h）
+#### 8.2 Claude Code 集成指南（4h）
 
-- [ ] EVIF MCP Server 注册为 Claude Code MCP Server
-- [ ] 新增 MCP 工具：
-  - [ ] `evif_project_init` — 初始化 EVIF 项目（自动挂载推荐插件）
-  - [ ] `evif_context` — 加载/保存项目上下文
-  - [ ] `evif_agent_pipe` — 创建 Agent 管道
-  - [ ] `evif_skill_list` — 列出可用技能
-  - [ ] `evif_memory_search` — 语义搜索项目记忆
-- [ ] Claude Code CLAUDE.md 集成指南
-- [ ] Codex CLI AGENTS.md 集成指南
+- [ ] `CLAUDE.md` 模板 — EVIF 项目快速上手
+- [ ] FUSE 挂载 + Claude Code 工作流示例
+- [ ] `/context` 目录使用最佳实践文档
+- [ ] 多 Agent 协调示例（QueueFS + PipeFS）
 
-#### 8.3 PipeFS — Agent 管道文件系统（P1，8h）
+#### 8.3 Codex CLI 集成指南（2h）
 
-- [ ] `PipeFS` 插件 — Agent 间通信管道
+- [ ] `AGENTS.md` 模板 — EVIF + Codex 配置
+- [ ] `agents/openai.yaml` 技能定义
+- [ ] REST API + Codex 工作流示例
+
+#### 8.4 README.md 重写（2h）
+
+- [ ] "Context FileSystem for AI Agents" 定位叙事
+- [ ] 架构图（三层：Agent Access → Core → Plugins）
+- [ ] 快速上手：3 分钟搭建 EVIF + Claude Code 环境
+- [ ] 30 秒演示：ls /context → cat /context/L0/current → write decision
+
+### Phase 9: SkillFS + PipeFS（Agent 协作，P1，预估 15h）
+
+#### 9.1 SkillFS 技能文件系统（8h）
+
+- [ ] `SkillFS` 插件实现
+  - [ ] YAML manifest 规范（对标 SKILL.md frontmatter）
+  - [ ] Markdown 指令文件（对标 SKILL.md body）
+  - [ ] 技能发现：`ls /skills/` + `cat /skills/*/manifest.yaml`
+  - [ ] 技能调用：`write /skills/*/input` → `read /skills/*/output`
+  - [ ] 技能注册：Agent 或开发者通过 mkdir + write 添加技能
+- [ ] 内置技能模板
+  - [ ] `code-review` — 代码审查（安全、性能、风格）
+  - [ ] `test-gen` — 测试生成
+  - [ ] `doc-gen` — 文档生成
+  - [ ] `refactor` — 代码重构建议
+- [ ] 与 Claude Code Skills 互操作：manifest.yaml ↔ SKILL.md 转换
+- [ ] 测试：SkillFS 完整单元测试
+
+#### 9.2 PipeFS Agent 管道（7h）
+
+- [ ] `PipeFS` 插件实现
   - [ ] 创建管道：`mkdir /pipes/task-001`
-  - [ ] 输入/输出：读写 `/pipes/task-001/input`、`/pipes/task-001/output`
-  - [ ] 状态监控：`cat /pipes/task-001/status`
+  - [ ] 双向通信：`input`/`output` 文件
+  - [ ] 状态监控：`status` 文件（pending → running → completed/failed）
   - [ ] 超时和自动清理
-  - [ ] 广播模式：一个写入 → 多个读取
-- [ ] 基于 QueueFS 扩展
+  - [ ] 广播模式：`/pipes/broadcast/` 一写多读
+- [ ] 基于 QueueFS 扩展（复用 Backend trait）
+- [ ] 测试：PipeFS 完整单元测试
 
-#### 8.4 SkillFS — 技能注册文件系统（P1，7h）
+### Phase 10: 开发者生态（P1，预估 25h）
 
-- [ ] `SkillFS` 插件 — Agent 技能发现和调用
-- [ ] YAML manifest 规范
-- [ ] 内置技能模板（code-review、test-gen、doc-gen）
-- [ ] Agent 自注册技能
-- [ ] MCP 工具：`skill_register`、`skill_discover`、`skill_execute`
+#### 10.1 Python SDK（8h）
 
-### Phase 9: 开发者体验（预估 25h）
-
-#### 9.1 Python SDK（P1，8h）
-
-- [ ] HTTP 客户端（requests/httpx）
-- [ ] 异步客户端（asyncio + httpx）
-- [ ] 文件操作、挂载管理、句柄操作
-- [ ] Context API（上下文加载/保存）
+- [ ] HTTP 客户端（httpx + asyncio）
+- [ ] 文件操作：read/write/list/stat/mkdir/rm/mv/cp
+- [ ] 挂载管理：mount/unmount/list
+- [ ] Context API：context_load/context_save/context_search
+- [ ] Skill API：skill_discover/skill_execute
 - [ ] 流式读写支持
-- [ ] 完整测试套件
+- [ ] 完整测试套件（pytest + httpx mock）
 
-#### 9.2 TypeScript SDK（P1，8h）
+#### 10.2 TypeScript SDK（8h）
 
 - [ ] Node.js 客户端（fetch API）
-- [ ] 类型定义（TypeScript）
-- [ ] 文件操作、挂载管理、句柄操作
-- [ ] Context API
+- [ ] TypeScript 类型定义
+- [ ] 文件操作、挂载管理、Context API、Skill API
 - [ ] 流式读写支持
-- [ ] 完整测试套件
+- [ ] 完整测试套件（vitest）
 
-#### 9.3 Web Shell（P1，9h）
+#### 10.3 Web Shell（9h）
 
-- [ ] React + Vite 前端框架
+- [ ] React + Vite + TypeScript
 - [ ] 文件浏览器（树形 + 列表视图）
-- [ ] 在线文件编辑器
-- [ ] 插件状态仪表盘
-- [ ] 队列可视化
-- [ ] 实时日志流
-- [ ] REST API 交互式文档
+- [ ] Monaco Editor 在线编辑
+- [ ] Context Explorer（L0/L1/L2 可视化）
+- [ ] Queue/Pipe 可视化（消息流、Agent 状态）
+- [ ] Skill Gallery（技能发现和管理）
+- [ ] 实时日志流（WebSocket）
 
-### Phase 10: 生产增强（预估 15h）
+### Phase 11: 生产增强（P2，预估 15h）
 
-#### 10.1 OpenAPI 文档（P2，3h）
-
-- [ ] 自动生成 OpenAPI 3.0 spec
-- [ ] Swagger UI 集成
-- [ ] API 示例和说明
-
-#### 10.2 Metrics 增强（P2，4h）
-
-- [ ] Prometheus metrics 完整实现
-- [ ] Grafana 仪表盘模板
-- [ ] 插件级性能指标
-- [ ] 请求延迟分布
-
-#### 10.3 Go SDK 增强（P2，3h）
-
-- [ ] 错误重试（指数退避）
-- [ ] 断路器模式
-- [ ] 连接池管理
-- [ ] Context API 集成
-
-#### 10.4 CI/CD 完善（P2，5h）
-
-- [ ] 多平台 Release 自动化（GoReleaser 风格）
-- [ ] Docker 镜像构建和推送
-- [ ] 自动 changelog 生成
-- [ ] 性能基准测试 CI
+- [ ] OpenAPI 3.0 自动生成 + Swagger UI（3h）
+- [ ] Prometheus metrics 完整实现 + Grafana 模板（4h）
+- [ ] Go SDK 增强：重试/断路器/连接池（3h）
+- [ ] CI/CD：多平台 Release + Docker + 性能基准（5h）
 
 ---
 
-## 五、核心设计原则
+## 六、里程碑
 
-### 5.1 Meta Tool 设计哲学
-
-```
-原则 1：文件系统是 AI Agent 的通用接口
-  → 任何 LLM 都知道 cat/ls/grep/echo，无需学习新 API
-
-原则 2：组合优于硬编码
-  → 给 Agent 原子操作（read/write/list/search），让它自己组合
-
-原则 3：分层上下文是 Agent 智能的基础
-  → L0（即时）→ L1（会话）→ L2（知识）分层加载
-
-原则 4：Agent 间通过文件系统协调
-  → QueueFS/PipeFS/StreamFS 替代 API 调用
-
-原则 5：一切皆可观测
-  → 文件系统天然可审计（ls/cat/grep 即可调试）
-```
-
-### 5.2 与 Claude Code 集成模式
-
-```bash
-# 模式 1: 作为 MCP Server
-# claude_desktop_config.json
-{
-  "mcpServers": {
-    "evif": {
-      "command": "evif-mcp",
-      "args": ["--config", "evif.toml"]
-    }
-  }
-}
-
-# 模式 2: 作为文件系统后端
-evif-fuse mount /evif --config evif.toml
-# Agent 直接操作 /evif/ 路径
-
-# 模式 3: 作为 REST API
-curl http://localhost:8080/api/v1/files?path=/context/L2/architecture.md
-```
-
-### 5.3 与 Codex CLI 集成模式
-
-```bash
-# Codex 通过 REST API 使用 EVIF
-# AGENTS.md 配置
-export EVIF_URL=http://localhost:8080/api/v1
-
-# Agent 自动发现上下文
-curl $EVIF_URL/context/L0/current
-curl $EVIF_URL/context/L2/knowledge-base
-```
+| 里程碑 | Phase | 交付物 | 预估 |
+|--------|-------|--------|------|
+| M1: Context FileSystem 基础版 | 8 | ContextFS + Claude Code 集成 + README 重写 | 20h |
+| M2: Agent 协作平台 | 9 | SkillFS + PipeFS + 多 Agent 示例 | 15h |
+| M3: 开发者生态 | 10 | Python SDK + TypeScript SDK + Web Shell | 25h |
+| M4: 生产就绪 | 11 | OpenAPI + Metrics + CI/CD | 15h |
 
 ---
 
-## 六、优先级排序与里程碑
+## 七、关键设计决策
 
-### M1: "AI Agent Meta Tool" 基础版（Phase 8.1 + 8.2）
+### 7.1 为什么弱化 MCP？
 
-**里程碑**：EVIF 可以作为 Claude Code 的上下文管理后端
+1. **Claude Code 的实际工作方式**：使用 glob/grep/head/tail/read/write，不是 MCP 工具
+2. **Anthropic 自己的验证**："primitives like glob and grep allow it to navigate its environment just-in-time"
+3. **MCP 的扩展性问题**：100+ 工具时 context burn 和成本暴增（Tool-RAG 正在解决）
+4. **通用性**：ls/cat/grep 任何 LLM 都懂，MCP 需要专门的客户端支持
 
-- Context Engine (L0/L1/L2)
-- Claude Code MCP 集成
-- 重写 README.md（Meta Tool 叙事）
+### 7.2 为什么采用 Skills 方式？
 
-### M2: "Multi-Agent 平台"（Phase 8.3 + 8.4）
+1. **Claude Code 已验证**：SKILL.md 格式是声明式、人类可读的技能描述
+2. **Codex 也采用**：agents/openai.yaml 格式类似
+3. **实证数据**：Meta-Tool 论文证明组合式工具减少 11.9% LLM 调用
+4. **文件系统原生**：技能通过 ls/cat 发现，不需要额外的注册协议
+5. **可移植**：manifest.yaml 可以转换为 SKILL.md 或 agents/openai.yaml
 
-**里程碑**：多个 AI Agent 可以通过 EVIF 协调工作
+### 7.3 为什么 Context Engine 是核心？
 
-- PipeFS 多 Agent 管道
-- SkillFS 技能注册
-- 多 Agent 示例
-
-### M3: "开发者生态"（Phase 9）
-
-**里程碑**：开发者可以用任意语言接入 EVIF
-
-- Python SDK
-- TypeScript SDK
-- Web Shell
-
-### M4: "生产就绪"（Phase 10）
-
-**里程碑**：EVIF 可以在生产环境部署
-
-- OpenAPI 文档
-- Metrics + Grafana
-- CI/CD 完善
-
----
-
-## 七、与 mem12.md 的关系
-
-mem12.md 记录了 Phase 4-7 的实施计划，**已全部完成**：
-- Phase 4: WASM 插件系统（Extism + Wasmtime）✅
-- Phase 5: S3 分片上传 ✅
-- Phase 6: 存储后端增强（VectorFS SQLite, SQLFS, QueueFS MySQL）✅
-- Phase 7: 生产增强（ProxyFS 健康检查, CI 每日构建）✅
-
-mem13.md 从 mem12.md 基础上延伸，将 EVIF 从"虚拟文件系统插件平台"升级为 **"AI Agent Meta Tool 基础设施"**。
+1. **OpenViking 已证明**：L0/L1/L2 分层加载是解决上下文窗口限制的有效方法
+2. **Anthropic 推荐**：Compaction + Structured Note-taking + Sub-agent 都依赖上下文管理
+3. **AGFS 没做到**：OpenViking 是外挂的，EVIF 可以原生集成
+4. **差异化**：从 "虚拟文件系统" 升级为 "上下文文件系统"
 
 ---
 
 ## 八、参考资料
 
-### 行业调研
-- [AGFS: File Systems for AI Agents](https://langcopilot.com/posts/2025-12-04-file-systems-for-ai-agents-next)
-- [OpenViking: Context DB for AI Agents](https://github.com/volcengine/OpenViking)
-- [Everything is Context (arXiv:2512.05470)](https://arxiv.org/abs/2512.05470)
-- [Meta-Tool: Unleash Open-World Function Calling (ACL 2025)](https://aclanthology.org/2025.acl-long.1481.pdf)
+### 学术论文
+- [Everything is Context: Agentic File System Abstraction (arXiv:2512.05470)](https://arxiv.org/abs/2512.05470)
+- [Optimizing Agentic Workflows using Meta-tools (arXiv:2601.22037)](https://arxiv.org/abs/2601.22037)
 - [AIOS-LSFS: LLM-based Semantic File System (ICLR 2025)](https://github.com/agiresearch/AIOS-LSFS)
-- [LangChain: How Agents Can Use Filesystems](https://blog.langchain.com/how-agents-can-use-filesystems-for-context-engineering/)
+
+### AI Agent 集成
+- [Effective Context Engineering for AI Agents — Anthropic](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills)
+- [Codex CLI AGENTS.md](https://developers.openai.com/codex/guides/agents-md/)
+- [Claude Skills Deep Dive — Han Lee](https://leehanchung.github.io/blogs/2025/10/26/claude-skills-deep-dive/)
+
+### AGFS / OpenViking
+- [AGFS GitHub](https://github.com/c4pt0r/agfs)
+- [AGFS: File Systems for AI Agents — LangCopilot](https://langcopilot.com/posts/2025-12-04-file-systems-for-ai-agents-next)
+- [OpenViking GitHub](https://github.com/volcengine/OpenViking)
+- [OpenViking Docs](https://volcengine-openviking.mintlify.app/)
+
+### MCP / 工具生态
+- [MCP Specification](https://modelcontextprotocol.io/specification/2025-11-25)
+- [Scaling MCP to 100+ Tools](https://apxml.com/posts/scaling-mcp-with-tool-rag)
+- [LangChain: How Agents Use Filesystems](https://blog.langchain.com/how-agents-can-use-filesystems-for-context-engineering/)
 - [LlamaIndex: Files Are All You Need](https://www.llamaindex.ai/blog/files-are-all-you-need)
 
-### 技术参考
-- [MCP Specification](https://modelcontextprotocol.io/specification/2025-06-18)
-- [Claude Code MCP Integration](https://www.anthropic.com/engineering/advanced-tool-use)
-- [Codex CLI](https://github.com/openai/codex)
-- [AGFS GitHub](https://github.com/c4pt0r/agfs)
+---
+
+## 九、与 mem12.md 的关系
+
+mem12.md Phase 4-7 **已全部完成**（0 个未勾选项）：
+- Phase 4: WASM 双后端（Extism + Wasmtime）✅
+- Phase 5: S3 分片上传 ✅
+- Phase 6: QueueFS MySQL + VectorFS SQLite + SQLFS ✅
+- Phase 7: CI 每日构建 + ProxyFS 健康检查 ✅
+
+mem13.md v2 是一次战略级重定位：从"虚拟文件系统插件平台" → **"AI Agent 上下文文件系统"**。
+
+---
+
+> **核心转变**：
+> 1. MCP 降级为辅助接口，文件元命令（ls/cat/grep/write）升级为核心接口
+> 2. 新增 Context Engine（L0/L1/L2），对标 OpenViking 但内建而非外挂
+> 3. 新增 SkillFS，对标 Claude Code SKILL.md 但用文件系统实现
+> 4. 定位从"AGFS 的 Rust 版"升级为"AI Agent 的 Context FileSystem"
