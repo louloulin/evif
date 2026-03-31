@@ -974,7 +974,7 @@ impl WasmPluginLoader {
   - [x] `/reload` 虚拟文件热重载（已有）
   - [x] `health_check()` 独立健康检查方法（新增，带5秒超时）
   - [x] `last_reload_time()` 连接状态查询方法（新增）
-- [ ] CI 每日自动构建多平台二进制（需要 CI 配置）
+- [x] CI 每日自动构建多平台二进制 — `.github/workflows/daily.yml` 已创建（4 平台: Linux amd64/arm64 + macOS amd64/arm64）
 - [x] 集成测试覆盖所有新功能
   - [x] evif-core: 82 单元测试通过（含 Extism + Wasmtime 双后端）
   - [x] extism_plugin: 9 集成测试通过
@@ -1280,7 +1280,28 @@ engine_profile = "production_pool"
 - 全部 426 单元测试通过
 
 #### mem12.md 清单完成度
-Phase 4-7 **所有**任务项已全部完成，剩余仅 3 个延期项：
+Phase 4-7 **所有**任务项已全部完成，剩余仅 2 个延期项：
 - QueueFS MySQL 后端（需 mysql 依赖）
-- CI 每日自动构建（需 GitHub Actions 配置）
 - Go SDK 流式读取（需 evif-sdk-go 开发）
+
+### 2026-03-31 (第八次): CI 每日自动构建 — ✅ 已完成
+
+#### 实现内容
+1. **`.github/workflows/daily.yml`** — 每日自动构建多平台二进制
+   - **触发方式**：每日 00:00 UTC 自动运行 + 手动触发
+   - **构建平台**：4 个并行 Job
+     - Linux x86_64 (amd64) — `evif`, `evif-rest`, `evif-mcp`, `evif-fuse-mount`
+     - Linux ARM64 (aarch64) — 交叉编译 `aarch64-unknown-linux-gnu`
+     - macOS x86_64 (Intel) — `evif`, `evif-rest`, `evif-mcp`
+     - macOS ARM64 (Apple Silicon) — `evif`, `evif-rest`, `evif-mcp`
+   - **测试 Job**：运行全部单元测试 + wasm feature + s3fs feature
+   - **发布 Job**（手动触发时）：
+     - 打包为 `.tar.gz` 格式
+     - 生成 SHA256 校验和
+     - 创建 GitHub Release（`nightly-<run_number>` 标签）
+   - **依赖安装**：libfuse3-dev（Linux）、libssl-dev、pkg-config
+   - **缓存**：Swatinem/rust-cache@v2 加速构建
+
+#### 验证结果
+- YAML 语法验证通过
+- 全部 426 单元测试通过

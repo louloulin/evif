@@ -1,0 +1,255 @@
+name: Daily Build
+
+on:
+  schedule:
+    # Every day at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Build for Linux x86_64
+  build-linux-amd64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse3-dev libssl-dev pkg-config
+
+      - name: Build release
+        run: cargo build --release -p evif-cli -p evif-rest -p evif-mcp -p evif-fuse
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp target/release/evif dist/evif-linux-amd64
+          cp target/release/evif-rest dist/evif-rest-linux-amd64
+          cp target/release/evif-mcp dist/evif-mcp-linux-amd64
+          cp target/release/evif-fuse-mount dist/evif-fuse-mount-linux-amd64
+          chmod +x dist/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: evif-linux-amd64
+          path: dist/
+
+  # Build for Linux ARM64
+  build-linux-arm64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cross-compilation toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libfuse3-dev:arm64 libssl-dev:arm64 pkg-config
+          rustup target add aarch64-unknown-linux-gnu
+
+      - name: Build release
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p evif-cli -p evif-rest -p evif-mcp -p evif-fuse
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp target/aarch64-unknown-linux-gnu/release/evif dist/evif-linux-arm64
+          cp target/aarch64-unknown-linux-gnu/release/evif-rest dist/evif-rest-linux-arm64
+          cp target/aarch64-unknown-linux-gnu/release/evif-mcp dist/evif-mcp-linux-arm64
+          cp target/aarch64-unknown-linux-gnu/release/evif-fuse-mount dist/evif-fuse-mount-linux-arm64
+          chmod +x dist/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: evif-linux-arm64
+          path: dist/
+
+  # Build for macOS x86_64
+  build-macos-amd64:
+    name: Build macOS x86_64
+    runs-on: macos-13  # Intel runner
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release -p evif-cli -p evif-rest -p evif-mcp
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp target/release/evif dist/evif-macos-amd64
+          cp target/release/evif-rest dist/evif-rest-macos-amd64
+          cp target/release/evif-mcp dist/evif-mcp-macos-amd64
+          chmod +x dist/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: evif-macos-amd64
+          path: dist/
+
+  # Build for macOS ARM64 (Apple Silicon)
+  build-macos-arm64:
+    name: Build macOS ARM64
+    runs-on: macos-latest  # M1/M2 runner
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release -p evif-cli -p evif-rest -p evif-mcp
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp target/release/evif dist/evif-macos-arm64
+          cp target/release/evif-rest dist/evif-rest-macos-arm64
+          cp target/release/evif-mcp dist/evif-mcp-macos-arm64
+          chmod +x dist/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: evif-macos-arm64
+          path: dist/
+
+  # Run full test suite
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse3-dev libssl-dev pkg-config
+
+      - name: Run all tests
+        run: cargo test --workspace --lib --exclude evif-example-wasm-plugin --exclude api-tests --exclude cli-tests --exclude e2e-tests
+
+      - name: Run tests with wasm feature
+        run: cargo test --lib -p evif-core --features wasm
+
+      - name: Run tests with s3fs feature
+        run: cargo test --lib -p evif-plugins --features s3fs
+
+  # Create GitHub release (only on manual trigger or weekly)
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
+    needs: [build-linux-amd64, build-linux-arm64, build-macos-amd64, build-macos-arm64, test]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create tarballs
+        run: |
+          mkdir -p release
+          DATE=$(date +%Y-%m-%d)
+          VERSION="nightly-${DATE}"
+
+          # Linux amd64
+          tar -czf release/evif-${VERSION}-linux-amd64.tar.gz -C artifacts/evif-linux-amd64 .
+
+          # Linux arm64
+          tar -czf release/evif-${VERSION}-linux-arm64.tar.gz -C artifacts/evif-linux-arm64 .
+
+          # macOS amd64
+          tar -czf release/evif-${VERSION}-macos-amd64.tar.gz -C artifacts/evif-macos-amd64 .
+
+          # macOS arm64
+          tar -czf release/evif-${VERSION}-macos-arm64.tar.gz -C artifacts/evif-macos-arm64 .
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum *.tar.gz > checksums-sha256.txt
+          cat checksums-sha256.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ github.run_number }}
+          name: Nightly Build ${{ github.run_number }}
+          body: |
+            ## EVIF Nightly Build
+
+            **Build date**: $(date +%Y-%m-%d)
+            **Commit**: ${{ github.sha }}
+
+            ### Binaries included
+            - `evif` — CLI tool
+            - `evif-rest` — REST API server
+            - `evif-mcp` — MCP server
+            - `evif-fuse-mount` — FUSE mount (Linux only)
+
+            ### Platforms
+            - Linux x86_64 (amd64)
+            - Linux ARM64 (aarch64)
+            - macOS x86_64 (Intel)
+            - macOS ARM64 (Apple Silicon)
+          files: release/*
+          draft: false
+          prerelease: true
