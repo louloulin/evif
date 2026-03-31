@@ -1,9 +1,9 @@
-# EVIF mem13.md — 定位、架构重设计与后续计划（v2）
+# EVIF mem13.md — 定位、架构重设计与后续计划（v3）
 
 > 创建时间：2026-03-31
-> 更新时间：2026-03-31（v2：基于深度调研重写）
-> 基于：EVIF 全面代码审计 + AGFS 源码分析 + 行业深度调研（20+ 源）
-> 调研范围：AGFS/OpenViking/Claude Code/Codex CLI/MCP/Skills/arXiv 论文
+> 更新时间：2026-03-31（v3：Skills 完全兼容 Claude Code/Codex 协议 + Rust 生态集成）
+> 基于：EVIF 全面代码审计 + AGFS 源码分析 + 行业深度调研（30+ 源）
+> 调研范围：AGFS/OpenViking/Claude Code Skills/Codex Skills/MCP/Rust Skills 生态/arXiv 论文
 
 ---
 
@@ -207,54 +207,118 @@ cat /context/L2/embeddings/results
 echo "decision: use JWT for auth" >> /context/L1/decisions.md
 ```
 
-### 3.3 SkillFS 设计（对标 Claude Code SKILL.md）
+### 3.3 SkillFS 设计（完全兼容 Claude Code + Codex 协议）
 
-**核心思想**：技能 = 一个目录 + manifest.yaml + 指令文件
+**核心原则：不发明自定义格式，直接使用行业标准**
+
+#### Claude Code SKILL.md 协议
+
+Claude Code 的 Skills 使用 `SKILL.md` 文件，格式如下：
+
+```markdown
+---
+name: code-review
+description: "Review code for bugs, security issues, and best practices"
+triggers:
+  - "review"
+  - "code review"
+  - "check my code"
+---
+
+# Code Review Skill
+
+You are a code reviewer. Analyze the given file for:
+1. Security vulnerabilities
+2. Performance issues
+3. Code style violations
+
+Focus areas: {focus}
+File path: {path}
+
+## Steps
+1. Read the file
+2. Identify issues
+3. Write a structured report
+```
+
+- **Frontmatter** (YAML between `---`): `name`, `description`, `triggers`（触发关键词）
+- **Body** (Markdown): 执行指令，支持变量占位符 `{variable}`
+- **存放位置**: `.claude/skills/` 目录下
+
+#### Codex Skills 协议（`codex-rs` 已用 Rust 实现）
+
+Codex 使用 `SKILL.md` + `agents/openai.yaml` 双格式：
+- `SKILL.md` — 与 Claude Code 完全相同的格式（开放 Agent Skills 标准）
+- `agents/openai.yaml` — OpenAI 特定的元数据（UI 展示、调用策略、工具依赖）
+- `AGENTS.md` — 项目级 Agent 指令
+
+**关键发现**：Codex CLI 已用 Rust 重写（`codex-rs`），其中的 skill 解析逻辑可直接参考。
+Rust crate `agent-skills` (Govcraft/agent-skills) 已实现了 SKILL.md 的解析和验证。
+
+#### EVIF SkillFS 实现：直接集成行业标准
+
+**不使用自定义 manifest.yaml，直接解析 SKILL.md 格式：**
 
 ```
 /skills/
-├── README                       # 技能导航
-├── code-review/                 # 代码审查技能
-│   ├── manifest.yaml            # 声明式描述（对标 SKILL.md frontmatter）
+├── README                              # 技能导航（自动生成）
+├── code-review/
+│   ├── SKILL.md                        # 标准 SKILL.md（Claude Code/Codex 兼容）
 │   │   ---
 │   │   name: code-review
-│   │   description: "Review code for bugs, security issues, and best practices"
+│   │   description: "Review code for bugs, security, and best practices"
 │   │   triggers: ["review", "code review", "check my code"]
-│   │   input_schema:
-│   │     path: { type: string, required: true }
-│   │     focus: { type: string, enum: [security, performance, style, all] }
 │   │   ---
-│   ├── instructions.md          # 执行指令（对标 SKILL.md body）
-│   ├── examples/                # 示例输入/输出
-│   └── templates/               # 模板文件
+│   │   # Code Review
+│   │   Analyze the given file...
+│   ├── examples/                       # 示例（可选）
+│   └── templates/                      # 模板（可选）
 │
-├── test-gen/                    # 测试生成技能
-├── doc-gen/                     # 文档生成技能
-├── deploy/                      # 部署技能
-└── refactor/                    # 重构技能
+├── test-gen/
+│   └── SKILL.md
+├── doc-gen/
+│   └── SKILL.md
+└── refactor/
+    └── SKILL.md
 ```
 
-**Agent 发现和使用技能**：
+**Rust 实现栈**：
+```
+agent-skills crate   → 解析和验证 SKILL.md（frontmatter + body）
+gray_matter crate    → 提取 YAML frontmatter，serde 反序列化
+rmcp crate (v1.3.0)  → 将技能暴露为 MCP tools（Claude Code 可发现）
+skill-runtime crate  → WASM/Docker/Native 安全执行引擎（生产环境）
+```
+
+**Agent 交互方式（文件元命令）**：
 ```bash
-# 发现所有技能
+# 发现技能
 ls /skills/
-# → code-review  test-gen  doc-gen  deploy  refactor
+# → code-review  test-gen  doc-gen  refactor
 
-# 理解某个技能
-cat /skills/code-review/manifest.yaml
-cat /skills/code-review/instructions.md
+# 理解技能（读取标准 SKILL.md）
+cat /skills/code-review/SKILL.md
 
-# 执行技能（写入输入，读取输出）
+# 触发技能（Claude Code 方式：自然语言匹配 triggers）
+# Claude Code 自动匹配: "review this code" → code-review skill
+
+# 触发技能（文件系统方式）
 echo '{"path":"/src/auth.rs","focus":"security"}' > /skills/code-review/input
 cat /skills/code-review/output
 ```
 
-**与 Claude Code Skills 的对应关系**：
+**与 Claude Code/Codex 的互操作**：
 ```
-SKILL.md frontmatter  → /skills/*/manifest.yaml
-SKILL.md body         → /skills/*/instructions.md
-Skill invocation      → write to /skills/*/input, read from /skills/*/output
-Skill discovery       → ls /skills/, cat manifest.yaml
+EVIF /skills/*/SKILL.md  ←→  .claude/skills/*/SKILL.md   (完全相同格式)
+EVIF /skills/*/SKILL.md  ←→  codex skills/*/SKILL.md     (完全相同格式)
+Skill discovery           ←→  ls /skills/ (EVIF) = scan .claude/skills/ (Claude Code)
+```
+
+**执行方式（三层安全模型）**：
+```
+Native  → 开发环境：直接执行（最快）
+WASM    → 沙箱执行：通过 skill-runtime crate（安全）
+Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 ```
 
 ### 3.4 PipeFS 设计（多 Agent 协调）
@@ -356,18 +420,29 @@ Skill discovery       → ls /skills/, cat manifest.yaml
 
 #### 9.1 SkillFS 技能文件系统（8h）
 
-- [ ] `SkillFS` 插件实现
-  - [ ] YAML manifest 规范（对标 SKILL.md frontmatter）
-  - [ ] Markdown 指令文件（对标 SKILL.md body）
-  - [ ] 技能发现：`ls /skills/` + `cat /skills/*/manifest.yaml`
+- [ ] `SkillFS` 插件实现（使用标准 SKILL.md 格式，不发明自定义格式）
+  - [ ] 集成 `agent-skills` crate — 解析和验证 SKILL.md
+  - [ ] 集成 `gray_matter` crate — YAML frontmatter 提取
+  - [ ] 技能发现：`ls /skills/` + `cat /skills/*/SKILL.md`
+  - [ ] 技能触发：自然语言匹配 `triggers` 字段（Claude Code 方式）
   - [ ] 技能调用：`write /skills/*/input` → `read /skills/*/output`
-  - [ ] 技能注册：Agent 或开发者通过 mkdir + write 添加技能
-- [ ] 内置技能模板
+  - [ ] 技能注册：`mkdir /skills/new-skill/` + `write SKILL.md`
+- [ ] MCP 暴露：集成 `rmcp` crate — 将 Skills 暴露为 MCP tools
+  - [ ] 每个 SKILL.md 自动注册为 MCP tool
+  - [ ] Claude Code 通过 MCP 协议发现和调用技能
+- [ ] 安全执行：集成 `skill-runtime` crate
+  - [ ] Native 执行（开发环境）
+  - [ ] WASM sandbox（生产推荐）
+  - [ ] Docker isolation（最高安全）
+- [ ] 内置技能模板（标准 SKILL.md 格式）
   - [ ] `code-review` — 代码审查（安全、性能、风格）
   - [ ] `test-gen` — 测试生成
   - [ ] `doc-gen` — 文档生成
   - [ ] `refactor` — 代码重构建议
-- [ ] 与 Claude Code Skills 互操作：manifest.yaml ↔ SKILL.md 转换
+- [ ] 与 Claude Code/Codex 互操作
+  - [ ] `/skills/*/SKILL.md` = `.claude/skills/*/SKILL.md`（相同格式）
+  - [ ] 自动生成 `agents/openai.yaml`（Codex 兼容）
+  - [ ] 符号链接：EVIF `/skills/` → `.claude/skills/`
 - [ ] 测试：SkillFS 完整单元测试
 
 #### 9.2 PipeFS Agent 管道（7h）
@@ -440,13 +515,18 @@ Skill discovery       → ls /skills/, cat manifest.yaml
 3. **MCP 的扩展性问题**：100+ 工具时 context burn 和成本暴增（Tool-RAG 正在解决）
 4. **通用性**：ls/cat/grep 任何 LLM 都懂，MCP 需要专门的客户端支持
 
-### 7.2 为什么采用 Skills 方式？
+### 7.2 为什么 Skills 必须完全兼容 Claude Code/Codex 协议？
 
-1. **Claude Code 已验证**：SKILL.md 格式是声明式、人类可读的技能描述
-2. **Codex 也采用**：agents/openai.yaml 格式类似
-3. **实证数据**：Meta-Tool 论文证明组合式工具减少 11.9% LLM 调用
-4. **文件系统原生**：技能通过 ls/cat 发现，不需要额外的注册协议
-5. **可移植**：manifest.yaml 可以转换为 SKILL.md 或 agents/openai.yaml
+1. **开放标准已存在**：Claude Code 的 `SKILL.md` 和 Codex 的 `SKILL.md` 使用完全相同的格式
+2. **Rust 生态已就绪**：
+   - `agent-skills` crate — 专门解析 SKILL.md 的 Rust 库
+   - `gray_matter` crate — YAML frontmatter 提取（serde 兼容）
+   - `rmcp` crate (v1.3.0, 4.7M downloads) — 官方 Rust MCP SDK，将 Skills 暴露为 MCP tools
+   - `skill-runtime` crate — WASM/Docker/Native 安全执行引擎
+   - `codex-rs` — OpenAI 官方 Rust 参考实现
+3. **零成本互操作**：EVIF `/skills/*/SKILL.md` = `.claude/skills/*/SKILL.md` = Codex skills
+4. **不应自造格式**：自定义 `manifest.yaml` 会导致生态割裂，用户需要学习两套格式
+5. **实证数据**：Meta-Tool 论文证明组合式工具减少 11.9% LLM 调用
 
 ### 7.3 为什么 Context Engine 是核心？
 
@@ -457,7 +537,67 @@ Skill discovery       → ls /skills/, cat manifest.yaml
 
 ---
 
-## 八、参考资料
+## 八、Rust Skills 生态（直接集成）
+
+### 8.1 已有的 Rust Skills 生态
+
+| Crate | 功能 | 版本 | 下载量 | 用途 |
+|-------|------|------|--------|------|
+| `agent-skills` | 解析/验证 SKILL.md | published | — | **直接使用**：解析 EVIF Skills |
+| `agent-skills-cli` | SKILL.md CLI 验证工具 | published | — | 开发时验证 Skills 格式 |
+| `gray_matter` | YAML/JSON/TOML frontmatter 提取 | v0.3.2 | — | 解析 SKILL.md frontmatter |
+| `rmcp` | 官方 Rust MCP SDK | v1.3.0 | 4.7M+ | 将 Skills 暴露为 MCP tools |
+| `skill-runtime` | WASM/Docker/Native 技能执行 | v0.3.0 | — | 安全执行技能 |
+| `skillsrs-runtime` | 技能编排+工作流+追踪 | published | — | 复杂技能工作流 |
+| `rig-core` | LLM Agent 框架+工具调用 | published | — | LLM 集成层 |
+| `codex-rs` | OpenAI Codex Rust 参考 | production | — | 参考实现 |
+
+### 8.2 集成架构
+
+```
+EVIF SkillFS
+├── Skill Parsing Layer
+│   ├── agent-skills crate     → 解析 SKILL.md（frontmatter + body）
+│   ├── gray_matter crate      → 提取 YAML frontmatter
+│   └── serde + serde_yaml     → 反序列化为 Rust struct
+│
+├── Skill Discovery Layer
+│   ├── ls /skills/            → 文件系统级发现
+│   ├── cat SKILL.md           → 读取技能描述
+│   └── triggers 匹配          → 自然语言触发（Claude Code 方式）
+│
+├── Skill Execution Layer
+│   ├── skill-runtime crate    → WASM/Docker/Native 三种后端
+│   ├── rmcp crate             → 暴露为 MCP tools（Claude Code 可发现）
+│   └── Native fallback        → 直接 Rust 函数调用（开发环境）
+│
+└── Interop Layer
+    ├── .claude/skills/ 链接    → 符号链接到 /skills/（Claude Code 兼容）
+    ├── agents/openai.yaml      → 自动生成 Codex 元数据
+    └── SKILL.md 转换器         → 双向兼容（如果格式有差异）
+```
+
+### 8.3 实施策略：直接使用现有 crate
+
+**Phase 9 SkillFS 实施变更**：
+
+原计划（v2）：自定义 manifest.yaml + instructions.md
+新计划（v3）：直接使用 `agent-skills` + `gray_matter` crate
+
+```toml
+# Cargo.toml 新增依赖
+[dependencies]
+agent-skills = "0.1"       # SKILL.md 解析和验证
+gray_matter = "0.3"        # YAML frontmatter 提取
+rmcp = "1.3"               # MCP SDK（将 Skills 暴露为 tools）
+skill-runtime = "0.3"      # 技能执行引擎（WASM/Docker/Native）
+```
+
+这避免了重复造轮子，直接复用已验证的 Rust 生态。
+
+---
+
+## 九、参考资料
 
 ### 学术论文
 - [Everything is Context: Agentic File System Abstraction (arXiv:2512.05470)](https://arxiv.org/abs/2512.05470)
@@ -468,7 +608,16 @@ Skill discovery       → ls /skills/, cat manifest.yaml
 - [Effective Context Engineering for AI Agents — Anthropic](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
 - [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills)
 - [Codex CLI AGENTS.md](https://developers.openai.com/codex/guides/agents-md/)
+- [Codex Skills — OpenAI Developers](https://developers.openai.com/codex/skills/)
 - [Claude Skills Deep Dive — Han Lee](https://leehanchung.github.io/blogs/2025/10/26/claude-skills-deep-dive/)
+
+### Rust Skills 生态
+- [agent-skills crate (Govcraft)](https://github.com/Govcraft/agent-skills) — SKILL.md 解析验证
+- [skill-runtime crate (Kubiya)](https://github.com/kubiyabot/skill) — WASM/Docker/Native 执行
+- [rmcp crate — Official Rust MCP SDK](https://github.com/modelcontextprotocol/rust-sdk) (v1.3.0, 4.7M+ downloads)
+- [gray_matter crate](https://crates.io/crates/gray_matter) — YAML frontmatter 提取
+- [codex-rs — OpenAI Codex Rust 实现](https://github.com/openai/codex/blob/main/codex-rs/README.md)
+- [agent-skills CLI](https://lib.rs/crates/agent-skills-cli)
 
 ### AGFS / OpenViking
 - [AGFS GitHub](https://github.com/c4pt0r/agfs)
@@ -484,7 +633,7 @@ Skill discovery       → ls /skills/, cat manifest.yaml
 
 ---
 
-## 九、与 mem12.md 的关系
+## 十、与 mem12.md 的关系
 
 mem12.md Phase 4-7 **已全部完成**（0 个未勾选项）：
 - Phase 4: WASM 双后端（Extism + Wasmtime）✅
@@ -492,12 +641,15 @@ mem12.md Phase 4-7 **已全部完成**（0 个未勾选项）：
 - Phase 6: QueueFS MySQL + VectorFS SQLite + SQLFS ✅
 - Phase 7: CI 每日构建 + ProxyFS 健康检查 ✅
 
-mem13.md v2 是一次战略级重定位：从"虚拟文件系统插件平台" → **"AI Agent 上下文文件系统"**。
+mem13.md v3 核心变更（vs v2）：
+1. **Skills 不再使用自定义 manifest.yaml**，直接使用标准 SKILL.md 格式
+2. **集成现有 Rust crate**：`agent-skills` + `gray_matter` + `rmcp` + `skill-runtime`
+3. **零成本互操作**：`/skills/*/SKILL.md` = `.claude/skills/*/SKILL.md` = Codex skills
 
 ---
 
-> **核心转变**：
-> 1. MCP 降级为辅助接口，文件元命令（ls/cat/grep/write）升级为核心接口
-> 2. 新增 Context Engine（L0/L1/L2），对标 OpenViking 但内建而非外挂
-> 3. 新增 SkillFS，对标 Claude Code SKILL.md 但用文件系统实现
-> 4. 定位从"AGFS 的 Rust 版"升级为"AI Agent 的 Context FileSystem"
+> **v3 核心转变（vs v2）**：
+> 1. Skills 从"自定义 manifest.yaml"改为"标准 SKILL.md"（完全兼容 Claude Code/Codex）
+> 2. 技能运行时从"自研"改为"集成 skill-runtime crate"（WASM/Docker/Native 三后端）
+> 3. MCP 暴露从"自建 MCP server"改为"使用 rmcp crate"（官方 Rust MCP SDK）
+> 4. 前端解析从"自写 YAML parser"改为"使用 agent-skills + gray_matter crate"
