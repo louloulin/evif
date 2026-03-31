@@ -1,0 +1,92 @@
+# EVIF Shell Features Verification Script
+# Tests: variables, for loops, while loops, if/else, functions, arithmetic, break/continue, string ops
+
+# === Test 1: Variable Expansion ===
+echo === Test 1: Variable Expansion ===
+echo Shell: $0
+
+# === Test 2: Arithmetic ===
+echo === Test 2: Arithmetic ===
+echo 3+4=$((3 + 4))
+echo 6*7=$((6 * 7))
+echo 2**10=$((2 ** 10))
+echo 17%5=$((17 % 5))
+echo 100/3=$((100 / 3))
+echo 2**8-1=$((2 ** 8 - 1))
+
+# === Test 3: For Loop ===
+echo === Test 3: For Loop ===
+for i in 1 2 3 {
+    echo item $i
+}
+
+# === Test 4: Nested For ===
+echo === Test 4: Nested For ===
+for x in a b {
+    for y in 1 2 {
+        echo $x $y
+    }
+}
+
+# === Test 5: If/Else ===
+echo === Test 5: If/Else ===
+if hello == hello {
+    echo string match works
+}
+if a == b {
+    echo should not appear
+} else {
+    echo else branch works
+}
+
+# === Test 6: While + Break ===
+echo === Test 6: While + Break ===
+n=0
+while 1 == 1 {
+    echo count $n
+    n=$((n + 1))
+    if $n == 3 {
+        break
+    }
+}
+
+# === Test 7: For + Continue ===
+echo === Test 7: For + Continue ===
+for i in 1 2 3 4 5 {
+    if $i == 3 {
+        continue
+    }
+    echo val $i
+}
+
+# === Test 8: Functions ===
+echo === Test 8: Functions ===
+fn greet(name) {
+    echo hello $name
+}
+greet world
+greet Rust
+
+fn add(a, b) {
+    echo sum=$((a + b))
+}
+add 10 20
+
+# === Test 9: String Operations ===
+echo === Test 9: String Operations ===
+set STR helloworld
+echo length: ${#STR}
+echo sub: ${STR:0:5}
+echo offset: ${STR:5}
+echo default: ${MISSING:-fallback}
+set X yes
+echo alt: ${X:+set}
+
+# === Test 10: Assignment ===
+echo === Test 10: Assignment ===
+x=42
+echo x=$x
+y=$((x + 8))
+echo y=$y
+
+echo === All Tests Complete ===

@@ -1,0 +1,8 @@
+# Test 2: Arithmetic expressions
+echo $((3 + 4))
+echo $((6 * 7))
+echo $((2 ** 10))
+echo $((17 % 5))
+echo $((100 / 3))
+echo $((2 ** 8 - 1))
+echo $(((2 + 3) * 4))

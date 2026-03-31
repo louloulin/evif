@@ -1,0 +1,10 @@
+# Test 6: While loop with break
+set n 0
+while 1 == 1 {
+    echo n=$n
+    n=$((n + 1))
+    if $n == 3 {
+        break
+    }
+}
+echo done

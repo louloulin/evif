@@ -450,11 +450,12 @@ evif_average_write_size {}
         // Create parent directories if requested
         if payload.parents.unwrap_or(false) {
             if let Some(parent) = std::path::Path::new(&relative_path).parent() {
-                let parent_path = parent.to_str().unwrap();
-                if !parent_path.is_empty() && parent_path != "/" {
-                    plugin
-                        .mkdir(parent_path, payload.mode.unwrap_or(0o755))
-                        .await?;
+                if let Some(parent_str) = parent.to_str() {
+                    if !parent_str.is_empty() && parent_str != "/" {
+                        plugin
+                            .mkdir(parent_str, payload.mode.unwrap_or(0o755))
+                            .await?;
+                    }
                 }
             }
         }

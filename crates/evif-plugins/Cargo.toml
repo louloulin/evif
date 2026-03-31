@@ -52,6 +52,7 @@ log = "0.4"
 aws-config = { version = "1.5", optional = true }
 aws-sdk-s3 = { version = "1.40", optional = true }
 aws-smithy-types = { version = "1.2", optional = true }
+aws-credential-types = { version = "1.2", optional = true }
 
 # OpenDAL for unified storage access (optional dependency)
 opendal = { version = "0.50", optional = true, features = [
@@ -78,12 +79,12 @@ rusqlite2 = { version = "0.32", optional = true, features = ["bundled"], package
 
 [features]
 default = ["sqlfs", "queuefs-sqlite"]
-s3fs = ["aws-config", "aws-sdk-s3", "aws-smithy-types"]
+s3fs = ["aws-config", "aws-sdk-s3", "aws-smithy-types", "aws-credential-types"]
 sqlfs = ["rusqlite", "r2d2", "r2d2_sqlite"]
 sqlfs2 = ["rusqlite2"]
 queuefs-sqlite = ["rusqlite"]
 gptfs = []
-vectorfs = ["aws-config", "aws-sdk-s3", "aws-smithy-types"]
+vectorfs = ["aws-config", "aws-sdk-s3", "aws-smithy-types", "aws-credential-types", "rusqlite"]
 streamrotatefs = []
 opendal = ["dep:opendal"]
 s3fs-opendal = ["opendal"]

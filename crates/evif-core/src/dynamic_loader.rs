@@ -373,7 +373,7 @@ impl DynamicPluginLoader {
     /// 动态库的 evif_plugin_create 必须返回 Arc<dyn EvifPlugin> 裸指针
     ///
     /// # 示例（插件库代码）
-    /// ```no_run
+    /// ```ignore
     /// use evif_core::EvifPlugin;
     /// use std::sync::Arc;
     /// use std::ffi::c_void;

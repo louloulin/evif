@@ -228,6 +228,16 @@ impl SqlfsPlugin {
             ).map_err(|e| EvifError::InvalidPath(format!("failed to create table: {}", e)))?;
 
             conn.execute(
+                "CREATE TABLE IF NOT EXISTS saved_queries (
+                    name TEXT PRIMARY KEY,
+                    query TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    modified_at INTEGER NOT NULL
+                )",
+                [],
+            ).map_err(|e| EvifError::InvalidPath(format!("failed to create saved_queries table: {}", e)))?;
+
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_parent ON files(path)",
                 [],
             ).map_err(|e| EvifError::InvalidPath(format!("failed to create index: {}", e)))?;
@@ -264,6 +274,147 @@ impl SqlfsPlugin {
             ))),
             config,
         })
+    }
+
+    /// Execute a SELECT SQL query and return results as JSON
+    /// The query runs against the internal files table and any other tables in the DB.
+    /// Results are returned as a JSON array of objects.
+    pub async fn execute_query(&self, query: &str) -> EvifResult<String> {
+        let db_path = self.db_path.clone();
+        let query = query.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let conn = Connection::open(&db_path)
+                .map_err(|e| EvifError::Storage(format!("failed to open database: {}", e)))?;
+
+            // Only allow SELECT statements (basic safety check)
+            let trimmed = query.trim().to_uppercase();
+            if !trimmed.starts_with("SELECT") {
+                return Err(EvifError::InvalidPath(
+                    "Only SELECT queries are allowed".to_string()
+                ));
+            }
+
+            let mut stmt = conn.prepare(&query)
+                .map_err(|e| EvifError::Storage(format!("Failed to prepare query: {}", e)))?;
+
+            let column_count = stmt.column_count();
+            let column_names: Vec<String> = (0..column_count)
+                .map(|i| stmt.column_name(i).unwrap_or("unknown").to_string())
+                .collect();
+
+            let mut rows_result = stmt.query([])
+                .map_err(|e| EvifError::Storage(format!("Failed to execute query: {}", e)))?;
+
+            let mut json_rows: Vec<serde_json::Value> = Vec::new();
+            while let Some(row) = rows_result.next()
+                .map_err(|e| EvifError::Storage(format!("Failed to fetch row: {}", e)))?
+            {
+                let mut obj = serde_json::Map::new();
+                for (i, col_name) in column_names.iter().enumerate() {
+                    let value: serde_json::Value = match row.get_ref(i) {
+                        Ok(value_ref) => {
+                            match value_ref {
+                                rusqlite::types::ValueRef::Null => serde_json::Value::Null,
+                                rusqlite::types::ValueRef::Integer(n) => serde_json::json!(n),
+                                rusqlite::types::ValueRef::Real(f) => serde_json::json!(f),
+                                rusqlite::types::ValueRef::Text(s) => {
+                                    serde_json::json!(String::from_utf8_lossy(s).to_string())
+                                }
+                                rusqlite::types::ValueRef::Blob(b) => {
+                                    serde_json::json!(format!("<blob {} bytes>", b.len()))
+                                }
+                            }
+                        }
+                        Err(_) => serde_json::Value::Null,
+                    };
+                    obj.insert(col_name.clone(), value);
+                }
+                json_rows.push(serde_json::Value::Object(obj));
+            }
+
+            let result = serde_json::to_string_pretty(&json_rows)
+                .map_err(|e| EvifError::Storage(format!("Failed to serialize results: {}", e)))?;
+
+            Ok(result)
+        }).await
+        .map_err(|e| EvifError::Storage(format!("spawn_blocking error: {}", e)))?
+    }
+
+    /// List all saved queries
+    pub async fn list_saved_queries(&self) -> EvifResult<Vec<(String, String, DateTime<Utc>)>> {
+        let db_path = self.db_path.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let conn = Connection::open(&db_path)
+                .map_err(|e| EvifError::Storage(format!("failed to open database: {}", e)))?;
+
+            let mut stmt = conn.prepare(
+                "SELECT name, query, modified_at FROM saved_queries ORDER BY name"
+            ).map_err(|e| EvifError::Storage(format!("Failed to prepare: {}", e)))?;
+
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            }).map_err(|e| EvifError::Storage(format!("Failed to query: {}", e)))?;
+
+            let mut queries = Vec::new();
+            for row in rows {
+                let (name, query, modified_at) = row
+                    .map_err(|e| EvifError::Storage(format!("Failed to read row: {}", e)))?;
+                queries.push((
+                    name,
+                    query,
+                    DateTime::from_timestamp(modified_at, 0).unwrap_or_default(),
+                ));
+            }
+
+            Ok(queries)
+        }).await
+        .map_err(|e| EvifError::Storage(format!("spawn_blocking error: {}", e)))?
+    }
+
+    /// Save a query for later reuse
+    pub async fn save_query(&self, name: &str, query: &str) -> EvifResult<()> {
+        let db_path = self.db_path.clone();
+        let name = name.to_string();
+        let query = query.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let conn = Connection::open(&db_path)
+                .map_err(|e| EvifError::Storage(format!("failed to open database: {}", e)))?;
+
+            let now = Utc::now().timestamp();
+            conn.execute(
+                "INSERT OR REPLACE INTO saved_queries (name, query, created_at, modified_at) VALUES (?1, ?2, ?3, ?4)",
+                params![name, query, now, now],
+            ).map_err(|e| EvifError::Storage(format!("Failed to save query: {}", e)))?;
+
+            Ok(())
+        }).await
+        .map_err(|e| EvifError::Storage(format!("spawn_blocking error: {}", e)))?
+    }
+
+    /// Delete a saved query
+    pub async fn delete_query(&self, name: &str) -> EvifResult<()> {
+        let db_path = self.db_path.clone();
+        let name = name.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let conn = Connection::open(&db_path)
+                .map_err(|e| EvifError::Storage(format!("failed to open database: {}", e)))?;
+
+            conn.execute(
+                "DELETE FROM saved_queries WHERE name = ?1",
+                params![name],
+            ).map_err(|e| EvifError::Storage(format!("Failed to delete query: {}", e)))?;
+
+            Ok(())
+        }).await
+        .map_err(|e| EvifError::Storage(format!("spawn_blocking error: {}", e)))?
     }
 }
 
@@ -993,5 +1144,97 @@ mod tests {
         // Verify all removed
         let result = plugin.stat("/dir").await;
         assert!(result.is_err());
+    }
+
+    #[cfg(feature = "sqlfs")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlfs_execute_query() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("query_test.db");
+        let config = SqlfsConfig {
+            db_path: db_path.to_str().unwrap().to_string(),
+            ..Default::default()
+        };
+        let plugin = SqlfsPlugin::new(config).unwrap();
+
+        // Create files to query
+        plugin.mkdir("/data", 0o755).await.unwrap();
+        plugin.create("/data/file1.txt", 0o644).await.unwrap();
+        plugin.write("/data/file1.txt", b"Hello World".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+        plugin.create("/data/file2.txt", 0o644).await.unwrap();
+        plugin.write("/data/file2.txt", b"Hello Rust".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+
+        // Execute a SELECT query against the files table
+        let result = plugin.execute_query(
+            "SELECT path, is_dir, size FROM files WHERE path LIKE '/data/%' AND is_dir = 0 ORDER BY path"
+        ).await.unwrap();
+
+        // Verify JSON results
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed.is_array());
+        let arr = parsed.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert!(arr[0]["path"].as_str().unwrap().contains("file1.txt"));
+        assert!(arr[1]["path"].as_str().unwrap().contains("file2.txt"));
+    }
+
+    #[cfg(feature = "sqlfs")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlfs_saved_queries() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("saved_query_test.db");
+        let config = SqlfsConfig {
+            db_path: db_path.to_str().unwrap().to_string(),
+            ..Default::default()
+        };
+        let plugin = SqlfsPlugin::new(config).unwrap();
+
+        // Create files
+        plugin.mkdir("/test", 0o755).await.unwrap();
+        plugin.create("/test/a.txt", 0o644).await.unwrap();
+        plugin.create("/test/b.txt", 0o644).await.unwrap();
+
+        // Save a query
+        plugin.save_query("list_test_files", "SELECT path, size FROM files WHERE path LIKE '/test/%' AND is_dir = 0").await.unwrap();
+
+        // List saved queries
+        let queries = plugin.list_saved_queries().await.unwrap();
+        assert_eq!(queries.len(), 1);
+        assert_eq!(queries[0].0, "list_test_files");
+        assert!(queries[0].1.contains("SELECT"));
+
+        // Execute the saved query's SQL
+        let result = plugin.execute_query(&queries[0].1).await.unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.as_array().unwrap().len(), 2);
+
+        // Delete the saved query
+        plugin.delete_query("list_test_files").await.unwrap();
+        let queries = plugin.list_saved_queries().await.unwrap();
+        assert!(queries.is_empty());
+    }
+
+    #[cfg(feature = "sqlfs")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlfs_query_only_select_allowed() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("query_safety_test.db");
+        let config = SqlfsConfig {
+            db_path: db_path.to_str().unwrap().to_string(),
+            ..Default::default()
+        };
+        let plugin = SqlfsPlugin::new(config).unwrap();
+
+        // INSERT should be rejected
+        let result = plugin.execute_query("INSERT INTO files VALUES ('/hack', 0, 644, 0, 0, '')").await;
+        assert!(result.is_err());
+
+        // DELETE should be rejected
+        let result = plugin.execute_query("DELETE FROM files WHERE path = '/'").await;
+        assert!(result.is_err());
+
+        // SELECT should work
+        let result = plugin.execute_query("SELECT COUNT(*) as cnt FROM files").await;
+        assert!(result.is_ok());
     }
 }

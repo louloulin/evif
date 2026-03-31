@@ -260,10 +260,87 @@ impl LLMClient for OpenAIClient {
             .ok_or_else(|| MemError::Llm("No response generated".to_string()))
     }
 
-    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement LLM-based memory extraction
-        // For now, return empty vec (will be implemented in Task 4)
-        Ok(vec![])
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+        use crate::models::MemoryType;
+
+        let truncated: String = if text.len() > 6000 {
+            text.chars().take(6000).collect()
+        } else {
+            text.to_string()
+        };
+
+        let prompt = format!(
+            r#"Extract Memory Items from Text
+
+Analyze the following text and extract structured memory items.
+For each item, provide:
+  - memory_type: one of [profile, event, knowledge, behavior, skill, tool]
+  - summary: a concise 1-sentence summary
+  - content: the full relevant content
+
+Return ONLY a JSON array (no markdown fences):
+[{{"memory_type":"<type>","summary":"<summary>","content":"<content>"}}]
+
+Text:
+```
+{}
+```"#,
+            truncated
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse JSON from response
+        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut items = Vec::new();
+        let now = chrono::Utc::now();
+        for raw in raw_items {
+            let memory_type = match raw.get("memory_type").and_then(|t| t.as_str()) {
+                Some("profile") => MemoryType::Profile,
+                Some("event") => MemoryType::Event,
+                Some("knowledge") => MemoryType::Knowledge,
+                Some("behavior") => MemoryType::Behavior,
+                Some("skill") => MemoryType::Skill,
+                Some("tool") => MemoryType::Tool,
+                _ => MemoryType::Knowledge,
+            };
+            let summary = raw.get("summary").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let content = raw.get("content").and_then(|t| t.as_str()).unwrap_or("").to_string();
+
+            items.push(MemoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                memory_type,
+                summary,
+                content,
+                embedding_id: None,
+                happened_at: Some(now),
+                content_hash: None,
+                reinforcement_count: 0,
+                last_reinforced_at: None,
+                resource_id: None,
+                ref_id: None,
+                category_id: None,
+                user_id: None,
+                tenant_id: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        Ok(items)
     }
 
     async fn embed(&self, text: &str) -> MemResult<Vec<f32>> {
@@ -319,21 +396,83 @@ impl LLMClient for OpenAIClient {
             .ok_or_else(|| MemError::Embedding("No embedding returned".to_string()))
     }
 
-    async fn analyze_category(&self, _memories: &[String]) -> MemResult<CategoryAnalysis> {
-        // TODO: Implement category analysis
-        // For now, return placeholder (will be implemented later)
-        Ok(CategoryAnalysis {
-            name: "uncategorized".to_string(),
-            description: "Default category".to_string(),
-            themes: vec![],
-            tags: vec![],
-        })
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+        if memories.is_empty() {
+            return Ok(CategoryAnalysis {
+                name: "uncategorized".to_string(),
+                description: "Default category".to_string(),
+                themes: vec![],
+                tags: vec![],
+            });
+        }
+        let memory_list = memories.join("\n---\n");
+        let truncated: String = if memory_list.len() > 6000 {
+            memory_list.chars().take(6000).collect()
+        } else {
+            memory_list
+        };
+        let prompt = format!(
+            r#"Analyze Memory Category
+
+Given these memory items, generate a category summary.
+
+Memories:
+---
+{}
+---
+
+Return ONLY JSON (no markdown):
+{{"name":"<category_name>","description":"<description>","themes":["t1"],"tags":["t1"]}}"#,
+            truncated
+        );
+        let response = self.generate(&prompt).await?;
+        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let start = match cleaned.find('{') { Some(s) => s, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
+        let end = match cleaned.rfind('}') { Some(e) => e, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
+        serde_json::from_str(&cleaned[start..=end])
+            .map_err(|e| MemError::Llm(format!("Failed to parse category: {}", e)))
     }
 
-    async fn rerank(&self, _query: &str, items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement reranking logic
-        // For now, return items as-is (will be implemented in Task 5)
-        Ok(items)
+    async fn rerank(&self, query: &str, items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        if items.is_empty() {
+            return Ok(items);
+        }
+        let items_json: Vec<String> = items.iter().enumerate()
+            .map(|(i, item)| format!(r#"{{"index": {}, "summary": "{}", "content": "{}"}}"#,
+                i,
+                item.summary.replace('"', "\\\"").replace('\n', "\\n"),
+                item.content.chars().take(200).collect::<String>().replace('"', "\\\"").replace('\n', "\\n")))
+            .collect();
+        let prompt = format!(
+            r#"Given the query "{}", rerank the following items by relevance (most relevant first).
+
+Items:
+{}
+
+Return ONLY a JSON array of indices in order of relevance, e.g. [2, 0, 1, 3]. Return ONLY the array, no other text."#,
+            query.replace('"', "\\\""),
+            items_json.join(",\n")
+        );
+        let response = self.generate(&prompt).await?;
+        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let start = match cleaned.find('[') { Some(s) => s, None => return Ok(items) };
+        let end = match cleaned.rfind(']') { Some(e) => e, None => return Ok(items) };
+        let indices: Vec<usize> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(items),
+        };
+        let mut result = Vec::new();
+        let valid_indices: Vec<usize> = indices.into_iter().filter(|&i| i < items.len()).collect();
+        for idx in &valid_indices {
+            result.push(items[*idx].clone());
+        }
+        let indexed: std::collections::HashSet<usize> = valid_indices.into_iter().collect();
+        for (i, item) in items.into_iter().enumerate() {
+            if !indexed.contains(&i) {
+                result.push(item);
+            }
+        }
+        Ok(result)
     }
 
     async fn analyze_image(&self, image_data: &[u8], mime_type: &str) -> MemResult<ImageAnalysis> {
@@ -527,10 +666,87 @@ impl LLMClient for AnthropicClient {
             .ok_or_else(|| MemError::Llm("No response generated".to_string()))
     }
 
-    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement LLM-based memory extraction
-        // For now, return empty vec (will be implemented in Task 4)
-        Ok(vec![])
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+        use crate::models::MemoryType;
+
+        let truncated: String = if text.len() > 6000 {
+            text.chars().take(6000).collect()
+        } else {
+            text.to_string()
+        };
+
+        let prompt = format!(
+            r#"Extract Memory Items from Text
+
+Analyze the following text and extract structured memory items.
+For each item, provide:
+  - memory_type: one of [profile, event, knowledge, behavior, skill, tool]
+  - summary: a concise 1-sentence summary
+  - content: the full relevant content
+
+Return ONLY a JSON array (no markdown fences):
+[{{"memory_type":"<type>","summary":"<summary>","content":"<content>"}}]
+
+Text:
+```
+{}
+```"#,
+            truncated
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse JSON from response
+        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut items = Vec::new();
+        let now = chrono::Utc::now();
+        for raw in raw_items {
+            let memory_type = match raw.get("memory_type").and_then(|t| t.as_str()) {
+                Some("profile") => MemoryType::Profile,
+                Some("event") => MemoryType::Event,
+                Some("knowledge") => MemoryType::Knowledge,
+                Some("behavior") => MemoryType::Behavior,
+                Some("skill") => MemoryType::Skill,
+                Some("tool") => MemoryType::Tool,
+                _ => MemoryType::Knowledge,
+            };
+            let summary = raw.get("summary").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let content = raw.get("content").and_then(|t| t.as_str()).unwrap_or("").to_string();
+
+            items.push(MemoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                memory_type,
+                summary,
+                content,
+                embedding_id: None,
+                happened_at: Some(now),
+                content_hash: None,
+                reinforcement_count: 0,
+                last_reinforced_at: None,
+                resource_id: None,
+                ref_id: None,
+                category_id: None,
+                user_id: None,
+                tenant_id: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        Ok(items)
     }
 
     async fn embed(&self, _text: &str) -> MemResult<Vec<f32>> {
@@ -542,21 +758,83 @@ impl LLMClient for AnthropicClient {
         ))
     }
 
-    async fn analyze_category(&self, _memories: &[String]) -> MemResult<CategoryAnalysis> {
-        // TODO: Implement category analysis
-        // For now, return placeholder (will be implemented later)
-        Ok(CategoryAnalysis {
-            name: "uncategorized".to_string(),
-            description: "Default category".to_string(),
-            themes: vec![],
-            tags: vec![],
-        })
+    async fn analyze_category(&self, memories: &[String]) -> MemResult<CategoryAnalysis> {
+        if memories.is_empty() {
+            return Ok(CategoryAnalysis {
+                name: "uncategorized".to_string(),
+                description: "Default category".to_string(),
+                themes: vec![],
+                tags: vec![],
+            });
+        }
+        let memory_list = memories.join("\n---\n");
+        let truncated: String = if memory_list.len() > 6000 {
+            memory_list.chars().take(6000).collect()
+        } else {
+            memory_list
+        };
+        let prompt = format!(
+            r#"Analyze Memory Category
+
+Given these memory items, generate a category summary.
+
+Memories:
+---
+{}
+---
+
+Return ONLY JSON (no markdown):
+{{"name":"<category_name>","description":"<description>","themes":["t1"],"tags":["t1"]}}"#,
+            truncated
+        );
+        let response = self.generate(&prompt).await?;
+        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let start = match cleaned.find('{') { Some(s) => s, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
+        let end = match cleaned.rfind('}') { Some(e) => e, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
+        serde_json::from_str(&cleaned[start..=end])
+            .map_err(|e| MemError::Llm(format!("Failed to parse category: {}", e)))
     }
 
-    async fn rerank(&self, _query: &str, items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement reranking logic
-        // For now, return items as-is (will be implemented in Task 5)
-        Ok(items)
+    async fn rerank(&self, query: &str, items: Vec<MemoryItem>) -> MemResult<Vec<MemoryItem>> {
+        if items.is_empty() {
+            return Ok(items);
+        }
+        let items_json: Vec<String> = items.iter().enumerate()
+            .map(|(i, item)| format!(r#"{{"index": {}, "summary": "{}", "content": "{}"}}"#,
+                i,
+                item.summary.replace('"', "\\\"").replace('\n', "\\n"),
+                item.content.chars().take(200).collect::<String>().replace('"', "\\\"").replace('\n', "\\n")))
+            .collect();
+        let prompt = format!(
+            r#"Given the query "{}", rerank the following items by relevance (most relevant first).
+
+Items:
+{}
+
+Return ONLY a JSON array of indices in order of relevance, e.g. [2, 0, 1, 3]. Return ONLY the array, no other text."#,
+            query.replace('"', "\\\""),
+            items_json.join(",\n")
+        );
+        let response = self.generate(&prompt).await?;
+        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let start = match cleaned.find('[') { Some(s) => s, None => return Ok(items) };
+        let end = match cleaned.rfind(']') { Some(e) => e, None => return Ok(items) };
+        let indices: Vec<usize> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(items),
+        };
+        let mut result = Vec::new();
+        let valid_indices: Vec<usize> = indices.into_iter().filter(|&i| i < items.len()).collect();
+        for idx in &valid_indices {
+            result.push(items[*idx].clone());
+        }
+        let indexed: std::collections::HashSet<usize> = valid_indices.into_iter().collect();
+        for (i, item) in items.into_iter().enumerate() {
+            if !indexed.contains(&i) {
+                result.push(item);
+            }
+        }
+        Ok(result)
     }
 
     async fn analyze_image(&self, image_data: &[u8], mime_type: &str) -> MemResult<ImageAnalysis> {

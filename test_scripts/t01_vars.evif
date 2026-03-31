@@ -1,0 +1,5 @@
+# Test 1: Variable expansion
+set NAME EVIF
+echo $NAME
+echo ${NAME}
+echo $0

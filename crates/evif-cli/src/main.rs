@@ -3,6 +3,7 @@
 mod cli;
 mod commands;
 mod completer;
+mod control_flow;
 mod repl;
 mod script;
 

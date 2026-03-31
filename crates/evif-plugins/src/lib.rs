@@ -97,7 +97,7 @@ pub use sqlfs::{SqlfsPlugin, SqlfsConfig, MAX_FILE_SIZE};
 pub use gptfs::{GptfsPlugin, GptfsConfig, Job, JobStatus};
 
 #[cfg(feature = "vectorfs")]
-pub use vectorfs::{VectorFsPlugin, VectorFsConfig};
+pub use vectorfs::{VectorFsPlugin, VectorFsConfig, EmbeddingProvider, OpenAIEmbeddingProvider, NoEmbeddingProvider};
 
 // SQLFS2 - Always available
 // pub use sqlfs2_simple::{create_sqlfs2_plugin, SqlFS2Plugin};

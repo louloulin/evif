@@ -1,0 +1,282 @@
+# EVIF Plugin Schema (XTP Bindgen)
+#
+# This schema defines the Extism plugin interface for EVIF.
+# Use XTP Bindgen to auto-generate type-safe bindings for multiple languages:
+#   Rust, Go, Python, JavaScript, C#, Zig, C, C++
+#
+# Usage:
+#   xtp-bindgen rust ./schemas/evif_plugin.yaml
+#   xtp_bindgen go ./schemas/evif_plugin.yaml
+#
+# See: https://github.com/dylibso/xtp-bindgen
+
+version: v1-draft
+
+exports:
+  # ============== Filesystem Operations ==============
+
+  evif-create:
+    description: "Create a new file at the given path with the specified permissions"
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "File path to create"
+        perm:
+          type: integer
+          description: "File permission mode (Unix-style, e.g. 0o644)"
+      required: [path, perm]
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-mkdir:
+    description: "Create a directory at the given path with the specified permissions"
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "Directory path to create"
+        perm:
+          type: integer
+          description: "Directory permission mode (Unix-style, e.g. 0o755)"
+      required: [path, perm]
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-read:
+    description: "Read data from a file. Data is Base64 encoded for binary safety."
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "File path to read"
+        offset:
+          type: integer
+          description: "Byte offset to start reading from (0 = beginning)"
+        size:
+          type: integer
+          description: "Number of bytes to read (0 = read all)"
+      required: [path]
+    output:
+      type: object
+      properties:
+        data:
+          type: string
+          description: "Base64 encoded file content"
+        error:
+          type: string
+          nullable: true
+
+  evif-write:
+    description: "Write data to a file. Data must be Base64 encoded."
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "File path to write"
+        data:
+          type: string
+          description: "Base64 encoded content to write"
+        offset:
+          type: integer
+          description: "Byte offset to start writing at (-1 = append)"
+        flags:
+          type: integer
+          description: "Write flags (0=none, 1=append, 2=create, 4=exclusive, 8=truncate, 16=sync)"
+      required: [path, data]
+    output:
+      type: object
+      properties:
+        bytes-written:
+          type: integer
+          description: "Number of bytes written"
+        error:
+          type: string
+          nullable: true
+
+  evif-readdir:
+    description: "List directory entries at the given path"
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "Directory path to list"
+      required: [path]
+    output:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              size:
+                type: integer
+              mode:
+                type: integer
+              modified:
+                type: string
+                description: "RFC 3339 timestamp"
+              is-dir:
+                type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-stat:
+    description: "Get file metadata at the given path"
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "File path to stat"
+      required: [path]
+    output:
+      type: object
+      properties:
+        file:
+          type: object
+          nullable: true
+          properties:
+            name:
+              type: string
+            size:
+              type: integer
+            mode:
+              type: integer
+            modified:
+              type: string
+            is-dir:
+              type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-remove:
+    description: "Remove a file or empty directory at the given path"
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "File/directory path to remove"
+      required: [path]
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-rename:
+    description: "Rename a file or directory"
+    input:
+      type: object
+      properties:
+        old-path:
+          type: string
+          description: "Source path"
+        new-path:
+          type: string
+          description: "Destination path"
+      required: [old-path, new-path]
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-remove-all:
+    description: "Recursively remove all files and directories under the given path"
+    input:
+      type: object
+      properties:
+        path:
+          type: string
+          description: "Root path to remove recursively"
+      required: [path]
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+  # ============== Lifecycle Operations ==============
+
+  evif-validate:
+    description: "Validate the plugin configuration before initialization"
+    input:
+      type: object
+      properties:
+        config:
+          type: object
+          description: "Plugin configuration JSON"
+      required: []
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-initialize:
+    description: "Initialize the plugin with the given configuration"
+    input:
+      type: object
+      properties:
+        config:
+          type: object
+          description: "Plugin configuration JSON"
+      required: []
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+
+  evif-shutdown:
+    description: "Gracefully shut down the plugin and release resources"
+    input:
+      type: object
+      properties: {}
+    output:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true

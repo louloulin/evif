@@ -4,15 +4,71 @@
 // 充分复用 extism 的 PDK (Plugin Development Kit) 能力
 
 use crate::error::{EvifError, EvifResult};
-use crate::plugin::{EvifPlugin, FileHandle, FileInfo, WriteFlags};
+use crate::plugin::{EvifPlugin, FileInfo, WriteFlags};
 use async_trait::async_trait;
 use extism::{Manifest, Plugin, Wasm};
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 use base64::{engine::general_purpose, Engine as _};
+
+/// 安全配置
+#[derive(Debug, Clone)]
+pub struct SecurityConfig {
+    /// 内存限制（字节）
+    pub memory_limit: u64,
+    /// 超时时间（毫秒）
+    pub timeout_ms: u64,
+    /// 允许访问的主机列表
+    pub allowed_hosts: Vec<String>,
+    /// 允许访问的路径列表
+    pub allowed_paths: Vec<String>,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            memory_limit: 64 * 1024 * 1024, // 64MB
+            timeout_ms: 5000,               // 5 seconds
+            allowed_hosts: vec![],
+            allowed_paths: vec![],
+        }
+    }
+}
+
+impl SecurityConfig {
+    /// 创建新的安全配置
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 设置内存限制
+    pub fn with_memory_limit(mut self, limit: u64) -> Self {
+        self.memory_limit = limit;
+        self
+    }
+
+    /// 设置超时时间
+    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = timeout_ms;
+        self
+    }
+
+    /// 设置允许的主机列表
+    pub fn with_allowed_hosts(mut self, hosts: Vec<String>) -> Self {
+        self.allowed_hosts = hosts;
+        self
+    }
+
+    /// 设置允许的路径列表
+    pub fn with_allowed_paths(mut self, paths: Vec<String>) -> Self {
+        self.allowed_paths = paths;
+        self
+    }
+}
 
 /// WASM 插件配置
 #[derive(Debug, Clone)]
@@ -25,6 +81,8 @@ pub struct WasmPluginConfig {
     pub mount_point: String,
     /// 配置参数（传递给 WASM 插件）
     pub config: serde_json::Value,
+    /// 安全配置
+    pub security: SecurityConfig,
 }
 
 impl Default for WasmPluginConfig {
@@ -34,7 +92,42 @@ impl Default for WasmPluginConfig {
             name: String::from("wasm_plugin"),
             mount_point: String::from("/"),
             config: serde_json::json!({}),
+            security: SecurityConfig::default(),
         }
+    }
+}
+
+impl WasmPluginConfig {
+    /// 创建新的 WASM 插件配置
+    pub fn new(wasm_path: impl Into<String>) -> Self {
+        Self {
+            wasm_path: wasm_path.into(),
+            ..Default::default()
+        }
+    }
+
+    /// 设置插件名称
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    /// 设置挂载点
+    pub fn with_mount_point(mut self, mount_point: impl Into<String>) -> Self {
+        self.mount_point = mount_point.into();
+        self
+    }
+
+    /// 设置配置参数
+    pub fn with_config(mut self, config: serde_json::Value) -> Self {
+        self.config = config;
+        self
+    }
+
+    /// 设置安全配置
+    pub fn with_security(mut self, security: SecurityConfig) -> Self {
+        self.security = security;
+        self
     }
 }
 
@@ -65,15 +158,39 @@ impl ExtismPlugin {
             )));
         }
 
-        // 创建 Extism Manifest
-        let manifest = Manifest::new([Wasm::file(wasm_path)]);
+        // 创建带安全配置的 Extism Manifest
+        let manifest = Manifest::new([Wasm::file(wasm_path)])
+            .with_memory_max(config.security.memory_limit as u32)
+            .with_timeout(Duration::from_millis(config.security.timeout_ms));
 
-        // 创建 Extism Plugin 实例
+        // 配置允许的主机列表（HTTP 访问控制）
+        let manifest = if !config.security.allowed_hosts.is_empty() {
+            manifest.with_allowed_hosts(
+                config
+                    .security
+                    .allowed_hosts
+                    .iter()
+                    .map(|s| s.clone()),
+            )
+        } else {
+            manifest
+        };
+
+        // 创建 Extism Plugin 实例（带 AOT 编译）
         let plugin = Plugin::new(&manifest, [], true)
             .map_err(|e| EvifError::Internal(format!("Failed to create extism plugin: {}", e)))?;
 
+        let name = config.name.clone();
+        tracing::info!(
+            "Created Extism plugin '{}' with security config: memory={}MB, timeout={}ms, hosts={:?}",
+            name,
+            config.security.memory_limit / 1024 / 1024,
+            config.security.timeout_ms,
+            config.security.allowed_hosts
+        );
+
         Ok(Self {
-            name: config.name.clone(),
+            name,
             plugin: Arc::new(Mutex::new(plugin)),
             config,
         })
@@ -112,6 +229,23 @@ impl ExtismPlugin {
         let result = serde_json::from_slice(&output)
             .map_err(|e| EvifError::Internal(format!("Failed to parse WASM output: {}", e)))?;
         Ok(result)
+    }
+
+    /// 获取插件导出的函数列表
+    pub fn get_exports(&self) -> Vec<String> {
+        // Extism 不直接提供函数列表，需要通过模块信息获取
+        // 返回已知的 EVIF 标准函数
+        vec![
+            "evif_create".to_string(),
+            "evif_mkdir".to_string(),
+            "evif_read".to_string(),
+            "evif_write".to_string(),
+            "evif_readdir".to_string(),
+            "evif_stat".to_string(),
+            "evif_remove".to_string(),
+            "evif_rename".to_string(),
+            "evif_remove_all".to_string(),
+        ]
     }
 }
 
@@ -181,6 +315,7 @@ impl EvifPlugin for ExtismPlugin {
 
         #[derive(Deserialize)]
         struct Response {
+            #[serde(default)]
             data: String, // Base64 编码的数据
             error: Option<String>,
         }
@@ -238,6 +373,7 @@ impl EvifPlugin for ExtismPlugin {
 
         #[derive(Deserialize)]
         struct Response {
+            #[serde(default)]
             files: Vec<WasmFileInfo>,
             error: Option<String>,
         }
@@ -245,9 +381,13 @@ impl EvifPlugin for ExtismPlugin {
         #[derive(Deserialize)]
         struct WasmFileInfo {
             name: String,
+            #[serde(default)]
             size: u64,
+            #[serde(default)]
             mode: u32,
-            modified: String, // ISO 8601 字符串
+            #[serde(default)]
+            modified: String,
+            #[serde(default)]
             is_dir: bool,
         }
 
@@ -289,9 +429,13 @@ impl EvifPlugin for ExtismPlugin {
         #[derive(Deserialize)]
         struct WasmFileInfo {
             name: String,
+            #[serde(default)]
             size: u64,
+            #[serde(default)]
             mode: u32,
+            #[serde(default)]
             modified: String,
+            #[serde(default)]
             is_dir: bool,
         }
 
@@ -390,19 +534,87 @@ impl EvifPlugin for ExtismPlugin {
 pub mod helpers {
     use super::*;
 
-    /// 从文件路径加载 WASM 插件
+    /// 从文件路径加载 WASM 插件（使用默认安全配置）
     pub fn load_wasm_plugin_from_file(
         wasm_path: &str,
         name: &str,
         mount_point: &str,
     ) -> EvifResult<ExtismPlugin> {
-        let config = WasmPluginConfig {
-            wasm_path: wasm_path.to_string(),
-            name: name.to_string(),
-            mount_point: mount_point.to_string(),
-            config: serde_json::json!({}),
-        };
+        let config = WasmPluginConfig::new(wasm_path)
+            .with_name(name)
+            .with_mount_point(mount_point);
 
         ExtismPlugin::new(config)
+    }
+
+    /// 从文件路径加载 WASM 插件（使用自定义安全配置）
+    pub fn load_wasm_plugin_with_security(
+        wasm_path: &str,
+        name: &str,
+        mount_point: &str,
+        security: SecurityConfig,
+    ) -> EvifResult<ExtismPlugin> {
+        let config = WasmPluginConfig::new(wasm_path)
+            .with_name(name)
+            .with_mount_point(mount_point)
+            .with_security(security);
+
+        ExtismPlugin::new(config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_security_config_default() {
+        let config = SecurityConfig::default();
+        assert_eq!(config.memory_limit, 64 * 1024 * 1024);
+        assert_eq!(config.timeout_ms, 5000);
+        assert!(config.allowed_hosts.is_empty());
+        assert!(config.allowed_paths.is_empty());
+    }
+
+    #[test]
+    fn test_security_config_builder() {
+        let config = SecurityConfig::new()
+            .with_memory_limit(128 * 1024 * 1024)
+            .with_timeout_ms(10000)
+            .with_allowed_hosts(vec!["api.example.com".to_string()])
+            .with_allowed_paths(vec!["/data".to_string()]);
+
+        assert_eq!(config.memory_limit, 128 * 1024 * 1024);
+        assert_eq!(config.timeout_ms, 10000);
+        assert_eq!(config.allowed_hosts.len(), 1);
+        assert_eq!(config.allowed_paths.len(), 1);
+    }
+
+    #[test]
+    fn test_wasm_plugin_config_default() {
+        let config = WasmPluginConfig::default();
+        assert_eq!(config.name, "wasm_plugin");
+        assert_eq!(config.mount_point, "/");
+        assert_eq!(config.security.memory_limit, 64 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_wasm_plugin_config_builder() {
+        let config = WasmPluginConfig::new("/path/to/plugin.wasm")
+            .with_name("test_plugin")
+            .with_mount_point("/mnt/test")
+            .with_config(serde_json::json!({"key": "value"}));
+
+        assert_eq!(config.wasm_path, "/path/to/plugin.wasm");
+        assert_eq!(config.name, "test_plugin");
+        assert_eq!(config.mount_point, "/mnt/test");
+        assert_eq!(config.config["key"], "value");
+    }
+
+    #[test]
+    fn test_extism_plugin_not_found() {
+        let config = WasmPluginConfig::new("/nonexistent/path.wasm");
+        let result = ExtismPlugin::new(config);
+        assert!(result.is_err());
     }
 }

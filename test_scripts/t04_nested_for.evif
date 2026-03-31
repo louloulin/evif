@@ -1,0 +1,6 @@
+# Test 4: Nested for loop
+for x in a b c {
+    for y in 1 2 {
+        echo $x $y
+    }
+}

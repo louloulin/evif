@@ -1,0 +1,15 @@
+# Test 5: If/Else
+if hello == hello {
+    echo match
+}
+if a == b {
+    echo wrong
+} else {
+    echo else_ok
+}
+if 5 > 3 {
+    echo num_cmp_ok
+}
+if 2 <= 2 {
+    echo le_ok
+}

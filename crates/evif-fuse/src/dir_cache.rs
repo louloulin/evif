@@ -139,7 +139,7 @@ impl DirCache {
     pub fn get(&self, path: &str) -> Option<Vec<DirEntry>> {
         trace!("DirCache get: {}", path);
 
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
 
         if let Some(entry) = cache.get_mut(path) {
             // 检查是否过期
@@ -172,7 +172,7 @@ impl DirCache {
 
         // 检查是否需要淘汰
         {
-            let size = self.current_size.read().unwrap();
+            let size = self.current_size.read().unwrap_or_else(|e| e.into_inner());
             if *size >= self.max_entries {
                 self.evict_one();
             }
@@ -180,7 +180,7 @@ impl DirCache {
 
         // 插入缓存
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
             let entry = CacheEntry::new(entries);
             cache.insert(path.clone(), entry);
         }
@@ -190,14 +190,14 @@ impl DirCache {
 
         // 更新计数
         {
-            let mut size = self.current_size.write().unwrap();
+            let mut size = self.current_size.write().unwrap_or_else(|e| e.into_inner());
             *size += 1;
         }
 
         debug!(
             "Cached: {} (now {} entries)",
             path,
-            *self.current_size.read().unwrap()
+            *self.current_size.read().unwrap_or_else(|e| e.into_inner())
         );
     }
 
@@ -209,7 +209,7 @@ impl DirCache {
         trace!("DirCache invalidate: {}", path);
 
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
             cache.remove(path);
         }
 
@@ -217,7 +217,7 @@ impl DirCache {
 
         // 更新计数
         {
-            let mut size = self.current_size.write().unwrap();
+            let mut size = self.current_size.write().unwrap_or_else(|e| e.into_inner());
             if *size > 0 {
                 *size -= 1;
             }
@@ -228,19 +228,19 @@ impl DirCache {
 
     /// 清空所有缓存
     pub fn clear(&self) {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
         cache.clear();
 
-        let mut lru_head = self.lru_head.write().unwrap();
+        let mut lru_head = self.lru_head.write().unwrap_or_else(|e| e.into_inner());
         *lru_head = None;
 
-        let mut lru_tail = self.lru_tail.write().unwrap();
+        let mut lru_tail = self.lru_tail.write().unwrap_or_else(|e| e.into_inner());
         *lru_tail = None;
 
-        let mut lru_nodes = self.lru_nodes.write().unwrap();
+        let mut lru_nodes = self.lru_nodes.write().unwrap_or_else(|e| e.into_inner());
         lru_nodes.clear();
 
-        let mut size = self.current_size.write().unwrap();
+        let mut size = self.current_size.write().unwrap_or_else(|e| e.into_inner());
         *size = 0;
 
         debug!("Cleared all cache");
@@ -251,7 +251,7 @@ impl DirCache {
     /// # 返回
     /// (当前条目数, 最大条目数, TTL 秒数)
     pub fn stats(&self) -> (usize, usize, u64) {
-        let size = *self.current_size.read().unwrap();
+        let size = *self.current_size.read().unwrap_or_else(|e| e.into_inner());
         (size, self.max_entries, self.ttl.as_secs())
     }
 
@@ -263,7 +263,7 @@ impl DirCache {
         let mut expired_paths = Vec::new();
 
         {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
             for (path, entry) in cache.iter() {
                 if entry.is_expired(self.ttl) {
                     expired_paths.push(path.clone());
@@ -285,7 +285,7 @@ impl DirCache {
     /// 淘汰一个条目（LRU）
     fn evict_one(&self) {
         let head = {
-            let lru_head = self.lru_head.read().unwrap();
+            let lru_head = self.lru_head.read().unwrap_or_else(|e| e.into_inner());
             lru_head.clone()
         };
 
@@ -303,23 +303,23 @@ impl DirCache {
         let node = LruNode {
             path: path.clone(),
             prev: {
-                let lru_tail = self.lru_tail.read().unwrap();
+                let lru_tail = self.lru_tail.read().unwrap_or_else(|e| e.into_inner());
                 lru_tail.clone()
             },
             next: None,
         };
 
         {
-            let mut lru_nodes = self.lru_nodes.write().unwrap();
+            let mut lru_nodes = self.lru_nodes.write().unwrap_or_else(|e| e.into_inner());
             lru_nodes.insert(path.clone(), node);
         }
 
         // 更新尾节点
         {
-            let mut lru_tail = self.lru_tail.write().unwrap();
+            let mut lru_tail = self.lru_tail.write().unwrap_or_else(|e| e.into_inner());
             if let Some(old_tail) = lru_tail.take() {
                 // 更新旧尾节点的后继
-                let mut lru_nodes = self.lru_nodes.write().unwrap();
+                let mut lru_nodes = self.lru_nodes.write().unwrap_or_else(|e| e.into_inner());
                 if let Some(old_node) = lru_nodes.get_mut(&old_tail) {
                     old_node.next = Some(path.clone());
                 }
@@ -329,9 +329,13 @@ impl DirCache {
 
         // 如果是空链表，更新头节点
         {
-            let lru_head = self.lru_head.read().unwrap();
-            if lru_head.is_none() {
-                let mut lru_head = self.lru_head.write().unwrap();
+            let should_set_head = self
+                .lru_head
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_none();
+            if should_set_head {
+                let mut lru_head = self.lru_head.write().unwrap_or_else(|e| e.into_inner());
                 *lru_head = Some(path);
             }
         }
@@ -340,32 +344,32 @@ impl DirCache {
     /// 从 LRU 链表中移除
     fn remove_lru(&self, path: &str) {
         let node_opt = {
-            let mut lru_nodes = self.lru_nodes.write().unwrap();
+            let mut lru_nodes = self.lru_nodes.write().unwrap_or_else(|e| e.into_inner());
             lru_nodes.remove(path)
         };
 
         if let Some(node) = node_opt {
             // 更新前驱节点
             if let Some(ref prev_path) = node.prev {
-                let mut lru_nodes = self.lru_nodes.write().unwrap();
+                let mut lru_nodes = self.lru_nodes.write().unwrap_or_else(|e| e.into_inner());
                 if let Some(prev_node) = lru_nodes.get_mut(prev_path.as_str()) {
                     prev_node.next = node.next.clone();
                 }
             } else {
                 // 是头节点，更新头
-                let mut lru_head = self.lru_head.write().unwrap();
+                let mut lru_head = self.lru_head.write().unwrap_or_else(|e| e.into_inner());
                 *lru_head = node.next.clone();
             }
 
             // 更新后继节点
             if let Some(ref next_path) = node.next {
-                let mut lru_nodes = self.lru_nodes.write().unwrap();
+                let mut lru_nodes = self.lru_nodes.write().unwrap_or_else(|e| e.into_inner());
                 if let Some(next_node) = lru_nodes.get_mut(next_path.as_str()) {
                     next_node.prev = node.prev.clone();
                 }
             } else {
                 // 是尾节点，更新尾
-                let mut lru_tail = self.lru_tail.write().unwrap();
+                let mut lru_tail = self.lru_tail.write().unwrap_or_else(|e| e.into_inner());
                 *lru_tail = node.prev;
             }
         }

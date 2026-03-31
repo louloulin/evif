@@ -1,0 +1,12 @@
+# Test 8: Function definitions and calls
+fn greet(name) {
+    echo hello $name
+}
+greet world
+greet Rust
+
+fn add(a, b) {
+    echo sum=$((a + b))
+}
+add 10 20
+add 3 4

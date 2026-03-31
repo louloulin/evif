@@ -22,8 +22,12 @@ pub mod radix_mount_table;
 pub mod server;
 pub mod streaming;
 
-// WASM plugin support (requires "wasm" feature)
+// WASM plugin support (requires "wasm" feature - enables both backends)
 #[cfg(feature = "wasm")]
+pub mod wasm;
+
+// Extism WASM plugin support (requires "extism-backend" feature)
+#[cfg(feature = "extism-backend")]
 pub mod extism_plugin;
 
 pub use acl::{
@@ -60,3 +64,13 @@ pub use plugin_registry::{PluginRegistry, PluginRegistryRef, PluginState, Regist
 pub use radix_mount_table::{MountTableStats, RadixMountTable};
 pub use server::EvifServer;
 pub use streaming::{LineReader, MemoryStreamReader, StreamReader, Streamer};
+
+// WASM plugin exports
+#[cfg(feature = "wasm")]
+pub use wasm::{
+    detect_backend_from_path, WasmBackendType, WasmPluginConfig, WasmPluginHandle, WasmPluginManager,
+};
+
+// Extism plugin exports
+#[cfg(feature = "extism-backend")]
+pub use extism_plugin::{ExtismPlugin, SecurityConfig as WasmSecurityConfig};

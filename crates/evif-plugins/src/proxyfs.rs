@@ -206,6 +206,26 @@ impl ProxyFsPlugin {
         }
     }
 
+    /// 获取最后重载时间
+    pub async fn last_reload_time(&self) -> DateTime<Utc> {
+        *self.last_reload.read().await
+    }
+
+    /// 健康检查（不更新 reload 时间戳）
+    pub async fn health_check(&self) -> EvifResult<bool> {
+        let health_url = self.endpoint_url("health");
+        let response = self.client
+            .get(&health_url)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) => Ok(resp.status().is_success()),
+            Err(_) => Ok(false),
+        }
+    }
+
     /// 热重载连接
     pub async fn reload(&self) -> EvifResult<()> {
         // 测试连接

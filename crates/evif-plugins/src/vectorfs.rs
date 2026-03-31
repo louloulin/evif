@@ -1,4 +1,4 @@
-// VectorFS - 向量搜索文件系统插件 (简化版本)
+// VectorFS - 向量搜索文件系统插件
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use evif_core::{EvifError, EvifPlugin, EvifResult, FileInfo, WriteFlags};
@@ -7,6 +7,113 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
+
+#[cfg(feature = "rusqlite")]
+use rusqlite::{Connection, params};
+
+/// Embedding provider trait for generating text embeddings
+#[async_trait]
+pub trait EmbeddingProvider: Send + Sync {
+    /// Generate embedding for a single text
+    async fn embed(&self, text: &str) -> Result<Vec<f32>, String>;
+
+    /// Generate embeddings for multiple texts
+    async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
+        let mut results = Vec::with_capacity(texts.len());
+        for text in texts {
+            results.push(self.embed(text).await?);
+        }
+        Ok(results)
+    }
+
+    /// Name of the provider
+    fn name(&self) -> &str;
+}
+
+/// OpenAI embedding provider using reqwest
+pub struct OpenAIEmbeddingProvider {
+    client: reqwest::Client,
+    api_key: String,
+    model: String,
+    base_url: String,
+}
+
+impl OpenAIEmbeddingProvider {
+    pub fn new(api_key: String, model: String) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            api_key,
+            model,
+            base_url: "https://api.openai.com/v1".to_string(),
+        }
+    }
+
+    pub fn with_base_url(mut self, base_url: String) -> Self {
+        self.base_url = base_url;
+        self
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for OpenAIEmbeddingProvider {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            input: String,
+        }
+        #[derive(Deserialize)]
+        struct Response {
+            data: Vec<EmbeddingData>,
+        }
+        #[derive(Deserialize)]
+        struct EmbeddingData {
+            embedding: Vec<f32>,
+        }
+
+        let resp = self.client
+            .post(format!("{}/embeddings", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&Request {
+                model: self.model.clone(),
+                input: text.to_string(),
+            })
+            .send()
+            .await
+            .map_err(|e| format!("Embedding request failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Embedding API error {}: {}", status, body));
+        }
+
+        let result: Response = resp.json().await
+            .map_err(|e| format!("Failed to parse embedding response: {}", e))?;
+
+        result.data.into_iter().next()
+            .map(|d| d.embedding)
+            .ok_or_else(|| "No embedding in response".to_string())
+    }
+
+    fn name(&self) -> &str {
+        "openai"
+    }
+}
+
+/// No-op embedding provider for when no embedding is configured
+pub struct NoEmbeddingProvider;
+
+#[async_trait]
+impl EmbeddingProvider for NoEmbeddingProvider {
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>, String> {
+        Err("No embedding provider configured".to_string())
+    }
+
+    fn name(&self) -> &str {
+        "none"
+    }
+}
 
 /// 向量搜索配置
 #[derive(Debug, Clone)]
@@ -17,6 +124,11 @@ pub struct VectorFsConfig {
     pub s3_region: Option<String>,
     pub s3_endpoint: Option<String>,
 
+    /// OpenAI embedding配置
+    pub embedding_api_key: Option<String>,
+    pub embedding_model: String,
+    pub embedding_base_url: Option<String>,
+
     /// 向量维度 (OpenAI text-embedding-3-small = 1536)
     pub embedding_dim: usize,
 
@@ -26,6 +138,11 @@ pub struct VectorFsConfig {
 
     /// 索引worker数量
     pub index_workers: usize,
+
+    /// 持久化存储路径（SQLite）
+    /// 设为 None 则仅使用内存存储（重启后丢失）
+    /// 设为 Some(path) 则将向量数据持久化到 SQLite 文件
+    pub persistence_path: Option<String>,
 }
 
 impl Default for VectorFsConfig {
@@ -35,10 +152,14 @@ impl Default for VectorFsConfig {
             s3_key_prefix: Some("vectorfs".to_string()),
             s3_region: Some("us-east-1".to_string()),
             s3_endpoint: None,
+            embedding_api_key: None,
+            embedding_model: "text-embedding-3-small".to_string(),
+            embedding_base_url: None,
             embedding_dim: 1536,
             chunk_size: 512,
             chunk_overlap: 50,
             index_workers: 4,
+            persistence_path: None, // 默认仅内存存储
         }
     }
 }
@@ -67,7 +188,8 @@ struct VectorDocument {
     file_name: String,
     chunk_index: usize,
     content: String,
-    embedding: Option<Vec<f32>>, // 简化:不实际存储向量
+    #[serde(skip)]
+    embedding: Option<Vec<f32>>,
     created_at: DateTime<Utc>,
     s3_key: String,
 }
@@ -86,18 +208,248 @@ pub struct VectorFsPlugin {
     namespaces: Arc<RwLock<HashMap<String, Namespace>>>,
     index_queue: Arc<Mutex<Vec<IndexTask>>>,
     indexing_status: Arc<RwLock<HashMap<String, HashMap<String, IndexingFileInfo>>>>,
+    embedding_provider: Arc<dyn EmbeddingProvider>,
+    #[cfg(feature = "rusqlite")]
+    db_path: Option<String>,
+}
 
-    // S3客户端引用 (可选,用于实际存储)
-    // s3_client: Option<Arc<S3Client>>,
+/// SQLite 持久化辅助方法
+#[cfg(feature = "rusqlite")]
+impl VectorFsPlugin {
+    /// 初始化 SQLite 数据库
+    fn init_db(db_path: &str) -> EvifResult<()> {
+        let conn = Connection::open(db_path)
+            .map_err(|e| EvifError::Storage(format!("Failed to open persistence DB: {}", e)))?;
+
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;
+             CREATE TABLE IF NOT EXISTS vectorfs_namespaces (
+                 name TEXT PRIMARY KEY,
+                 created_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS vectorfs_documents (
+                 id TEXT PRIMARY KEY,
+                 namespace TEXT NOT NULL,
+                 file_name TEXT NOT NULL,
+                 chunk_index INTEGER NOT NULL,
+                 content TEXT NOT NULL,
+                 embedding BLOB,
+                 created_at INTEGER NOT NULL,
+                 s3_key TEXT NOT NULL,
+                 FOREIGN KEY (namespace) REFERENCES vectorfs_namespaces(name) ON DELETE CASCADE
+             );
+             CREATE INDEX IF NOT EXISTS idx_docs_namespace ON vectorfs_documents(namespace);
+             CREATE INDEX IF NOT EXISTS idx_docs_filename ON vectorfs_documents(namespace, file_name);"
+        ).map_err(|e| EvifError::Storage(format!("Failed to initialize persistence DB: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// 从 SQLite 加载所有数据到内存
+    fn load_from_db(db_path: &str) -> EvifResult<HashMap<String, Namespace>> {
+        let conn = Connection::open(db_path)
+            .map_err(|e| EvifError::Storage(format!("Failed to open persistence DB for loading: {}", e)))?;
+
+        let mut namespaces = HashMap::new();
+
+        // 加载命名空间
+        let mut ns_stmt = conn.prepare(
+            "SELECT name, created_at FROM vectorfs_namespaces"
+        ).map_err(|e| EvifError::Storage(format!("Failed to prepare namespace query: {}", e)))?;
+
+        let ns_rows = ns_stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+            ))
+        }).map_err(|e| EvifError::Storage(format!("Failed to query namespaces: {}", e)))?;
+
+        let mut ns_list = Vec::new();
+        for row in ns_rows {
+            let (name, created_at_ts) = row
+                .map_err(|e| EvifError::Storage(format!("Failed to read namespace row: {}", e)))?;
+            ns_list.push((name, created_at_ts));
+        }
+
+        // 加载每个命名空间的文档
+        for (name, created_at_ts) in ns_list {
+            let created_at = DateTime::from_timestamp(created_at_ts, 0).unwrap_or_default();
+
+            let mut doc_stmt = conn.prepare(
+                "SELECT id, namespace, file_name, chunk_index, content, embedding, created_at, s3_key
+                 FROM vectorfs_documents WHERE namespace = ?1"
+            ).map_err(|e| EvifError::Storage(format!("Failed to prepare document query: {}", e)))?;
+
+            let namespace_name = name.clone();
+            let doc_rows = doc_stmt.query_map([&name], |row| {
+                let embedding_blob: Option<Vec<u8>> = row.get(5)?;
+                let embedding = embedding_blob.map(|blob| {
+                    // Deserialize Vec<f32> from little-endian bytes
+                    let len = blob.len() / 4;
+                    let mut vec = Vec::with_capacity(len);
+                    for chunk in blob.chunks_exact(4) {
+                        let bytes: [u8; 4] = chunk.try_into().unwrap_or([0; 4]);
+                        vec.push(f32::from_le_bytes(bytes));
+                    }
+                    vec
+                });
+
+                Ok(VectorDocument {
+                    id: row.get(0)?,
+                    namespace: row.get(1)?,
+                    file_name: row.get(2)?,
+                    chunk_index: row.get(3)?,
+                    content: row.get(4)?,
+                    embedding,
+                    created_at: DateTime::from_timestamp(row.get::<_, i64>(6)?, 0).unwrap_or_default(),
+                    s3_key: row.get(7)?,
+                })
+            }).map_err(|e| EvifError::Storage(format!("Failed to query documents for namespace {}: {}", namespace_name, e)))?;
+
+            let mut documents = HashMap::new();
+            for doc_result in doc_rows {
+                let doc = doc_result
+                    .map_err(|e| EvifError::Storage(format!("Failed to read document: {}", e)))?;
+                documents.insert(doc.id.clone(), doc);
+            }
+
+            log::info!("Loaded namespace '{}' with {} documents from SQLite", name, documents.len());
+
+            namespaces.insert(name.clone(), Namespace {
+                name,
+                documents,
+                created_at,
+            });
+        }
+
+        Ok(namespaces)
+    }
+
+    /// 持久化命名空间创建
+    fn persist_create_namespace(&self, name: &str, created_at: DateTime<Utc>) -> EvifResult<()> {
+        if let Some(db_path) = &self.db_path {
+            let db_path = db_path.clone();
+            let name = name.to_string();
+            tokio::task::block_in_place(|| {
+                let conn = Connection::open(&db_path)
+                    .map_err(|e| EvifError::Storage(format!("Failed to open DB: {}", e)))?;
+                conn.execute(
+                    "INSERT OR IGNORE INTO vectorfs_namespaces (name, created_at) VALUES (?1, ?2)",
+                    params![name, created_at.timestamp()],
+                ).map_err(|e| EvifError::Storage(format!("Failed to persist namespace: {}", e)))?;
+                Ok(())
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 持久化命名空间删除
+    fn persist_delete_namespace(&self, name: &str) -> EvifResult<()> {
+        if let Some(db_path) = &self.db_path {
+            let db_path = db_path.clone();
+            let name = name.to_string();
+            tokio::task::block_in_place(|| {
+                let conn = Connection::open(&db_path)
+                    .map_err(|e| EvifError::Storage(format!("Failed to open DB: {}", e)))?;
+                // CASCADE will delete documents automatically
+                conn.execute(
+                    "DELETE FROM vectorfs_namespaces WHERE name = ?1",
+                    params![name],
+                ).map_err(|e| EvifError::Storage(format!("Failed to persist namespace deletion: {}", e)))?;
+                Ok(())
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 持久化文档写入
+    fn persist_write_document(&self, doc: &VectorDocument) -> EvifResult<()> {
+        if let Some(db_path) = &self.db_path {
+            let db_path = db_path.clone();
+            let id = doc.id.clone();
+            let namespace = doc.namespace.clone();
+            let file_name = doc.file_name.clone();
+            let chunk_index = doc.chunk_index;
+            let content = doc.content.clone();
+            let embedding_blob = doc.embedding.as_ref().map(|emb| {
+                // Serialize Vec<f32> to little-endian bytes
+                let mut blob = Vec::with_capacity(emb.len() * 4);
+                for val in emb {
+                    blob.extend_from_slice(&val.to_le_bytes());
+                }
+                blob
+            });
+            let created_at = doc.created_at.timestamp();
+            let s3_key = doc.s3_key.clone();
+
+            tokio::task::block_in_place(|| {
+                let conn = Connection::open(&db_path)
+                    .map_err(|e| EvifError::Storage(format!("Failed to open DB: {}", e)))?;
+                conn.execute(
+                    "INSERT OR REPLACE INTO vectorfs_documents
+                     (id, namespace, file_name, chunk_index, content, embedding, created_at, s3_key)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![id, namespace, file_name, chunk_index, content, embedding_blob, created_at, s3_key],
+                ).map_err(|e| EvifError::Storage(format!("Failed to persist document: {}", e)))?;
+                Ok(())
+            })
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl VectorFsPlugin {
     pub fn new(config: VectorFsConfig) -> Self {
+        let embedding_provider: Arc<dyn EmbeddingProvider> = match &config.embedding_api_key {
+            Some(api_key) => {
+                let mut provider = OpenAIEmbeddingProvider::new(
+                    api_key.clone(),
+                    config.embedding_model.clone(),
+                );
+                if let Some(base_url) = &config.embedding_base_url {
+                    provider = provider.with_base_url(base_url.clone());
+                }
+                Arc::new(provider)
+            }
+            None => Arc::new(NoEmbeddingProvider),
+        };
+
+        #[cfg(feature = "rusqlite")]
+        let (namespaces, db_path) = {
+            if let Some(persistence_path) = &config.persistence_path {
+                match Self::init_db(persistence_path) {
+                    Ok(()) => {
+                        log::info!("VectorFS persistence initialized at: {}", persistence_path);
+                    }
+                    Err(e) => {
+                        log::error!("VectorFS persistence init failed: {}", e);
+                    }
+                }
+                let namespaces = Self::load_from_db(persistence_path).unwrap_or_else(|e| {
+                    log::warn!("VectorFS failed to load from SQLite (starting fresh): {}", e);
+                    HashMap::new()
+                });
+                (namespaces, Some(persistence_path.clone()))
+            } else {
+                (HashMap::new(), None)
+            }
+        };
+
+        #[cfg(not(feature = "rusqlite"))]
+        let namespaces = HashMap::new();
+
         Self {
             config,
-            namespaces: Arc::new(RwLock::new(HashMap::new())),
+            namespaces: Arc::new(RwLock::new(namespaces)),
             index_queue: Arc::new(Mutex::new(Vec::new())),
             indexing_status: Arc::new(RwLock::new(HashMap::new())),
+            embedding_provider,
+            #[cfg(feature = "rusqlite")]
+            db_path,
         }
     }
 
@@ -179,11 +531,16 @@ impl VectorFsPlugin {
             return Err(EvifError::Other(format!("Namespace already exists: {}", namespace)));
         }
 
+        let created_at = Utc::now();
         namespaces.insert(namespace.to_string(), Namespace {
             name: namespace.to_string(),
             documents: HashMap::new(),
-            created_at: Utc::now(),
+            created_at,
         });
+
+        // 持久化到 SQLite
+        #[cfg(feature = "rusqlite")]
+        self.persist_create_namespace(namespace, created_at)?;
 
         Ok(())
     }
@@ -202,6 +559,10 @@ impl VectorFsPlugin {
         let mut status = self.indexing_status.write().await;
         status.remove(namespace);
 
+        // 持久化删除到 SQLite
+        #[cfg(feature = "rusqlite")]
+        self.persist_delete_namespace(namespace)?;
+
         Ok(())
     }
 
@@ -211,15 +572,28 @@ impl VectorFsPlugin {
             .map_err(|_| EvifError::Other("Invalid UTF-8".to_string()))?;
 
         let document_id = Self::generate_document_id(namespace, file_name);
-        let chunks = Self::chunk_document(&text, self.config.chunk_size, self.config.chunk_overlap);
+        let _chunks = Self::chunk_document(&text, self.config.chunk_size, self.config.chunk_overlap);
 
-        // 模拟创建向量文档
-        let namespaces = self.namespaces.read().await;
-        let namespace_obj = namespaces.get(namespace)
-            .ok_or_else(|| EvifError::NotFound(format!("Namespace not found: {}", namespace)))?;
+        // 确保命名空间存在
+        {
+            let namespaces = self.namespaces.read().await;
+            if !namespaces.contains_key(namespace) {
+                return Err(EvifError::NotFound(format!("Namespace not found: {}", namespace)));
+            }
+        }
 
-        // 注意: 这里需要drop读锁,因为后面需要获取写锁
-        drop(namespaces);
+        // 尝试生成 embedding
+        let embedding = if !text.is_empty() {
+            match self.embedding_provider.embed(&text).await {
+                Ok(emb) => Some(emb),
+                Err(e) => {
+                    log::debug!("Embedding generation failed for {}: {}", file_name, e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         // 创建文档
         let mut namespaces = self.namespaces.write().await;
@@ -230,10 +604,15 @@ impl VectorFsPlugin {
                 file_name: file_name.to_string(),
                 chunk_index: 0,
                 content: text.clone(),
-                embedding: None, // 简化版本不实际生成向量
+                embedding,
                 created_at: Utc::now(),
                 s3_key: format!("{}/{}/{}", namespace, file_name, Uuid::new_v4()),
             };
+
+            // 持久化到 SQLite
+            #[cfg(feature = "rusqlite")]
+            self.persist_write_document(&doc)?;
+
             ns.documents.insert(document_id.clone(), doc);
         }
 
@@ -248,19 +627,57 @@ impl VectorFsPlugin {
         Ok(document_id)
     }
 
-    /// 搜索文档 (简化版:基于文本匹配)
+    /// 计算余弦相似度
+    fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+        if a.len() != b.len() || a.is_empty() {
+            return 0.0;
+        }
+        let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return 0.0;
+        }
+        dot / (norm_a * norm_b)
+    }
+
+    /// 搜索文档 (支持向量语义搜索和文本匹配)
     async fn search_documents(&self, namespace: &str, query: &str, limit: usize) -> Vec<VectorDocument> {
         let namespaces = self.namespaces.read().await;
-        if let Some(ns) = namespaces.get(namespace) {
-            let query_lower = query.to_lowercase();
-            ns.documents.values()
-                .filter(|doc| doc.content.to_lowercase().contains(&query_lower))
-                .take(limit)
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
-        }
+        let ns = match namespaces.get(namespace) {
+            Some(ns) => ns,
+            None => return Vec::new(),
+        };
+
+        // 尝试向量语义搜索
+        let query_embedding = self.embedding_provider.embed(query).await.ok();
+
+        let mut scored: Vec<(f32, &VectorDocument)> = ns.documents.values()
+            .filter_map(|doc| {
+                let score = match (&query_embedding, &doc.embedding) {
+                    (Some(q_emb), Some(d_emb)) => Self::cosine_similarity(q_emb, d_emb),
+                    _ => {
+                        // 退回到文本匹配
+                        if doc.content.to_lowercase().contains(&query.to_lowercase()) {
+                            0.5
+                        } else {
+                            0.0
+                        }
+                    }
+                };
+                if score > 0.0 {
+                    Some((score, doc))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.into_iter()
+            .take(limit)
+            .map(|(_, doc)| doc.clone())
+            .collect()
     }
 }
 
@@ -553,7 +970,7 @@ GET /vectorfs/mynamespace/.indexing
     }
 
     async fn remove(&self, _path: &str) -> EvifResult<()> {
-        Err(EvifError::NotSupported)
+        Err(EvifError::NotSupportedGeneric)
     }
 
     async fn remove_all(&self, path: &str) -> EvifResult<()> {
@@ -572,7 +989,7 @@ GET /vectorfs/mynamespace/.indexing
     }
 
     async fn rename(&self, _old_path: &str, _new_path: &str) -> EvifResult<()> {
-        Err(EvifError::NotSupported)
+        Err(EvifError::NotSupportedGeneric)
     }
 }
 
@@ -620,5 +1037,47 @@ mod tests {
         // 清理
         plugin.remove_all("/ns1").await.unwrap();
         plugin.remove_all("/ns2").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_cosine_similarity() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        let c = vec![1.0, 0.0, 0.0];
+
+        // Orthogonal vectors should have 0 similarity
+        let sim_ab = VectorFsPlugin::cosine_similarity(&a, &b);
+        assert!((sim_ab - 0.0).abs() < 0.001);
+
+        // Identical vectors should have similarity 1.0
+        let sim_ac = VectorFsPlugin::cosine_similarity(&a, &c);
+        assert!((sim_ac - 1.0).abs() < 0.001);
+
+        // Empty vectors
+        let empty: Vec<f32> = vec![];
+        assert_eq!(VectorFsPlugin::cosine_similarity(&empty, &a), 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_no_embedding_provider() {
+        let provider = NoEmbeddingProvider;
+        assert_eq!(provider.name(), "none");
+        let result = provider.embed("test").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_text_fallback_search() {
+        let plugin = VectorFsPlugin::new(VectorFsConfig::default());
+
+        plugin.mkdir("/searchns", 0o755).await.unwrap();
+        plugin.write("/searchns/docs/rust.txt", b"Rust is a systems programming language".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+        plugin.write("/searchns/docs/python.txt", b"Python is a scripting language".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+
+        let results = plugin.search_documents("searchns", "rust", 10).await;
+        assert_eq!(results.len(), 1);
+        assert!(results[0].content.contains("Rust"));
+
+        plugin.remove_all("/searchns").await.unwrap();
     }
 }

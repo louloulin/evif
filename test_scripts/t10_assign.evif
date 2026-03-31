@@ -1,0 +1,7 @@
+# Test 10: Variable assignment
+x=42
+echo x=$x
+y=$((x + 8))
+echo y=$y
+z=$((x * y))
+echo z=$z

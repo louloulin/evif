@@ -1,0 +1,153 @@
+/// EVIF Plugin Interface Definition (WIT)
+///
+/// Defines the standard interface for Wasmtime Component Model plugins.
+/// This interface mirrors the EvifPlugin trait from evif-core.
+///
+/// Plugin developers implement this interface to create filesystem plugins
+/// that can be loaded by the EVIF Wasmtime backend.
+///
+/// Usage:
+///   1. Install `wit-bindgen`: `cargo install wit-bindgen-cli`
+///   2. Generate bindings: `wit-bindgen c ./wit` (or rust, go, etc.)
+///   3. Implement the generated trait/interface in your plugin language
+///   4. Compile to WASM Component: `cargo build --target wasm32-unknown-unknown`
+
+package evif:plugin;
+
+/// File metadata returned by stat and readdir operations
+record file-info {
+    name: string,
+    size: u64,
+    mode: u32,
+    modified: string,   // RFC 3339 timestamp
+    is-dir: bool,
+}
+
+/// Configuration parameter definition for plugin setup
+record config-param {
+    name: string,
+    param-type: string,   // "string", "u32", "u64", "bool", "json"
+    default-value: option<string>,
+    description: string,
+    required: bool,
+}
+
+/// Error codes returned by plugin operations
+enum error-code {
+    not-found,
+    permission-denied,
+    already-exists,
+    not-a-directory,
+    is-a-directory,
+    not-supported,
+    io-error,
+    invalid-argument,
+    out-of-range,
+}
+
+/// Result type for operations that may fail
+variant evif-result {
+    ok,
+    err(error-code, string),
+}
+
+/// Result type for read operations
+variant read-result {
+    ok-list(list<u8>),
+    err(error-code, string),
+}
+
+/// Result type for write operations
+variant write-result {
+    ok-size(u64),
+    err(error-code, string),
+}
+
+/// Result type for readdir operations
+variant readdir-result {
+    ok-entries(list<file-info>),
+    err(error-code, string),
+}
+
+/// Result type for stat operations
+variant stat-result {
+    ok-info(file-info),
+    err(error-code, string),
+}
+
+/// Core filesystem interface that all EVIF plugins must implement.
+///
+/// This provides the same operations as the Rust EvifPlugin trait,
+/// exposed as WASM Component Model exports.
+interface filesystem {
+    /// Create a new file at the given path with the specified permissions
+    create: func(path: string, perm: u32) -> evif-result;
+
+    /// Create a directory at the given path with the specified permissions
+    mkdir: func(path: string, perm: u32) -> evif-result;
+
+    /// Read data from a file at the given path
+    /// - offset: byte offset to start reading from (0 = beginning)
+    /// - size: number of bytes to read (0 = read all)
+    read: func(path: string, offset: u64, size: u64) -> read-result;
+
+    /// Write data to a file at the given path
+    /// - offset: byte offset to start writing at (-1 = append)
+    /// - flags: write flags (bitfield: 0=none, 1=append, 2=create, 4=exclusive, 8=truncate, 16=sync)
+    write: func(path: string, data: list<u8>, offset: i64, flags: u32) -> write-result;
+
+    /// List directory entries at the given path
+    readdir: func(path: string) -> readdir-result;
+
+    /// Get file metadata at the given path
+    stat: func(path: string) -> stat-result;
+
+    /// Remove a file or empty directory at the given path
+    remove: func(path: string) -> evif-result;
+
+    /// Rename a file or directory from old_path to new_path
+    rename: func(old-path: string, new-path: string) -> evif-result;
+
+    /// Recursively remove all files and directories under the given path
+    remove-all: func(path: string) -> evif-result;
+
+    /// Create a symbolic link from target_path to link_path
+    symlink: func(target-path: string, link-path: string) -> evif-result;
+
+    /// Read the target of a symbolic link
+    readlink: func(link-path: string) -> evif-result;
+
+    /// Change file permissions
+    chmod: func(path: string, mode: u32) -> evif-result;
+
+    /// Truncate a file to the specified size
+    truncate: func(path: string, size: u64) -> evif-result;
+}
+
+/// Plugin lifecycle interface for initialization and shutdown
+interface lifecycle {
+    /// Get the plugin name
+    get-name: func() -> string;
+
+    /// Validate the plugin configuration
+    validate: func(config: option<string>) -> evif-result;
+
+    /// Initialize the plugin with the given configuration
+    initialize: func(config: option<string>) -> evif-result;
+
+    /// Gracefully shut down the plugin
+    shutdown: func() -> evif-result;
+
+    /// Get the plugin README/documentation
+    get-readme: func() -> string;
+
+    /// Get the list of configuration parameters
+    get-config-params: func() -> list<config-param>;
+}
+
+/// The world defines the complete EVIF plugin component.
+/// A plugin must export both the filesystem and lifecycle interfaces.
+world evif-plugin {
+    export filesystem;
+    export lifecycle;
+}

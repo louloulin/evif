@@ -240,7 +240,13 @@ impl TieredFsPlugin {
         }
 
         for (path, target_tier) in paths_to_migrate {
-            let _permit = self.migration_semaphore.acquire().await.unwrap();
+            let _permit = match self.migration_semaphore.acquire().await {
+                Ok(p) => p,
+                Err(_) => {
+                    eprintln!("Migration semaphore closed, aborting migration");
+                    break;
+                }
+            };
             if let Err(e) = self.migrate_file(&path, target_tier).await {
                 eprintln!("Failed to migrate {}: {:?}", path, e);
             }

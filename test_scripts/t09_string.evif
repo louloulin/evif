@@ -1,0 +1,9 @@
+# Test 9: String operations
+set STR helloworld
+echo length: ${#STR}
+echo sub: ${STR:0:5}
+echo offset: ${STR:5}
+echo default: ${MISSING:-fallback}
+set X yes
+echo alt: ${X:+set}
+echo empty: ${MISSING:+nope}

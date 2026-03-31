@@ -102,7 +102,7 @@ impl InodeManager {
 
         // 检查是否已存在
         {
-            let path_map = self.path_to_inode.read().unwrap();
+            let path_map = self.path_to_inode.read().unwrap_or_else(|e| e.into_inner());
             if let Some(&inode) = path_map.get(path) {
                 trace!("Path exists: {} -> {}", path, inode);
                 return inode;
@@ -115,12 +115,12 @@ impl InodeManager {
 
         // 更新映射
         {
-            let mut path_map = self.path_to_inode.write().unwrap();
+            let mut path_map = self.path_to_inode.write().unwrap_or_else(|e| e.into_inner());
             path_map.insert(path.to_string(), inode);
         }
 
         {
-            let mut info_map = self.inode_to_info.write().unwrap();
+            let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
             info_map.insert(inode, InodeInfo::new(inode, path.to_string(), is_dir));
         }
 
@@ -136,7 +136,7 @@ impl InodeManager {
     /// # 返回
     /// Some(路径) 如果 inode 存在，否则 None
     pub fn get_path(&self, inode: Inode) -> Option<String> {
-        let info_map = self.inode_to_info.read().unwrap();
+        let info_map = self.inode_to_info.read().unwrap_or_else(|e| e.into_inner());
         info_map.get(&inode).map(|info| info.path.clone())
     }
 
@@ -148,7 +148,7 @@ impl InodeManager {
     /// # 返回
     /// Some(inode) 如果路径存在，否则 None
     pub fn get_inode(&self, path: &str) -> Option<Inode> {
-        let path_map = self.path_to_inode.read().unwrap();
+        let path_map = self.path_to_inode.read().unwrap_or_else(|e| e.into_inner());
         path_map.get(path).copied()
     }
 
@@ -160,7 +160,7 @@ impl InodeManager {
     /// # 返回
     /// Some(InodeInfo) 如果 inode 存在，否则 None
     pub fn get_info(&self, inode: Inode) -> Option<InodeInfo> {
-        let info_map = self.inode_to_info.read().unwrap();
+        let info_map = self.inode_to_info.read().unwrap_or_else(|e| e.into_inner());
         info_map.get(&inode).cloned()
     }
 
@@ -169,7 +169,7 @@ impl InodeManager {
     /// # 参数
     /// - `inode`: inode 编号
     pub fn incref(&self, inode: Inode) {
-        let mut info_map = self.inode_to_info.write().unwrap();
+        let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
         if let Some(info) = info_map.get_mut(&inode) {
             info.ref_count += 1;
             trace!("Incref inode {} -> ref_count: {}", inode, info.ref_count);
@@ -184,7 +184,7 @@ impl InodeManager {
     /// # 返回
     /// true 如果引用计数归零，false 否则
     pub fn decref(&self, inode: Inode) -> bool {
-        let mut info_map = self.inode_to_info.write().unwrap();
+        let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
         if let Some(info) = info_map.get_mut(&inode) {
             if info.ref_count > 0 {
                 info.ref_count -= 1;
@@ -202,20 +202,20 @@ impl InodeManager {
     /// - `inode`: inode 编号
     pub fn recycle(&self, inode: Inode) {
         let info = {
-            let info_map = self.inode_to_info.read().unwrap();
+            let info_map = self.inode_to_info.read().unwrap_or_else(|e| e.into_inner());
             info_map.get(&inode).cloned()
         };
 
         if let Some(info) = info {
             // 从路径映射中删除
             {
-                let mut path_map = self.path_to_inode.write().unwrap();
+                let mut path_map = self.path_to_inode.write().unwrap_or_else(|e| e.into_inner());
                 path_map.remove(&info.path);
             }
 
             // 从信息映射中删除
             {
-                let mut info_map = self.inode_to_info.write().unwrap();
+                let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
                 info_map.remove(&inode);
             }
 
@@ -239,8 +239,8 @@ impl InodeManager {
     /// # 返回
     /// (总 inode 数, 总路径数)
     pub fn stats(&self) -> (usize, usize) {
-        let info_map = self.inode_to_info.read().unwrap();
-        let path_map = self.path_to_inode.read().unwrap();
+        let info_map = self.inode_to_info.read().unwrap_or_else(|e| e.into_inner());
+        let path_map = self.path_to_inode.read().unwrap_or_else(|e| e.into_inner());
         (info_map.len(), path_map.len())
     }
 }

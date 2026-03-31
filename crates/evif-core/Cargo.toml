@@ -22,8 +22,6 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 
-# Logging
-
 # Time
 chrono = { workspace = true }
 
@@ -43,9 +41,12 @@ serde_yaml = "0.9"
 # Radix Tree for routing optimization
 radix_trie = "0.3"
 
-# Extism for WASM plugin support (optional)
+# Extism for WASM plugin support (optional - independent backend)
 extism = { version = "1.0", optional = true }
-extism-pdk = { version = "1.0", optional = true }
+
+# Wasmtime for WASM plugin support (optional - independent backend)
+wasmtime = { version = "27", optional = true, features = ["pooling-allocator"] }
+wasmtime-wasi = { version = "27", optional = true }
 
 # Base64 encoding for WASM data transfer
 base64 = "0.22"
@@ -55,7 +56,12 @@ libloading = "0.8"
 
 [features]
 default = []
-wasm = ["extism", "extism-pdk"]
+# Extism WASM plugin backend (independent, multi-language PDK)
+extism-backend = ["extism"]
+# Wasmtime WASM plugin backend (independent, high performance)
+wasmtime-backend = ["wasmtime", "wasmtime-wasi"]
+# Enable all WASM backends
+wasm = ["extism-backend", "wasmtime-backend"]
 
 [dev-dependencies]
 tokio-test = { workspace = true }

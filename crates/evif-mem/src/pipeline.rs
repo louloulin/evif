@@ -1989,7 +1989,10 @@ impl Categorizer {
         for result in search_results {
             // Category IDs in vector index are prefixed with "cat:"
             if result.id.starts_with("cat:") {
-                let category_id = result.id.strip_prefix("cat:").unwrap().to_string();
+                let category_id = match result.id.strip_prefix("cat:") {
+                    Some(id) => id.to_string(),
+                    None => continue,
+                };
 
                 // Check if category still exists
                 if self.storage.get_category(&category_id).is_ok() {

@@ -11,6 +11,8 @@ members = [
     "crates/evif-mem",  # Memory platform
     "crates/example-dynamic-plugin",
     "examples",
+    "examples/wasm-plugin",
+    "examples/plugins/wasmtime",
     "tests/e2e",
     "tests/common",
     "tests/cli",

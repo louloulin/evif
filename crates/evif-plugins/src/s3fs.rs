@@ -13,9 +13,11 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "s3fs")]
 use aws_config::BehaviorVersion;
 #[cfg(feature = "s3fs")]
-use aws_sdk_s3::{Client, Config};
+use aws_sdk_s3::Client;
 #[cfg(feature = "s3fs")]
-use aws_sdk_s3::types::ByteStream;
+use aws_sdk_s3::primitives::ByteStream;
+#[cfg(feature = "s3fs")]
+use aws_credential_types::Credentials;
 
 /// S3 配置
 #[derive(Clone, Debug)]
@@ -28,6 +30,10 @@ pub struct S3Config {
     pub prefix: Option<String>,
     pub disable_ssl: bool,
     pub force_path_style: bool,
+    /// 分片上传阈值（字节），超过此大小自动使用分片上传（默认 8MB）
+    pub multipart_threshold: u64,
+    /// 每个分片大小（字节），默认 8MB
+    pub multipart_chunk_size: u64,
 }
 
 impl Default for S3Config {
@@ -41,6 +47,8 @@ impl Default for S3Config {
             prefix: None,
             disable_ssl: false,
             force_path_style: false,
+            multipart_threshold: 8 * 1024 * 1024,       // 8MB
+            multipart_chunk_size: 8 * 1024 * 1024,       // 8MB
         }
     }
 }
@@ -93,16 +101,23 @@ impl DirCache {
             return None;
         }
 
-        if let Some(entry) = self.cache.get(path) {
-            if !entry.is_expired(self.ttl) {
+        // Check entry existence and validity (clone data before mutating)
+        let entry_info = self.cache.get(path).map(|entry| {
+            (!entry.is_expired(self.ttl), entry.data.clone())
+        });
+
+        match entry_info {
+            Some((true, data)) => {
                 self.hits += 1;
                 self.move_to_front(path);
-                return Some(entry.data.clone());
-            } else {
-                // 过期条目
+                return Some(data);
+            }
+            Some((false, _)) => {
+                // Expired entry - clean up
                 self.cache.remove(path);
                 self.lru_list.retain(|p| p != path);
             }
+            None => {}
         }
 
         self.misses += 1;
@@ -196,15 +211,23 @@ impl StatCache {
             return None;
         }
 
-        if let Some(entry) = self.cache.get(path) {
-            if !entry.is_expired(self.ttl) {
+        // Check entry existence and validity (clone data before mutating)
+        let entry_info = self.cache.get(path).map(|entry| {
+            (!entry.is_expired(self.ttl), entry.data.clone())
+        });
+
+        match entry_info {
+            Some((true, data)) => {
                 self.hits += 1;
                 self.move_to_front(path);
-                return Some(entry.data.clone());
-            } else {
+                return Some(data);
+            }
+            Some((false, _)) => {
+                // Expired entry - clean up
                 self.cache.remove(path);
                 self.lru_list.retain(|p| p != path);
             }
+            None => {}
         }
 
         self.misses += 1;
@@ -280,9 +303,6 @@ impl S3fsPlugin {
 
         // 设置访问密钥 (如果提供)
         if let (Some(akid), Some(secret)) = (&config.access_key_id, &config.secret_access_key) {
-            use aws_config::profile::ProfileFileCredentialsProvider;
-            use aws_credential_types::Credentials;
-
             let creds = Credentials::new(
                 akid,
                 secret,
@@ -296,8 +316,8 @@ impl S3fsPlugin {
 
         let aws_config = loader.load().await;
 
-        // 配置 S3 客户端
-        let mut builder = Config::new(&aws_config)
+        // 配置 S3 客户端 (使用 Builder pattern)
+        let mut builder = aws_sdk_s3::config::Builder::from(&aws_config)
             .region(aws_sdk_s3::config::Region::new(config.region.clone()));
 
         // 设置自定义 endpoint (MinIO 兼容)
@@ -370,6 +390,121 @@ impl S3fsPlugin {
             path.to_string()
         }
     }
+
+    /// S3 分片上传
+    ///
+    /// 支持大于阈值（默认 8MB）的文件分片上传
+    /// 流程: CreateMultipartUpload → UploadPart (并发) → CompleteMultipartUpload
+    pub async fn multipart_upload(&self, s3_path: &str, data: Vec<u8>) -> EvifResult<()> {
+        use aws_sdk_s3::primitives::ByteStream;
+        use aws_sdk_s3::types::CompletedMultipartUpload;
+        use aws_sdk_s3::types::CompletedPart;
+
+        let part_size = self.config.multipart_chunk_size as usize;
+        let total_size = data.len();
+
+        // 1. 初始化分片上传
+        let create_resp = self.client
+            .create_multipart_upload()
+            .bucket(&self.config.bucket)
+            .key(s3_path)
+            .send()
+            .await
+            .map_err(|e| EvifError::Storage(format!("CreateMultipartUpload failed: {}", e)))?;
+
+        let upload_id = create_resp.upload_id()
+            .ok_or_else(|| EvifError::Internal("No upload_id in CreateMultipartUpload response".to_string()))?
+            .to_string();
+
+        log::info!(
+            "Multipart upload started: {} (upload_id={}, total={}bytes, part_size={}bytes)",
+            s3_path, upload_id, total_size, part_size
+        );
+
+        // 2. 分片并发上传
+        let mut parts: Vec<CompletedPart> = Vec::new();
+        let mut part_number: i32 = 0;
+        let mut offset = 0;
+
+        while offset < total_size {
+            part_number += 1;
+            let end = (offset + part_size).min(total_size);
+            let chunk = data[offset..end].to_vec();
+
+            match self.client
+                .upload_part()
+                .bucket(&self.config.bucket)
+                .key(s3_path)
+                .upload_id(&upload_id)
+                .part_number(part_number)
+                .body(ByteStream::from(chunk))
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    let e_tag = resp.e_tag()
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
+
+                    parts.push(
+                        CompletedPart::builder()
+                            .part_number(part_number)
+                            .e_tag(e_tag)
+                            .build()
+                    );
+
+                    log::debug!(
+                        "Uploaded part #{}/{} (offset={}, size={})",
+                        part_number, (total_size + part_size - 1) / part_size,
+                        offset, end - offset
+                    );
+                }
+                Err(e) => {
+                    // 上传失败，中止分片上传
+                    log::error!("Upload part {} failed: {}", part_number, e);
+                    if let Err(abort_err) = self.client
+                        .abort_multipart_upload()
+                        .bucket(&self.config.bucket)
+                        .key(s3_path)
+                        .upload_id(&upload_id)
+                        .send()
+                        .await
+                    {
+                        log::error!("Failed to abort multipart upload: {}", abort_err);
+                    }
+                    return Err(EvifError::Internal(format!(
+                        "Multipart upload failed at part {}: {}", part_number, e
+                    )));
+                }
+            }
+
+            offset = end;
+        }
+
+        // 3. 完成分片上传（按 part_number 排序确保正确性）
+        parts.sort_by_key(|p| p.part_number().unwrap_or(0));
+
+        let completed = CompletedMultipartUpload::builder()
+            .set_parts(Some(parts))
+            .build();
+
+        self.client
+            .complete_multipart_upload()
+            .bucket(&self.config.bucket)
+            .key(s3_path)
+            .upload_id(&upload_id)
+            .multipart_upload(completed)
+            .send()
+            .await
+            .map_err(|e| EvifError::Storage(format!("CompleteMultipartUpload failed: {}", e)))?;
+
+        log::info!(
+            "Multipart upload completed: {} ({} parts, {}bytes)",
+            s3_path, part_number, total_size
+        );
+
+        Ok(())
+    }
 }
 
 #[cfg(feature = "s3fs")]
@@ -401,7 +536,8 @@ impl EvifPlugin for S3fsPlugin {
             .key(&s3_path)
             .body(ByteStream::from(Vec::new()))
             .send()
-            .await?;
+            .await
+            .map_err(|e| EvifError::Storage(format!("PutObject failed: {}", e)))?;
 
         // 失效缓存
         let parent = self.get_parent_path(&s3_path);
@@ -424,7 +560,8 @@ impl EvifPlugin for S3fsPlugin {
             .key(&dir_key)
             .body(ByteStream::from(Vec::new()))
             .send()
-            .await?;
+            .await
+            .map_err(|e| EvifError::Storage(format!("PutObject (mkdir) failed: {}", e)))?;
 
         // 失效缓存
         let parent = self.get_parent_path(&s3_path);
@@ -451,7 +588,9 @@ impl EvifPlugin for S3fsPlugin {
 
             match result {
                 Ok(output) => {
-                    let data = output.body.collect().await?.into_vec();
+                    let data = output.body.collect().await
+                        .map_err(|e| EvifError::Storage(format!("Read body failed: {}", e)))?
+                        .to_vec();
                     return Ok(data);
                 }
                 Err(e) => {
@@ -477,7 +616,9 @@ impl EvifPlugin for S3fsPlugin {
 
         match result {
             Ok(output) => {
-                let data = output.body.collect().await?.into_vec();
+                let data = output.body.collect().await
+                    .map_err(|e| EvifError::Storage(format!("Read body failed: {}", e)))?
+                    .to_vec();
                 Ok(data)
             }
             Err(e) => {
@@ -511,22 +652,30 @@ impl EvifPlugin for S3fsPlugin {
             return Err(EvifError::InvalidPath(format!("is a directory: {}", path)));
         }
 
-        // 上传到 S3
-        let body = ByteStream::from(data.clone());
-        self.client
-            .put_object()
-            .bucket(&self.config.bucket)
-            .key(&s3_path)
-            .body(body)
-            .send()
-            .await?;
+        let data_len = data.len() as u64;
+
+        // 大文件自动使用分片上传（默认阈值 8MB）
+        if data_len > self.config.multipart_threshold {
+            self.multipart_upload(&s3_path, data).await?;
+        } else {
+            // 小文件直接上传
+            let body = ByteStream::from(data);
+            self.client
+                .put_object()
+                .bucket(&self.config.bucket)
+                .key(&s3_path)
+                .body(body)
+                .send()
+                .await
+                .map_err(|e| EvifError::Storage(format!("PutObject failed: {}", e)))?;
+        }
 
         // 失效缓存
         let parent = self.get_parent_path(&s3_path);
         self.dir_cache.write().await.invalidate(&parent);
         self.stat_cache.write().await.invalidate(&s3_path);
 
-        Ok(data.len() as u64)
+        Ok(data_len)
     }
 
     async fn readdir(&self, path: &str) -> EvifResult<Vec<FileInfo>> {
@@ -550,7 +699,8 @@ impl EvifPlugin for S3fsPlugin {
             .prefix(&prefix)
             .delimiter("/")
             .send()
-            .await?;
+            .await
+            .map_err(|e| EvifError::Storage(format!("ListObjectsV2 failed: {}", e)))?;
 
         let mut files = Vec::new();
 
@@ -568,7 +718,7 @@ impl EvifPlugin for S3fsPlugin {
                     name: relative_key.to_string(),
                     size: obj.size().unwrap_or(0) as u64,
                     mode: 0o644,
-                    modified: obj.last_modified().unwrap().clone(),
+                    modified: aws_dt_to_chrono(obj.last_modified()),
                     is_dir: false,
                 });
             }
@@ -578,7 +728,7 @@ impl EvifPlugin for S3fsPlugin {
         if let Some(common_prefixes) = result.common_prefixes {
             for cp in common_prefixes {
                 if let Some(prefix_str) = cp.prefix {
-                    let relative = prefix_str.strip_prefix(&prefix).unwrap_or(prefix_str);
+                    let relative = prefix_str.strip_prefix(&prefix).unwrap_or(&prefix_str);
                     let dir_name = relative.trim_end_matches('/');
 
                     if !dir_name.is_empty() {
@@ -632,7 +782,7 @@ impl EvifPlugin for S3fsPlugin {
                 name: self.get_basename(path),
                 size: head.content_length().unwrap_or(0) as u64,
                 mode: 0o644,
-                modified: head.last_modified().unwrap().clone(),
+                modified: aws_dt_to_chrono(head.last_modified()),
                 is_dir: false,
             };
 
@@ -652,8 +802,8 @@ impl EvifPlugin for S3fsPlugin {
             .await;
 
         if let Ok(result) = list_result {
-            let has_objects = result.contents().as_ref().map_or(false, |o| !o.is_empty());
-            let has_prefixes = result.common_prefixes().as_ref().map_or(false, |p| !p.is_empty());
+            let has_objects = !result.contents().is_empty();
+            let has_prefixes = !result.common_prefixes().is_empty();
 
             if has_objects || has_prefixes {
                 let info = FileInfo {
@@ -677,12 +827,13 @@ impl EvifPlugin for S3fsPlugin {
         let s3_path = self.normalize_s3_key(path)?;
 
         // 尝试删除对象
-        let _ = self.client
+        self.client
             .delete_object()
             .bucket(&self.config.bucket)
             .key(&s3_path)
             .send()
-            .await?;
+            .await
+            .map_err(|e| EvifError::Storage(format!("DeleteObject failed: {}", e)))?;
 
         // 失效缓存
         let parent = self.get_parent_path(&s3_path);
@@ -702,19 +853,23 @@ impl EvifPlugin for S3fsPlugin {
             .bucket(&self.config.bucket)
             .key(&old_s3_path)
             .send()
-            .await?;
+            .await
+            .map_err(|e| EvifError::Storage(format!("GetObject failed: {}", e)))?;
 
-        let data = result.body.collect().await?.into_vec();
+        let data = result.body.collect().await
+            .map_err(|e| EvifError::Storage(format!("Read body failed: {}", e)))?
+            .to_vec();
 
         // 写入新位置
-        let body = ByteStream::from(data.clone());
+        let body = ByteStream::from(data);
         self.client
             .put_object()
             .bucket(&self.config.bucket)
             .key(&new_s3_path)
             .body(body)
             .send()
-            .await?;
+            .await
+            .map_err(|e| EvifError::Storage(format!("PutObject failed: {}", e)))?;
 
         // 删除旧对象
         self.client
@@ -722,7 +877,8 @@ impl EvifPlugin for S3fsPlugin {
             .bucket(&self.config.bucket)
             .key(&old_s3_path)
             .send()
-            .await?;
+            .await
+            .map_err(|e| EvifError::Storage(format!("DeleteObject failed: {}", e)))?;
 
         // 失效缓存
         let old_parent = self.get_parent_path(&old_s3_path);
@@ -754,7 +910,8 @@ impl EvifPlugin for S3fsPlugin {
                 list_req = list_req.continuation_token(token);
             }
 
-            let result = list_req.send().await?;
+            let result = list_req.send().await
+                .map_err(|e| EvifError::Storage(format!("ListObjectsV2 failed: {}", e)))?;
 
             if let Some(objects) = result.contents {
                 for obj in objects {
@@ -778,18 +935,21 @@ impl EvifPlugin for S3fsPlugin {
                 ObjectIdentifier::builder()
                     .key(key)
                     .build()
+                    .expect("ObjectIdentifier build should not fail")
             }).collect();
+
+            let delete = aws_sdk_s3::types::Delete::builder()
+                .set_objects(Some(delete_objs))
+                .build()
+                .expect("Delete build should not fail");
 
             self.client
                 .delete_objects()
                 .bucket(&self.config.bucket)
-                .delete(
-                    aws_sdk_s3::types::Delete::builder()
-                        .set_objects(Some(delete_objs))
-                        .build()
-                )
+                .delete(delete)
                 .send()
-                .await?;
+                .await
+                .map_err(|e| EvifError::Storage(format!("DeleteObjects failed: {}", e)))?;
         }
 
         // 3. 失效缓存
@@ -823,7 +983,9 @@ impl EvifPlugin for S3fsPlugin {
             .await;
 
         if let Ok(output) = result {
-            let data = output.body.collect().await?.into_vec();
+            let data = output.body.collect().await
+                .map_err(|e| EvifError::Storage(format!("Read body failed: {}", e)))?
+                .to_vec();
             let truncated_data = if data.len() > size as usize {
                 &data[..size.min(data.len() as u64) as usize]
             } else {
@@ -838,7 +1000,8 @@ impl EvifPlugin for S3fsPlugin {
                 .key(&s3_path)
                 .body(body)
                 .send()
-                .await?;
+                .await
+                .map_err(|e| EvifError::Storage(format!("PutObject (truncate) failed: {}", e)))?;
 
             // 失效缓存
             let parent = self.get_parent_path(&s3_path);
@@ -852,9 +1015,14 @@ impl EvifPlugin for S3fsPlugin {
     }
 }
 
-// 导出类型
+/// 将 AWS SDK DateTime 转换为 chrono DateTime<Utc>
+/// 如果无法转换则返回当前时间
 #[cfg(feature = "s3fs")]
-pub use S3fsPlugin;
+fn aws_dt_to_chrono(dt: Option<&aws_smithy_types::DateTime>) -> DateTime<Utc> {
+    dt.and_then(|dt| {
+        DateTime::from_timestamp_millis(dt.to_millis().ok()?)
+    }).unwrap_or_else(Utc::now)
+}
 
 #[cfg(test)]
 mod tests {

@@ -157,103 +157,106 @@ impl ScriptExecutor {
     }
 
     /// 使用 EvifCommand 执行脚本文件（静态方法，用于 REPL 集成）
+    /// 使用增强的 ControlFlowExecutor 支持函数/算术/break/continue/string ops
     pub async fn execute_script_with_client(script_path: &str, client: &EvifCommand) -> Result<()> {
         let content = tokio::fs::read_to_string(script_path)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to read script file: {}", e))?;
 
-        let mut variables = HashMap::new();
-        let mut parser = ScriptParser::new(&mut variables);
-        let commands = parser.parse_commands(&content)?;
+        let mut executor = crate::control_flow::ControlFlowExecutor::new();
 
-        // 使用 EvifCommand 执行每个命令
-        for cmd in commands {
-            // 解析命令
-            let parts: Vec<&str> = cmd.split_whitespace().collect();
-            if parts.is_empty() {
-                continue;
+        // Use ControlFlowExecutor with command dispatcher
+        executor
+            .execute_script(&content, |cmd| {
+                Self::dispatch_command(cmd, client)
+            })
+            .await?;
+
+        Ok(())
+    }
+
+    /// Dispatch a single command through EvifCommand
+    async fn dispatch_command(cmd: String, client: &EvifCommand) -> Result<()> {
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        if parts.is_empty() {
+            return Ok(());
+        }
+        let cmd_name = parts[0];
+        match cmd_name {
+            "echo" => {
+                println!("{}", parts[1..].join(" "));
             }
-
-            let cmd_name = parts[0];
-
-            // 根据命令类型调用 EvifCommand 的方法
-            match cmd_name {
-                "echo" => {
-                    println!("{}", parts[1..].join(" "));
+            "ls" => {
+                let path = parts
+                    .get(1)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "/".to_string());
+                if let Err(e) = client.ls(Some(path), false, false).await {
+                    eprintln!("Error: {}", e);
                 }
-                "ls" => {
-                    let path = parts
-                        .get(1)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| "/".to_string());
-                    if let Err(e) = client.ls(Some(path), false, false).await {
+            }
+            "cat" => {
+                if let Some(path) = parts.get(1) {
+                    if let Err(e) = client.cat(path.to_string()).await {
                         eprintln!("Error: {}", e);
                     }
                 }
-                "cat" => {
-                    if let Some(path) = parts.get(1) {
-                        if let Err(e) = client.cat(path.to_string()).await {
-                            eprintln!("Error: {}", e);
-                        }
+            }
+            "write" => {
+                if parts.len() >= 3 {
+                    let path = parts[1].to_string();
+                    let content = parts[2..].join(" ");
+                    if let Err(e) = client.write(path, content, false).await {
+                        eprintln!("Error: {}", e);
                     }
-                }
-                "write" => {
-                    if parts.len() >= 3 {
-                        let path = parts[1].to_string();
-                        let content = parts[2..].join(" ");
-                        if let Err(e) = client.write(path, content, false).await {
-                            eprintln!("Error: {}", e);
-                        }
-                    }
-                }
-                "mkdir" => {
-                    if let Some(path) = parts.get(1) {
-                        if let Err(e) = client.mkdir(path.to_string(), false).await {
-                            eprintln!("Error: {}", e);
-                        }
-                    }
-                }
-                "rm" => {
-                    if let Some(path) = parts.get(1) {
-                        if let Err(e) = client.rm(path.to_string(), false).await {
-                            eprintln!("Error: {}", e);
-                        }
-                    }
-                }
-                "mv" => {
-                    if let (Some(src), Some(dst)) = (parts.get(1), parts.get(2)) {
-                        if let Err(e) = client.mv(src.to_string(), dst.to_string()).await {
-                            eprintln!("Error: {}", e);
-                        }
-                    }
-                }
-                "cp" => {
-                    if let (Some(src), Some(dst)) = (parts.get(1), parts.get(2)) {
-                        if let Err(e) = client.cp(src.to_string(), dst.to_string()).await {
-                            eprintln!("Error: {}", e);
-                        }
-                    }
-                }
-                "touch" => {
-                    if let Some(path) = parts.get(1) {
-                        if let Err(e) = client.touch(path.to_string()).await {
-                            eprintln!("Error: {}", e);
-                        }
-                    }
-                }
-                "sleep" => {
-                    if let Some(seconds) = parts.get(1) {
-                        if let Ok(secs) = seconds.parse::<u64>() {
-                            tokio::time::sleep(tokio::time::Duration::from_secs(secs)).await;
-                        }
-                    }
-                }
-                _ => {
-                    eprintln!("Unknown script command: {}", cmd_name);
                 }
             }
+            "mkdir" => {
+                if let Some(path) = parts.get(1) {
+                    if let Err(e) = client.mkdir(path.to_string(), false).await {
+                        eprintln!("Error: {}", e);
+                    }
+                }
+            }
+            "rm" => {
+                if let Some(path) = parts.get(1) {
+                    if let Err(e) = client.rm(path.to_string(), false).await {
+                        eprintln!("Error: {}", e);
+                    }
+                }
+            }
+            "mv" => {
+                if let (Some(src), Some(dst)) = (parts.get(1), parts.get(2)) {
+                    if let Err(e) = client.mv(src.to_string(), dst.to_string()).await {
+                        eprintln!("Error: {}", e);
+                    }
+                }
+            }
+            "cp" => {
+                if let (Some(src), Some(dst)) = (parts.get(1), parts.get(2)) {
+                    if let Err(e) = client.cp(src.to_string(), dst.to_string()).await {
+                        eprintln!("Error: {}", e);
+                    }
+                }
+            }
+            "touch" => {
+                if let Some(path) = parts.get(1) {
+                    if let Err(e) = client.touch(path.to_string()).await {
+                        eprintln!("Error: {}", e);
+                    }
+                }
+            }
+            "sleep" => {
+                if let Some(seconds) = parts.get(1) {
+                    if let Ok(secs) = seconds.parse::<u64>() {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(secs)).await;
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Unknown script command: {}", cmd_name);
+            }
         }
-
         Ok(())
     }
 }

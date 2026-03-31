@@ -433,4 +433,46 @@ mod tests {
         let result = plugin.stat("single.txt").await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_localfs_path_traversal_rejected() {
+        let temp_dir = tempdir().unwrap();
+        let plugin = LocalFsPlugin::new(temp_dir.path());
+
+        // Try path traversal with ..
+        let result = plugin.stat("../../../etc/passwd").await;
+        assert!(result.is_err(), "Path traversal with ../ should be rejected");
+
+        let result = plugin.read("../../../etc/passwd", 0, 100).await;
+        assert!(result.is_err(), "Path traversal read should be rejected");
+
+        let result = plugin.write("../../../tmp/evil", b"data".to_vec(), 0, WriteFlags::CREATE).await;
+        assert!(result.is_err(), "Path traversal write should be rejected");
+
+        // Absolute path outside base should also be rejected
+        let result = plugin.stat("/etc/passwd").await;
+        assert!(result.is_err(), "Absolute path outside base should be rejected");
+    }
+
+    #[tokio::test]
+    async fn test_localfs_symlink_traversal_rejected() {
+        let temp_dir = tempdir().unwrap();
+        let plugin = LocalFsPlugin::new(temp_dir.path());
+
+        // Create a file inside base dir
+        plugin.create("safe.txt", 0o644).await.unwrap();
+        plugin.write("safe.txt", b"safe data".to_vec(), 0, WriteFlags::CREATE).await.unwrap();
+
+        // Create a symlink pointing outside the base dir
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let link_path = temp_dir.path().join("escape_link");
+            symlink("/etc", &link_path).unwrap();
+
+            // Reading through symlink should fail
+            let result = plugin.stat("escape_link/passwd").await;
+            assert!(result.is_err(), "Symlink traversal should be rejected");
+        }
+    }
 }
