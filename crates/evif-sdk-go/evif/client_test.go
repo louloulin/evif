@@ -1,8 +1,10 @@
 package evif
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -413,4 +415,81 @@ func TestAPIKeySent(t *testing.T) {
 	c := NewClientWithAPIKey(srv.URL, "sk-test-key")
 	_, err := c.ListMounts()
 	require.NoError(t, err)
+}
+
+// ── Streaming Operations ─────────────────────────────────────────
+
+func TestStreamFile(t *testing.T) {
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/files", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, "/memfs/large.bin", r.URL.Query().Get("path"))
+		w.Write([]byte("streaming data content"))
+	})
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	stream, err := c.StreamFile("/memfs/large.bin", -1, -1)
+	require.NoError(t, err)
+	defer stream.Close()
+
+	data, err := io.ReadAll(stream)
+	require.NoError(t, err)
+	assert.Equal(t, "streaming data content", string(data))
+}
+
+func TestStreamFileWithOffset(t *testing.T) {
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/files", r.URL.Path)
+		assert.Equal(t, "1024", r.URL.Query().Get("offset"))
+		assert.Equal(t, "4096", r.URL.Query().Get("size"))
+		w.Write([]byte("partial content"))
+	})
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	stream, err := c.StreamFile("/memfs/large.bin", 1024, 4096)
+	require.NoError(t, err)
+	defer stream.Close()
+
+	data, err := io.ReadAll(stream)
+	require.NoError(t, err)
+	assert.Equal(t, "partial content", string(data))
+}
+
+func TestStreamFileError(t *testing.T) {
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "file not found",
+		})
+	})
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	_, err := c.StreamFile("/nonexistent", -1, -1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "file not found")
+}
+
+func TestStreamWriteFile(t *testing.T) {
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/files", r.URL.Path)
+		assert.Equal(t, "PUT", r.Method)
+		assert.Equal(t, "/memfs/upload.bin", r.URL.Query().Get("path"))
+
+		body, _ := io.ReadAll(r.Body)
+		assert.Equal(t, "streaming write data", string(body))
+
+		json.NewEncoder(w).Encode(apiDataResponse(map[string]any{
+			"bytes_written": 20,
+		}))
+	})
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	reader := bytes.NewReader([]byte("streaming write data"))
+	resp, err := c.StreamWriteFile("/memfs/upload.bin", reader)
+	require.NoError(t, err)
+	assert.Equal(t, int64(20), resp.BytesWritten)
 }

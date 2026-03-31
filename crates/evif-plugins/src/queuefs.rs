@@ -601,6 +601,276 @@ mod sqlite_backend {
     }
 }
 
+// ==================== MySQL Backend ====================
+
+#[cfg(feature = "queuefs-mysql")]
+mod mysql_backend {
+    use super::{QueueBackend, QueueMessage, EvifResult, EvifError};
+    use async_trait::async_trait;
+    use chrono::Utc;
+    use sqlx::mysql::MySqlPoolOptions;
+    use sqlx::MySqlPool;
+
+    /// MySQL 持久化队列后端
+    pub struct MysqlQueueBackend {
+        pool: MySqlPool,
+    }
+
+    impl MysqlQueueBackend {
+        /// Create a new MySQL queue backend.
+        /// `database_url` should be a MySQL connection string,
+        /// e.g. "mysql://user:password@localhost:3306/evif_queues"
+        pub async fn new(database_url: &str) -> EvifResult<Self> {
+            let pool = MySqlPoolOptions::new()
+                .max_connections(10)
+                .connect(database_url)
+                .await
+                .map_err(|e| EvifError::Storage(format!("Failed to create MySQL pool: {}", e)))?;
+
+            // Initialize schema
+            sqlx::query(
+                "CREATE TABLE IF NOT EXISTS queues (
+                    name VARCHAR(255) PRIMARY KEY,
+                    max_size INT NOT NULL DEFAULT 10000,
+                    dead_letter_queue VARCHAR(255),
+                    created_at BIGINT NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            )
+            .execute(&pool)
+            .await
+            .map_err(|e| EvifError::Storage(format!("Failed to create queues table: {}", e)))?;
+
+            sqlx::query(
+                "CREATE TABLE IF NOT EXISTS messages (
+                    id VARCHAR(36) PRIMARY KEY,
+                    queue_name VARCHAR(255) NOT NULL,
+                    data MEDIUMTEXT NOT NULL,
+                    timestamp BIGINT NOT NULL,
+                    priority INT NOT NULL DEFAULT 999,
+                    delay_until BIGINT,
+                    retry_count INT NOT NULL DEFAULT 0,
+                    max_retries INT NOT NULL DEFAULT 3,
+                    status VARCHAR(20) NOT NULL DEFAULT 'ready',
+                    INDEX idx_queue_status (queue_name, status, priority, timestamp),
+                    FOREIGN KEY (queue_name) REFERENCES queues(name) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            )
+            .execute(&pool)
+            .await
+            .map_err(|e| EvifError::Storage(format!("Failed to create messages table: {}", e)))?;
+
+            Ok(Self { pool })
+        }
+    }
+
+    #[async_trait]
+    impl QueueBackend for MysqlQueueBackend {
+        async fn create_queue(&self, name: &str) -> EvifResult<()> {
+            let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM queues WHERE name = ?")
+                .bind(name)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| EvifError::Storage(format!("Query error: {}", e)))?;
+
+            if exists {
+                return Err(EvifError::AlreadyExists(format!("queue: {}", name)));
+            }
+
+            sqlx::query("INSERT INTO queues (name, created_at) VALUES (?, ?)")
+                .bind(name)
+                .bind(Utc::now().timestamp())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| EvifError::Storage(format!("Insert error: {}", e)))?;
+
+            Ok(())
+        }
+
+        async fn remove_queue(&self, name: &str) -> EvifResult<()> {
+            let result = sqlx::query("DELETE FROM queues WHERE name = ?")
+                .bind(name)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| EvifError::Storage(format!("Delete error: {}", e)))?;
+
+            if result.rows_affected() == 0 {
+                return Err(EvifError::NotFound(name.to_string()));
+            }
+            Ok(())
+        }
+
+        async fn enqueue(&self, name: &str, data: Vec<u8>) -> EvifResult<String> {
+            let msg_data = String::from_utf8(data)
+                .map_err(|_| EvifError::InvalidInput("Invalid UTF-8 data".to_string()))?;
+
+            // Check queue exists and capacity
+            let max_size: i64 = sqlx::query_scalar("SELECT max_size FROM queues WHERE name = ?")
+                .bind(name)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|_| EvifError::NotFound(name.to_string()))?;
+
+            let current_size: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages WHERE queue_name = ? AND status = 'ready'"
+            )
+            .bind(name)
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+            if current_size >= max_size {
+                return Err(EvifError::QueueFull(name.to_string()));
+            }
+
+            let msg_id = uuid::Uuid::new_v4().to_string();
+            let timestamp = Utc::now().timestamp();
+
+            sqlx::query(
+                "INSERT INTO messages (id, queue_name, data, timestamp, priority, status) \
+                 VALUES (?, ?, ?, ?, 999, 'ready')"
+            )
+            .bind(&msg_id)
+            .bind(name)
+            .bind(&msg_data)
+            .bind(timestamp)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| EvifError::Storage(format!("Insert error: {}", e)))?;
+
+            Ok(msg_id)
+        }
+
+        async fn dequeue(&self, name: &str) -> EvifResult<QueueMessage> {
+            let now_ts = Utc::now().timestamp();
+
+            // Fetch and delete atomically using a transaction
+            let mut tx = self.pool.begin().await
+                .map_err(|e| EvifError::Storage(format!("Transaction error: {}", e)))?;
+
+            let row: Option<(String, String, i64, i32, Option<i64>, u32, u32)> = sqlx::query_as(
+                "SELECT id, data, timestamp, priority, delay_until, retry_count, max_retries \
+                 FROM messages \
+                 WHERE queue_name = ? AND status = 'ready' \
+                 AND (delay_until IS NULL OR delay_until <= ?) \
+                 ORDER BY priority ASC, timestamp ASC LIMIT 1 \
+                 FOR UPDATE"
+            )
+            .bind(name)
+            .bind(now_ts)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| EvifError::Storage(format!("Query error: {}", e)))?;
+
+            let row = row.ok_or_else(|| EvifError::EmptyQueue(name.to_string()))?;
+
+            sqlx::query("DELETE FROM messages WHERE id = ?")
+                .bind(&row.0)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| EvifError::Storage(format!("Delete error: {}", e)))?;
+
+            tx.commit().await
+                .map_err(|e| EvifError::Storage(format!("Commit error: {}", e)))?;
+
+            Ok(QueueMessage {
+                id: row.0,
+                data: row.1,
+                timestamp: row.2,
+                priority: row.3,
+                delay_until: row.4,
+                retry_count: row.5,
+                max_retries: row.6,
+            })
+        }
+
+        async fn peek(&self, name: &str) -> EvifResult<QueueMessage> {
+            let now_ts = Utc::now().timestamp();
+
+            let row: (String, String, i64, i32, Option<i64>, u32, u32) = sqlx::query_as(
+                "SELECT id, data, timestamp, priority, delay_until, retry_count, max_retries \
+                 FROM messages \
+                 WHERE queue_name = ? AND status = 'ready' \
+                 AND (delay_until IS NULL OR delay_until <= ?) \
+                 ORDER BY priority ASC, timestamp ASC LIMIT 1"
+            )
+            .bind(name)
+            .bind(now_ts)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|_| EvifError::EmptyQueue(name.to_string()))?;
+
+            Ok(QueueMessage {
+                id: row.0,
+                data: row.1,
+                timestamp: row.2,
+                priority: row.3,
+                delay_until: row.4,
+                retry_count: row.5,
+                max_retries: row.6,
+            })
+        }
+
+        async fn size(&self, name: &str) -> EvifResult<usize> {
+            let count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages WHERE queue_name = ? AND status = 'ready'"
+            )
+            .bind(name)
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+            Ok(count as usize)
+        }
+
+        async fn clear(&self, name: &str) -> EvifResult<()> {
+            sqlx::query("DELETE FROM messages WHERE queue_name = ?")
+                .bind(name)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| EvifError::Storage(format!("Delete error: {}", e)))?;
+
+            Ok(())
+        }
+
+        async fn list_queues(&self) -> Vec<String> {
+            let rows: Vec<String> = sqlx::query_scalar("SELECT name FROM queues ORDER BY name")
+                .fetch_all(&self.pool)
+                .await
+                .unwrap_or_default();
+
+            rows
+        }
+
+        async fn list_queues_with_prefix(&self, prefix: &str) -> EvifResult<Vec<String>> {
+            if prefix.is_empty() {
+                return Ok(self.list_queues().await);
+            }
+
+            let like_pattern = format!("{}/%", prefix);
+            let rows: Vec<String> = sqlx::query_scalar(
+                "SELECT name FROM queues WHERE name = ? OR name LIKE ? ORDER BY name"
+            )
+            .bind(prefix)
+            .bind(&like_pattern)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| EvifError::Storage(format!("Query error: {}", e)))?;
+
+            Ok(rows)
+        }
+
+        async fn queue_exists(&self, name: &str) -> bool {
+            let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM queues WHERE name = ?")
+                .bind(name)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(false);
+
+            exists
+        }
+    }
+}
+
 // ==================== Plugin ====================
 
 pub struct QueueFsPlugin {
@@ -620,6 +890,14 @@ impl QueueFsPlugin {
     pub fn with_sqlite(db_path: &str) -> EvifResult<Self> {
         Ok(Self {
             backend: Arc::new(sqlite_backend::SqliteQueueBackend::new(db_path)?),
+        })
+    }
+
+    /// Create QueueFS with MySQL persistent backend
+    #[cfg(feature = "queuefs-mysql")]
+    pub async fn with_mysql(database_url: &str) -> EvifResult<Self> {
+        Ok(Self {
+            backend: Arc::new(mysql_backend::MysqlQueueBackend::new(database_url).await?),
         })
     }
 

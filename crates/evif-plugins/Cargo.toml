@@ -77,12 +77,16 @@ r2d2_sqlite = { version = "0.25", optional = true }
 # SQLite for SQLFS2 (optional dependency)
 rusqlite2 = { version = "0.32", optional = true, features = ["bundled"], package = "rusqlite" }
 
+# MySQL for QueueFS (optional dependency)
+sqlx = { version = "0.8", optional = true, features = ["mysql", "runtime-tokio", "tls-rustls"] }
+
 [features]
 default = ["sqlfs", "queuefs-sqlite"]
 s3fs = ["aws-config", "aws-sdk-s3", "aws-smithy-types", "aws-credential-types"]
 sqlfs = ["rusqlite", "r2d2", "r2d2_sqlite"]
 sqlfs2 = ["rusqlite2"]
 queuefs-sqlite = ["rusqlite"]
+queuefs-mysql = ["sqlx"]
 gptfs = []
 vectorfs = ["aws-config", "aws-sdk-s3", "aws-smithy-types", "aws-credential-types", "rusqlite"]
 streamrotatefs = []

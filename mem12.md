@@ -949,11 +949,19 @@ impl WasmPluginLoader {
   - [x] DateTime 类型转换（AWS DateTime → chrono DateTime）
   - [x] 所有 SdkError 错误转换（map_err 统一处理）
   - [x] DirCache/StatCache 借用冲突修复
-- [ ] Go SDK 支持流式读取（后续）
+- [x] Go SDK 支持流式读取
+  - [x] `StreamFile()` 方法返回 `io.ReadCloser` 流式读取大文件
+  - [x] `StreamWriteFile()` 方法支持从 `io.Reader` 流式写入
+  - [x] 4 个新测试全部通过（StreamFile/StreamFileWithOffset/StreamFileError/StreamWriteFile）
 - [x] 分片排序和 ETag 管理正常
 
 ### Phase 6 完成标准 — 存储增强
-- [ ] QueueFS 支持 MySQL 后端（需添加 mysql 依赖，后续实现）
+- [x] QueueFS 支持 MySQL 后端
+  - [x] `MysqlQueueBackend` 实现 `QueueBackend` trait（基于 sqlx 0.8 + mysql）
+  - [x] `queuefs-mysql` feature flag（`Cargo.toml`）
+  - [x] `QueueFsPlugin::with_mysql(database_url)` 构造方法
+  - [x] 事务安全的 dequeue（SELECT FOR UPDATE + DELETE + COMMIT）
+  - [x] InnoDB + utf8mb4、索引优化（queue_name, status, priority, timestamp）
 - [x] VectorFS 重启后向量数据不丢失
   - [x] `VectorFsConfig` 增加 `persistence_path` 持久化路径配置
   - [x] SQLite 持久化实现（命名空间 CRUD、文档写入/删除、向量 f32 LE BLOB 序列化、启动加载恢复）
@@ -998,6 +1006,28 @@ impl WasmPluginLoader {
 ---
 
 ## 十、实施记录
+
+### 2026-03-31 (Session 9): Go SDK Streaming + QueueFS MySQL
+
+#### 已完成项
+1. **Go SDK 流式读取**（`crates/evif-sdk-go/evif/client.go`）
+   - `StreamFile(path, offset, size)` → `io.ReadCloser`：流式读取大文件
+   - `StreamWriteFile(path, reader)` → `WriteResponse`：从 `io.Reader` 流式写入
+   - 4 个新测试全部通过（StreamFile/StreamFileWithOffset/StreamFileError/StreamWriteFile）
+   - Go 测试总数：31（全部通过）
+
+2. **QueueFS MySQL 后端**（`crates/evif-plugins/src/queuefs.rs`）
+   - `MysqlQueueBackend` 实现 `QueueBackend` trait（基于 sqlx 0.8 + mysql runtime）
+   - `#[cfg(feature = "queuefs-mysql")]` feature flag
+   - `QueueFsPlugin::with_mysql(database_url)` 构造方法
+   - 事务安全的 dequeue：`SELECT ... FOR UPDATE` + `DELETE` + `COMMIT`
+   - InnoDB + utf8mb4 字符集，索引优化
+   - `cargo check -p evif-plugins --features queuefs-mysql` 编译通过
+
+#### 验证结果
+- Rust 测试：548 通过（0 失败）
+- Go 测试：31 通过（0 失败）
+- `mem12.md` 所有计划项已完成 ✅
 
 ### 2026-03-31: Extism 插件后端实现完成
 

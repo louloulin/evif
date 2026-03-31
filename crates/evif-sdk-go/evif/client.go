@@ -131,6 +131,39 @@ func (c *Client) Health() (*HealthResponse, error) {
 
 // ── File Operations ──────────────────────────────────────────────
 
+// StreamFile reads file content as a stream, returning the response body
+// as an io.ReadCloser. The caller is responsible for closing the stream.
+// This is useful for large files where loading the entire content into memory
+// is undesirable.
+// offset and size: use -1 for defaults (read all from beginning).
+func (c *Client) StreamFile(path string, offset, size int64) (io.ReadCloser, error) {
+	query := url.Values{}
+	query.Set("path", path)
+	if offset > 0 {
+		query.Set("offset", fmt.Sprintf("%d", offset))
+	}
+	if size >= 0 {
+		query.Set("size", fmt.Sprintf("%d", size))
+	}
+
+	resp, err := c.doRequest("GET", "/files", query, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		var errResp APIResponse
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, errResp.Error)
+		}
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	return resp.Body, nil
+}
+
 // ReadFile reads file content.
 // offset and size: use -1 for defaults (read all from beginning).
 func (c *Client) ReadFile(path string, offset, size int64) ([]byte, error) {
@@ -159,6 +192,26 @@ func (c *Client) ReadFile(path string, offset, size int64) ([]byte, error) {
 	}
 
 	return io.ReadAll(resp.Body)
+}
+
+// StreamWriteFile writes data to a file from an io.Reader, streaming the content
+// without loading it entirely into memory. Useful for uploading large files.
+func (c *Client) StreamWriteFile(path string, reader io.Reader) (*WriteResponse, error) {
+	query := url.Values{}
+	query.Set("path", path)
+
+	resp, err := c.doRequest("PUT", "/files", query, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Data WriteResponse `json:"data"`
+	}
+	if err := c.handleResponse(resp, &result); err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
 }
 
 // WriteFile writes data to a file.
