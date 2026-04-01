@@ -1,1 +1,1 @@
-{"mcpServers":{"evif":{"command":"./target/debug/evif-mcp","env":{"EVIF_API_URL":"http://localhost:8081"}}}}
+{"mcpServers":{"evif":{"command":"./target/release/evif-mcp","env":{"EVIF_API_URL":"http://localhost:8081","EVIF_REST_AUTH_MODE":"disabled"}}}}
