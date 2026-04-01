@@ -49,7 +49,41 @@ const IconMemory = () => (
   </svg>
 );
 
-export type ActivityView = 'explorer' | 'terminal' | 'problems' | 'plugins' | 'search' | 'monitor' | 'memory';
+const IconContext = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.5V20h6v-2.5c2.9-1.2 5-4.1 5-7.5a8 8 0 0 0-8-8z" />
+    <path d="M10 22h4" />
+    <path d="M9 12h6" />
+    <path d="M12 9v6" />
+  </svg>
+);
+
+const IconSkills = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+);
+
+const IconQueuePipe = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 6h16" />
+    <path d="M4 12h16" />
+    <path d="M4 18h10" />
+    <circle cx="19" cy="18" r="2" fill="currentColor" />
+  </svg>
+);
+
+const IconLogs = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+    <line x1="6" y1="8" x2="14" y2="8" />
+    <line x1="6" y1="11" x2="10" y2="11" />
+  </svg>
+);
+
+export type ActivityView = 'explorer' | 'terminal' | 'problems' | 'plugins' | 'search' | 'monitor' | 'memory' | 'context' | 'skills' | 'queue' | 'logs';
 
 interface ActivityBarProps {
   activeView: ActivityView | null;
@@ -86,6 +120,18 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   };
   const handleMemory = () => {
     onViewChange('memory');
+  };
+  const handleContext = () => {
+    onViewChange('context');
+  };
+  const handleSkills = () => {
+    onViewChange('skills');
+  };
+  const handleQueue = () => {
+    onViewChange('queue');
+  };
+  const handleLogs = () => {
+    onViewChange('logs');
   };
 
   return (
@@ -149,6 +195,38 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
           title="记忆管理"
         >
           <IconMemory />
+        </button>
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'context' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleContext}
+          title="Context Explorer"
+        >
+          <IconContext />
+        </button>
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'skills' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleSkills}
+          title="Skill Gallery"
+        >
+          <IconSkills />
+        </button>
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'queue' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleQueue}
+          title="Queue/Pipe"
+        >
+          <IconQueuePipe />
+        </button>
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'logs' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleLogs}
+          title="Log Stream"
+        >
+          <IconLogs />
         </button>
       </div>
     </div>

@@ -3,6 +3,7 @@
 mod batch_handlers;
 mod collab_handlers;
 mod compat_fs;
+mod context_handlers;
 mod fs_handlers;
 mod handle_handlers;
 mod handlers;
@@ -20,6 +21,7 @@ pub use batch_handlers::{
     BatchOperationManager, OperationStatus,
 };
 pub use compat_fs::CompatFsHandlers;
+pub use context_handlers::{ContextState, SemanticSearchRequest, SemanticSearchResponse, SemanticResultJson, SummarizeRequest, SummarizeResponse};
 pub use fs_handlers::{FsHandlers, FsState};
 pub use handle_handlers::{HandleHandlers, HandleState};
 pub use handlers::{AppState, EvifHandlers};
@@ -31,7 +33,7 @@ pub use memory_handlers::{
 pub use metrics_handlers::{MetricsHandlers, MetricsState, TrafficStats};
 pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState};
 pub use plugin_handlers::{PluginHandlers, PluginState};
-pub use routes::{create_routes, create_routes_with_auth, create_routes_with_memory_state};
+pub use routes::{create_routes, create_routes_with_auth, create_routes_with_context, create_routes_with_memory_state};
 pub use server::{EvifServer, ServerConfig};
 pub use ws_handlers::{WSMessage, WebSocketHandlers, WebSocketState};
 

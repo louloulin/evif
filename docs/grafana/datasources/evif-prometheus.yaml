@@ -1,0 +1,24 @@
+# EVIF Prometheus Data Source Provisioning
+# Place this file in /etc/grafana/provisioning/datasources/evif-prometheus.yaml
+# or mount at /etc/grafana/provisioning/datasources/ in the Grafana container
+#
+# Usage:
+#   docker run -v $(pwd)/datasources:/etc/grafana/provisioning/datasources \
+#              -v $(pwd)/dashboards:/etc/grafana/provisioning/dashboards \
+#              grafana/grafana
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus-evif
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      timeInterval: 15s

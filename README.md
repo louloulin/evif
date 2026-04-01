@@ -3,11 +3,28 @@
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](https://opensource.org/licenses/)
 
-> A powerful, extensible plugin-based virtual file system built in Rust, following the Plan 9 "Everything Is a File" philosophy.
+> A context-oriented, extensible virtual file system built in Rust, following the Plan 9 "Everything Is a File" philosophy.
 
 [中文文档](README-CN.md)
 
 ## Overview
+
+EVIF is evolving from "Everything Is a File" toward "Context Is a File" for AI agents. The current repository now includes:
+
+- `ContextFS` for layered `L0/L1/L2` working context
+- `SkillFS` for standard `SKILL.md` discovery and invocation
+- `PipeFS` for lightweight multi-agent coordination
+- Traditional EVIF plugin infrastructure for storage, routing, REST, CLI, and FUSE
+
+### Agent Positioning
+
+EVIF gives agents one file-oriented surface for:
+
+- active context in `/context`
+- reusable workflows in `/skills`
+- task coordination in `/pipes`
+
+This keeps agent interaction compatible with simple primitives such as `ls`, `cat`, `grep`, and `write`.
 
 EVIF is a modular plugin filesystem platform that exposes multiple backends through one mount table, one plugin lifecycle, and one file-oriented surface. The supported product path is centered on mount routing, plugin lifecycle management, file and directory operations, handle management, and access surfaces such as REST, CLI, and FUSE.
 
@@ -22,6 +39,21 @@ EVIF is a modular plugin filesystem platform that exposes multiple backends thro
 - **WASM Plugin Support**: WebAssembly-based plugin extensions
 
 ## Architecture
+
+### Agent-Centered Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Agent Access Layer                                          │
+│  /context      /skills      /pipes      REST / CLI / FUSE  │
+├─────────────────────────────────────────────────────────────┤
+│ EVIF Core                                                   │
+│  Mount Table   Plugin Lifecycle   Handles   Metrics         │
+├─────────────────────────────────────────────────────────────┤
+│ Plugin Layer                                                │
+│  ContextFS    SkillFS    PipeFS    Storage / Queue / Vector │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -94,6 +126,29 @@ evif mount-plugin local /local --config root=/tmp
 evif list-mounts
 ```
 
+### 30-Second Agent Demo
+
+```bash
+cat /context/L0/current
+cat /context/L1/decisions.md
+ls /skills
+cat /skills/code-review/SKILL.md
+mkdir /pipes/task-001
+echo "review changed handlers" > /pipes/task-001/input
+cat /pipes/task-001/status
+```
+
+### 3-Minute Claude Code Setup
+
+```bash
+cargo build --release -p evif-rest -p evif-fuse
+cp CLAUDE.md /path/to/your/project/CLAUDE.md
+./target/release/evif-rest --port 8081
+./target/release/evif-fuse-mount /tmp/evif --readwrite
+cat /tmp/evif/context/L0/current
+ls /tmp/evif/skills
+```
+
 ## Core Components
 
 | Crate | Description |
@@ -114,6 +169,9 @@ evif list-mounts
 | Plugin | Description | Default Mount |
 |--------|-------------|---------------|
 | `memfs` | In-memory filesystem | `/mem` |
+| `contextfs` | Layered agent context filesystem | `/context` |
+| `skillfs` | Standard `SKILL.md` skill surface | `/skills` |
+| `pipefs` | Agent coordination pipes | `/pipes` |
 | `localfs` | Local filesystem access | - |
 | `hellofs` | Hello world example plugin | `/hello` |
 | `serverinfofs` | Server status and metrics | `/serverinfo` |

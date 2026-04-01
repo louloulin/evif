@@ -12,9 +12,9 @@ use evif_core::{
     validate_and_initialize_plugin, DynamicPluginLoader, EvifError, EvifPlugin, RadixMountTable,
 };
 use evif_plugins::{
-    normalize_plugin_id, DevFsPlugin, HeartbeatFsPlugin, HelloFsPlugin, HttpFsPlugin, KvfsPlugin,
-    LocalFsPlugin, MemFsPlugin, ProxyFsPlugin, QueueFsPlugin, ServerInfoFsPlugin, SqlfsConfig,
-    SqlfsPlugin, StreamFsPlugin,
+    normalize_plugin_id, ContextFsPlugin, DevFsPlugin, HeartbeatFsPlugin, HelloFsPlugin,
+    HttpFsPlugin, KvfsPlugin, LocalFsPlugin, MemFsPlugin, PipeFsPlugin, ProxyFsPlugin,
+    QueueFsPlugin, ServerInfoFsPlugin, SkillFsPlugin, SqlfsConfig, SqlfsPlugin, StreamFsPlugin,
 };
 use std::path::Path;
 use std::sync::Arc;
@@ -98,6 +98,9 @@ pub(crate) fn create_builtin_plugin_from_config(
 ) -> Result<Option<Arc<dyn EvifPlugin>>, EvifError> {
     let normalized = normalize_plugin_id(plugin);
     let plugin_instance: Arc<dyn EvifPlugin> = match normalized.as_str() {
+        "contextfs" => Arc::new(ContextFsPlugin::new()),
+        "skillfs" => Arc::new(SkillFsPlugin::new()),
+        "pipefs" => Arc::new(PipeFsPlugin::new()),
         "memfs" => Arc::new(MemFsPlugin::new()),
         "hellofs" => Arc::new(HelloFsPlugin::new()),
         "localfs" => {

@@ -6,14 +6,17 @@ use evif_plugins::{core_supported_plugins, experimental_plugins};
 fn core_supported_plugins_inventory_matches_supported_surface() {
     let core_ids: BTreeSet<&str> = core_supported_plugins().iter().map(|plugin| plugin.id).collect();
     let expected = BTreeSet::from([
+        "contextfs",
         "heartbeatfs",
         "hellofs",
         "kvfs",
         "localfs",
         "memfs",
+        "pipefs",
         "proxyfs",
         "queuefs",
         "serverinfofs",
+        "skillfs",
         "sqlfs2",
         "streamfs",
     ]);

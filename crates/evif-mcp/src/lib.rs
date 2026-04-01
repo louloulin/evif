@@ -429,6 +429,52 @@ impl EvifMcpServer {
                     "required": ["query"]
                 }),
             },
+            // SkillFS tools - expose Skills as MCP tools
+            Tool {
+                name: "evif_skill_list".to_string(),
+                description: "List all registered skills in the SkillFS".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_skill_info".to_string(),
+                description: "Get detailed info about a specific skill".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Skill name"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "evif_skill_execute".to_string(),
+                description: "Execute a skill with input data".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Skill name to execute"
+                        },
+                        "input": {
+                            "type": "string",
+                            "description": "Input data for the skill"
+                        },
+                        "mode": {
+                            "type": "string",
+                            "description": "Execution mode: native, wasm, docker (default: native)"
+                        }
+                    },
+                    "required": ["name", "input"]
+                }),
+            },
         ];
 
         *self.tools.write().await = tools;
@@ -970,6 +1016,126 @@ impl EvifMcpServer {
                 Ok(result)
             }
 
+            // SkillFS tools - expose Skills via MCP
+            "evif_skill_list" => {
+                let url = format!("{}/api/v1/directories?path=/skills", self.config.evif_url);
+                let response = self
+                    .client
+                    .get(&url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to list skills: {}", e))?;
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+                Ok(result)
+            }
+
+            "evif_skill_info" => {
+                let name = arguments["name"]
+                    .as_str()
+                    .ok_or("Missing 'name' argument")?;
+
+                // Read the SKILL.md file for the requested skill
+                let url = format!(
+                    "{}/api/v1/files?path=/skills/{}/SKILL.md",
+                    self.config.evif_url,
+                    urlencoding::encode(name)
+                );
+                let response = self
+                    .client
+                    .get(&url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to get skill info: {}", e))?;
+
+                if response.status().as_u16() >= 400 {
+                    let status = response.status().as_u16();
+                    let body = response.text().await.unwrap_or_default();
+                    return Err(format!("Skill '{}' not found (HTTP {}): {}", name, status, body));
+                }
+
+                let body: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| format!("Failed to parse skill info: {}", e))?;
+
+                Ok(body)
+            }
+
+            "evif_skill_execute" => {
+                let name = arguments["name"]
+                    .as_str()
+                    .ok_or("Missing 'name' argument")?;
+                let input = arguments["input"]
+                    .as_str()
+                    .ok_or("Missing 'input' argument")?;
+                let mode = arguments["mode"].as_str().unwrap_or("native");
+
+                // Write input to skill's input file
+                let write_url = format!(
+                    "{}/api/v1/files?path=/skills/{}/input",
+                    self.config.evif_url,
+                    urlencoding::encode(name)
+                );
+                let write_response = self
+                    .client
+                    .put(&write_url)
+                    .body(input.to_string())
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to write skill input: {}", e))?;
+
+                if write_response.status().as_u16() >= 400 {
+                    let status = write_response.status().as_u16();
+                    let body = write_response.text().await.unwrap_or_default();
+                    return Err(format!(
+                        "Failed to write input for skill '{}' (HTTP {}): {}",
+                        name, status, body
+                    ));
+                }
+
+                // Read the output from the skill
+                let read_url = format!(
+                    "{}/api/v1/files?path=/skills/{}/output",
+                    self.config.evif_url,
+                    urlencoding::encode(name)
+                );
+                let read_response = self
+                    .client
+                    .get(&read_url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to read skill output: {}", e))?;
+
+                let output: Value = if read_response.status().as_u16() >= 400 {
+                    json!({
+                        "skill": name,
+                        "mode": mode,
+                        "status": "executed",
+                        "input_written": true,
+                        "output": "Skill input written successfully. Read /skills/{}/output when ready.",
+                        "note": "Skill execution is asynchronous - check output file for results."
+                    })
+                } else {
+                    let body: Value = read_response
+                        .json()
+                        .await
+                        .map_err(|e| format!("Failed to parse skill output: {}", e))?;
+                    json!({
+                        "skill": name,
+                        "mode": mode,
+                        "status": "completed",
+                        "output": body
+                    })
+                };
+
+                Ok(output)
+            }
+
             _ => Err(format!("Unknown tool: {}", tool_name)),
         }
     }
@@ -1122,6 +1288,52 @@ mod tests {
         (format!("http://{}", address), captured_params, handle)
     }
 
+    /// Spawn a server that handles PUT (captures body) and GET (captures query).
+    async fn spawn_put_get_server(
+        route: &str,
+        put_response: Value,
+        get_response: Value,
+    ) -> (String, Arc<Mutex<Option<String>>>, JoinHandle<()>) {
+        let captured_body = Arc::new(Mutex::new(None::<String>));
+        let state = captured_body.clone();
+        let get_resp = get_response.clone();
+        let app = Router::new()
+            .route(
+                route,
+                axum::routing::put(capture_string_body).get(return_json_get),
+            )
+            .with_state((state, put_response, get_resp));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        (format!("http://{}", address), captured_body, handle)
+    }
+
+    async fn capture_string_body(
+        State((captured_body, put_response, _)): State<(
+            Arc<Mutex<Option<String>>>,
+            Value,
+            Value,
+        )>,
+        body: String,
+    ) -> Json<Value> {
+        *captured_body.lock().await = Some(body);
+        Json(put_response)
+    }
+
+    async fn return_json_get(
+        State((_, _, get_response)): State<(
+            Arc<Mutex<Option<String>>>,
+            Value,
+            Value,
+        )>,
+    ) -> Json<Value> {
+        Json(get_response.clone())
+    }
+
     async fn get_capture_query(
         State((captured_params, response_body)): State<(
             Arc<Mutex<Option<Value>>>,
@@ -1153,8 +1365,8 @@ mod tests {
         let tools = wait_for_tools(&server).await;
         assert!(!tools.is_empty());
         assert!(
-            tools.len() >= 15,
-            "expected at least 15 tools, got {}",
+            tools.len() >= 18,
+            "expected at least 18 tools, got {}",
             tools.len()
         );
 
@@ -1534,5 +1746,165 @@ mod tests {
             assert!(tool.input_schema.is_object(), "tool {} input_schema should be an object", tool.name);
             assert!(tool.input_schema.get("type").is_some(), "tool {} input_schema should have type", tool.name);
         }
+    }
+
+    // ── SkillFS MCP tool tests ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_skill_tools_are_registered() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+        let tools = wait_for_tools(&server).await;
+
+        let skill_tool_names: Vec<&str> = tools
+            .iter()
+            .filter(|t| t.name.starts_with("evif_skill_"))
+            .map(|t| t.name.as_str())
+            .collect();
+
+        assert!(
+            skill_tool_names.contains(&"evif_skill_list"),
+            "evif_skill_list tool should be registered"
+        );
+        assert!(
+            skill_tool_names.contains(&"evif_skill_info"),
+            "evif_skill_info tool should be registered"
+        );
+        assert!(
+            skill_tool_names.contains(&"evif_skill_execute"),
+            "evif_skill_execute tool should be registered"
+        );
+        assert_eq!(skill_tool_names.len(), 3, "expected exactly 3 skill tools");
+    }
+
+    #[tokio::test]
+    async fn test_evif_skill_list_calls_directory_api() {
+        let (base_url, captured_params, handle) = spawn_get_json_server(
+            "/api/v1/directories",
+            json!({
+                "data": [
+                    {"name": "code-review", "size": 0, "is_dir": true},
+                    {"name": "test-gen", "size": 0, "is_dir": true},
+                    {"name": "doc-gen", "size": 0, "is_dir": true}
+                ]
+            }),
+        )
+        .await;
+
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_skill_list", json!({}))
+            .await
+            .unwrap();
+
+        let skills = result["data"].as_array().expect("should have data array");
+        assert_eq!(skills.len(), 3);
+        assert_eq!(skills[0]["name"], "code-review");
+        assert_eq!(skills[1]["name"], "test-gen");
+        assert_eq!(skills[2]["name"], "doc-gen");
+
+        // Verify the request used /skills path
+        let captured = captured_params.lock().await.clone().unwrap();
+        assert_eq!(captured["path"], "/skills");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_skill_info_reads_skill_md() {
+        let (base_url, _captured_params, handle) = spawn_get_json_server(
+            "/api/v1/files",
+            json!({
+                "data": "---\nname: code-review\ndescription: Review code\ntriggers:\n  - review code\n  - check code quality\n---\n# Code Review Skill\n\nAnalyzes code for bugs, security issues, and style."
+            }),
+        )
+        .await;
+
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_skill_info", json!({"name": "code-review"}))
+            .await
+            .unwrap();
+
+        // The result should contain the skill data
+        assert!(result["data"].as_str().unwrap_or_default().contains("code-review"));
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_skill_info_rejects_missing_name() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+
+        let result = server
+            .call_tool("evif_skill_info", json!({}))
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing 'name'"));
+    }
+
+    #[tokio::test]
+    async fn test_evif_skill_execute_writes_input() {
+        let (base_url, captured_body, handle) = spawn_put_get_server(
+            "/api/v1/files",
+            json!({"data": {"bytes_written": 42}}),
+            json!({"data": "skill output result"}),
+        )
+        .await;
+
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_skill_execute", json!({
+                "name": "code-review",
+                "input": "fn main() { println!(\"hello\"); }",
+                "mode": "native"
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(result["skill"], "code-review");
+        assert_eq!(result["mode"], "native");
+
+        // Verify the PUT request was made with correct input
+        let captured = captured_body.lock().await.clone().unwrap();
+        assert!(captured.contains("fn main()"));
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_skill_execute_rejects_missing_input() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+
+        let result = server
+            .call_tool("evif_skill_execute", json!({"name": "test-skill"}))
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing 'input'"));
+    }
+
+    #[tokio::test]
+    async fn test_evif_skill_execute_rejects_missing_name() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+
+        let result = server
+            .call_tool("evif_skill_execute", json!({"input": "test data"}))
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Missing 'name'"));
     }
 }

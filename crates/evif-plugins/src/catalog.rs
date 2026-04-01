@@ -24,7 +24,16 @@ pub struct PluginCatalogEntry {
     pub is_mountable: bool,
 }
 
-const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 10] = [
+const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
+    PluginCatalogEntry {
+        id: "contextfs",
+        display_name: "ContextFS",
+        description: "Layered L0/L1/L2 context filesystem for agent working memory",
+        plugin_type: "context",
+        support_tier: PluginSupportTier::Core,
+        aliases: &["context"],
+        is_mountable: true,
+    },
     PluginCatalogEntry {
         id: "memfs",
         display_name: "MemFS",
@@ -32,6 +41,24 @@ const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 10] = [
         plugin_type: "other",
         support_tier: PluginSupportTier::Core,
         aliases: &["mem", "memoryfs"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "skillfs",
+        display_name: "SkillFS",
+        description: "Standard SKILL.md discovery and invocation filesystem",
+        plugin_type: "agent",
+        support_tier: PluginSupportTier::Core,
+        aliases: &["skill", "skills"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "pipefs",
+        display_name: "PipeFS",
+        description: "Bidirectional pipe primitives for multi-agent coordination",
+        plugin_type: "agent",
+        support_tier: PluginSupportTier::Core,
+        aliases: &["pipe", "pipes"],
         is_mountable: true,
     },
     PluginCatalogEntry {
@@ -167,6 +194,9 @@ const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 5] = [
 
 pub fn normalize_plugin_id(name: &str) -> String {
     match name.to_ascii_lowercase().as_str() {
+        "context" => "contextfs".to_string(),
+        "skill" | "skills" => "skillfs".to_string(),
+        "pipe" | "pipes" => "pipefs".to_string(),
         "mem" | "memoryfs" => "memfs".to_string(),
         "hello" => "hellofs".to_string(),
         "local" => "localfs".to_string(),

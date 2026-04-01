@@ -1,13 +1,17 @@
 // REST API 路由 - 增强版，完全对标AGFS
 
 use crate::{
-    batch_handlers, collab_handlers, handle_handlers, handlers, memory_handlers, metrics_handlers,
-    wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, HandleState, RestAuthState,
+    batch_handlers, collab_handlers, context_handlers, handle_handlers, handlers, memory_handlers,
+    metrics_handlers, wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState,
+    HandleState, RestAuthState,
 };
 use axum::{middleware, Router};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
 use std::sync::Arc;
 use std::time::Instant;
+
+// Re-export for external use
+pub use context_handlers::{semantic_search, summarize};
 
 /// 创建 API 路由
 pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
@@ -97,6 +101,11 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         .route(
             "/api/v1/fs/delete",
             axum::routing::delete(CompatFsHandlers::delete),
+        )
+        // 流式读写端点（无 JSON/base64 封装，Python SDK 用 httpx.stream 调用）
+        .route(
+            "/api/v1/fs/stream",
+            axum::routing::post(CompatFsHandlers::stream),
         )
         // ============== 文件操作 ==============
         // 读取文件
@@ -438,6 +447,27 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         .merge(batch_routes)
         .merge(ws_routes)
         .merge(memory_routes)
+}
+
+/// 创建带 ContextManager 的路由
+pub fn create_routes_with_context(
+    mount_table: Arc<RadixMountTable>,
+    context_manager: evif_plugins::ContextManager,
+) -> Router {
+    let base = create_routes(mount_table);
+    let context_state = ContextState::new(context_manager);
+
+    Router::new()
+        .route(
+            "/context/semantic_search",
+            axum::routing::post(context_handlers::semantic_search),
+        )
+        .route(
+            "/context/summarize",
+            axum::routing::post(context_handlers::summarize),
+        )
+        .with_state(context_state)
+        .merge(base)
 }
 
 #[cfg(test)]

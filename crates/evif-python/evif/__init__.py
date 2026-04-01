@@ -8,6 +8,8 @@ __author__ = "EVIF Development Team"
 
 from evif.client import EvifClient
 from evif.file_handle import FileHandle
+from evif.context import ContextApi
+from evif.skill import SkillApi
 from evif.exceptions import (
     EvifError,
     ClientError,
@@ -20,6 +22,8 @@ from evif.exceptions import (
 __all__ = [
     "EvifClient",
     "FileHandle",
+    "ContextApi",
+    "SkillApi",
     "EvifError",
     "ClientError",
     "AuthenticationError",

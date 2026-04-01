@@ -19,6 +19,10 @@ futures = "0.3"
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
+
+# Front matter parsing
+gray_matter = "0.3"
 
 # Error handling
 thiserror = { workspace = true }
@@ -47,6 +51,11 @@ urlencoding = "2.1"
 
 # Logging
 log = "0.4"
+
+# WASM runtime for skill sandbox (optional dependency)
+wasmtime = { version = "26", optional = true }
+wasmtime-wasi = { version = "26", optional = true }
+wat = { version = "1.221", optional = true }
 
 # AWS SDK for S3 (optional dependency)
 aws-config = { version = "1.5", optional = true }
@@ -101,6 +110,9 @@ miniofs = ["opendal"]
 webdavfs = ["opendal"]
 ftpfs = ["opendal"]
 sftpfs = ["opendal"]
+# Skill runtime execution modes
+skill-wasm = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wat"]
+skill-docker = []
 
 [dev-dependencies]
 tokio-test = { workspace = true }

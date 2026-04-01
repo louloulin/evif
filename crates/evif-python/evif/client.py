@@ -1,7 +1,7 @@
 """EVIF Python Client - Core client implementation."""
 
 import asyncio
-from typing import Any, Optional, Union
+from typing import Any, AsyncIterator, Iterator, Optional, Union
 import httpx
 from tenacity import (
     retry,
@@ -20,9 +20,11 @@ from evif.exceptions import (
     ValidationError,
 )
 from evif.models import FileInfo, MountInfo, HealthStatus, HandleInfo
+from evif.context import ContextApi
+from evif.skill import SkillApi
 
 
-class EvifClient:
+class EvifClient(ContextApi, SkillApi):
     """Async EVIF client with retry and error handling."""
 
     def __init__(
@@ -414,3 +416,117 @@ class EvifClient:
         """
         await self._request("DELETE", f"/api/v1/handles/{handle_id}")
         return True
+
+    # ===== Streaming Operations =====
+
+    async def stream_read(
+        self,
+        path: str,
+        offset: int = 0,
+        size: int = 0,
+    ) -> AsyncIterator[bytes]:
+        """Stream read file contents as raw bytes.
+
+        Uses the dedicated streaming endpoint `/api/v1/fs/stream` which returns
+        raw bytes without JSON/base64 wrapping. This enables true streaming for
+        large files without buffering the entire response in memory.
+
+        Args:
+            path: File path
+            offset: Read offset in bytes (default 0)
+            size: Number of bytes to read, 0 = entire file (default 0)
+
+        Yields:
+            Raw byte chunks from the file
+
+        Example:
+            async for chunk in client.stream_read("/large/file.bin", chunk_size=65536):
+                await file.write(chunk)
+        """
+        self._ensure_connected()
+
+        params = {
+            "op": "read",
+            "path": path,
+            "offset": offset,
+            "size": size,
+        }
+
+        async with self._client.stream(
+            "POST",
+            "/api/v1/fs/stream",
+            json=params,
+            timeout=self.timeout,
+        ) as response:
+            if response.status_code == 401:
+                raise AuthenticationError()
+            elif response.status_code == 403:
+                raise PermissionError()
+            elif response.status_code == 404:
+                raise EvifFileNotFoundError(path)
+            elif response.status_code >= 400:
+                text = await response.aread()
+                raise EvifError(text.decode("utf-8", errors="ignore"), response.status_code)
+
+            async for chunk in response.aiter_bytes(chunk_size=65536):
+                if chunk:
+                    yield chunk
+
+    async def stream_write(
+        self,
+        path: str,
+        content: Union[str, bytes],
+        offset: int = -1,
+    ) -> int:
+        """Stream write content to a file.
+
+        Sends content directly to the server without buffering the entire
+        payload in memory. Suitable for large files or data streams.
+
+        Args:
+            path: File path
+            content: Content to write (string or bytes). For true streaming
+                     with large data, pass a string or bytes directly - httpx
+                     will stream the body efficiently.
+            offset: Write offset (-1 = append, default)
+
+        Returns:
+            Number of bytes written
+
+        Example:
+            # Write a large file from disk without loading it all into memory
+            with open("large.bin", "rb") as f:
+                data = f.read()
+            result = await client.stream_write("/path/to/dest", data)
+        """
+        self._ensure_connected()
+
+        if isinstance(content, str):
+            body = content.encode("utf-8")
+        else:
+            body = content
+
+        params = {
+            "op": "write",
+            "path": path,
+            "offset": offset,
+        }
+
+        response = await self._client.post(
+            "/api/v1/fs/stream",
+            params=params,
+            content=body,
+            timeout=self.timeout,
+        )
+
+        if response.status_code == 401:
+            raise AuthenticationError()
+        elif response.status_code == 403:
+            raise PermissionError()
+        elif response.status_code == 404:
+            raise EvifFileNotFoundError(path)
+        elif response.status_code >= 400:
+            raise EvifError(response.text, response.status_code)
+
+        data = response.json()
+        return data.get("bytes_written", 0)

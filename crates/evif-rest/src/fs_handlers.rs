@@ -96,6 +96,69 @@ pub struct GrepParams {
     pub max_results: Option<usize>,
 }
 
+/// 流式操作参数
+#[derive(Debug, Deserialize)]
+pub struct StreamParams {
+    /// 操作类型: "read" 或 "write"
+    pub op: String,
+    /// 文件路径
+    pub path: String,
+    /// 读取偏移（仅 read），默认 0
+    pub offset: Option<u64>,
+    /// 读取大小，0=全部（仅 read）
+    pub size: Option<u64>,
+    /// 写入偏移（仅 write），默认 -1（追加）
+    pub offset_write: Option<i64>,
+    /// 写入标志（仅 write）
+    pub flags: Option<String>,
+}
+
+/// 流式操作响应
+pub enum StreamResponse {
+    Read(Vec<u8>),
+    Write(u64),
+}
+
+impl axum::response::IntoResponse for StreamResponse {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            StreamResponse::Read(data) => {
+                let len = data.len();
+                tracing::debug!("stream_read: {} bytes for path", len);
+                axum::response::Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header(axum::http::header::CONTENT_TYPE, "application/octet-stream")
+                    .header(axum::http::header::CONTENT_LENGTH, len)
+                    .body(axum::body::Body::from(data))
+                    .unwrap_or_else(|_| {
+                        (
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to build stream response",
+                        )
+                            .into_response()
+                    })
+            }
+            StreamResponse::Write(bytes_written) => {
+                let body = format!(
+                    "{{\"bytes_written\":{}}}",
+                    bytes_written
+                );
+                axum::response::Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header(axum::http::header::CONTENT_TYPE, "application/json")
+                    .body(axum::body::Body::from(body))
+                    .unwrap_or_else(|_| {
+                        (
+                            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to build stream response",
+                        )
+                            .into_response()
+                    })
+            }
+        }
+    }
+}
+
 /// EVIF 文件系统 API 处理器
 pub struct FsHandlers;
 
@@ -578,6 +641,57 @@ impl FsHandlers {
                     "path": req.path,
                 })))
             }
+        }
+    }
+
+// ==================== 流式操作 ====================
+
+    /// 流式读取文件内容（无 JSON/base64 封装，适合大文件）
+    /// POST /api/v1/fs/stream?op=read&path=<path>&offset=<offset>&size=<size>
+    ///
+    /// Python SDK 用 httpx.stream() 调用此端点，
+    /// 直接获取原始字节，无需解析 JSON。
+    pub async fn stream(
+        State(state): State<FsState>,
+        Query(params): Query<StreamParams>,
+        body: String,
+    ) -> Result<StreamResponse, FsError> {
+        let plugin = state
+            .mount_table
+            .lookup(&params.path)
+            .await
+            .ok_or_else(|| FsError::NotFound(params.path.clone()))?;
+
+        match params.op.as_str() {
+            "read" => {
+                let offset = params.offset.unwrap_or(0);
+                let size = params.size.unwrap_or(0);
+
+                let data = plugin
+                    .read(&params.path, offset, size)
+                    .await
+                    .map_err(|e| FsError::Internal(e.to_string()))?;
+
+                Ok(StreamResponse::Read(data))
+            }
+            "write" => {
+                let offset = params.offset_write.unwrap_or(-1);
+                let flags = params
+                    .flags
+                    .as_ref()
+                    .and_then(|f| Self::parse_write_flags(f))
+                    .unwrap_or(WriteFlags::NONE);
+
+                let bytes_written = plugin
+                    .write(&params.path, body.into_bytes(), offset, flags)
+                    .await
+                    .map_err(|e| FsError::Internal(e.to_string()))?;
+
+                Ok(StreamResponse::Write(bytes_written))
+            }
+            _ => Err(FsError::BadRequest(
+                "op must be 'read' or 'write'".to_string(),
+            )),
         }
     }
 

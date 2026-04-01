@@ -1,0 +1,22 @@
+# EVIF Grafana Dashboard Provisioning
+# Place this file in /etc/grafana/provisioning/dashboards/evif-dashboard.yaml
+# or mount at /etc/grafana/provisioning/dashboards/ in the Grafana container
+#
+# Usage:
+#   docker run -v $(pwd)/dashboards:/etc/grafana/provisioning/dashboards \
+#              -v $(pwd)/dashboards/evif-dashboard.json:/var/lib/grafana/dashboards/evif-dashboard.json \
+#              grafana/grafana
+
+apiVersion: 1
+
+providers:
+  - name: 'EVIF'
+    orgId: 1
+    folder: 'EVIF'
+    folderUid: 'evif'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,25 @@
+version: 1
+agent:
+  name: evif-codex
+  description: EVIF-focused Codex agent profile using ContextFS, SkillFS, and PipeFS.
+context:
+  bootstrap_files:
+    - /context/L0/current
+    - /context/L1/decisions.md
+    - /context/L2/architecture.md
+skills:
+  discovery_root: /skills
+  preferred_files:
+    - SKILL.md
+coordination:
+  pipe_root: /pipes
+  status_file: status
+  input_file: input
+  output_file: output
+workflow:
+  startup:
+    - cat /context/L0/current
+    - cat /context/L1/decisions.md
+    - ls /skills
+  shutdown:
+    - write /context/L1/decisions.md

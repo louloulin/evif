@@ -1,0 +1,2189 @@
+openapi: 3.0.3
+info:
+  title: EVIF REST API
+  description: |
+    EVIF (Enhanced Virtual Information Framework) provides a unified filesystem API
+    with plugin support, memory management, collaboration features, and skill execution.
+
+    ## Authentication
+    Pass API key via `Authorization: Bearer <key>` header when authentication is enabled.
+
+    ## Base URL
+    Default: `http://localhost:8080`
+
+    ## Versioning
+    API version `v1` is available under `/api/v1/*` prefix.
+  version: 1.0.0
+  contact:
+    name: EVIF Project
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.example.com/evif
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Mounts
+    description: Plugin mount management
+  - name: Filesystem
+    description: Core filesystem operations
+  - name: Handles
+    description: Stateful file handle operations
+  - name: Plugins
+    description: Plugin management
+  - name: Memory
+    description: Memory/context operations
+  - name: Collaboration
+    description: Sharing and collaboration features
+  - name: Batch
+    description: Batch operations
+  - name: Metrics
+    description: Monitoring and metrics
+
+paths:
+  # ==================== Health ====================
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check (legacy)
+      operationId: healthLegacy
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                version: 1.0.0
+                uptime: 3600
+
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Health check v1
+      operationId: healthV1
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                version: 1.0.0
+                uptime: 3600
+                timestamp: "2026-04-01T12:00:00Z"
+
+  # ==================== Mount Operations ====================
+  /api/v1/mounts:
+    get:
+      tags: [Mounts]
+      summary: List all mount points
+      operationId: listMounts
+      responses:
+        '200':
+          description: List of mounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MountListResponse'
+              example:
+                mounts:
+                  - id: mount-1
+                    plugin: localfs
+                    path: /local
+                    options: {}
+                  - id: mount-2
+                    plugin: s3fs
+                    path: /s3
+                    options:
+                      bucket: my-bucket
+    post:
+      tags: [Mounts]
+      summary: Mount a plugin
+      operationId: mountPlugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MountRequest'
+            example:
+              plugin: s3fs
+              path: /mnt/s3
+              options:
+                bucket: my-bucket
+                region: us-east-1
+      responses:
+        '200':
+          description: Mount created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MountResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/mount:
+    post:
+      tags: [Mounts]
+      summary: Mount plugin (alias)
+      operationId: mountPluginAlias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MountRequest'
+      responses:
+        '200':
+          description: Mount created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MountResponse'
+
+  /api/v1/unmount:
+    post:
+      tags: [Mounts]
+      summary: Unmount plugin
+      operationId: unmountPlugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+                  description: Mount path to unmount
+            example:
+              path: /mnt/s3
+      responses:
+        '200':
+          description: Unmount successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Unmounted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== Filesystem Operations ====================
+  /api/v1/files:
+    get:
+      tags: [Filesystem]
+      summary: Read file contents
+      operationId: readFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: File path to read
+          example: /local/data.txt
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          description: Read offset in bytes
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          description: Number of bytes to read (0 = entire file)
+      responses:
+        '200':
+          description: File contents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileReadResponse'
+              example:
+                path: /local/data.txt
+                offset: 0
+                size: 1024
+                data: "SGVsbG8gV29ybGQh"
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Filesystem]
+      summary: Write file contents
+      operationId: writeFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: File path to write
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: -1
+          description: Write offset (-1 = append)
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Bytes written
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  bytes_written:
+                    type: integer
+              example:
+                path: /local/data.txt
+                bytes_written: 1024
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Filesystem]
+      summary: Create empty file
+      operationId: createFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: File path to create
+        - name: perm
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0644
+          description: File permissions (octal)
+      responses:
+        '200':
+          description: File created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileCreateResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Filesystem]
+      summary: Delete file or empty directory
+      operationId: deleteFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Path to delete
+        - name: recursive
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Recursively delete directory
+      responses:
+        '200':
+          description: Delete successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  path:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/directories:
+    get:
+      tags: [Filesystem]
+      summary: List directory contents
+      operationId: listDirectory
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Directory path to list
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Maximum number of entries to return
+      responses:
+        '200':
+          description: Directory entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileInfo'
+              example:
+                path: /local
+                files:
+                  - name: data.txt
+                    size: 1024
+                    is_dir: false
+                    modified: "2026-04-01T12:00:00Z"
+                  - name: subdir
+                    size: 0
+                    is_dir: true
+                    modified: "2026-04-01T11:00:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Filesystem]
+      summary: Create directory
+      operationId: createDirectory
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Directory path to create
+        - name: perm
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0755
+          description: Directory permissions (octal)
+      responses:
+        '200':
+          description: Directory created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  perm:
+                    type: integer
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/stat:
+    get:
+      tags: [Filesystem]
+      summary: Get file/directory metadata
+      operationId: statFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Path to stat
+      responses:
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileInfo'
+              example:
+                name: data.txt
+                size: 1024
+                is_dir: false
+                created: "2026-04-01T10:00:00Z"
+                modified: "2026-04-01T12:00:00Z"
+                permissions: 0644
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/rename:
+    post:
+      tags: [Filesystem]
+      summary: Rename or move file/directory
+      operationId: renameFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_path, new_path]
+              properties:
+                old_path:
+                  type: string
+                  description: Source path
+                new_path:
+                  type: string
+                  description: Destination path
+            example:
+              old_path: /local/oldname.txt
+              new_path: /local/newname.txt
+      responses:
+        '200':
+          description: Rename successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  old_path:
+                    type: string
+                  new_path:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/grep:
+    post:
+      tags: [Filesystem]
+      summary: Search for pattern in files
+      operationId: grepFiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrepRequest'
+            example:
+              path: /local
+              pattern: "error|warning"
+              max_results: 100
+              recursive: true
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrepResponse'
+              example:
+                path: /local
+                pattern: "error|warning"
+                matches: 3
+                results:
+                  - path: /local/app.log
+                    line_number: 42
+                    line: "2026-04-01 ERROR: Connection failed"
+                  - path: /local/app.log
+                    line_number: 100
+                    line: "2026-04-01 WARNING: Retry attempt"
+
+  /api/v1/digest:
+    post:
+      tags: [Filesystem]
+      summary: Calculate file hash
+      operationId: digestFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: algorithm
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [md5, sha256, sha512, xxh3]
+            default: sha256
+      responses:
+        '200':
+          description: File hash
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  algorithm:
+                    type: string
+                  hash:
+                    type: string
+                  size:
+                    type: integer
+              example:
+                path: /local/data.txt
+                algorithm: sha256
+                hash: "a591a6d40ba6202a8..."
+                size: 1024
+
+  /api/v1/touch:
+    post:
+      tags: [Filesystem]
+      summary: Update file timestamp or create empty file
+      operationId: touchFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+            example:
+              path: /local/newfile.txt
+      responses:
+        '200':
+          description: Touch successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  path:
+                    type: string
+
+  # ==================== Handle Operations ====================
+  /api/v1/handles/open:
+    post:
+      tags: [Handles]
+      summary: Open a file handle
+      operationId: openHandle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenHandleRequest'
+            example:
+              path: /local/data.txt
+              flags: rw
+              mode: 0644
+              lease: 60
+      responses:
+        '200':
+          description: Handle opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenHandleResponse'
+              example:
+                handle_id: 12345
+                path: /local/data.txt
+                flags: rw
+                lease_expires_at: 1709380800
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/handles:
+    get:
+      tags: [Handles]
+      summary: List all open handles
+      operationId: listHandles
+      responses:
+        '200':
+          description: List of handles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleListResponse'
+    get:
+      tags: [Handles]
+      summary: Get handle statistics
+      operationId: getHandleStats
+      responses:
+        '200':
+          description: Handle statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleStatsResponse'
+              example:
+                total: 5
+                active: 4
+                idle: 1
+
+  /api/v1/handles/{id}:
+    get:
+      tags: [Handles]
+      summary: Get handle information
+      operationId: getHandle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Handle ID
+      responses:
+        '200':
+          description: Handle information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleInfoResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/handles/{id}/read:
+    post:
+      tags: [Handles]
+      summary: Read from handle
+      operationId: readHandle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                size:
+                  type: integer
+                  default: 4096
+            example:
+              size: 8192
+      responses:
+        '200':
+          description: Read result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadResponse'
+
+  /api/v1/handles/{id}/write:
+    post:
+      tags: [Handles]
+      summary: Write to handle
+      operationId: writeHandle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteRequest'
+            example:
+              data: "SGVsbG8gV29ybGQh"
+              offset: 0
+      responses:
+        '200':
+          description: Write result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WriteResponse'
+
+  /api/v1/handles/{id}/seek:
+    post:
+      tags: [Handles]
+      summary: Seek in handle
+      operationId: seekHandle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeekRequest'
+            example:
+              offset: 100
+              whence: set
+      responses:
+        '200':
+          description: Seek result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeekResponse'
+
+  /api/v1/handles/{id}/sync:
+    post:
+      tags: [Handles]
+      summary: Sync handle to disk
+      operationId: syncHandle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Sync successful
+
+  /api/v1/handles/{id}/close:
+    post:
+      tags: [Handles]
+      summary: Close handle
+      operationId: closeHandle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Handle closed
+
+  /api/v1/handles/{id}/renew:
+    post:
+      tags: [Handles]
+      summary: Renew handle lease
+      operationId: renewHandle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lease]
+              properties:
+                lease:
+                  type: integer
+                  description: New lease duration in seconds
+            example:
+              lease: 120
+      responses:
+        '200':
+          description: Lease renewed
+
+  # ==================== Plugin Management ====================
+  /api/v1/plugins:
+    get:
+      tags: [Plugins]
+      summary: List loaded plugins
+      operationId: listPlugins
+      responses:
+        '200':
+          description: List of plugins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PluginInfo'
+
+  /api/v1/plugins/available:
+    get:
+      tags: [Plugins]
+      summary: List available plugins
+      operationId: listAvailablePlugins
+      responses:
+        '200':
+          description: Available plugins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailablePlugin'
+
+  /api/v1/plugins/load:
+    post:
+      tags: [Plugins]
+      summary: Load external plugin
+      operationId: loadPlugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, path]
+              properties:
+                name:
+                  type: string
+                path:
+                  type: string
+                options:
+                  type: object
+            example:
+              name: my-plugin
+              path: /plugins/my-plugin.so
+              options: {}
+      responses:
+        '200':
+          description: Plugin loaded
+
+  /api/v1/plugins/wasm/load:
+    post:
+      tags: [Plugins]
+      summary: Load WASM plugin
+      operationId: loadWasmPlugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, wasm_path]
+              properties:
+                name:
+                  type: string
+                wasm_path:
+                  type: string
+                options:
+                  type: object
+      responses:
+        '200':
+          description: WASM plugin loaded
+
+  /api/v1/plugins/{name}/readme:
+    get:
+      tags: [Plugins]
+      summary: Get plugin README
+      operationId: getPluginReadme
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin README
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  readme:
+                    type: string
+
+  /api/v1/plugins/{name}/config:
+    get:
+      tags: [Plugins]
+      summary: Get plugin configuration parameters
+      operationId: getPluginConfig
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config:
+                    type: object
+
+  /api/v1/plugins/{name}/status:
+    get:
+      tags: [Plugins]
+      summary: Get plugin status
+      operationId: getPluginStatus
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginStatus'
+
+  /api/v1/plugins/{name}/reload:
+    post:
+      tags: [Plugins]
+      summary: Reload plugin
+      operationId: reloadPlugin
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin reloaded
+
+  # ==================== Memory/Context Operations ====================
+  /api/v1/memories:
+    get:
+      tags: [Memory]
+      summary: List all memories
+      operationId: listMemories
+      responses:
+        '200':
+          description: List of memories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemoryItem'
+    post:
+      tags: [Memory]
+      summary: Create memory
+      operationId: createMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMemoryRequest'
+            example:
+              content: "Remember that the project deadline is April 15th"
+              modality: text
+      responses:
+        '200':
+          description: Memory created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMemoryResponse'
+
+  /api/v1/memories/search:
+    post:
+      tags: [Memory]
+      summary: Search memories
+      operationId: searchMemories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchMemoryRequest'
+            example:
+              query: project deadline
+              mode: vector
+              vector_k: 10
+              llm_top_n: 5
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchMemoryResponse'
+
+  /api/v1/memories/{id}:
+    get:
+      tags: [Memory]
+      summary: Get memory by ID
+      operationId: getMemory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/memories/query:
+    post:
+      tags: [Memory]
+      summary: Query memories with relationship views
+      operationId: queryMemories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryQueryRequest'
+            example:
+              query_type: causal_chain
+              start_node: "node-123"
+              max_depth: 5
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryQueryResponse'
+
+  /api/v1/categories:
+    get:
+      tags: [Memory]
+      summary: List all categories
+      operationId: listCategories
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+
+  /api/v1/categories/{id}:
+    get:
+      tags: [Memory]
+      summary: Get category by ID
+      operationId: getCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories/{id}/memories:
+    get:
+      tags: [Memory]
+      summary: Get memories in category
+      operationId: getCategoryMemories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Category with memories
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryWithMemories'
+
+  # ==================== Collaboration ====================
+  /api/v1/share/create:
+    post:
+      tags: [Collaboration]
+      summary: Create share link
+      operationId: createShare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+                permissions:
+                  type: string
+                  enum: [read, write, admin]
+                  default: read
+                expires_in:
+                  type: integer
+                  description: Expiration time in seconds
+      responses:
+        '200':
+          description: Share created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Share'
+
+  /api/v1/share/list:
+    get:
+      tags: [Collaboration]
+      summary: List shares
+      operationId: listShares
+      responses:
+        '200':
+          description: List of shares
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Share'
+
+  /api/v1/share/revoke:
+    post:
+      tags: [Collaboration]
+      summary: Revoke share
+      operationId: revokeShare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [share_id]
+              properties:
+                share_id:
+                  type: string
+      responses:
+        '200':
+          description: Share revoked
+
+  /api/v1/permissions/set:
+    post:
+      tags: [Collaboration]
+      summary: Set permissions
+      operationId: setPermissions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                user:
+                  type: string
+                permissions:
+                  type: string
+      responses:
+        '200':
+          description: Permissions set
+
+  /api/v1/comments:
+    get:
+      tags: [Collaboration]
+      summary: List comments
+      operationId: listComments
+      parameters:
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Comment'
+    post:
+      tags: [Collaboration]
+      summary: Add comment
+      operationId: addComment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+      responses:
+        '200':
+          description: Comment added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+
+  /api/v1/comments/{id}:
+    put:
+      tags: [Collaboration]
+      summary: Update comment
+      operationId: updateComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Comment updated
+    delete:
+      tags: [Collaboration]
+      summary: Delete comment
+      operationId: deleteComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Comment deleted
+
+  /api/v1/comments/{id}/resolve:
+    put:
+      tags: [Collaboration]
+      summary: Resolve comment
+      operationId: resolveComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Comment resolved
+
+  /api/v1/users:
+    get:
+      tags: [Collaboration]
+      summary: List users
+      operationId: listUsers
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  # ==================== Batch Operations ====================
+  /api/v1/batch/copy:
+    post:
+      tags: [Batch]
+      summary: Batch copy files
+      operationId: batchCopy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCopyRequest'
+      responses:
+        '200':
+          description: Batch copy result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchOperationResult'
+
+  /api/v1/batch/delete:
+    post:
+      tags: [Batch]
+      summary: Batch delete files
+      operationId: batchDelete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDeleteRequest'
+      responses:
+        '200':
+          description: Batch delete result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchOperationResult'
+
+  /api/v1/batch/move:
+    post:
+      tags: [Batch]
+      summary: Batch move files
+      operationId: batchMove
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operations]
+              properties:
+                operations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      src:
+                        type: string
+                      dst:
+                        type: string
+      responses:
+        '200':
+          description: Batch move result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchOperationResult'
+
+  /api/v1/batch/merge:
+    post:
+      tags: [Batch]
+      summary: Batch merge files
+      operationId: batchMerge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [src_files, dst]
+              properties:
+                src_files:
+                  type: array
+                  items:
+                    type: string
+                dst:
+                  type: string
+      responses:
+        '200':
+          description: Batch merge result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchOperationResult'
+
+  # ==================== Metrics ====================
+  /metrics:
+    get:
+      tags: [Metrics]
+      summary: Prometheus metrics endpoint
+      operationId: prometheusMetrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/metrics/traffic:
+    get:
+      tags: [Metrics]
+      summary: Traffic statistics
+      operationId: getTrafficStats
+      responses:
+        '200':
+          description: Traffic stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrafficStats'
+
+  /api/v1/metrics/operations:
+    get:
+      tags: [Metrics]
+      summary: Operation statistics
+      operationId: getOperationStats
+      responses:
+        '200':
+          description: Operation stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  operations:
+                    type: object
+
+  /api/v1/metrics/status:
+    get:
+      tags: [Metrics]
+      summary: System status
+      operationId: getSystemStatus
+      responses:
+        '200':
+          description: System status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatus'
+
+  /api/v1/metrics/reset:
+    post:
+      tags: [Metrics]
+      summary: Reset metrics
+      operationId: resetMetrics
+      responses:
+        '200':
+          description: Metrics reset
+
+components:
+  schemas:
+    # ==================== Common ====================
+    HealthResponse:
+      type: object
+      required: [status, version, uptime]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: integer
+          description: Uptime in seconds
+        timestamp:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    FileInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+        is_dir:
+          type: boolean
+        created:
+          type: string
+          format: date-time
+        modified:
+          type: string
+          format: date-time
+        permissions:
+          type: integer
+        owner:
+          type: string
+
+    # ==================== Mounts ====================
+    MountRequest:
+      type: object
+      required: [plugin, path]
+      properties:
+        plugin:
+          type: string
+          description: Plugin name (e.g., localfs, s3fs)
+        path:
+          type: string
+          description: Mount path
+        options:
+          type: object
+          description: Plugin-specific options
+
+    MountResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        plugin:
+          type: string
+        path:
+          type: string
+        options:
+          type: object
+
+    MountListResponse:
+      type: object
+      properties:
+        mounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/MountResponse'
+
+    # ==================== Filesystem ====================
+    FileReadResponse:
+      type: object
+      properties:
+        path:
+          type: string
+        offset:
+          type: integer
+        size:
+          type: integer
+        data:
+          type: string
+          format: base64
+          description: Base64-encoded file content
+
+    FileCreateResponse:
+      type: object
+      properties:
+        path:
+          type: string
+        perm:
+          type: integer
+
+    GrepRequest:
+      type: object
+      required: [path, pattern]
+      properties:
+        path:
+          type: string
+          description: Path to search
+        pattern:
+          type: string
+          description: Regular expression pattern
+        max_results:
+          type: integer
+          default: 100
+        recursive:
+          type: boolean
+          default: false
+
+    GrepResponse:
+      type: object
+      properties:
+        path:
+          type: string
+        pattern:
+          type: string
+        matches:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              line_number:
+                type: integer
+              line:
+                type: string
+
+    # ==================== Handles ====================
+    OpenHandleRequest:
+      type: object
+      required: [path, flags]
+      properties:
+        path:
+          type: string
+        flags:
+          type: string
+          enum: [r, read, readonly, w, write, writeonly, rw, read-write, rw-create, rw-create-excl, rw-truncate, append, rw-append]
+          description: Open flags
+        mode:
+          type: integer
+          default: 0644
+        lease:
+          type: integer
+          description: Lease duration in seconds
+
+    OpenHandleResponse:
+      type: object
+      properties:
+        handle_id:
+          type: integer
+          format: int64
+        path:
+          type: string
+        flags:
+          type: string
+        lease_expires_at:
+          type: integer
+          format: int64
+
+    HandleInfoResponse:
+      type: object
+      properties:
+        handle_id:
+          type: integer
+          format: int64
+        path:
+          type: string
+        flags:
+          type: string
+        plugin_id:
+          type: string
+        lease_expires_at:
+          type: integer
+          format: int64
+
+    HandleListResponse:
+      type: object
+      properties:
+        handles:
+          type: array
+          items:
+            $ref: '#/components/schemas/HandleInfoResponse'
+        count:
+          type: integer
+
+    HandleStatsResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        active:
+          type: integer
+        idle:
+          type: integer
+
+    ReadRequest:
+      type: object
+      properties:
+        size:
+          type: integer
+          default: 4096
+
+    ReadResponse:
+      type: object
+      properties:
+        data:
+          type: string
+          format: base64
+        bytes_read:
+          type: integer
+        eof:
+          type: boolean
+
+    WriteRequest:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: string
+          format: base64
+        offset:
+          type: integer
+          format: int64
+
+    WriteResponse:
+      type: object
+      properties:
+        bytes_written:
+          type: integer
+
+    SeekRequest:
+      type: object
+      required: [offset, whence]
+      properties:
+        offset:
+          type: integer
+          format: int64
+        whence:
+          type: string
+          enum: [set, cur, end]
+
+    SeekResponse:
+      type: object
+      properties:
+        new_offset:
+          type: integer
+          format: int64
+
+    # ==================== Plugins ====================
+    PluginInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+
+    AvailablePlugin:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+
+    PluginStatus:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        loaded_at:
+          type: string
+          format: date-time
+
+    # ==================== Memory ====================
+    CreateMemoryRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+        modality:
+          type: string
+          default: text
+        metadata:
+          type: object
+
+    CreateMemoryResponse:
+      type: object
+      properties:
+        memory_id:
+          type: string
+        extracted_items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+              summary:
+                type: string
+              category:
+                type: string
+
+    SearchMemoryRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+        mode:
+          type: string
+          default: vector
+        vector_k:
+          type: integer
+          default: 10
+        llm_top_n:
+          type: integer
+          default: 5
+
+    SearchMemoryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemorySearchResult'
+        total:
+          type: integer
+
+    MemorySearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        content:
+          type: string
+        score:
+          type: number
+        category:
+          type: string
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+
+    MemoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        content:
+          type: string
+        summary:
+          type: string
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+
+    MemoryQueryRequest:
+      type: object
+      required: [query_type]
+      properties:
+        query_type:
+          type: string
+          enum: [causal_chain, timeline, temporal_bfs, temporal_path]
+        start_node:
+          type: string
+        end_node:
+          type: string
+        max_depth:
+          type: integer
+          default: 5
+        event_type:
+          type: string
+        category:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+
+    MemoryQueryResponse:
+      type: object
+      properties:
+        query_type:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryQueryNode'
+        paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryQueryPath'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEvent'
+        total:
+          type: integer
+
+    MemoryQueryNode:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    MemoryQueryPath:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            type: string
+        edges:
+          type: array
+          items:
+            type: string
+        narrative:
+          type: string
+
+    TimelineEvent:
+      type: object
+      properties:
+        node_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        event_type:
+          type: string
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        item_count:
+          type: integer
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+
+    CategoryWithMemories:
+      type: object
+      properties:
+        category:
+          $ref: '#/components/schemas/Category'
+        memories:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryItem'
+
+    # ==================== Collaboration ====================
+    Share:
+      type: object
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        permissions:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        url:
+          type: string
+
+    CreateCommentRequest:
+      type: object
+      required: [path, content]
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+        line_number:
+          type: integer
+
+    Comment:
+      type: object
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        content:
+          type: string
+        author:
+          type: string
+        line_number:
+          type: integer
+        resolved:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+
+    # ==================== Batch ====================
+    BatchCopyRequest:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          items:
+            type: object
+            required: [src, dst]
+            properties:
+              src:
+                type: string
+              dst:
+                type: string
+
+    BatchDeleteRequest:
+      type: object
+      required: [paths]
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
+        recursive:
+          type: boolean
+          default: false
+
+    BatchOperationResult:
+      type: object
+      properties:
+        total:
+          type: integer
+        succeeded:
+          type: integer
+        failed:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              error:
+                type: string
+
+    # ==================== Metrics ====================
+    TrafficStats:
+      type: object
+      properties:
+        bytes_read:
+          type: integer
+          format: int64
+        bytes_written:
+          type: integer
+          format: int64
+        requests:
+          type: integer
+        errors:
+          type: integer
+
+    SystemStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        plugins_loaded:
+          type: integer
+        handles_open:
+          type: integer
+        memory_used:
+          type: integer
+          format: int64
+        uptime:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: BAD_REQUEST
+            message: Missing required parameter
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: NOT_FOUND
+            message: Path not found: /nonexistent
+
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: CONFLICT
+            message: Path already exists
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: UNAUTHORIZED
+            message: Invalid API key
+
+    Forbidden:
+      description: Permission denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: FORBIDDEN
+            message: Access denied
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: INTERNAL_SERVER_ERROR
+            message: An unexpected error occurred

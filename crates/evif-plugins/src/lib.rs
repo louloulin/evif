@@ -3,9 +3,13 @@
 // 完全对标 AGFS 的插件集合
 
 pub mod catalog;
+pub mod contextfs;
+pub mod context_manager;
+pub mod pipefs;
 pub mod localfs;
 pub mod kvfs;
 pub mod queuefs;
+pub mod skillfs;
 pub mod serverinfofs;
 pub mod memfs;
 pub mod httpfs;
@@ -35,6 +39,15 @@ pub mod vectorfs;
 
 #[cfg(feature = "streamrotatefs")]
 pub mod streamrotatefs;
+
+// Skill Runtime Safety Layer (Phase 9.1 - SkillFS)
+pub mod skill_runtime;
+
+// Exports from skill_runtime module
+pub use skill_runtime::{
+    execute_skill, execute_skill_with_timeout, get_runtime_info, validate_skill_execution,
+    SkillExecutionContext, SkillExecutionResult, SkillExecutor, SkillRuntimeError,
+};
 
 // OpenDAL-based plugins (EVIF 2.1)
 #[cfg(feature = "opendal")]
@@ -69,8 +82,13 @@ pub mod miniofs;
 // pub mod sftpfs;
 
 pub use localfs::LocalFsPlugin;
+pub use contextfs::{ContextFsPlugin, ContextTokenBudget, BudgetLevel, BudgetStatus};
+pub use context_manager::{ContextManager, ContextLayer, SessionInfo, SearchResult, SemanticResult};
+pub use pipefs::PipeFsPlugin;
 pub use kvfs::KvfsPlugin;
 pub use queuefs::QueueFsPlugin;
+pub use skillfs::SkillFsPlugin;
+pub use skillfs::{validate_skill_md, SkillMetadata, SkillValidationError};
 pub use serverinfofs::ServerInfoFsPlugin;
 pub use memfs::MemFsPlugin;
 pub use httpfs::HttpFsPlugin;

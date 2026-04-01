@@ -13,9 +13,11 @@ import (
 
 // Client is a Go client for the EVIF REST API.
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
+	baseURL        string
+	apiKey         string
+	httpClient     *http.Client
+	retryConfig    *RetryConfig
+	circuitBreaker *CircuitBreaker
 }
 
 // NewClient creates a new EVIF client.
@@ -24,9 +26,13 @@ type Client struct {
 // The "/api/v1" prefix is appended automatically.
 func NewClient(baseURL string) *Client {
 	return &Client{
-		baseURL: normalizeBaseURL(baseURL),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+		baseURL:    normalizeBaseURL(baseURL),
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		retryConfig: &RetryConfig{
+			MaxRetries:     3,
+			InitialBackoff: 100 * time.Millisecond,
+			MaxBackoff:     30 * time.Second,
+			Jitter:         true,
 		},
 	}
 }
@@ -43,7 +49,22 @@ func NewClientWithHTTPClient(baseURL string, httpClient *http.Client) *Client {
 	return &Client{
 		baseURL:    normalizeBaseURL(baseURL),
 		httpClient: httpClient,
+		retryConfig: &RetryConfig{
+			MaxRetries:     3,
+			InitialBackoff: 100 * time.Millisecond,
+			MaxBackoff:     30 * time.Second,
+			Jitter:         true,
+		},
 	}
+}
+
+// NewClientWithOptions creates a client with custom retry and circuit breaker options.
+func NewClientWithOptions(baseURL string, options ...ClientOption) *Client {
+	c := NewClient(baseURL)
+	for _, opt := range options {
+		opt(c)
+	}
+	return c
 }
 
 func normalizeBaseURL(baseURL string) string {

@@ -107,12 +107,12 @@ impl Queue {
 }
 
 /// 内存队列后端
-struct MemoryQueueBackend {
+pub struct MemoryQueueBackend {
     queues: RwLock<HashMap<String, Queue>>,
 }
 
 impl MemoryQueueBackend {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             queues: RwLock::new(HashMap::new()),
         }

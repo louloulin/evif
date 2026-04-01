@@ -12,6 +12,10 @@ import PluginManagerView from './components/PluginManagerView';
 import SearchUploadView from './components/SearchUploadView';
 import { MonitorView } from './components/MonitorView';
 import MemoryView from './components/memory/MemoryView';
+import ContextExplorer from './components/ContextExplorer';
+import SkillGallery from './components/SkillGallery';
+import QueuePipePanel from './components/QueuePipePanel';
+import LogViewer from './components/LogViewer';
 import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog';
 import { EditorTabs } from './components/editor/EditorTabs';
 import { Breadcrumb } from './components/Breadcrumb';
@@ -888,7 +892,7 @@ function App() {
           activeView={activeView}
           onViewChange={(view) => {
             setActiveView(view);
-            if (view === 'explorer' || view === 'plugins' || view === 'search' || view === 'monitor') setSidebarVisible(true);
+            if (view === 'explorer' || view === 'plugins' || view === 'search' || view === 'monitor' || view === 'memory' || view === 'context' || view === 'skills' || view === 'queue' || view === 'logs') setSidebarVisible(true);
             if (view === 'terminal' || view === 'problems') {
               setPanelVisible(true);
               setPanelTab(view === 'terminal' ? 'terminal' : 'problems');
@@ -909,6 +913,14 @@ function App() {
               <MonitorView />
             ) : activeView === 'memory' ? (
               <MemoryView />
+            ) : activeView === 'context' ? (
+              <ContextExplorer />
+            ) : activeView === 'skills' ? (
+              <SkillGallery />
+            ) : activeView === 'queue' ? (
+              <QueuePipePanel />
+            ) : activeView === 'logs' ? (
+              <LogViewer />
             ) : (
             <FileTree
               files={files}

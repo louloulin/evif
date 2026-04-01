@@ -2,12 +2,14 @@ package evif
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -492,4 +494,154 @@ func TestStreamWriteFile(t *testing.T) {
 	resp, err := c.StreamWriteFile("/memfs/upload.bin", reader)
 	require.NoError(t, err)
 	assert.Equal(t, int64(20), resp.BytesWritten)
+}
+
+// ── Retry and Circuit Breaker ─────────────────────────────────────
+
+func TestRetryConfig(t *testing.T) {
+	cfg := DefaultRetryConfig()
+	assert.Equal(t, 3, cfg.MaxRetries)
+	assert.Equal(t, 100*time.Millisecond, cfg.InitialBackoff)
+	assert.Equal(t, 30*time.Second, cfg.MaxBackoff)
+	assert.True(t, cfg.Jitter)
+}
+
+func TestCircuitBreakerClosed(t *testing.T) {
+	cb := NewCircuitBreaker(DefaultCircuitBreakerConfig())
+	assert.Equal(t, CircuitClosed, cb.State())
+	assert.True(t, cb.Allow()) // Should allow requests in closed state
+}
+
+func TestCircuitBreakerOpensAfterFailures(t *testing.T) {
+	cb := NewCircuitBreaker(&CircuitBreakerConfig{
+		FailureThreshold: 3,
+		SuccessThreshold: 2,
+		Timeout:          1 * time.Second,
+	})
+
+	// Record 3 failures
+	cb.RecordFailure()
+	cb.RecordFailure()
+	cb.RecordFailure()
+
+	assert.Equal(t, CircuitOpen, cb.State())
+	assert.False(t, cb.Allow()) // Should not allow requests when open
+}
+
+func TestCircuitBreakerHalfOpenAfterTimeout(t *testing.T) {
+	cb := NewCircuitBreaker(&CircuitBreakerConfig{
+		FailureThreshold: 1,
+		SuccessThreshold: 1,
+		Timeout:          10 * time.Millisecond,
+	})
+
+	// Record 1 failure to open the circuit
+	cb.RecordFailure()
+	assert.Equal(t, CircuitOpen, cb.State())
+
+	// Wait for timeout
+	time.Sleep(20 * time.Millisecond)
+
+	// Should transition to half-open
+	assert.True(t, cb.Allow())
+	assert.Equal(t, CircuitHalfOpen, cb.State())
+}
+
+func TestCircuitBreakerClosesAfterSuccesses(t *testing.T) {
+	cb := NewCircuitBreaker(&CircuitBreakerConfig{
+		FailureThreshold: 1,
+		SuccessThreshold: 2,
+		Timeout:          10 * time.Millisecond,
+	})
+
+	// Open the circuit
+	cb.RecordFailure()
+	time.Sleep(20 * time.Millisecond)
+	cb.Allow() // Transition to half-open
+
+	// Record successes
+	cb.RecordSuccess()
+	assert.Equal(t, CircuitHalfOpen, cb.State())
+	cb.RecordSuccess()
+
+	assert.Equal(t, CircuitClosed, cb.State())
+	assert.True(t, cb.Allow())
+}
+
+func TestExecuteWithRetrySuccess(t *testing.T) {
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "success")
+	})
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	c.retryConfig = &RetryConfig{MaxRetries: 3}
+
+	// Use ExecuteWithRetry with a simple request
+	resp, err := ExecuteWithRetry(context.Background(), func() (*http.Response, error) {
+		return http.Get(srv.URL)
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestExecuteWithRetryRetriesOnFailure(t *testing.T) {
+	attemptCount := 0
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		attemptCount++
+		if attemptCount < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "success after retry")
+	})
+	defer srv.Close()
+
+	resp, err := ExecuteWithRetry(context.Background(), func() (*http.Response, error) {
+		return http.Get(srv.URL)
+	}, WithRetryConfig(&RetryConfig{MaxRetries: 3, InitialBackoff: 1 * time.Millisecond}))
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, 3, attemptCount)
+}
+
+func TestExecuteWithRetryWithCircuitBreaker(t *testing.T) {
+	attemptCount := 0
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		attemptCount++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	defer srv.Close()
+
+	cb := NewCircuitBreaker(&CircuitBreakerConfig{
+		FailureThreshold: 1,
+		Timeout:          1 * time.Second,
+	})
+
+	_, err := ExecuteWithRetry(context.Background(), func() (*http.Response, error) {
+		return http.Get(srv.URL)
+	}, WithCircuitBreaker(cb))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circuit breaker is open")
+}
+
+func TestExecuteWithRetryMaxRetriesExceeded(t *testing.T) {
+	attemptCount := 0
+	srv := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		attemptCount++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	defer srv.Close()
+
+	_, err := ExecuteWithRetry(context.Background(), func() (*http.Response, error) {
+		return http.Get(srv.URL)
+	}, WithRetryConfig(&RetryConfig{MaxRetries: 2, InitialBackoff: 1 * time.Millisecond}))
+
+	require.NoError(t, err) // http.Get doesn't error on 503, just returns the response
+	assert.Equal(t, 3, attemptCount) // Initial + 2 retries
 }

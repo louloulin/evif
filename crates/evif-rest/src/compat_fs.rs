@@ -8,6 +8,7 @@ use axum::{
     extract::{Query, State},
     Json,
 };
+use evif_core::{EvifPlugin, WriteFlags};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -229,4 +230,71 @@ impl CompatFsHandlers {
 
         Ok(Json(serde_json::json!({ "ok": true })))
     }
+
+    /// 流式读写（无 JSON/base64 封装，适合大文件）
+    ///
+    /// POST /api/v1/fs/stream?op=read&path=<path>&offset=<offset>&size=<size>
+    /// POST /api/v1/fs/stream?op=write&path=<path>
+    ///
+    /// Python SDK 用 httpx.stream() 调用此端点，直接获取/发送原始字节。
+    pub async fn stream(
+        State(state): State<AppState>,
+        Query(params): Query<StreamParams>,
+        body: String,
+    ) -> Result<axum::response::Response, RestError> {
+        let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
+        let plugin: Arc<dyn EvifPlugin> = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", params.path)))?;
+
+        match params.op.as_str() {
+            "read" => {
+                let offset = params.offset.unwrap_or(0);
+                let size = params.size.unwrap_or(0);
+
+                let data = plugin
+                    .read(&relative_path, offset, size)
+                    .await
+                    .map_err(|e| RestError::Internal(e.to_string()))?;
+
+                let len = data.len();
+                Ok(axum::response::Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header(axum::http::header::CONTENT_TYPE, "application/octet-stream")
+                    .header(axum::http::header::CONTENT_LENGTH, len)
+                    .body(axum::body::Body::from(data))
+                    .expect("valid stream response"))
+            }
+            "write" => {
+                let bytes_written = plugin
+                    .write(&relative_path, body.into_bytes(), -1, WriteFlags::TRUNCATE)
+                    .await
+                    .map_err(|e| RestError::Internal(e.to_string()))?;
+
+                let body_str = format!("{{\"bytes_written\":{}}}", bytes_written);
+                Ok(axum::response::Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header(axum::http::header::CONTENT_TYPE, "application/json")
+                    .body(axum::body::Body::from(body_str))
+                    .expect("valid stream response"))
+            }
+            _ => Err(RestError::BadRequest(
+                "op must be 'read' or 'write'".to_string(),
+            )),
+        }
+    }
+}
+
+use std::sync::Arc;
+
+/// 流式操作参数
+#[derive(Debug, Deserialize)]
+pub struct StreamParams {
+    /// 操作类型: "read" 或 "write"
+    pub op: String,
+    /// 文件路径
+    pub path: String,
+    /// 读取偏移（仅 read），默认 0
+    pub offset: Option<u64>,
+    /// 读取大小，0=全部（仅 read）
+    pub size: Option<u64>,
 }
