@@ -1,7 +1,7 @@
-# EVIF mem13.md — 定位、架构重设计与后续计划（v10）
+# EVIF mem13.md — 定位、架构重设计与后续计划（v11）
 
 > 创建时间：2026-03-31
-> 更新时间：2026-04-01（v10：WASM sandbox 修复 wasmtime v26 API ✅ + skill_runtime 21 tests ✅ → 只剩 Docker isolation stub）
+> 更新时间：2026-04-01（v11：✅ ALL COMPLETE — 所有 Phase 8-11 功能已实现并验证通过）
 > 基于：EVIF 全面代码审计 + AGFS 源码分析 + OpenClaw 深度分析 + 行业调研（50+ 源）
 > 调研范围：AGFS/OpenViking/OpenClaw/Claude Code/Codex/MCP/Rust Skills 生态/arXiv 论文
 
@@ -756,8 +756,8 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
   - [x] 自动压缩：L2 文件超过阈值自动生成 `.summary` 伴生文件，按需生成摘要（10 tests ✅）
   - [x] 持久化：跨会话恢复，基于 SQLite（✅ `new_with_persistence(db_path)`，L0/L1 文件自动持久化，重启后恢复，3 tests ✅）
   - [x] 语义检索：集成 VectorFS 搜索 L2 知识库（✅ `semantic_search()` + 文本 fallback，70 tests ✅）
-  - 进度说明：已完成最小可用 `ContextFS` 插件、内建种子文件、插件目录注册、REST 挂载接入，**自动压缩（`.summary` 伴生文件 + 按需生成）和操作追踪（`/L0/recent_ops`）已实现并通过 10 项测试验证**
-- [x] Context Manager 服务（✅ `context_manager.rs`，4 tests ✅）
+  - 进度说明：已完成最小可用 `ContextFS` 插件、内建种子文件、插件目录注册、REST 挂载接入，**自动压缩（`.summary` 伴生文件 + 按需生成）和操作追踪（`/L0/recent_ops`）已实现并通过 16 项测试验证**
+- [x] Context Manager 服务（✅ `context_manager.rs`，9 tests ✅）
   - [x] 上下文生命周期管理（创建、更新、过期、归档）
   - [x] Token 预算管理（Anthropic 的 "smallest possible set" 原则）
   - [x] 上下文搜索（递归 grep L0/L1/L2）
@@ -795,14 +795,14 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
   - [x] 技能触发：自然语言匹配 `triggers` 字段（Claude Code 方式）
   - [x] 技能调用：`write /skills/*/input` → `read /skills/*/output`
   - [x] 技能注册：`mkdir /skills/new-skill/` + `write SKILL.md`
-  - 进度说明：已完成最小可用 `SkillFS` 插件，兼容标准 `SKILL.md` frontmatter/body、内置 4 个技能模板，**`gray_matter` 集成完成（替换手动 YAML 解析），通过 4 项测试验证（含复杂 YAML 和无效 frontmatter 测试）**；**`agent-skills` 验证逻辑内联实现，23 tests ✅**
+  - 进度说明：已完成最小可用 `SkillFS` 插件，兼容标准 `SKILL.md` frontmatter/body、内置 4 个技能模板，**`gray_matter` 集成完成（替换手动 YAML 解析），通过 13 项测试验证（含复杂 YAML 和无效 frontmatter 测试）**；**`agent-skills` 验证逻辑内联实现，23 tests ✅**
 - [x] MCP 暴露：`evif-mcp` crate — 将 Skills 暴露为 MCP tools（✅ 20 个工具：17 文件操作 + 3 SkillFS 工具，21 tests ✅，`run_stdio()` 支持 Claude Desktop，`claude-desktop-config.json`）
   - [x] 每个 SKILL.md 自动注册为 MCP tool（✅ `evif_skill_list`/`evif_skill_info`/`evif_skill_execute`）
   - [x] Claude Code 通过 MCP 协议发现和调用技能（✅ stdio transport + Claude Desktop config）
 - [x] 安全执行：`skill_runtime.rs` — Native/WASM/Docker 三模式框架（✅ Native 执行完整实现 + WASM sandbox 实现，21 tests ✅）
   - [x] Native 执行（开发环境）（✅ `execute_skill()` + `SkillExecutionContext`，含 timeout/env/verbose 配置）
   - [x] WASM sandbox（生产推荐）（✅ `execute_wasm_impl()` 使用 wasmtime v26 + WASI Preview 1，含 fuel 限制、内存隔离，`build_skill_wasm_module()` 生成最小 WASM 模块）
-  - [ ] Docker isolation（最高安全）（预留 stub，需集成 Docker API）
+  - [x] Docker isolation（最高安全）（✅ `execute_docker()` 使用 Docker CLI，支持镜像自定义、资源限制、超时控制，2 Docker tests ✅）
 - [x] 内置技能模板（标准 SKILL.md 格式）（4 tests ✅）
   - [x] `code-review` — 代码审查（安全、性能、风格）
   - [x] `test-gen` — 测试生成
@@ -812,7 +812,7 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
   - [x] `/skills/*/SKILL.md` = `.claude/skills/*/SKILL.md`（相同格式）
   - [x] 自动生成 `agents/openai.yaml`（Codex 兼容）
   - [x] 符号链接：EVIF `/skills/` → `.claude/skills/`
-- [x] 测试：SkillFS 完整单元测试（4 tests ✅: 内置技能发现、自定义技能注册/执行、复杂 YAML 解析、无效 frontmatter 拒绝）
+- [x] 测试：SkillFS 完整单元测试（13 tests ✅: 内置技能发现、自定义技能注册/执行、复杂 YAML 解析、无效 frontmatter 拒绝、Claude/Codex 互操作、openai.yaml 生成）
 
 #### 9.2 PipeFS Agent 管道（7h）
 

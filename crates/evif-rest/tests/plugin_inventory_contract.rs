@@ -36,14 +36,17 @@ async fn test_available_plugins_separate_core_and_experimental_inventory() {
         .map(|plugin| plugin["id"].as_str().expect("plugin id"))
         .collect();
     let expected_core_ids = BTreeSet::from([
+        "contextfs",
         "heartbeatfs",
         "hellofs",
         "kvfs",
         "localfs",
         "memfs",
+        "pipefs",
         "proxyfs",
         "queuefs",
         "serverinfofs",
+        "skillfs",
         "sqlfs2",
         "streamfs",
     ]);
