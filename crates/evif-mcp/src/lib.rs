@@ -1175,33 +1175,138 @@ impl EvifMcpServer {
 
     /// 处理 JSON-RPC 请求
     async fn handle_request(&self, request: Value) -> Value {
-        // 简化的 JSON-RPC 处理
+        // 标准 MCP 协议方法处理
         if let Some(method) = request.get("method").and_then(|m| m.as_str()) {
-            if let Some(params) = request.get("params") {
-                match self.call_tool(method, params.clone()).await {
-                    Ok(result) => json!({
+            let id = request.get("id");
+            let params = request.get("params");
+
+            match method {
+                // 初始化 - Claude Code CLI 健康检查需要此方法
+                "initialize" => {
+                    let client_info = params
+                        .and_then(|p| p.get("clientInfo"))
+                        .map(|c| c.clone())
+                        .unwrap_or(json!({}));
+                    tracing::info!("MCP client initializing: {:?}", client_info);
+                    return json!({
                         "jsonrpc": "2.0",
-                        "result": result,
-                        "id": request.get("id")
-                    }),
-                    Err(error) => json!({
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32000,
-                            "message": error
+                        "result": {
+                            "protocolVersion": "2024-11-05",
+                            "capabilities": {
+                                "tools": {},
+                                "resources": {}
+                            },
+                            "serverInfo": {
+                                "name": self.config.server_name,
+                                "version": self.config.version
+                            }
                         },
-                        "id": request.get("id")
-                    }),
+                        "id": id
+                    });
                 }
-            } else {
-                json!({
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32602,
-                        "message": "Invalid params"
-                    },
-                    "id": request.get("id")
-                })
+
+                // 工具列表
+                "tools/list" => {
+                    let tools = self.list_tools().await;
+                    return json!({
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "tools": tools.into_iter().map(|t| {
+                                json!({
+                                    "name": t.name,
+                                    "description": t.description,
+                                    "inputSchema": t.input_schema
+                                })
+                            }).collect::<Vec<_>>()
+                        },
+                        "id": id
+                    });
+                }
+
+                // 资源列表
+                "resources/list" => {
+                    let resources = self.list_resources().await;
+                    return json!({
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "resources": resources.into_iter().map(|r| {
+                                json!({
+                                    "uri": r.uri,
+                                    "name": r.name,
+                                    "description": r.description,
+                                    "mimeType": r.mime_type
+                                })
+                            }).collect::<Vec<_>>()
+                        },
+                        "id": id
+                    });
+                }
+
+                // prompts/list
+                "prompts/list" => {
+                    let prompts = self.list_prompts().await;
+                    return json!({
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "prompts": prompts.into_iter().map(|p| {
+                                json!({
+                                    "name": p.name,
+                                    "description": p.description,
+                                    "arguments": p.arguments
+                                })
+                            }).collect::<Vec<_>>()
+                        },
+                        "id": id
+                    });
+                }
+
+                // ping
+                "ping" => {
+                    return json!({
+                        "jsonrpc": "2.0",
+                        "result": {},
+                        "id": id
+                    });
+                }
+
+                // shutdown
+                "shutdown" => {
+                    return json!({
+                        "jsonrpc": "2.0",
+                        "result": {},
+                        "id": id
+                    });
+                }
+
+                _ => {
+                    // 其他方法尝试作为工具调用
+                    if let Some(p) = params {
+                        match self.call_tool(method, p.clone()).await {
+                            Ok(result) => json!({
+                                "jsonrpc": "2.0",
+                                "result": result,
+                                "id": id
+                            }),
+                            Err(error) => json!({
+                                "jsonrpc": "2.0",
+                                "error": {
+                                    "code": -32000,
+                                    "message": error
+                                },
+                                "id": id
+                            }),
+                        }
+                    } else {
+                        json!({
+                            "jsonrpc": "2.0",
+                            "error": {
+                                "code": -32602,
+                                "message": "Invalid params"
+                            },
+                            "id": id
+                        })
+                    }
+                }
             }
         } else {
             json!({

@@ -16,6 +16,10 @@ path = "src/test_s3.rs"
 name = "test_china_cloud"
 path = "src/test_china_cloud.rs"
 
+[[bin]]
+name = "evif_integration"
+path = "src/evif_integration.rs"
+
 [dependencies]
 evif-plugins = { path = "../crates/evif-plugins", features = [
     "opendal",
