@@ -756,7 +756,7 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
   - [x] 自动压缩：L2 文件超过阈值自动生成 `.summary` 伴生文件，按需生成摘要（10 tests ✅）
   - [x] 持久化：跨会话恢复，基于 SQLite（✅ `new_with_persistence(db_path)`，L0/L1 文件自动持久化，重启后恢复，3 tests ✅）
   - [x] 语义检索：集成 VectorFS 搜索 L2 知识库（✅ `semantic_search()` + 文本 fallback，70 tests ✅）
-  - 进度说明：已完成最小可用 `ContextFS` 插件、内建种子文件、插件目录注册、REST 挂载接入，**自动压缩（`.summary` 伴生文件 + 按需生成）和操作追踪（`/L0/recent_ops`）已实现并通过 16 项测试验证**
+  - 进度说明：已完成最小可用 `ContextFS` 插件、内建种子文件、插件目录注册、REST 挂载接入，**自动压缩（`.summary` 伴生文件 + 按需生成）和操作追踪（`/L0/recent_ops`）已实现并通过 16 项测试验证**，**ContextFS/SkillFS/PipeFS 已添加到 REST API 默认挂载（`/context`、`/skills`、`/pipes`），开箱即用**
 - [x] Context Manager 服务（✅ `context_manager.rs`，9 tests ✅）
   - [x] 上下文生命周期管理（创建、更新、过期、归档）
   - [x] Token 预算管理（Anthropic 的 "smallest possible set" 原则）

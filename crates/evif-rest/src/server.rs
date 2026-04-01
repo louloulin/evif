@@ -233,6 +233,27 @@ fn load_mount_config() -> Vec<MountConfigEntry> {
             config: Some(serde_json::json!({ "root": "/tmp/evif-local" })),
             instance_name: None,
         },
+        // Phase 8-9: Context Engine 默认挂载
+        MountConfigEntry {
+            path: "/context".to_string(),
+            plugin: "contextfs".to_string(),
+            config: None,
+            instance_name: None,
+        },
+        // Phase 9: SkillFS 默认挂载
+        MountConfigEntry {
+            path: "/skills".to_string(),
+            plugin: "skillfs".to_string(),
+            config: None,
+            instance_name: None,
+        },
+        // Phase 9: PipeFS 默认挂载
+        MountConfigEntry {
+            path: "/pipes".to_string(),
+            plugin: "pipefs".to_string(),
+            config: None,
+            instance_name: None,
+        },
     ]
 }
 
@@ -572,5 +593,30 @@ config = { root = "/tmp/test" }
         let invalid = "not a valid config";
         let result = parse_mounts_from_string(invalid);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_default_mounts_include_contextfs_skillfs_pipefs() {
+        // 清除环境变量和配置文件，确保使用默认挂载
+        std::env::remove_var("EVIF_CONFIG");
+        std::env::remove_var("EVIF_MOUNTS");
+
+        // 测试默认挂载包含 contextfs, skillfs, pipefs
+        let mounts = load_mount_config();
+        let paths: Vec<&str> = mounts.iter().map(|m| m.path.as_str()).collect();
+
+        assert!(paths.contains(&"/context"), "Default mounts should include /context");
+        assert!(paths.contains(&"/skills"), "Default mounts should include /skills");
+        assert!(paths.contains(&"/pipes"), "Default mounts should include /pipes");
+
+        // 验证插件名称
+        let context_mount = mounts.iter().find(|m| m.path == "/context").unwrap();
+        assert_eq!(context_mount.plugin, "contextfs");
+
+        let skills_mount = mounts.iter().find(|m| m.path == "/skills").unwrap();
+        assert_eq!(skills_mount.plugin, "skillfs");
+
+        let pipes_mount = mounts.iter().find(|m| m.path == "/pipes").unwrap();
+        assert_eq!(pipes_mount.plugin, "pipefs");
     }
 }
