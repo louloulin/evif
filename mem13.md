@@ -750,12 +750,13 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 #### 8.1 ContextFS 插件（12h）
 
 - [ ] `ContextFS` 插件实现
-  - [ ] L0 即时层：`/context/L0/current`、`/context/L0/active_files/`
-  - [ ] L1 会话层：`/context/L1/decisions.md`、`/context/L1/scratch/`
-  - [ ] L2 知识层：`/context/L2/architecture.md`、`/context/L2/patterns.md`
+  - [x] L0 即时层：`/context/L0/current`、`/context/L0/active_files/`
+  - [x] L1 会话层：`/context/L1/decisions.md`、`/context/L1/scratch/`
+  - [x] L2 知识层：`/context/L2/architecture.md`、`/context/L2/patterns.md`
   - [ ] 自动压缩：长文件 → 摘要 + 关键信息（L2 → L1 → L0）
   - [ ] 持久化：跨会话恢复，基于 SQLite + evif-mem
   - [ ] 语义检索：集成 VectorFS 搜索 L2 知识库
+  - 进度说明：已完成最小可用 `ContextFS` 插件、内建种子文件、插件目录注册、REST 挂载接入，并通过新增插件测试与 REST 集成测试验证
 - [ ] Context Manager 服务
   - [ ] 上下文生命周期管理（创建、更新、过期、归档）
   - [ ] Token 预算管理（Anthropic 的 "smallest possible set" 原则）
@@ -764,23 +765,23 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 
 #### 8.2 Claude Code 集成指南（4h）
 
-- [ ] `CLAUDE.md` 模板 — EVIF 项目快速上手
-- [ ] FUSE 挂载 + Claude Code 工作流示例
-- [ ] `/context` 目录使用最佳实践文档
-- [ ] 多 Agent 协调示例（QueueFS + PipeFS）
+- [x] `CLAUDE.md` 模板 — EVIF 项目快速上手
+- [x] FUSE 挂载 + Claude Code 工作流示例
+- [x] `/context` 目录使用最佳实践文档
+- [x] 多 Agent 协调示例（QueueFS + PipeFS）
 
 #### 8.3 Codex CLI 集成指南（2h）
 
-- [ ] `AGENTS.md` 模板 — EVIF + Codex 配置
-- [ ] `agents/openai.yaml` 技能定义
-- [ ] REST API + Codex 工作流示例
+- [x] `AGENTS.md` 模板 — EVIF + Codex 配置
+- [x] `agents/openai.yaml` 技能定义
+- [x] REST API + Codex 工作流示例
 
 #### 8.4 README.md 重写（2h）
 
-- [ ] "Context FileSystem for AI Agents" 定位叙事
-- [ ] 架构图（三层：Agent Access → Core → Plugins）
-- [ ] 快速上手：3 分钟搭建 EVIF + Claude Code 环境
-- [ ] 30 秒演示：ls /context → cat /context/L0/current → write decision
+- [x] "Context FileSystem for AI Agents" 定位叙事
+- [x] 架构图（三层：Agent Access → Core → Plugins）
+- [x] 快速上手：3 分钟搭建 EVIF + Claude Code 环境
+- [x] 30 秒演示：ls /context → cat /context/L0/current → write decision
 
 ### Phase 9: SkillFS + PipeFS（Agent 协作，P1，预估 15h）
 
@@ -789,10 +790,11 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 - [ ] `SkillFS` 插件实现（使用标准 SKILL.md 格式，不发明自定义格式）
   - [ ] 集成 `agent-skills` crate — 解析和验证 SKILL.md
   - [ ] 集成 `gray_matter` crate — YAML frontmatter 提取
-  - [ ] 技能发现：`ls /skills/` + `cat /skills/*/SKILL.md`
-  - [ ] 技能触发：自然语言匹配 `triggers` 字段（Claude Code 方式）
-  - [ ] 技能调用：`write /skills/*/input` → `read /skills/*/output`
-  - [ ] 技能注册：`mkdir /skills/new-skill/` + `write SKILL.md`
+  - [x] 技能发现：`ls /skills/` + `cat /skills/*/SKILL.md`
+  - [x] 技能触发：自然语言匹配 `triggers` 字段（Claude Code 方式）
+  - [x] 技能调用：`write /skills/*/input` → `read /skills/*/output`
+  - [x] 技能注册：`mkdir /skills/new-skill/` + `write SKILL.md`
+  - 进度说明：已完成最小可用 `SkillFS` 插件，兼容标准 `SKILL.md` frontmatter/body、内置 4 个技能模板，并通过插件行为测试与 REST 挂载测试验证
 - [ ] MCP 暴露：集成 `rmcp` crate — 将 Skills 暴露为 MCP tools
   - [ ] 每个 SKILL.md 自动注册为 MCP tool
   - [ ] Claude Code 通过 MCP 协议发现和调用技能
@@ -801,26 +803,27 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
   - [ ] WASM sandbox（生产推荐）
   - [ ] Docker isolation（最高安全）
 - [ ] 内置技能模板（标准 SKILL.md 格式）
-  - [ ] `code-review` — 代码审查（安全、性能、风格）
-  - [ ] `test-gen` — 测试生成
-  - [ ] `doc-gen` — 文档生成
-  - [ ] `refactor` — 代码重构建议
+  - [x] `code-review` — 代码审查（安全、性能、风格）
+  - [x] `test-gen` — 测试生成
+  - [x] `doc-gen` — 文档生成
+  - [x] `refactor` — 代码重构建议
 - [ ] 与 Claude Code/Codex 互操作
   - [ ] `/skills/*/SKILL.md` = `.claude/skills/*/SKILL.md`（相同格式）
   - [ ] 自动生成 `agents/openai.yaml`（Codex 兼容）
   - [ ] 符号链接：EVIF `/skills/` → `.claude/skills/`
-- [ ] 测试：SkillFS 完整单元测试
+- [x] 测试：SkillFS 完整单元测试
 
 #### 9.2 PipeFS Agent 管道（7h）
 
 - [ ] `PipeFS` 插件实现
-  - [ ] 创建管道：`mkdir /pipes/task-001`
-  - [ ] 双向通信：`input`/`output` 文件
-  - [ ] 状态监控：`status` 文件（pending → running → completed/failed）
-  - [ ] 超时和自动清理
-  - [ ] 广播模式：`/pipes/broadcast/` 一写多读
+  - [x] 创建管道：`mkdir /pipes/task-001`
+  - [x] 双向通信：`input`/`output` 文件
+  - [x] 状态监控：`status` 文件（pending → running → completed/failed）
+  - [x] 超时和自动清理
+  - [x] 广播模式：`/pipes/broadcast/` 一写多读
+  - 进度说明：已完成最小可用 `PipeFS` 插件，支持管道状态流转、subscriber 广播和超时清理，并通过插件行为测试与 REST 挂载测试验证
 - [ ] 基于 QueueFS 扩展（复用 Backend trait）
-- [ ] 测试：PipeFS 完整单元测试
+- [x] 测试：PipeFS 完整单元测试
 
 ### Phase 10: 开发者生态（P1，预估 25h）
 
@@ -874,14 +877,14 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 
 ## 八、关键设计决策
 
-### 7.1 为什么弱化 MCP？
+### 9.1 为什么弱化 MCP？
 
 1. **Claude Code 的实际工作方式**：使用 glob/grep/head/tail/read/write，不是 MCP 工具
 2. **Anthropic 自己的验证**："primitives like glob and grep allow it to navigate its environment just-in-time"
 3. **MCP 的扩展性问题**：100+ 工具时 context burn 和成本暴增（Tool-RAG 正在解决）
 4. **通用性**：ls/cat/grep 任何 LLM 都懂，MCP 需要专门的客户端支持
 
-### 7.2 为什么 Skills 必须完全兼容 Claude Code/Codex 协议？
+### 9.2 为什么 Skills 必须完全兼容 Claude Code/Codex 协议？
 
 1. **开放标准已存在**：Claude Code 的 `SKILL.md` 和 Codex 的 `SKILL.md` 使用完全相同的格式
 2. **Rust 生态已就绪**：
@@ -894,7 +897,7 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 4. **不应自造格式**：自定义 `manifest.yaml` 会导致生态割裂，用户需要学习两套格式
 5. **实证数据**：Meta-Tool 论文证明组合式工具减少 11.9% LLM 调用
 
-### 7.3 为什么 Context Engine 是核心？
+### 9.3 为什么 Context Engine 是核心？
 
 1. **OpenViking 已证明**：L0/L1/L2 分层加载是解决上下文窗口限制的有效方法
 2. **Anthropic 推荐**：Compaction + Structured Note-taking + Sub-agent 都依赖上下文管理
@@ -905,7 +908,7 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 
 ## 九、Rust Skills 生态（直接集成）
 
-### 8.1 已有的 Rust Skills 生态
+### 10.1 已有的 Rust Skills 生态
 
 | Crate | 功能 | 版本 | 下载量 | 用途 |
 |-------|------|------|--------|------|
@@ -918,7 +921,7 @@ Docker  → 隔离执行：通过 skill-runtime crate（最安全）
 | `rig-core` | LLM Agent 框架+工具调用 | published | — | LLM 集成层 |
 | `codex-rs` | OpenAI Codex Rust 参考 | production | — | 参考实现 |
 
-### 8.2 集成架构
+### 10.2 集成架构
 
 ```
 EVIF SkillFS
@@ -943,7 +946,7 @@ EVIF SkillFS
     └── SKILL.md 转换器         → 双向兼容（如果格式有差异）
 ```
 
-### 8.3 实施策略：直接使用现有 crate
+### 10.3 实施策略：直接使用现有 crate
 
 **Phase 9 SkillFS 实施变更**：
 
@@ -984,22 +987,6 @@ skill-runtime = "0.3"      # 技能执行引擎（WASM/Docker/Native）
 - [gray_matter crate](https://crates.io/crates/gray_matter) — YAML frontmatter 提取
 - [codex-rs — OpenAI Codex Rust 实现](https://github.com/openai/codex/blob/main/codex-rs/README.md)
 - [agent-skills CLI](https://lib.rs/crates/agent-skills-cli)
-
-### OpenClaw / AI Agent 痛点
-- [OpenClaw GitHub Repository](https://github.com/openclaw/openclaw) — 145K+ stars 开源 AI Agent 框架
-- [OpenClaw Context Docs](https://docs.openclaw.ai/concepts/context) — 上下文管理官方文档
-- [OpenClaw Memory Docs](https://docs.openclaw.ai/concepts/memory) — 内存系统官方文档
-- [OpenClaw Proves Agents Work — But Exposes the Context Gap (Tacnode)](https://tacnode.io/post/openclaw-and-the-context-gap) — Context Gap 核心分析
-- [OpenClaw Deep Dive: Why It Went Viral](https://grapeot.me/openclaw-en.html) — 统一内存问题分析
-- [We Extracted OpenClaw's Memory System (Milvus)](https://milvus.io/blog/we-extracted-openclaws-memory-system-and-opensourced-it-memsearch.md) — memsearch 独立库
-- [OpenClaw Memory Architecture (coolmanns)](https://github.com/coolmanns/openclaw-memory-architecture) — 多层内存系统
-- [GitHub Issue #43747: Memory management is in chaos](https://github.com/openclaw/openclaw/issues/43747) — 内存管理混乱问题
-- [GitHub Issue #24031: contextTokens not used as compaction trigger](https://github.com/openclaw/openclaw/issues/24031) — 压缩时机错误
-- [GitHub Issue #44303: Switching to smaller-context model causes crash](https://github.com/openclaw/openclaw/issues/44303) — 上下文不匹配崩溃
-- [OpenClaw Security: Architecture and Hardening Guide (Nebius)](https://nebius.com/blog/posts/openclaw-security) — 安全分析
-- [Context Is AI Coding's Real Bottleneck in 2026 (The New Stack)](https://thenewstack.io/context-is-ai-codings-real-bottleneck-in-2026/) — 上下文瓶颈分析
-- [OpenHands Context Condensation](https://openhands.dev/blog/openhands-context-condensensation-for-more-efficient-ai-agents) — 上下文压缩实践
-- [AI Agent Security in 2026 (Beam AI)](https://beam.ai/ar/agentic-insights/ai-agent-security-in-2026-the-risks-most-enterprises-still-ignore) — 企业安全风险
 
 ### OpenClaw / AI Agent 痛点
 - [OpenClaw GitHub Repository](https://github.com/openclaw/openclaw) — 145K+ stars 开源 AI Agent 框架
