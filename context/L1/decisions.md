@@ -13,3 +13,9 @@
 - 2026-04-02：先新增 `request_identity.rs` 集成测试并确认当前服务既不会生成 `x-request-id`，也不会透传客户端提供的 `x-request-id / x-correlation-id`，再补充 RequestIdentityMiddleware、全路由接线以及 CORS 允许/暴露头。
 - 2026-04-02：Phase B 第四个最小子项选择“关键路由 success/error/latency 指标”而不是 tracing_subscriber 初始化，因为当前 `/metrics` 只能看请求量级，仍缺少问题定位最需要的成功率、错误率和时延信号；该缺口可以用真实 HTTP 抓取直接验证。
 - 2026-04-02：先新增 `metrics_prometheus_endpoint_exposes_success_error_and_latency_by_operation` 集成测试并确认 `/metrics` 尚未导出按 operation 维度的成功数、错误数和时延指标，再将这些指标真实接到 TrafficMetricsMiddleware 和 Prometheus 文本导出，同时修正 `/api/v1/metrics/operations` 的错误计数口径。
+- 2026-04-02：Phase B 最后一个最小子项选择 `tracing_subscriber` 启动初始化，并以真实二进制启动日志作为完成信号；因为 `evif-rest` 已有 `info!` 启动日志但入口未初始化 subscriber，改动面最小且可直接验证。
+- 2026-04-02：先新增 `tracing_init.rs` 集成测试并确认 `evif-rest` 二进制启动时没有任何日志输出；补上 `main.rs` 中基于 `RUST_LOG` 的 `tracing_subscriber::fmt()` 初始化后，进一步分析发现日志实际输出到 `stdout` 而非测试最初假设的 `stderr`，因此同步修正验证口径并确认启动日志真实出现。
+- 2026-04-02：进入 Phase A 后，先用 `cargo clippy -p evif-rest --all-targets -- -D warnings` 和 `--no-deps` 复核真实失败面，确认“只修 evif-rest”并不能形成最小闭环，因为路径依赖 `evif-core/evif-auth` 仍会一起挡住门禁。
+- 2026-04-02：因此将 Phase A 的最佳最小子项调整为 `evif-auth derivable_impls`，这是 mem15 明确列出的独立任务，改动面最小且验证最直接；真实验证命令为 `cargo clippy -p evif-auth --all-targets -- -D warnings` 与 `cargo test -p evif-auth --all-targets -- --nocapture`。
+- 2026-04-03：在完成 `evif-auth` 后，继续用 `cargo clippy -p evif-rest --all-targets --no-deps --message-format short -- -D warnings` 抽取 `evif-rest` 自身失败面，并按“先库代码、再测试代码”两批收口 unused import / dead code / module cleanliness。
+- 2026-04-03：`cargo clippy -p evif-rest --all-targets --no-deps -- -D warnings` 仍会打印依赖 crate warning，因此对 `evif-rest` 子项的完成验证改用“过滤后无 `crates/evif-rest` 诊断”加 `cargo test -p evif-rest --lib --tests --quiet` 全绿的组合口径；这代表 `evif-rest` 自身门禁已清理完毕，但全 workspace Phase A 仍未完成。

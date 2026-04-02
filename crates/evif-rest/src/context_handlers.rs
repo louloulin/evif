@@ -2,7 +2,7 @@
 
 use crate::{RestError, RestResult};
 use axum::{
-    extract::{Path, State},
+    extract::State,
     Json,
 };
 use evif_plugins::{ContextManager, SemanticResult};

@@ -93,8 +93,8 @@ impl EncryptionState {
 
     fn create_cipher(key: &str) -> Result<Aes256Gcm, String> {
         // Support "env:NAME" format
-        let key = if key.starts_with("env:") {
-            std::env::var(&key[4..]).map_err(|_| "Environment variable not set")?
+        let key = if let Some(env_name) = key.strip_prefix("env:") {
+            std::env::var(env_name).map_err(|_| "Environment variable not set")?
         } else {
             key.to_string()
         };
@@ -124,8 +124,8 @@ impl EncryptionState {
 
     pub async fn enable(&self, key: String) -> Result<EncryptionConfig, String> {
         let cipher = Self::create_cipher(&key)?;
-        let key_source = if key.starts_with("env:") {
-            format!("env:{} (enabled)", &key[4..])
+        let key_source = if let Some(env_name) = key.strip_prefix("env:") {
+            format!("env:{} (enabled)", env_name)
         } else {
             "provided".to_string()
         };

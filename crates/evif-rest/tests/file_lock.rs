@@ -25,7 +25,7 @@ async fn file_lock_acquisition() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -71,7 +71,7 @@ async fn file_lock_release() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -116,7 +116,7 @@ async fn file_lock_list() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }

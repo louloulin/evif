@@ -518,7 +518,7 @@ mod tests {
         let event = AuditEvent::new(AuditEventType::AccessGranted, "Test event".to_string());
 
         assert_eq!(event.details, "Test event");
-        assert_eq!(event.success, true);
+        assert!(event.success);
         assert!(event.principal_id.is_none());
         assert!(event.resource_id.is_none());
     }
@@ -536,7 +536,7 @@ mod tests {
 
         assert_eq!(event.principal_id, Some(principal_id));
         assert_eq!(event.resource_id, Some(resource_id));
-        assert_eq!(event.success, false);
+        assert!(!event.success);
         assert_eq!(event.ip_address, Some("127.0.0.1".to_string()));
     }
 
@@ -557,7 +557,6 @@ mod tests {
     fn test_audit_filter() {
         let logger = MemoryAuditLogger::new();
         let principal_id = uuid::Uuid::new_v4();
-        let resource_id = uuid::Uuid::new_v4();
 
         // 添加不同类型的事件
         let event1 = AuditEvent::new(AuditEventType::AccessGranted, "Granted".to_string())

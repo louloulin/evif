@@ -15,8 +15,7 @@ use axum::{
     Json, Router,
 };
 use evif_core::{
-    BatchCopyRequest, BatchDeleteRequest, BatchExecutor, BatchProgress, BatchResult, EvifResult,
-    RadixMountTable,
+    BatchCopyRequest, BatchDeleteRequest, BatchExecutor, BatchProgress, RadixMountTable,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -126,7 +125,7 @@ impl BatchOperationManager {
     }
 
     /// 标记操作完成
-    pub fn mark_completed(&self, id: &str, result: Option<String>) {
+    pub fn mark_completed(&self, id: &str, _result: Option<String>) {
         if let Some(mut info) = self.get_operation(id) {
             info.status = OperationStatus::Completed;
             info.progress = 100.0;
@@ -192,6 +191,12 @@ impl BatchOperationManager {
     }
 }
 
+impl Default for BatchOperationManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// 请求体：批量复制
 #[derive(Debug, Deserialize)]
 pub struct BatchCopyRequestJson {
@@ -245,7 +250,7 @@ pub async fn handle_batch_copy(
         destination: data.destination.clone(),
         recursive: data.recursive,
         overwrite: data.overwrite,
-        concurrency: data.concurrency.max(1).min(64),
+        concurrency: data.concurrency.clamp(1, 64),
     };
 
     // 执行实际的批量复制操作
@@ -317,7 +322,7 @@ pub async fn handle_batch_delete(
     let delete_req = BatchDeleteRequest {
         paths: data.paths.clone(),
         recursive: data.recursive,
-        concurrency: data.concurrency.max(1).min(64),
+        concurrency: data.concurrency.clamp(1, 64),
     };
 
     // 执行实际的批量删除操作

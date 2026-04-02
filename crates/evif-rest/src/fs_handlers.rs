@@ -4,21 +4,16 @@
 // 提供文件系统操作的完整 HTTP 接口
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Query, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
-use evif_core::{EvifPlugin, FileInfo, MountTable, OpenFlags, WriteFlags};
+use evif_core::{EvifPlugin, FileInfo, MountTable, WriteFlags};
 
 // 导入哈希库
 use base64::{engine::general_purpose, Engine as _};
-use digest::Digest;
-use md5;
-use sha2::{Sha256, Sha512};
-
 /// 应用状态
 #[derive(Clone)]
 pub struct FsState {
@@ -86,14 +81,6 @@ pub struct SymlinkRequest {
 pub struct DigestParams {
     pub path: String,
     pub algorithm: Option<String>, // md5, sha256, xxh3
-}
-
-/// Grep搜索参数
-#[derive(Debug, Deserialize)]
-pub struct GrepParams {
-    pub path: String,
-    pub pattern: String,
-    pub max_results: Option<usize>,
 }
 
 /// 流式操作参数
@@ -537,7 +524,7 @@ impl FsHandlers {
         let hash = match algorithm.to_lowercase().as_str() {
             "md5" => {
                 // md5 crate 0.7 有API变化,暂时跳过
-                format!("md5 not implemented")
+                "md5 not implemented".to_string()
             }
             "sha256" => {
                 use digest::Digest;

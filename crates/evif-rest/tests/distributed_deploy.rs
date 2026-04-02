@@ -25,7 +25,7 @@ async fn distributed_status_endpoint() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -68,7 +68,7 @@ async fn distributed_ping_post() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -107,7 +107,7 @@ async fn distributed_ping_get() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -146,7 +146,7 @@ async fn distributed_status_ready() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -184,7 +184,7 @@ async fn distributed_ping_latency() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }

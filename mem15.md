@@ -73,15 +73,33 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - 指标真实接在 `TrafficMetricsMiddleware` 上，由真实 HTTP 请求驱动
   - `/api/v1/metrics/operations` 的 `errors` 口径已修正为按操作维度统计，而非只让 `read` 读取全局错误数
   - 新增集成测试：`metrics_prometheus_endpoint_exposes_success_error_and_latency_by_operation`
+- [x] 已实现：Phase B 最小闭环中的 **`tracing_subscriber` 启动初始化**
+  - `evif-rest` 入口现在已初始化 `tracing_subscriber::fmt()`，支持通过 `RUST_LOG` 控制日志级别
+  - 启动日志已在真实二进制运行时输出
+  - 本轮分析额外确认：该默认格式化 subscriber 的输出流是 `stdout`，因此黑盒验证按真实输出流修正
+  - 新增集成测试：`tracing_init.rs`
+- [x] 已实现：Phase A 最小闭环中的 **`evif-auth` derivable_impls**
+  - `AuthPolicy` 已改为 `#[derive(Default)]` 并显式将 `Strict` 标记为 `#[default]`
+  - 顺手清理了同轮 clippy 暴露的 bench 冗余闭包、布尔断言写法、测试残留未用变量
+  - 新增真实门禁验证：`cargo clippy -p evif-auth --all-targets -- -D warnings`
+- [x] 已实现：Phase A 最小闭环中的 **`evif-rest` clippy 清理**
+  - 已清理 `evif-rest` 自身的 unused import / unused variable / dead code / module cleanliness 等问题
+  - 真实收口了 GraphQL 占位状态、WASM 条件编译请求、collab 权限映射、middleware clippy 样式项，以及多组测试中的 `reqwest` 多余借用
+  - 过滤后的 `--no-deps` clippy 已无 `crates/evif-rest` 诊断
 - [x] 真实验证：
   - `cargo test -p evif-rest --test metrics_traffic metrics_traffic_counts_real_requests -- --nocapture`
   - `cargo test -p evif-rest --test metrics_traffic metrics_prometheus_endpoint_exposes_standard_text_format -- --nocapture`
   - `cargo test -p evif-rest --test request_identity -- --nocapture`
   - `cargo test -p evif-rest --test metrics_traffic metrics_prometheus_endpoint_exposes_success_error_and_latency_by_operation -- --nocapture`
+  - `cargo test -p evif-rest --test tracing_init rest_binary_emits_startup_logs_when_started -- --nocapture`
+  - `cargo clippy -p evif-auth --all-targets -- -D warnings`
+  - `cargo test -p evif-auth --all-targets -- --nocapture`
+  - `cargo clippy -p evif-rest --all-targets --no-deps --message-format short -- -D warnings 2>&1 | rg '^crates/evif-rest|^benches/'`
   - `cargo test -p evif-rest --lib --tests --quiet`
 - [x] 当前进度：
-  - **Phase B = 80%**（5 个明确子项中完成 4 项）
-  - **mem15 总路线图 = 13.8%**（按 Phase A-F 共 29 个明确子项估算，当前完成 4 项）
+  - **Phase A = 50%**（4 个明确子项中完成 2 项）
+  - **Phase B = 100%**（5 个明确子项中完成 5 项）
+  - **mem15 总路线图 = 24.1%**（按 Phase A-F 共 29 个明确子项估算，当前完成 7 项）
 
 ---
 
@@ -385,13 +403,26 @@ cargo clippy -p evif-rest --all-targets -- -D warnings
 优先任务：
 
 - 修复 `evif-core` 的未使用 import / dead code / clippy 提示
-- 修复 `evif-auth` 的 `derivable_impls`
-- 修复 `evif-rest` 的 unused import / dead code / module cleanliness
+- [x] 修复 `evif-auth` 的 `derivable_impls`
+- [x] 修复 `evif-rest` 的 unused import / dead code / module cleanliness
 - 让下面命令通过：
 
 ```bash
 cargo clippy --workspace --all-targets -- -D warnings
 ```
+
+**当前实现：50%**
+
+- 已完成最小闭环：
+  - `evif-auth` 的 `AuthPolicy` 已改为 derive `Default`
+  - `Strict` 已显式标记为默认策略，满足 clippy `derivable_impls`
+  - 同轮顺带清理了 `auth_bench` 的冗余闭包和 `audit.rs` 测试中的 clippy 问题
+  - 真实验证通过：`cargo clippy -p evif-auth --all-targets -- -D warnings`
+  - 真实验证通过：`cargo test -p evif-auth --all-targets -- --nocapture`
+  - `evif-rest` 自身的 clippy 失败面已清空
+  - 已收口库代码与测试代码中的 unused import / variable、dead code、manual clippy 样式问题
+  - 真实验证通过：过滤后的 `cargo clippy -p evif-rest --all-targets --no-deps --message-format short -- -D warnings 2>&1 | rg '^crates/evif-rest|^benches/'`
+  - 真实验证通过：`cargo test -p evif-rest --lib --tests --quiet`
 
 完成标准：
 
@@ -407,15 +438,18 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 优先任务：
 
-- 在 `evif-rest` 启动入口初始化 `tracing_subscriber`
+- [x] 在 `evif-rest` 启动入口初始化 `tracing_subscriber`
 - [x] 给请求接入 request id / correlation id
 - [x] 让 `TrafficStats::record_*` 真正接入业务 handler / 中间件路径
 - [x] 暴露标准 `/metrics` Prometheus 文本接口
 - [x] 为关键路由增加成功率、延迟、错误率统计
 
-**当前实现：80%**
+**当前实现：100%**
 
 - 已完成最小闭环：
+  - `evif-rest` 入口已初始化 `tracing_subscriber::fmt()`
+  - 已支持通过 `RUST_LOG` 控制日志级别
+  - 真实二进制启动日志验证通过：`rest_binary_emits_startup_logs_when_started`
   - 新增 `TrafficMetricsMiddleware`
   - 将真实 HTTP 请求统计接到 `TrafficStats`
   - `/api/v1/metrics/traffic` 已能反映真实读/写/列表/错误请求

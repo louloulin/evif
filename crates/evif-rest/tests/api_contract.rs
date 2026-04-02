@@ -138,12 +138,12 @@ async fn test_write_file_accepts_base64_encoding() {
     for i in 0..80 {
         tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
         let _ = client
-            .post(&format!("{}/api/v1/directories", base))
+            .post(format!("{}/api/v1/directories", base))
             .json(&serde_json::json!({ "path": "/mem" }))
             .send()
             .await;
         let _ = client
-            .post(&format!("{}/api/v1/files", base))
+            .post(format!("{}/api/v1/files", base))
             .json(&serde_json::json!({ "path": path }))
             .send()
             .await;
@@ -442,12 +442,12 @@ async fn test_key_path_mount_list_write_read_unmount() {
         }
         // 3. 创建目录占位、创建文件、写入、读取
         let _ = client
-            .post(&format!("{}/api/v1/directories", base))
+            .post(format!("{}/api/v1/directories", base))
             .json(&serde_json::json!({ "path": "/mkey" }))
             .send()
             .await;
         let _ = client
-            .post(&format!("{}/api/v1/files", base))
+            .post(format!("{}/api/v1/files", base))
             .json(&serde_json::json!({ "path": "/mkey/keypath.txt" }))
             .send()
             .await;

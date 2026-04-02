@@ -25,7 +25,7 @@ async fn tenant_list_endpoint() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -64,7 +64,7 @@ async fn tenant_create() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -109,7 +109,7 @@ async fn tenant_get_current() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -149,7 +149,7 @@ async fn tenant_get_by_id() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -208,7 +208,7 @@ async fn tenant_create_empty_name_error() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -250,7 +250,7 @@ async fn tenant_delete_non_default() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -299,7 +299,7 @@ async fn tenant_cannot_delete_default() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }

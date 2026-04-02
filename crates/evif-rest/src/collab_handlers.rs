@@ -239,6 +239,12 @@ impl CollabHandlers {
         let access_url = format!("/share/{}", id);
         let created_at = now_iso();
         let expires_at = req.expires_at.clone();
+        let _access_type = req.access_type;
+        let permissions: Vec<SharePermissionRecord> = req
+            .permissions
+            .into_iter()
+            .filter_map(|value| serde_json::from_value(value).ok())
+            .collect();
         let record = ShareRecord {
             id: id.clone(),
             file_id: req.file_id,
@@ -247,7 +253,7 @@ impl CollabHandlers {
             access_url: access_url.clone(),
             created_at: created_at.clone(),
             expires_at: expires_at.clone(),
-            permissions: vec![],
+            permissions,
             access_count: 0,
         };
         state.shares.write().await.insert(id.clone(), record);
@@ -267,7 +273,10 @@ impl CollabHandlers {
         let shares = state.shares.read().await;
         let list: Vec<ShareListItem> = shares
             .values()
-            .filter(|s| file_id.as_ref().map_or(true, |f| *f == s.file_id))
+            .filter(|s| match file_id.as_ref() {
+                Some(file_id) => *file_id == s.file_id,
+                None => true,
+            })
             .map(|s| ShareListItem {
                 id: s.id.clone(),
                 file_id: s.file_id.clone(),
@@ -449,7 +458,10 @@ impl CollabHandlers {
         let activities = state.activities.read().await;
         let filtered: Vec<&ActivityRecord> = activities
             .iter()
-            .filter(|a| path.as_ref().map_or(true, |p| a.file_path == *p))
+            .filter(|a| match path.as_ref() {
+                Some(path) => a.file_path == *path,
+                None => true,
+            })
             .skip(offset)
             .take(limit)
             .collect();

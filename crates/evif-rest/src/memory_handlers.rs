@@ -4,7 +4,7 @@
 // Implements mem.md API design
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -156,7 +156,7 @@ impl MemoryBackendConfig {
 /// Check if production mode is enabled
 pub fn is_production_mode() -> bool {
     std::env::var("EVIF_REST_PRODUCTION_MODE")
-        .map(|v| v.trim().to_ascii_lowercase() == "true" || v == "1")
+        .map(|v| v.trim().eq_ignore_ascii_case("true") || v == "1")
         .unwrap_or(false)
 }
 

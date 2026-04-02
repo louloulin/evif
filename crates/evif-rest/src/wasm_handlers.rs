@@ -5,10 +5,10 @@
 use crate::{handlers::AppState, RestError, RestResult};
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 /// WASM 插件加载请求
 #[derive(Debug, Deserialize)]
+#[cfg_attr(not(feature = "wasm"), allow(dead_code))]
 pub struct LoadWasmPluginRequest {
     /// WASM 文件路径
     pub wasm_path: String,
@@ -74,6 +74,7 @@ pub struct PluginInfo {
 
 /// 热重载请求 (Phase 16.1: WASM 插件热重载)
 #[derive(Debug, Deserialize)]
+#[cfg_attr(not(feature = "wasm"), allow(dead_code))]
 pub struct ReloadWasmPluginRequest {
     /// 挂载点
     pub mount_point: String,
@@ -106,8 +107,8 @@ impl WasmPluginHandlers {
     /// # REST API
     /// POST /api/v1/plugins/wasm/load
     pub async fn load_wasm_plugin(
-        State(state): State<AppState>,
-        Json(req): Json<LoadWasmPluginRequest>,
+        State(_state): State<AppState>,
+        Json(_req): Json<LoadWasmPluginRequest>,
     ) -> RestResult<Json<LoadWasmPluginResponse>> {
         #[cfg(feature = "wasm")]
         {
@@ -247,8 +248,8 @@ impl WasmPluginHandlers {
     /// # REST API
     /// POST /api/v1/plugins/wasm/reload
     pub async fn reload_wasm_plugin(
-        State(state): State<AppState>,
-        Json(req): Json<ReloadWasmPluginRequest>,
+        State(_state): State<AppState>,
+        Json(_req): Json<ReloadWasmPluginRequest>,
     ) -> RestResult<Json<ReloadWasmPluginResponse>> {
         #[cfg(feature = "wasm")]
         {

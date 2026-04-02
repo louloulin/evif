@@ -10,16 +10,14 @@ use axum::{
 };
 use base64::Engine;
 use chrono::Utc;
-use evif_core::FileInfo as EvifFileInfo;
 use evif_core::cross_fs_copy::CrossFsCopyManager;
 use evif_core::file_lock::FileLockManager;
 use evif_core::{
-    DynamicPluginLoader, EvifPlugin, OpenFlags, PluginConfigParam, PluginRegistry,
-    PluginState as RegistryPluginState, RadixMountTable, RegisteredPlugin, WriteFlags,
+    DynamicPluginLoader, EvifPlugin, PluginConfigParam, PluginRegistry, RadixMountTable,
+    WriteFlags,
 };
 use evif_plugins::{normalize_plugin_id, plugin_catalog, PluginCatalogEntry};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
@@ -39,13 +37,6 @@ pub struct AppState {
     pub lock_manager: Arc<FileLockManager>,
     /// Phase 14.1: 跨文件系统复制管理器
     pub cross_fs_copy_manager: Arc<CrossFsCopyManager>,
-}
-
-/// 错误响应
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
-    pub message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -341,12 +332,7 @@ impl EvifHandlers {
         let uptime_secs = state.start_time.elapsed().as_secs();
 
         let average_latency_micros = |success_count: u64, error_count: u64, total_micros: u64| {
-            let total_count = success_count + error_count;
-            if total_count > 0 {
-                total_micros / total_count
-            } else {
-                0
-            }
+            total_micros.checked_div(success_count + error_count).unwrap_or(0)
         };
 
         // Build Prometheus text format output
@@ -404,16 +390,8 @@ evif_average_write_size {}
             list_count,
             other_count,
             uptime_secs,
-            if read_count > 0 {
-                total_bytes_read / read_count
-            } else {
-                0
-            },
-            if write_count > 0 {
-                total_bytes_written / write_count
-            } else {
-                0
-            }
+            total_bytes_read.checked_div(read_count).unwrap_or(0),
+            total_bytes_written.checked_div(write_count).unwrap_or(0)
         );
 
         let operation_metrics = format!(
@@ -501,16 +479,8 @@ evif_operation_latency_micros_average{{operation="other"}} {}
         let total_bytes_written = s.total_bytes_written.load(Ordering::Relaxed);
         let read_count = s.read_count.load(Ordering::Relaxed);
         let write_count = s.write_count.load(Ordering::Relaxed);
-        let avg_read = if read_count > 0 {
-            total_bytes_read / read_count
-        } else {
-            0
-        };
-        let avg_write = if write_count > 0 {
-            total_bytes_written / write_count
-        } else {
-            0
-        };
+        let avg_read = total_bytes_read.checked_div(read_count).unwrap_or(0);
+        let avg_write = total_bytes_written.checked_div(write_count).unwrap_or(0);
         Json(serde_json::json!({
             "total_requests": total_requests,
             "total_bytes_read": total_bytes_read,
@@ -937,7 +907,7 @@ evif_operation_latency_micros_average{{operation="other"}} {}
             .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
 
         // Create file if it doesn't exist, update timestamp if it does
-        if let Err(_) = plugin.stat(&relative_path).await {
+        if plugin.stat(&relative_path).await.is_err() {
             plugin.create(&relative_path, 0o644).await?;
         } else {
             // Update timestamp by writing empty data with append flag
@@ -1289,11 +1259,9 @@ evif_operation_latency_micros_average{{operation="other"}} {}
         Path(name): Path<String>,
     ) -> RestResult<Json<serde_json::Value>> {
         // 1. 从 registry 获取插件信息
-        let plugin_info = state.plugin_registry.get(&name).ok_or_else(|| {
+        let _plugin_info = state.plugin_registry.get(&name).ok_or_else(|| {
             RestError::NotFound(format!("Plugin '{}' not found in registry", name))
         })?;
-
-        let library_path = plugin_info.library_path.clone();
 
         // 2. 卸载现有插件
         let mount_path = format!("/{}", name);
@@ -1911,7 +1879,6 @@ pub struct CopyResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::RestError;
     use axum::{http::StatusCode, response::IntoResponse};
     use evif_core::EvifError;

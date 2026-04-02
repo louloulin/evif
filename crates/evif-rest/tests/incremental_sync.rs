@@ -24,7 +24,7 @@ async fn sync_status_endpoint() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -64,7 +64,7 @@ async fn sync_version_endpoint() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -103,7 +103,7 @@ async fn sync_apply_delta() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -160,7 +160,7 @@ async fn sync_path_version() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -216,7 +216,7 @@ async fn sync_delta_empty_changes_error() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }

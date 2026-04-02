@@ -10,7 +10,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 
 use evif_core::{EvifError, EvifResult, GlobalHandleManager, OpenFlags, RadixMountTable};
 
@@ -474,7 +473,7 @@ impl HandleHandlers {
         let mut handle_responses = Vec::new();
         for handle_id in handle_ids {
             // 获取每个handle的详细信息
-            if let Ok((_hid, mount_path, full_path, expires_at)) =
+            if let Ok((_hid, mount_path, full_path, _expires_at)) =
                 state.handle_manager.get_handle(handle_id).await
             {
                 handle_responses.push(HandleInfoResponse {
@@ -548,7 +547,6 @@ impl axum::response::IntoResponse for RestError {
     fn into_response(self) -> axum::response::Response {
         use axum::{
             http::StatusCode,
-            response::{IntoResponse, Response},
             Json,
         };
         use serde_json::json;

@@ -1,4 +1,4 @@
-use evif_core::{EvifPlugin, RadixMountTable};
+use evif_core::RadixMountTable;
 use evif_rest::create_routes;
 use std::sync::Arc;
 use tokio::net::TcpListener;

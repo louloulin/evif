@@ -24,7 +24,7 @@ async fn encryption_status_endpoint() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -64,7 +64,7 @@ async fn encryption_enable() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -106,7 +106,7 @@ async fn encryption_disable() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -144,7 +144,7 @@ async fn encryption_enable_empty_key_error() {
     let client = reqwest::Client::new();
 
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }

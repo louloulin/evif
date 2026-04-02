@@ -25,7 +25,7 @@ async fn grep_trace_records_steps() {
 
     // 等待服务器就绪并挂载 context 插件
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -89,7 +89,7 @@ async fn grep_without_trace_has_no_trace_field() {
 
     // 等待服务器就绪并挂载 context 插件
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -151,7 +151,7 @@ async fn grep_trace_contains_latency_info() {
 
     // 等待服务器就绪并挂载 context 插件
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }

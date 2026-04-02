@@ -2,36 +2,16 @@
 //
 // 提供 GraphQL API 端点
 
-use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
-use async_graphql_axum::GraphQL;
+use async_graphql::{EmptySubscription, Object, Schema, SimpleObject};
 use axum::{
     extract::State,
     response::IntoResponse,
-    routing::{get, post},
-    Json, Router,
+    Json,
 };
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 /// GraphQL state
 #[derive(Clone)]
-pub struct GraphQLState {
-    inner: Arc<RwLock<GraphQLInner>>,
-}
-
-struct GraphQLInner {
-    enabled: bool,
-}
-
-/// File info for GraphQL
-#[derive(SimpleObject, Clone, Serialize, Deserialize)]
-pub struct GqlFileInfo {
-    pub path: String,
-    pub size: u64,
-    pub is_dir: bool,
-    pub modified: Option<String>,
-}
+pub struct GraphQLState;
 
 /// Query root for GraphQL
 pub struct QueryRoot;
@@ -75,9 +55,7 @@ pub type EvifSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
 impl GraphQLState {
     pub fn new() -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(GraphQLInner { enabled: true })),
-        }
+        Self
     }
 
     pub fn schema() -> EvifSchema {
@@ -100,8 +78,7 @@ impl GraphQLHandlers {
         State(schema): State<EvifSchema>,
         req: Json<async_graphql::Request>,
     ) -> impl IntoResponse {
-        let response = schema.execute(req.0).await;
-        Json(async_graphql::Response::from(response))
+        Json(schema.execute(req.0).await)
     }
 
     /// GraphQL IDE (GraphiQL) - GET /api/v1/graphql/graphiql

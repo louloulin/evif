@@ -179,6 +179,7 @@ impl RestAuthState {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_event(
         &self,
         event_type: AuditEventType,
@@ -303,24 +304,6 @@ pub async fn PathValidationMiddleware(request: Request, next: Next) -> Response 
         }
     }
     next.run(request).await
-}
-
-/// Get the maximum request body size from environment variable.
-/// Default: 104,857,600 bytes (100MB)
-fn max_request_body_bytes() -> u64 {
-    std::env::var("EVIF_MAX_BODY_SIZE")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(104_857_600) // 100MB default
-}
-
-/// Get the rate limit per minute from environment variable.
-/// Default: 1000
-fn rate_limit_per_minute() -> u64 {
-    std::env::var("EVIF_RATE_LIMIT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(1000)
 }
 
 /// 日志中间件
@@ -554,7 +537,7 @@ fn parse_key_list(var_name: &str) -> Vec<String> {
         .ok()
         .map(|value| {
             value
-                .split(|c| c == ',' || c == '\n')
+                .split([',', '\n'])
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(ToOwned::to_owned)
@@ -602,10 +585,10 @@ fn register_key(
     api_keys.insert(key, identity);
 }
 
-fn header_value<'a>(
-    headers: &'a HeaderMap,
+fn header_value(
+    headers: &HeaderMap,
     name: impl axum::http::header::AsHeaderName,
-) -> Option<&'a str> {
+) -> Option<&str> {
     headers.get(name).and_then(|value| value.to_str().ok())
 }
 
@@ -772,10 +755,7 @@ mod tests {
         let requirement = write_requirement();
         let headers = HeaderMap::new();
 
-        match state.authorize(&headers, requirement) {
-            AuthDecision::MissingCredentials => {}
-            _ => {}
-        }
+        if let AuthDecision::MissingCredentials = state.authorize(&headers, requirement) {}
 
         state.record_event(
             AuditEventType::AuthenticationFailed,

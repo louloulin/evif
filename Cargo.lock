@@ -2814,6 +2814,7 @@ dependencies = [
  "tower-http 0.5.2",
  "tower-test",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

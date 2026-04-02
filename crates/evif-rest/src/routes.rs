@@ -4,15 +4,12 @@ use crate::{
     batch_handlers, collab_handlers, context_handlers, encryption_handlers, graphql_handlers,
     handle_handlers, handlers, memory_handlers, metrics_handlers, sync_handlers, tenant_handlers,
     wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState,
-    EvifSchema, HandleState, RestAuthState, SyncState, TenantMiddleware, TenantState,
+    HandleState, RestAuthState, SyncState, TenantState,
 };
 use axum::{middleware, routing, Router};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
 use std::sync::Arc;
 use std::time::Instant;
-
-// Re-export for external use
-pub use context_handlers::{semantic_search, summarize};
 
 /// 创建 API 路由
 pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
@@ -660,6 +657,5 @@ mod tests {
     async fn test_route_creation() {
         let mount_table = Arc::new(RadixMountTable::new());
         let _app = create_routes(mount_table);
-        assert!(true);
     }
 }

@@ -12,7 +12,6 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use uuid::Uuid;
 
 /// Sync status
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -137,7 +136,7 @@ impl SyncState {
             let max_change_version = req
                 .changes
                 .iter()
-                .filter(|c| accepted > 0)
+                .filter(|_| accepted > 0)
                 .map(|c| c.version)
                 .max()
                 .unwrap_or(0);

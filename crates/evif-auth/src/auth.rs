@@ -8,18 +8,13 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 
 /// 认证策略
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum AuthPolicy {
     /// 开放策略：所有操作都允许
     Open,
     /// 严格策略：需要明确授权
+    #[default]
     Strict,
-}
-
-impl Default for AuthPolicy {
-    fn default() -> Self {
-        AuthPolicy::Strict
-    }
 }
 
 /// 认证管理器

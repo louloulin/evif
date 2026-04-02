@@ -25,7 +25,7 @@ async fn cross_fs_copy_same_fs() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -82,7 +82,7 @@ async fn cross_fs_copy_returns_bytes() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -131,7 +131,7 @@ async fn cross_fs_copy_nonexistent_source() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }
@@ -177,7 +177,7 @@ async fn cross_fs_recursive_copy_endpoint() {
 
     // 等待服务器就绪
     for _ in 0..60 {
-        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
             if res.status().is_success() {
                 break;
             }

@@ -144,7 +144,7 @@ impl WebSocketHandlers {
 
     /// 执行终端命令
     async fn execute_command(command: &str, state: &WebSocketState) -> WSMessage {
-        let parts: Vec<&str> = command.trim().split_whitespace().collect();
+        let parts: Vec<&str> = command.split_whitespace().collect();
         if parts.is_empty() {
             return WSMessage::Output {
                 output: "$ ".to_string(),
@@ -274,7 +274,7 @@ Examples:
                 }
             }
             "pwd" => WSMessage::Output {
-                output: format!("/\r\n$ "),
+                output: "/\r\n$ ".to_string(),
             },
             "echo" => {
                 let text = args.join(" ");

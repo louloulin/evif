@@ -350,14 +350,14 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         let production_mode = std::env::var("EVIF_REST_PRODUCTION_MODE")
-            .map(|v| v.trim().to_ascii_lowercase() == "true" || v == "1")
+            .map(|v| v.trim().eq_ignore_ascii_case("true") || v == "1")
             .unwrap_or(false);
 
         Self {
             bind_addr: "0.0.0.0".to_string(),
             port: 8081,
             enable_cors: std::env::var("EVIF_CORS_ENABLED")
-                .map(|v| v.trim().to_ascii_lowercase() != "false" && v != "0")
+                .map(|v| !v.trim().eq_ignore_ascii_case("false") && v != "0")
                 .unwrap_or(true),
             cors_origins: std::env::var("EVIF_CORS_ORIGINS")
                 .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
@@ -383,7 +383,7 @@ impl EvifServer {
         let mount_table = Arc::new(RadixMountTable::new());
         let mounts = load_mount_config();
         let memory_config = crate::memory_handlers::MemoryBackendConfig::from_env()
-            .map_err(|e| RestError::Internal(e))?;
+            .map_err(RestError::Internal)?;
 
         // Validate memory backend for production mode
         if let Err(e) = validate_memory_for_production(&memory_config) {
@@ -467,7 +467,7 @@ impl EvifServer {
 
         info!("EVIF REST API listening on http://{}", addr);
 
-        let graceful_timeout = std::env::var("EVIF_SHUTDOWN_TIMEOUT")
+        let _graceful_timeout = std::env::var("EVIF_SHUTDOWN_TIMEOUT")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(30u64);

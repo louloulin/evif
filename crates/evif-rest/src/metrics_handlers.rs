@@ -5,13 +5,11 @@
 
 use axum::{
     extract::State,
-    response::{IntoResponse, Response},
     Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use evif_core::MountTable;
 
@@ -72,14 +70,6 @@ pub struct OperationStats {
     pub errors: u64,
 }
 
-/// 端点统计
-#[derive(Debug, Serialize)]
-pub struct EndpointStats {
-    pub path: String,
-    pub requests: u64,
-    pub avg_response_time_ms: u64,
-}
-
 /// 系统健康状态
 #[derive(Debug, Serialize)]
 pub struct HealthStatus {
@@ -109,17 +99,8 @@ impl MetricsHandlers {
         let list_count = stats.list_count.load(Ordering::Relaxed);
         let other_count = stats.other_count.load(Ordering::Relaxed);
 
-        let avg_read_size = if read_count > 0 {
-            total_bytes_read / read_count
-        } else {
-            0
-        };
-
-        let avg_write_size = if write_count > 0 {
-            total_bytes_written / write_count
-        } else {
-            0
-        };
+        let avg_read_size = total_bytes_read.checked_div(read_count).unwrap_or(0);
+        let avg_write_size = total_bytes_written.checked_div(write_count).unwrap_or(0);
 
         Json(TrafficStatsResponse {
             total_requests,

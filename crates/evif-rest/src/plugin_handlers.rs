@@ -11,12 +11,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::handlers::AppState;
 use evif_core::{
-    DynamicPluginLoader, EvifPlugin, MountTable, PluginInfo as EvifPluginInfo, PluginRegistry,
-    PluginState as RegistryPluginState,
+    DynamicPluginLoader, EvifPlugin, MountTable, PluginRegistry,
 };
-use std::sync::OnceLock;
 
 /// 应用状态
 #[derive(Clone)]
@@ -127,20 +124,20 @@ impl PluginHandlers {
     /// 挂载插件
     /// POST /api/v1/plugins/mount?plugin=<name>&path=<path>
     pub async fn mount_plugin(
-        State(state): State<PluginState>,
+        State(_state): State<PluginState>,
         Query(params): Query<std::collections::HashMap<String, String>>,
     ) -> Result<Json<serde_json::Value>, PluginError> {
-        let plugin_name = params
+        let _plugin_name = params
             .get("plugin")
             .ok_or_else(|| PluginError::BadRequest("Missing plugin parameter".to_string()))?
             .clone();
 
-        let mount_path = params
+        let _mount_path = params
             .get("path")
             .ok_or_else(|| PluginError::BadRequest("Missing path parameter".to_string()))?
             .clone();
 
-        let config: Option<serde_json::Value> = params
+        let _config: Option<serde_json::Value> = params
             .get("config")
             .and_then(|c| serde_json::from_str(c).ok());
 
