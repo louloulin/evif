@@ -13,7 +13,7 @@ use evif_plugins::ContextFsPlugin;
 /// 目标: 100 并发写入，95%+ 成功率
 #[tokio::test]
 async fn perf_concurrent_writes() {
-    let plugin = ContextFsPlugin::new();
+    let _plugin = ContextFsPlugin::new();
 
     // 创建 100 个并发写入任务
     let mut handles = Vec::new();

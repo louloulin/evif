@@ -4,6 +4,7 @@ mod batch_handlers;
 mod collab_handlers;
 mod compat_fs;
 mod context_handlers;
+mod encryption_handlers;
 mod fs_handlers;
 mod handle_handlers;
 mod handlers;
@@ -13,6 +14,7 @@ mod middleware;
 mod plugin_handlers;
 mod routes;
 mod server;
+mod tenant_handlers;
 mod wasm_handlers;
 mod ws_handlers;
 
@@ -31,11 +33,19 @@ pub use memory_handlers::{
     MemoryBackendKind, MemoryHandlers, MemoryState,
 };
 pub use metrics_handlers::{MetricsHandlers, MetricsState, TrafficStats};
-pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState};
+pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState, TenantMiddleware};
 pub use plugin_handlers::{PluginHandlers, PluginState};
 pub use routes::{create_routes, create_routes_with_auth, create_routes_with_context, create_routes_with_memory_state};
 pub use server::{EvifServer, ServerConfig};
 pub use ws_handlers::{WSMessage, WebSocketHandlers, WebSocketState};
+pub use tenant_handlers::{
+    CreateTenantRequest, TenantHandlers, TenantInfo, TenantState, TenantStatus,
+    DEFAULT_TENANT_ID, TENANT_HEADER,
+};
+pub use encryption_handlers::{
+    EnableEncryptionRequest, EncryptionConfig, EncryptionHandlers, EncryptionState,
+    EncryptionStatus,
+};
 
 use axum::{
     http::StatusCode,
@@ -59,6 +69,10 @@ pub enum RestError {
     #[error("Bad request: {0}")]
     BadRequest(String),
 
+    /// Phase 14.2: 资源冲突（锁已存在）
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -74,6 +88,7 @@ impl From<evif_core::EvifError> for RestError {
             evif_core::EvifError::PermissionDenied(_) => RestError::BadRequest(err.to_string()),
             evif_core::EvifError::AlreadyExists(_) => RestError::BadRequest(err.to_string()),
             evif_core::EvifError::NotMounted(_) => RestError::NotFound(err.to_string()),
+            evif_core::EvifError::Conflict(_) => RestError::Conflict(err.to_string()),
             evif_core::EvifError::Io(io_err) => match io_err.kind() {
                 std::io::ErrorKind::NotFound => RestError::NotFound(io_err.to_string()),
                 std::io::ErrorKind::PermissionDenied => RestError::BadRequest(io_err.to_string()),
@@ -91,6 +106,7 @@ impl IntoResponse for RestError {
         let (status, message) = match self {
             RestError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             RestError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            RestError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             RestError::Io(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => (StatusCode::NOT_FOUND, err.to_string()),
                 std::io::ErrorKind::PermissionDenied => (StatusCode::FORBIDDEN, err.to_string()),

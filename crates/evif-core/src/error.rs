@@ -38,6 +38,10 @@ pub enum EvifError {
     #[error("Read-only filesystem")]
     ReadOnly,
 
+    /// Phase 14.2: 文件锁冲突
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Operation not supported by plugin '{plugin_name}': {operation}")]
     NotSupported {
         plugin_name: String,

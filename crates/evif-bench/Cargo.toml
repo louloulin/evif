@@ -1,0 +1,28 @@
+[package]
+name = "evif-bench"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Benchmark suite for EVIF - OSWorld, IDE-Bench, AgentBench, L0CO"
+
+[dependencies]
+evif-core = { path = "../evif-core" }
+evif-rest = { path = "../evif-rest" }
+evif-plugins = { path = "../evif-plugins", features = ["sqlfs"] }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP client & server
+reqwest = { version = "0.11", default-features = false, features = ["json"] }
+axum = { version = "0.7.4", features = ["json"] }
+futures-util = "0.3.28"
+futures = "0.3"
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tempfile = { workspace = true }

@@ -475,6 +475,121 @@ impl EvifMcpServer {
                     "required": ["name", "input"]
                 }),
             },
+            // Phase 15: Claude Code 集成工具
+            // ── CLAUDE.md 自动生成 ────────────────────────────────────────
+            Tool {
+                name: "evif_claude_md_generate".to_string(),
+                description: "Auto-generate CLAUDE.md for the current project by analyzing its structure".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "project_path": {
+                            "type": "string",
+                            "description": "Project root path (default: /)"
+                        },
+                        "include_skills": {
+                            "type": "boolean",
+                            "description": "Include skill references (default: true)"
+                        },
+                        "include_context": {
+                            "type": "boolean",
+                            "description": "Include context structure (default: true)"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            // ── Auto-memory 增强 ──────────────────────────────────────────
+            Tool {
+                name: "evif_session_save".to_string(),
+                description: "Save current session state to L0/L1 context".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "level": {
+                            "type": "string",
+                            "description": "Context level: L0 (current task) or L1 (decisions)"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Session content to save"
+                        },
+                        "summary": {
+                            "type": "string",
+                            "description": "Brief summary of the session"
+                        }
+                    },
+                    "required": ["content"]
+                }),
+            },
+            Tool {
+                name: "evif_session_list".to_string(),
+                description: "List all saved sessions".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "level": {
+                            "type": "string",
+                            "description": "Filter by level: L0 or L1"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "Maximum number of sessions to return"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            // ── Subagent 协调 ─────────────────────────────────────────────
+            Tool {
+                name: "evif_subagent_create".to_string(),
+                description: "Create a new subagent with assigned context".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Subagent name/ID"
+                        },
+                        "task": {
+                            "type": "string",
+                            "description": "Task description for the subagent"
+                        },
+                        "context_path": {
+                            "type": "string",
+                            "description": "Context path to share with subagent"
+                        }
+                    },
+                    "required": ["name", "task"]
+                }),
+            },
+            Tool {
+                name: "evif_subagent_send".to_string(),
+                description: "Send a message to a subagent".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Subagent name/ID"
+                        },
+                        "message": {
+                            "type": "string",
+                            "description": "Message to send"
+                        }
+                    },
+                    "required": ["name", "message"]
+                }),
+            },
+            Tool {
+                name: "evif_subagent_list".to_string(),
+                description: "List all active subagents".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }),
+            },
         ];
 
         *self.tools.write().await = tools;
@@ -1134,6 +1249,245 @@ impl EvifMcpServer {
                 };
 
                 Ok(output)
+            }
+
+            // Phase 15.1: CLAUDE.md auto-generation
+            "evif_claude_md_generate" => {
+                let project_path = arguments["path"].as_str().unwrap_or("/");
+                let include_skills = arguments["include_skills"].as_bool().unwrap_or(true);
+                let include_context = arguments["include_context"].as_bool().unwrap_or(true);
+
+                // Scan project structure
+                let dirs_url = format!(
+                    "{}/api/v1/directories?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(project_path)
+                );
+                let dirs_response = self
+                    .client
+                    .get(&dirs_url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to scan project: {}", e))?;
+
+                let dirs_data: Value = dirs_response
+                    .json()
+                    .await
+                    .unwrap_or(json!({"data": []}));
+
+                // Generate CLAUDE.md content
+                let data = dirs_data.get("data").and_then(|d| d.as_array()).map(|a| {
+                    a.iter()
+                        .filter_map(|e| e.get("name").and_then(|n| n.as_str()))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }).unwrap_or_default();
+
+                let mut claude_md = format!(
+                    r#"# Project Context
+
+## Mission
+
+Auto-generated CLAUDE.md for EVIF context filesystem.
+
+## Project Structure
+
+{}
+
+## Quick Reference
+
+- Context filesystem: `/context/L0/current`, `/context/L1/decisions`
+"#,
+                    data
+                );
+
+                if include_skills {
+                    claude_md.push_str("\n## Skills\n\n- `/skills/` — Available agent skills\n");
+                }
+
+                if include_context {
+                    claude_md.push_str("\n## Context Convention\n\n- Read `/context/L0/current` for active task\n- Write decisions to `/context/L1/decisions.md`\n");
+                }
+
+                claude_md.push_str("\n---\n*Auto-generated by EVIF MCP Server*\n");
+
+                Ok(json!({
+                    "content": claude_md,
+                    "path": format!("{}CLAUDE.md", project_path.trim_end_matches('/')),
+                    "status": "ready"
+                }))
+            }
+
+            // Phase 15.2: Session management
+            "evif_session_save" => {
+                let level = arguments["level"].as_str().unwrap_or("L0");
+                let content = arguments["content"]
+                    .as_str()
+                    .ok_or("Missing 'content' argument")?;
+                let summary = arguments["summary"].as_str().unwrap_or("");
+
+                let context_path = if level == "L1" {
+                    "/context/L1/decisions.md"
+                } else {
+                    "/context/L0/current"
+                };
+
+                // Append to context file
+                let write_url = format!(
+                    "{}/api/v1/files?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(context_path)
+                );
+
+                let body = if level == "L1" {
+                    serde_json::json!({
+                        "data": format!("\n\n## Session {}\n\n{}\n\n{}", chrono::Utc::now().format("%Y-%m-%d %H:%M"), summary, content)
+                    })
+                } else {
+                    serde_json::json!({ "data": content })
+                };
+
+                let response = self
+                    .client
+                    .put(&write_url)
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to save session: {}", e))?;
+
+                if response.status().is_success() || response.status().as_u16() == 201 {
+                    Ok(json!({
+                        "status": "saved",
+                        "level": level,
+                        "path": context_path
+                    }))
+                } else {
+                    Err(format!("Failed to save (HTTP {})", response.status().as_u16()))
+                }
+            }
+
+            "evif_session_list" => {
+                let level = arguments["level"].as_str().unwrap_or("");
+                let _limit = arguments["limit"].as_i64().unwrap_or(20);
+
+                // Read context directory
+                let path = if level == "L1" {
+                    "/context/L1"
+                } else if level == "L0" {
+                    "/context/L0"
+                } else {
+                    "/context"
+                };
+
+                let url = format!(
+                    "{}/api/v1/directories?path={}",
+                    self.config.evif_url,
+                    urlencoding::encode(path)
+                );
+                let response = self
+                    .client
+                    .get(&url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to list sessions: {}", e))?;
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| format!("Failed to parse: {}", e))?;
+
+                Ok(result)
+            }
+
+            // Phase 15.3: Subagent coordination
+            "evif_subagent_create" => {
+                let name = arguments["name"]
+                    .as_str()
+                    .ok_or("Missing 'name' argument")?;
+                let task = arguments["task"]
+                    .as_str()
+                    .ok_or("Missing 'task' argument")?;
+                let context_path = arguments["context_path"].as_str().unwrap_or("/context");
+
+                // Create pipe for subagent communication
+                let pipe_url = format!(
+                    "{}/api/v1/directories?path=/pipes/{}",
+                    self.config.evif_url,
+                    urlencoding::encode(name)
+                );
+                let _ = self.client.post(&pipe_url).send().await;
+
+                // Write task to pipe input
+                let input_url = format!(
+                    "{}/api/v1/files?path=/pipes/{}/input",
+                    self.config.evif_url,
+                    urlencoding::encode(name)
+                );
+                let _ = self
+                    .client
+                    .put(&input_url)
+                    .json(&serde_json::json!({ "data": task }))
+                    .send()
+                    .await;
+
+                Ok(json!({
+                    "status": "created",
+                    "name": name,
+                    "context_path": context_path,
+                    "input": format!("/pipes/{}/input", name),
+                    "output": format!("/pipes/{}/output", name)
+                }))
+            }
+
+            "evif_subagent_send" => {
+                let name = arguments["name"]
+                    .as_str()
+                    .ok_or("Missing 'name' argument")?;
+                let message = arguments["message"]
+                    .as_str()
+                    .ok_or("Missing 'message' argument")?;
+
+                let url = format!(
+                    "{}/api/v1/files?path=/pipes/{}/input",
+                    self.config.evif_url,
+                    urlencoding::encode(name)
+                );
+                let response = self
+                    .client
+                    .put(&url)
+                    .json(&serde_json::json!({ "data": message }))
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to send to subagent: {}", e))?;
+
+                if response.status().is_success() || response.status().as_u16() == 201 {
+                    Ok(json!({
+                        "status": "sent",
+                        "to": name
+                    }))
+                } else {
+                    Err(format!("Subagent '{}' not found or unavailable", name))
+                }
+            }
+
+            "evif_subagent_list" => {
+                let url = format!(
+                    "{}/api/v1/directories?path=/pipes",
+                    self.config.evif_url
+                );
+                let response = self
+                    .client
+                    .get(&url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to list subagents: {}", e))?;
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .unwrap_or(json!({"data": []}));
+
+                Ok(result)
             }
 
             _ => Err(format!("Unknown tool: {}", tool_name)),

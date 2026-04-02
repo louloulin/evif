@@ -20,6 +20,8 @@ use std::sync::Arc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use crate::tenant_handlers::{TenantState, TENANT_HEADER};
+
 fn write_scope_id() -> Uuid {
     Uuid::from_u128(0x8f53_7321_9f58_4a6f_8d21_3141_0000_0001)
 }
@@ -318,6 +320,23 @@ pub async fn LoggingMiddleware(req: Request, next: Next) -> Response {
     let uri = req.uri().clone();
 
     info!("{} {}", method, uri);
+
+    next.run(req).await
+}
+
+/// Phase 17.1: 租户中间件
+/// 从 X-Tenant-ID header 提取租户 ID 并注入到请求扩展中
+#[allow(non_snake_case)]
+pub async fn TenantMiddleware(
+    State(tenant_state): State<TenantState>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    let tenant_header = req.headers().get(TENANT_HEADER).cloned();
+    let tenant_id = TenantState::effective_tenant_id(tenant_header.as_ref());
+
+    req.extensions_mut().insert(tenant_id);
+    req.extensions_mut().insert(tenant_state);
 
     next.run(req).await
 }

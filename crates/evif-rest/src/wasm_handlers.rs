@@ -68,6 +68,28 @@ pub struct PluginInfo {
     pub mount_point: String,
     /// 插件类型
     pub plugin_type: String,
+    /// 是否支持热重载
+    pub hot_reloadable: bool,
+}
+
+/// 热重载请求 (Phase 16.1: WASM 插件热重载)
+#[derive(Debug, Deserialize)]
+pub struct ReloadWasmPluginRequest {
+    /// 挂载点
+    pub mount_point: String,
+}
+
+/// 热重载响应
+#[derive(Debug, Serialize)]
+pub struct ReloadWasmPluginResponse {
+    /// 是否成功
+    pub success: bool,
+    /// 插件名称
+    pub plugin_name: String,
+    /// 挂载点
+    pub mount_point: String,
+    /// 消息
+    pub message: String,
 }
 
 /// WASM 插件处理器
@@ -187,7 +209,8 @@ impl WasmPluginHandlers {
             .into_iter()
             .map(|path| {
                 // 判断插件类型（基于路径简单判断）
-                let plugin_type = if path.contains("wasm") || path.contains("WASM") {
+                let is_wasm = path.contains("wasm") || path.contains("WASM");
+                let plugin_type = if is_wasm {
                     "wasm".to_string()
                 } else if path.contains("memory") || path.starts_with("/mem") {
                     "memory".to_string()
@@ -203,6 +226,7 @@ impl WasmPluginHandlers {
                     name: format!("plugin_{}", path.replace("/", "_")),
                     mount_point: path,
                     plugin_type,
+                    hot_reloadable: is_wasm,
                 }
             })
             .collect();
@@ -211,5 +235,75 @@ impl WasmPluginHandlers {
             total: plugins.len(),
             plugins,
         }))
+    }
+
+    /// 热重载 WASM 插件 (Phase 16.1)
+    ///
+    /// # 功能
+    /// - 卸载现有插件
+    /// - 重新读取 WASM 文件
+    /// - 重新挂载插件
+    ///
+    /// # REST API
+    /// POST /api/v1/plugins/wasm/reload
+    pub async fn reload_wasm_plugin(
+        State(state): State<AppState>,
+        Json(req): Json<ReloadWasmPluginRequest>,
+    ) -> RestResult<Json<ReloadWasmPluginResponse>> {
+        #[cfg(feature = "wasm")]
+        {
+            use evif_core::extism_plugin::{ExtismPlugin, WasmPluginConfig};
+
+            // 1. 获取现有插件的配置信息（从挂载点查找）
+            let wasm_path = format!("{}.wasm", req.mount_point.trim_end_matches('/'));
+            let plugin_name = req
+                .mount_point
+                .trim_start_matches('/')
+                .split('/')
+                .last()
+                .unwrap_or("wasm_plugin")
+                .to_string();
+
+            // 2. 卸载现有插件
+            state
+                .mount_table
+                .unmount(&req.mount_point)
+                .await
+                .map_err(|e| {
+                    RestError::Internal(format!("Failed to unmount plugin for reload: {}", e))
+                })?;
+
+            // 3. 创建新插件实例
+            let config = WasmPluginConfig {
+                wasm_path: wasm_path.clone(),
+                name: plugin_name.clone(),
+                mount_point: req.mount_point.clone(),
+                config: serde_json::Value::Null,
+            };
+
+            let plugin = ExtismPlugin::new(config)
+                .map_err(|e| RestError::Internal(format!("Failed to reload WASM plugin: {}", e)))?;
+
+            // 4. 重新挂载
+            state
+                .mount_table
+                .mount(req.mount_point.clone(), Arc::new(plugin))
+                .await
+                .map_err(|e| RestError::Internal(format!("Failed to remount plugin: {}", e)))?;
+
+            Ok(Json(ReloadWasmPluginResponse {
+                success: true,
+                plugin_name,
+                mount_point: req.mount_point,
+                message: format!("Plugin hot-reloaded from '{}'", wasm_path),
+            }))
+        }
+
+        #[cfg(not(feature = "wasm"))]
+        {
+            Err(RestError::BadRequest(
+                "WASM support is not enabled. Build with --features wasm".to_string(),
+            ))
+        }
     }
 }

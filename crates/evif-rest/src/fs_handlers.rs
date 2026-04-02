@@ -796,6 +796,9 @@ pub struct GrepRequest {
     pub pattern: String,
     pub max_results: Option<usize>,
     pub recursive: Option<bool>,
+    /// Enable search trace (Phase 14.3)
+    #[serde(default)]
+    pub trace: Option<bool>,
 }
 
 /// Touch 请求

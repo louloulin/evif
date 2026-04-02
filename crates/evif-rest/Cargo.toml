@@ -32,12 +32,17 @@ futures-util = "0.3.28"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4", "serde"] }
 base64 = "0.22"
+parking_lot = "0.12"
 
 # 文件哈希和正则
 md5 = "0.7"
-sha2 = "0.10"
+sha2 = { workspace = true }
 digest = "0.10"
 regex = "1"
+
+# Encryption (Phase 17.2)
+aes-gcm = { workspace = true }
+rand = { workspace = true }
 
 # Local crates
 evif-core = { path = "../evif-core" }

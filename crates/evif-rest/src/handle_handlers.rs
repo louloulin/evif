@@ -529,6 +529,10 @@ pub enum RestError {
     #[error("Not found: {0}")]
     NotFound(String),
 
+    /// Phase 14.2: 资源冲突
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -551,6 +555,7 @@ impl axum::response::IntoResponse for RestError {
 
         let (status, message) = match self {
             RestError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            RestError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             RestError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
 

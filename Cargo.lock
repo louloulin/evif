@@ -2311,6 +2311,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "evif-bench"
+version = "0.1.0"
+dependencies = [
+ "axum 0.7.9",
+ "evif-core",
+ "evif-plugins",
+ "evif-rest",
+ "futures",
+ "futures-util",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-test",
+]
+
+[[package]]
 name = "evif-cli"
 version = "0.1.0"
 dependencies = [
@@ -2428,6 +2446,7 @@ name = "evif-mcp"
 version = "0.1.0"
 dependencies = [
  "axum 0.7.9",
+ "chrono",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -2536,6 +2555,7 @@ dependencies = [
 name = "evif-rest"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "async-trait",
  "axum 0.7.9",
@@ -2550,6 +2570,8 @@ dependencies = [
  "futures-util",
  "hyper 1.8.1",
  "md5",
+ "parking_lot",
+ "rand 0.8.5",
  "regex",
  "reqwest 0.11.27",
  "serde",

@@ -1,9 +1,10 @@
 // REST API 路由 - 增强版，完全对标AGFS
 
 use crate::{
-    batch_handlers, collab_handlers, context_handlers, handle_handlers, handlers, memory_handlers,
-    metrics_handlers, wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState,
-    HandleState, RestAuthState,
+    batch_handlers, collab_handlers, context_handlers, encryption_handlers, handle_handlers,
+    handlers, memory_handlers, metrics_handlers, tenant_handlers, wasm_handlers, ws_handlers,
+    AuthMiddleware, CompatFsHandlers, ContextState, HandleState, RestAuthState, TenantMiddleware,
+    TenantState, EncryptionState,
 };
 use axum::{middleware, Router};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
@@ -50,6 +51,12 @@ pub(crate) fn create_routes_with_auth_and_memory_state(
 fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers::MemoryState) -> Router {
     // 创建动态插件加载器
     let dynamic_loader = Arc::new(DynamicPluginLoader::new());
+    // Phase 14.2: 创建文件锁管理器
+    let lock_manager = Arc::new(evif_core::file_lock::FileLockManager::new());
+    // Phase 14.1: 创建跨文件系统复制管理器
+    let cross_fs_copy_manager = Arc::new(evif_core::cross_fs_copy::CrossFsCopyManager::new(
+        mount_table.clone(),
+    ));
 
     let app_state = handlers::AppState {
         mount_table: mount_table.clone(),
@@ -57,10 +64,18 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         start_time: Instant::now(),
         dynamic_loader,
         plugin_registry: Arc::new(PluginRegistry::new()),
+        lock_manager,
+        cross_fs_copy_manager,
     };
 
     // 创建批量操作管理器
     let batch_manager = batch_handlers::BatchOperationManager::new();
+
+    // Phase 17.1: 创建租户状态管理器
+    let tenant_state = TenantState::new();
+
+    // Phase 17.2: 创建加密状态管理器
+    let encryption_state = Arc::new(EncryptionState::new());
 
     // 创建全局Handle管理器并启动清理任务
     let handle_manager = Arc::new(GlobalHandleManager::new());
@@ -80,6 +95,47 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         .route(
             "/api/v1/health",
             axum::routing::get(handlers::EvifHandlers::health_v1),
+        )
+        // Phase 16.2: 分布式部署健康检查
+        .route(
+            "/api/v1/status",
+            axum::routing::get(handlers::EvifHandlers::node_status),
+        )
+        // POST /api/v1/ping：快速存活检查
+        .route(
+            "/api/v1/ping",
+            axum::routing::post(handlers::EvifHandlers::ping),
+        )
+        // GET /api/v1/ping：也支持 GET
+        .route(
+            "/api/v1/ping",
+            axum::routing::get(handlers::EvifHandlers::ping),
+        )
+        // Phase 16.3: 云存储后端
+        .route(
+            "/api/v1/cloud/status",
+            axum::routing::get(handlers::EvifHandlers::cloud_status),
+        )
+        .route(
+            "/api/v1/cloud/providers",
+            axum::routing::get(handlers::EvifHandlers::cloud_providers),
+        )
+        .route(
+            "/api/v1/cloud/config",
+            axum::routing::post(handlers::EvifHandlers::cloud_config),
+        )
+        // Phase 16.4: LLM 本地模型集成
+        .route(
+            "/api/v1/llm/status",
+            axum::routing::get(handlers::EvifHandlers::llm_status),
+        )
+        .route(
+            "/api/v1/llm/complete",
+            axum::routing::post(handlers::EvifHandlers::llm_complete),
+        )
+        .route(
+            "/api/v1/llm/ping",
+            axum::routing::post(handlers::EvifHandlers::llm_ping),
         )
         // ============== 兼容旧前端 API (/api/v1/fs/*) ==============
         .route(
@@ -171,6 +227,33 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
             "/api/v1/rename",
             axum::routing::post(handlers::EvifHandlers::rename),
         )
+        // ============== Phase 14.2: 文件锁 ==============
+        // 获取文件锁
+        .route(
+            "/api/v1/lock",
+            axum::routing::post(handlers::EvifHandlers::acquire_lock),
+        )
+        // 释放文件锁
+        .route(
+            "/api/v1/lock",
+            axum::routing::delete(handlers::EvifHandlers::release_lock),
+        )
+        // 列出所有锁
+        .route(
+            "/api/v1/locks",
+            axum::routing::get(handlers::EvifHandlers::list_locks),
+        )
+        // ============== Phase 14.1: 跨文件系统复制 ==============
+        // 复制文件
+        .route(
+            "/api/v1/copy",
+            axum::routing::post(handlers::EvifHandlers::cross_fs_copy),
+        )
+        // 递归复制目录
+        .route(
+            "/api/v1/copy/recursive",
+            axum::routing::post(handlers::EvifHandlers::cross_fs_copy_recursive),
+        )
         // ============== 挂载管理 ==============
         // 列出挂载点
         .route(
@@ -231,11 +314,16 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
             "/api/v1/plugins/list",
             axum::routing::get(wasm_handlers::WasmPluginHandlers::list_plugins),
         )
-        // ============== WASM 插件管理 (新增) ==============
+        // ============== WASM 插件管理 ==============
         // 加载 WASM 插件
         .route(
             "/api/v1/plugins/wasm/load",
             axum::routing::post(wasm_handlers::WasmPluginHandlers::load_wasm_plugin),
+        )
+        // 热重载 WASM 插件 (Phase 16.1)
+        .route(
+            "/api/v1/plugins/wasm/reload",
+            axum::routing::post(wasm_handlers::WasmPluginHandlers::reload_wasm_plugin),
         )
         // ============== 监控和指标 (新增) ==============
         // Prometheus metrics endpoint (公开，无需认证)
@@ -394,6 +482,51 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         )
         .with_state(collab_handlers::CollabState::default());
 
+    // Phase 17.1: 租户管理路由
+    let tenant_routes = Router::new()
+        // 列出所有租户
+        .route(
+            "/api/v1/tenants",
+            axum::routing::get(tenant_handlers::TenantHandlers::list_tenants),
+        )
+        // 创建租户
+        .route(
+            "/api/v1/tenants",
+            axum::routing::post(tenant_handlers::TenantHandlers::create_tenant),
+        )
+        // 获取当前租户信息
+        .route(
+            "/api/v1/tenants/me",
+            axum::routing::get(tenant_handlers::TenantHandlers::get_current_tenant),
+        )
+        // 获取指定租户
+        .route(
+            "/api/v1/tenants/:id",
+            axum::routing::get(tenant_handlers::TenantHandlers::get_tenant),
+        )
+        // 删除租户
+        .route(
+            "/api/v1/tenants/:id",
+            axum::routing::delete(tenant_handlers::TenantHandlers::delete_tenant),
+        )
+        .with_state(tenant_state);
+
+    // Phase 17.2: 加密管理路由
+    let encryption_routes = Router::new()
+        .route(
+            "/api/v1/encryption/status",
+            axum::routing::get(encryption_handlers::EncryptionHandlers::get_status),
+        )
+        .route(
+            "/api/v1/encryption/enable",
+            axum::routing::post(encryption_handlers::EncryptionHandlers::enable),
+        )
+        .route(
+            "/api/v1/encryption/disable",
+            axum::routing::post(encryption_handlers::EncryptionHandlers::disable),
+        )
+        .with_state(encryption_state);
+
     let memory_routes = Router::new()
         // ============== 记忆操作 ==============
         // 创建记忆
@@ -446,6 +579,8 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         .merge(handle_routes)
         .merge(batch_routes)
         .merge(ws_routes)
+        .merge(tenant_routes)
+        .merge(encryption_routes)
         .merge(memory_routes)
 }
 
