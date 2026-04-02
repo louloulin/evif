@@ -824,3 +824,277 @@ async fn contextfs_llm_abstract_not_generated_for_small_file() {
         "small file should NOT generate .abstract, but stat succeeded"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 13.7: L0CO Benchmark Tests (对标 OpenViking)
+// ---------------------------------------------------------------------------
+
+/// Token counter heuristic: ~4 bytes per token
+fn estimate_tokens(content: &str) -> usize {
+    content.len() / 4
+}
+
+/// LC-01: Token Reduction Test
+/// 目标: ≥ 80% token 减少
+#[tokio::test]
+async fn l0co_token_reduction() {
+    let plugin = ContextFsPlugin::new().with_max_file_size(256);
+
+    // 创建大文件 (模拟 50 个文件的 Rust 项目)
+    let project_content = format!(
+        "This is a comprehensive Rust project with multiple modules.\n\
+        It includes lib.rs, main.rs, config.rs, and many other files.\n\
+        The project uses tokio for async runtime.\n\
+        {}\n",
+        "line of code.\n".repeat(500)
+    );
+    let original_tokens = estimate_tokens(&project_content);
+
+    plugin
+        .create("/L2/project.rs", 0o644)
+        .await
+        .expect("create project file");
+    plugin
+        .write("/L2/project.rs", project_content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .await
+        .expect("write project");
+
+    // 等待 .abstract 生成
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // 读取 .abstract
+    let abstract_data = plugin
+        .read("/L2/project.rs.abstract", 0, 0)
+        .await
+        .expect("read .abstract");
+    let abstract_str = String::from_utf8_lossy(&abstract_data);
+    let abstract_tokens = estimate_tokens(&abstract_str);
+
+    let reduction = 1.0 - (abstract_tokens as f64 / original_tokens as f64);
+
+    // OpenViking 基准: 83% token 减少
+    // EVIF 目标: ≥ 80% token 减少
+    assert!(
+        reduction >= 0.80,
+        "Token reduction {:.1}% < 80% target (original: {} tokens, abstract: {} tokens)",
+        reduction * 100.0,
+        original_tokens,
+        abstract_tokens
+    );
+}
+
+/// LC-05: Progressive Loading Test
+/// 目标: L0 < 10ms, L1 < 50ms, L2 < 100ms
+#[tokio::test]
+async fn l0co_progressive_loading() {
+    let plugin = ContextFsPlugin::new();
+
+    // 创建不同层级的文件
+    plugin
+        .write("/L0/current", b"quick context".to_vec(), 0, WriteFlags::TRUNCATE)
+        .await
+        .expect("write L0");
+
+    // 创建 L1 文件
+    plugin
+        .create("/L1/overview.txt", 0o644)
+        .await
+        .expect("create L1 overview");
+    plugin
+        .write(
+            "/L1/overview.txt",
+            "overview content\n".repeat(50).into_bytes(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
+        .await
+        .expect("write L1");
+
+    // 创建 L2 文件
+    plugin
+        .create("/L2/detail.txt", 0o644)
+        .await
+        .expect("create L2 detail");
+    plugin
+        .write(
+            "/L2/detail.txt",
+            "detail content\n".repeat(100).into_bytes(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
+        .await
+        .expect("write L2");
+
+    // L0 加载测试
+    let l0_start = std::time::Instant::now();
+    let _ = plugin.read("/L0/current", 0, 0).await.unwrap();
+    let l0_time = l0_start.elapsed().as_millis();
+    assert!(
+        l0_time < 10,
+        "L0 should load in < 10ms, got {}ms",
+        l0_time
+    );
+
+    // L1 加载测试
+    let l1_start = std::time::Instant::now();
+    let _ = plugin.read("/L1/overview.txt", 0, 0).await.unwrap();
+    let l1_time = l1_start.elapsed().as_millis();
+    assert!(
+        l1_time < 50,
+        "L1 should load in < 50ms, got {}ms",
+        l1_time
+    );
+
+    // L2 加载测试
+    let l2_start = std::time::Instant::now();
+    let _ = plugin.read("/L2/detail.txt", 0, 0).await.unwrap();
+    let l2_time = l2_start.elapsed().as_millis();
+    assert!(
+        l2_time < 100,
+        "L2 should load in < 100ms, got {}ms",
+        l2_time
+    );
+}
+
+/// LC-06: L2 Lazy Loading Test
+/// 目标: 按需加载 < 50ms
+#[tokio::test]
+async fn l0co_l2_lazy_loading() {
+    let plugin = ContextFsPlugin::new();
+
+    // 创建一个文件 (按需加载)
+    let file_content = format!("fn main() {{}}\n// {}\n", "x".repeat(200));
+    plugin
+        .create("/L2/module.rs", 0o644)
+        .await
+        .expect("create module");
+    plugin
+        .write("/L2/module.rs", file_content.into_bytes(), 0, WriteFlags::TRUNCATE)
+        .await
+        .expect("write module");
+
+    // 测试按需加载时间
+    let start = std::time::Instant::now();
+    let _content = plugin.read("/L2/module.rs", 0, 0).await.unwrap();
+    let load_time = start.elapsed().as_millis();
+
+    assert!(
+        load_time < 50,
+        "L2 lazy load should be < 50ms, got {}ms",
+        load_time
+    );
+
+    // 验证内容正确
+    let content_str = String::from_utf8_lossy(&_content);
+    assert!(content_str.contains("fn main()"));
+}
+
+/// LC-07: Memory Self-Iteration Test
+/// 目标: 会话结束时自动将 L1 归档到 L2
+#[tokio::test]
+async fn l0co_memory_self_iteration() {
+    let plugin = ContextFsPlugin::new();
+
+    // 启动会话
+    plugin
+        .start_session("test-l0co-001")
+        .await
+        .expect("start session");
+
+    // 写入 L1 决策
+    plugin
+        .write(
+            "/L1/decisions.md",
+            b"# Decisions\n\n1. Use Rust for performance\n2. Use EVIF for context management\n".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
+        .await
+        .expect("write decisions");
+
+    // 结束会话 (触发 L1 → L2 归档)
+    plugin.end_session().await.expect("end session");
+
+    // 验证: L2/history 中存在归档的决策
+    let history_entries = plugin
+        .readdir("/L2/history")
+        .await
+        .expect("read L2/history");
+    let history_names: Vec<String> = history_entries.into_iter().map(|e| e.name).collect();
+
+    let has_decisions_archive = history_names
+        .iter()
+        .any(|n| n.starts_with("decisions_") && n.ends_with(".md"));
+    assert!(
+        has_decisions_archive,
+        "L2/history should contain archived decisions, got: {:?}",
+        history_names
+    );
+
+    // 验证归档内容包含原始决策
+    let archive_name = history_names
+        .iter()
+        .find(|n| n.starts_with("decisions_") && n.ends_with(".md"))
+        .expect("find decisions archive");
+    let archive_data = plugin
+        .read(&format!("/L2/history/{}", archive_name), 0, 0)
+        .await
+        .expect("read archive");
+    let archive_str = String::from_utf8_lossy(&archive_data);
+    assert!(
+        archive_str.contains("Use Rust for performance"),
+        "Archived decisions should contain original content"
+    );
+
+    // 验证 L0 被重置为 idle
+    let current_data = plugin.read("/L0/current", 0, 0).await.expect("read current");
+    let current_str = String::from_utf8_lossy(&current_data);
+    assert!(
+        current_str.contains("idle"),
+        "L0/current should be reset to idle after session end"
+    );
+}
+
+/// LC-03: L0 Abstract Generation Test
+/// 目标: L0 摘要 ~100 tokens
+#[tokio::test]
+async fn l0co_l0_abstract_generation() {
+    let plugin = ContextFsPlugin::new().with_max_file_size(128);
+
+    // 创建大文件触发 .abstract 生成
+    let content = format!(
+        "# Rust Project\n\nThis is a comprehensive Rust project.\n{}\n",
+        "line\n".repeat(200)
+    );
+    plugin
+        .create("/L2/readme.md", 0o644)
+        .await
+        .expect("create readme");
+    plugin
+        .write("/L2/readme.md", content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .await
+        .expect("write readme");
+
+    // 等待异步生成
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // 读取 .abstract
+    let abstract_data = plugin
+        .read("/L2/readme.md.abstract", 0, 0)
+        .await
+        .expect("read .abstract");
+    let abstract_str = String::from_utf8_lossy(&abstract_data);
+    let tokens = estimate_tokens(&abstract_str);
+
+    // .abstract 应该明显短于原文
+    assert!(
+        tokens < 300,
+        "L0 .abstract should be < 300 tokens (heuristic), got {}",
+        tokens
+    );
+    assert!(
+        abstract_str.contains("Rust") || abstract_str.contains("摘要") || abstract_str.contains("truncated"),
+        ".abstract should contain key content or fallback marker"
+    );
+}
+
