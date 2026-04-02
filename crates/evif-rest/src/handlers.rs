@@ -4,6 +4,7 @@ use crate::metrics_handlers::TrafficStats;
 use crate::{RestError, RestResult};
 use axum::{
     extract::{Path, Query, State},
+    http::header,
     response::{IntoResponse, Response},
     Json,
 };
@@ -325,10 +326,31 @@ impl EvifHandlers {
         let write_count = stats.write_count.load(Ordering::Relaxed);
         let list_count = stats.list_count.load(Ordering::Relaxed);
         let other_count = stats.other_count.load(Ordering::Relaxed);
+        let read_success_count = stats.read_success_count.load(Ordering::Relaxed);
+        let read_error_count = stats.read_error_count.load(Ordering::Relaxed);
+        let read_latency_micros_total = stats.read_latency_micros_total.load(Ordering::Relaxed);
+        let write_success_count = stats.write_success_count.load(Ordering::Relaxed);
+        let write_error_count = stats.write_error_count.load(Ordering::Relaxed);
+        let write_latency_micros_total = stats.write_latency_micros_total.load(Ordering::Relaxed);
+        let list_success_count = stats.list_success_count.load(Ordering::Relaxed);
+        let list_error_count = stats.list_error_count.load(Ordering::Relaxed);
+        let list_latency_micros_total = stats.list_latency_micros_total.load(Ordering::Relaxed);
+        let other_success_count = stats.other_success_count.load(Ordering::Relaxed);
+        let other_error_count = stats.other_error_count.load(Ordering::Relaxed);
+        let other_latency_micros_total = stats.other_latency_micros_total.load(Ordering::Relaxed);
         let uptime_secs = state.start_time.elapsed().as_secs();
 
+        let average_latency_micros = |success_count: u64, error_count: u64, total_micros: u64| {
+            let total_count = success_count + error_count;
+            if total_count > 0 {
+                total_micros / total_count
+            } else {
+                0
+            }
+        };
+
         // Build Prometheus text format output
-        let metrics = format!(
+        let base_metrics = format!(
             r#"# HELP evif_total_requests Total number of requests processed
 # TYPE evif_total_requests counter
 evif_total_requests {}
@@ -394,7 +416,79 @@ evif_average_write_size {}
             }
         );
 
-        metrics.into_response()
+        let operation_metrics = format!(
+            r#"
+# HELP evif_operation_success_total Successful HTTP requests by operation
+# TYPE evif_operation_success_total counter
+evif_operation_success_total{{operation="read"}} {}
+evif_operation_success_total{{operation="write"}} {}
+evif_operation_success_total{{operation="list"}} {}
+evif_operation_success_total{{operation="other"}} {}
+
+# HELP evif_operation_error_total Error HTTP requests by operation
+# TYPE evif_operation_error_total counter
+evif_operation_error_total{{operation="read"}} {}
+evif_operation_error_total{{operation="write"}} {}
+evif_operation_error_total{{operation="list"}} {}
+evif_operation_error_total{{operation="other"}} {}
+
+# HELP evif_operation_latency_micros_total Total request latency in microseconds by operation
+# TYPE evif_operation_latency_micros_total counter
+evif_operation_latency_micros_total{{operation="read"}} {}
+evif_operation_latency_micros_total{{operation="write"}} {}
+evif_operation_latency_micros_total{{operation="list"}} {}
+evif_operation_latency_micros_total{{operation="other"}} {}
+
+# HELP evif_operation_latency_micros_average Average request latency in microseconds by operation
+# TYPE evif_operation_latency_micros_average gauge
+evif_operation_latency_micros_average{{operation="read"}} {}
+evif_operation_latency_micros_average{{operation="write"}} {}
+evif_operation_latency_micros_average{{operation="list"}} {}
+evif_operation_latency_micros_average{{operation="other"}} {}
+"#,
+            read_success_count,
+            write_success_count,
+            list_success_count,
+            other_success_count,
+            read_error_count,
+            write_error_count,
+            list_error_count,
+            other_error_count,
+            read_latency_micros_total,
+            write_latency_micros_total,
+            list_latency_micros_total,
+            other_latency_micros_total,
+            average_latency_micros(
+                read_success_count,
+                read_error_count,
+                read_latency_micros_total,
+            ),
+            average_latency_micros(
+                write_success_count,
+                write_error_count,
+                write_latency_micros_total,
+            ),
+            average_latency_micros(
+                list_success_count,
+                list_error_count,
+                list_latency_micros_total,
+            ),
+            average_latency_micros(
+                other_success_count,
+                other_error_count,
+                other_latency_micros_total,
+            ),
+        );
+        let metrics = format!("{base_metrics}{operation_metrics}");
+
+        (
+            [(
+                header::CONTENT_TYPE,
+                "text/plain; version=0.0.4; charset=utf-8",
+            )],
+            metrics,
+        )
+            .into_response()
     }
 
     // ============== Metrics API（Phase 9：与 AppState 对接，返回真实 uptime/mount_count/traffic）==============

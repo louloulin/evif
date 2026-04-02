@@ -32,13 +32,13 @@ EVIF = Virtual File System + Context Engine + Skill Platform + Multi-Agent Coord
 |------|------|------------|----------------|
 | **定位** | 通用虚拟文件系统 | Context Database | **AI Agent 虚拟上下文文件系统** |
 | **核心语言** | Go | Python | **Rust (性能 + 安全)** |
-| **L0 摘要** | ❌ 无 | ✅ `.abstract` (~100 tokens) | ⚠️ 需实现 |
-| **L1 概览** | ❌ 无 | ✅ `.overview` (~2000 tokens) | ⚠️ 需实现 |
+| **L0 摘要** | ❌ 无 | ✅ `.abstract` (~100 tokens) | ✅ 已实现 |
+| **L1 概览** | ❌ 无 | ✅ `.overview` (~2000 tokens) | ✅ 已实现 |
 | **L2 详情** | ❌ 无 | ✅ 完整内容 | ✅ 已实现 |
-| **自动摘要** | ❌ 无 | ✅ LLM 自动生成 | ⚠️ 基础版 |
-| **目录递归检索** | ⚠️ 基础 | ✅ 多层级递归 | ⚠️ 需增强 |
-| **检索轨迹可视化** | ❌ 无 | ✅ 有 | ❌ 需实现 |
-| **自动会话管理** | ❌ 无 | ✅ 端会话总结 | ❌ 需实现 |
+| **自动摘要** | ❌ 无 | ✅ LLM 自动生成 | ✅ 已实现 |
+| **目录递归检索** | ⚠️ 基础 | ✅ 多层级递归 | ✅ 已实现 |
+| **检索轨迹可视化** | ❌ 无 | ✅ 有 | ✅ 已实现 |
+| **自动会话管理** | ❌ 无 | ✅ 端会话总结 | ✅ 已实现 |
 | **技能系统** | ❌ 无 | ✅ 有 | ✅ **SkillFS** |
 | **多 Agent** | QueueFS (单向) | ❌ 无 | ✅ **PipeFS (双向)** |
 | **中国云存储** | ❌ 无 | ❌ 无 | ✅ **OSS/COS/OBS** |
@@ -230,7 +230,7 @@ EVIF 作为 Claude Code 的增强层，支持以下功能：
 
 ---
 
-## 三、代码分析：已实现 vs 待实现
+## 三、代码分析：已实现 vs 历史待实现
 
 ### 3.1 代码规模统计
 
@@ -260,16 +260,16 @@ EVIF 总计: 141 文件, 67,165 行 Rust
 | RBAC Auth | acl.rs | — | 8 |
 | 38 个存储插件 | *.fs.rs | 18,765 | 287+ |
 
-### 3.3 待实现功能（优先级排序）
+### 3.3 历史待实现功能（截至 v17 已完成收口）
 
 #### P0 — 核心差距（影响 EVIF 竞争力）
 
 | 功能 | OpenViking 实现 | EVIF 现状 | 实现方案 |
 |------|-----------------|-----------|----------|
-| **自动 LLM 摘要** | `.abstract` 自动生成 | ⚠️ 手动摘要 | 集成 GPTFS 或 OpenAI API |
-| **目录递归检索** | 多层级递归 | ⚠️ 基础 grep | 重写 grep 支持递归 |
-| **自动会话管理** | 端会话自动总结 | ❌ 无 | 添加 session lifecycle hook |
-| **持久化记忆跨会话** | 自动记忆提取 | ⚠️ 基础 | ContextFS auto-memory |
+| **自动 LLM 摘要** | `.abstract` 自动生成 | ✅ 已实现 | 已在 Phase 12/13 完成验证 |
+| **目录递归检索** | 多层级递归 | ✅ 已实现 | 已在 Phase 12 完成并验证 |
+| **自动会话管理** | 端会话自动总结 | ✅ 已实现 | 已在 Phase 12 完成并验证 |
+| **持久化记忆跨会话** | 自动记忆提取 | ✅ 已实现 | 已在 Phase 12 完成并验证 |
 
 #### P1 — Claude Code 增强功能
 
@@ -284,10 +284,10 @@ EVIF 总计: 141 文件, 67,165 行 Rust
 
 | 功能 | 对标基准 | 实现方案 |
 |------|----------|----------|
-| **OSWorld 对标** | OS 级 Agent 评估 | 创建文件系统状态测试 |
-| **IDE-Bench 对标** | IDE Agent 评估 | 创建文件读写测试 |
-| **AgentBench 对标** | 多环境 Agent 评估 | 创建 evif-bench crate |
-| **MCP 完整测试** | MCP-AgentBench | 添加 50+ MCP 协议测试 |
+| **OSWorld 对标** | OS 级 Agent 评估 | ✅ 已完成对标测试 |
+| **IDE-Bench 对标** | IDE Agent 评估 | ✅ 已完成对标测试 |
+| **AgentBench 对标** | 多环境 Agent 评估 | ✅ 已完成 evif-bench crate |
+| **MCP 完整测试** | MCP-AgentBench | ✅ 已完成协议测试覆盖 |
 
 ---
 
@@ -965,7 +965,7 @@ async fn test_memory_self_iteration() {
 │ 自动摘要         │ ✅ LLM 生成  │ ✅ LLM/Fallback│ 已实现              │
 │ 会话自迭代       │ ✅          │ ✅ ✅           │ **已实现**          │
 │ 多层级递归检索    │ ✅          │ ✅ ✅           │ **已实现**          │
-│ 检索轨迹可视化    │ ✅          │ ❌             │ 待实现              │
+│ 检索轨迹可视化    │ ✅          │ ✅ ✅           │ **已实现**          │
 └──────────────────┴─────────────┴──────────────────┴─────────────────────┘
 
 测试文件：
@@ -1251,7 +1251,7 @@ EVIF 测试集
   - CC-06: 目录导航
   - CC-07: 健康检查
   - CC-08: MCP 工具接口
-- [ ] Phase 14: 跨文件系统复制、文件锁、检索轨迹可视化 — 规划中
+- [x] Phase 14: 跨文件系统复制、文件锁、检索轨迹可视化 — 已完成（详见下文）
 
 ### Phase 14: 生态增强 ✅ 已完成 (100%)
 
@@ -1302,11 +1302,11 @@ EVIF 测试集
 
 **Phase 15 测试: 14 tests, 全部通过 ✅**
 
-### Phase 16: 未来规划
-- Phase 16.1: WASM 插件热重载
-- Phase 16.2: 分布式部署 (multi-node)
-- Phase 16.3: 云存储后端集成
-- Phase 16.4: LLM 本地模型集成 (Ollama)
+### Phase 16: 基础设施增强（已在后文进度总结中完成）
+- [x] Phase 16.1: WASM 插件热重载
+- [x] Phase 16.2: 分布式部署 (multi-node)
+- [x] Phase 16.3: 云存储后端集成
+- [x] Phase 16.4: LLM 本地模型集成 (Ollama)
 
 ---
 
@@ -1424,13 +1424,55 @@ EVIF 测试集
 
 **Phase 12-16 总测试: 133 tests，全部通过 ✅**
 
-### Phase 17: 未来规划
-- Phase 17.1: 多租户支持
-- Phase 17.2: 加密存储 (Encryption-at-rest)
-- Phase 17.3: 增量同步协议
-- Phase 17.4: GraphQL API
+### Phase 17: 基础设施增强（第二轮）✅ 100% 完成
 
-*EVIF 版本：1.9.0*
+- [x] **Phase 17.1: 多租户支持 ✅**
+  - 新增 `GET /api/v1/tenants` 列出所有租户
+  - 新增 `POST /api/v1/tenants` 创建租户
+  - 新增 `GET /api/v1/tenants/me` 获取当前租户
+  - 新增 `GET /api/v1/tenants/:id` 获取指定租户
+  - 新增 `DELETE /api/v1/tenants/:id` 删除租户
+  - TenantState 管理租户信息（ID、名称、配额、状态）
+  - TenantMiddleware 中间件从 X-Tenant-ID header 提取租户 ID
+  - 集成测试: multi_tenant.rs (7 tests)
+
+- [x] **Phase 17.2: 加密存储 (Encryption-at-rest) ✅**
+  - 新增 `GET /api/v1/encryption/status` 获取加密状态
+  - 新增 `POST /api/v1/encryption/enable` 启用加密
+  - 新增 `POST /api/v1/encryption/disable` 禁用加密
+  - AES-256-GCM 加密算法，支持环境变量或手动配置密钥
+  - EncryptionState 管理加密配置和加密/解密操作
+  - 集成测试: encryption_at_rest.rs (4 tests)
+
+- [x] **Phase 17.3: 增量同步协议 ✅**
+  - 新增 `GET /api/v1/sync/status` 获取同步状态
+  - 新增 `POST /api/v1/sync/delta` 提交增量变更
+  - 新增 `GET /api/v1/sync/version` 获取当前版本
+  - 新增 `GET /api/v1/sync/:path/version` 获取指定路径版本
+  - DeltaChange 支持 created/modified/deleted 操作
+  - SyncState 管理版本跟踪和冲突检测
+  - 集成测试: incremental_sync.rs (5 tests)
+
+- [x] **Phase 17.4: GraphQL API ✅**
+  - 新增 `POST /api/v1/graphql` GraphQL 查询端点
+  - 新增 `GET /api/v1/graphql/graphiql` GraphiQL IDE
+  - EvifSchema 提供 Query 和 Mutation 根类型
+  - 支持 status、health 查询和 echo mutation
+  - 集成测试: graphql_api.rs (4 tests)
+
+**Phase 17 测试: 20 tests，全部通过 ✅**
+
+**Phase 17 真实验证（2026-04-02）✅**
+
+- [x] 验证命令：
+  `cargo test -p evif-rest --test multi_tenant --test encryption_at_rest --test incremental_sync --test graphql_api -- --nocapture`
+- [x] 验证结果：
+  `multi_tenant` 7/7 通过，`encryption_at_rest` 4/4 通过，`incremental_sync` 5/5 通过，`graphql_api` 4/4 通过
+- [x] 当前实现进度：**Phase 17 = 100%**，**Phase 12-17 总进度 = 100%**
+
+**Phase 12-17 总测试: 153 tests，全部通过 ✅**
+
+*EVIF 版本：1.10.0*
 *核心定位：AI Agent 的虚拟上下文文件系统，增强 Claude Code/Codex/Cursor 等 AI Agent*
 *对标 OpenViking：83% token 减少 → EVIF 实现 98.3% ✅*
-*v16 更新时间：2026-04-02 | Phase 12-16 100% 完成*
+*v17 更新时间：2026-04-02 | Phase 12-17 100% 完成*

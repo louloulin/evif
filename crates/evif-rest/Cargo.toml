@@ -44,6 +44,10 @@ regex = "1"
 aes-gcm = { workspace = true }
 rand = { workspace = true }
 
+# GraphQL API (Phase 17.4)
+async-graphql = { workspace = true }
+async-graphql-axum = { workspace = true }
+
 # Local crates
 evif-core = { path = "../evif-core" }
 evif-plugins = { path = "../evif-plugins", features = ["sqlfs"] }

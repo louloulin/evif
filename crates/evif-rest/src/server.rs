@@ -441,7 +441,8 @@ impl EvifServer {
                 CorsLayer::new()
                     .allow_origin(Any)
                     .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::PUT, axum::http::Method::DELETE, axum::http::Method::PATCH])
-                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key")])
+                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key"), axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
+                    .expose_headers([axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
                     .max_age(std::time::Duration::from_secs(3600))
             } else {
                 // Specific origins configured
@@ -451,7 +452,8 @@ impl EvifServer {
                 CorsLayer::new()
                     .allow_origin(origins)
                     .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::PUT, axum::http::Method::DELETE, axum::http::Method::PATCH])
-                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key")])
+                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key"), axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
+                    .expose_headers([axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
                     .max_age(std::time::Duration::from_secs(3600))
             };
             app = app.layer(cors);

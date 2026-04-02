@@ -1,12 +1,12 @@
 // REST API 路由 - 增强版，完全对标AGFS
 
 use crate::{
-    batch_handlers, collab_handlers, context_handlers, encryption_handlers, handle_handlers,
-    handlers, memory_handlers, metrics_handlers, tenant_handlers, wasm_handlers, ws_handlers,
-    AuthMiddleware, CompatFsHandlers, ContextState, HandleState, RestAuthState, TenantMiddleware,
-    TenantState, EncryptionState,
+    batch_handlers, collab_handlers, context_handlers, encryption_handlers, graphql_handlers,
+    handle_handlers, handlers, memory_handlers, metrics_handlers, sync_handlers, tenant_handlers,
+    wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState,
+    EvifSchema, HandleState, RestAuthState, SyncState, TenantMiddleware, TenantState,
 };
-use axum::{middleware, Router};
+use axum::{middleware, routing, Router};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
 use std::sync::Arc;
 use std::time::Instant;
@@ -24,7 +24,7 @@ pub fn create_routes_with_memory_state(
     mount_table: Arc<RadixMountTable>,
     memory_state: memory_handlers::MemoryState,
 ) -> Router {
-    build_routes(mount_table, memory_state)
+    attach_request_identity(build_routes(mount_table, memory_state))
 }
 
 /// 创建带认证保护的 API 路由
@@ -44,8 +44,14 @@ pub(crate) fn create_routes_with_auth_and_memory_state(
     auth_state: Arc<RestAuthState>,
     memory_state: memory_handlers::MemoryState,
 ) -> Router {
-    build_routes(mount_table, memory_state)
-        .layer(middleware::from_fn_with_state(auth_state, AuthMiddleware))
+    attach_request_identity(
+        build_routes(mount_table, memory_state)
+            .layer(middleware::from_fn_with_state(auth_state, AuthMiddleware)),
+    )
+}
+
+fn attach_request_identity(router: Router) -> Router {
+    router.layer(middleware::from_fn(crate::middleware::RequestIdentityMiddleware))
 }
 
 fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers::MemoryState) -> Router {
@@ -67,6 +73,7 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         lock_manager,
         cross_fs_copy_manager,
     };
+    let traffic_stats = app_state.traffic_stats.clone();
 
     // 创建批量操作管理器
     let batch_manager = batch_handlers::BatchOperationManager::new();
@@ -75,7 +82,13 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
     let tenant_state = TenantState::new();
 
     // Phase 17.2: 创建加密状态管理器
-    let encryption_state = Arc::new(EncryptionState::new());
+    let encryption_state = EncryptionState::new();
+
+    // Phase 17.3: 创建增量同步状态管理器
+    let sync_state = SyncState::new();
+
+    // Phase 17.4: 创建 GraphQL schema
+    let graphql_schema = graphql_handlers::GraphQLState::schema();
 
     // 创建全局Handle管理器并启动清理任务
     let handle_manager = Arc::new(GlobalHandleManager::new());
@@ -351,7 +364,11 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
             "/api/v1/metrics/reset",
             axum::routing::post(handlers::EvifHandlers::reset_metrics),
         )
-        .with_state(app_state);
+        .with_state(app_state)
+        .layer(middleware::from_fn_with_state(
+            traffic_stats,
+            crate::middleware::TrafficMetricsMiddleware,
+        ));
 
     // 创建 WebSocket 状态
     let ws_state = ws_handlers::WebSocketState {
@@ -527,6 +544,32 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         )
         .with_state(encryption_state);
 
+    // Phase 17.3: 增量同步路由
+    let sync_routes = Router::new()
+        .route(
+            "/api/v1/sync/status",
+            axum::routing::get(sync_handlers::SyncHandlers::get_status),
+        )
+        .route(
+            "/api/v1/sync/delta",
+            axum::routing::post(sync_handlers::SyncHandlers::apply_delta),
+        )
+        .route(
+            "/api/v1/sync/version",
+            axum::routing::get(sync_handlers::SyncHandlers::get_version),
+        )
+        .route(
+            "/api/v1/sync/:path/version",
+            axum::routing::get(sync_handlers::SyncHandlers::get_path_version),
+        )
+        .with_state(sync_state);
+
+    // Phase 17.4: GraphQL API 路由
+    let graphql_routes = Router::new()
+        .route("/api/v1/graphql", routing::post(graphql_handlers::GraphQLHandlers::handler))
+        .route("/api/v1/graphql/graphiql", routing::get(graphql_handlers::GraphQLHandlers::graphiql))
+        .with_state(graphql_schema);
+
     let memory_routes = Router::new()
         // ============== 记忆操作 ==============
         // 创建记忆
@@ -581,6 +624,8 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
         .merge(ws_routes)
         .merge(tenant_routes)
         .merge(encryption_routes)
+        .merge(sync_routes)
+        .merge(graphql_routes)
         .merge(memory_routes)
 }
 
@@ -589,10 +634,11 @@ pub fn create_routes_with_context(
     mount_table: Arc<RadixMountTable>,
     context_manager: evif_plugins::ContextManager,
 ) -> Router {
-    let base = create_routes(mount_table);
+    let base = build_routes(mount_table, memory_handlers::create_memory_state());
     let context_state = ContextState::new(context_manager);
 
-    Router::new()
+    attach_request_identity(
+        Router::new()
         .route(
             "/context/semantic_search",
             axum::routing::post(context_handlers::semantic_search),
@@ -602,7 +648,8 @@ pub fn create_routes_with_context(
             axum::routing::post(context_handlers::summarize),
         )
         .with_state(context_state)
-        .merge(base)
+        .merge(base),
+    )
 }
 
 #[cfg(test)]

@@ -4,9 +4,10 @@
 
 use crate::{RestError, RestResult};
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
+use rand::{RngCore, rngs::OsRng};
 use axum::{
     extract::State,
     response::IntoResponse,
@@ -159,7 +160,6 @@ impl EncryptionState {
         let inner = self.inner.read();
         let cipher = inner.cipher.as_ref().ok_or("Encryption not enabled")?;
 
-        let nonce_bytes: [u8; 12] = rand::RngCore::fill_bytes(&mut OsRng, &mut [0u8; 12]).into();
         // Generate random nonce
         let mut nonce_arr = [0u8; 12];
         OsRng.fill_bytes(&mut nonce_arr);

@@ -34,6 +34,18 @@ pub struct TrafficStats {
     pub write_count: AtomicU64,
     pub list_count: AtomicU64,
     pub other_count: AtomicU64,
+    pub read_success_count: AtomicU64,
+    pub read_error_count: AtomicU64,
+    pub read_latency_micros_total: AtomicU64,
+    pub write_success_count: AtomicU64,
+    pub write_error_count: AtomicU64,
+    pub write_latency_micros_total: AtomicU64,
+    pub list_success_count: AtomicU64,
+    pub list_error_count: AtomicU64,
+    pub list_latency_micros_total: AtomicU64,
+    pub other_success_count: AtomicU64,
+    pub other_error_count: AtomicU64,
+    pub other_latency_micros_total: AtomicU64,
 }
 
 /// 流量统计响应
@@ -135,25 +147,25 @@ impl MetricsHandlers {
                 operation: "read".to_string(),
                 count: stats.read_count.load(Ordering::Relaxed),
                 bytes: stats.total_bytes_read.load(Ordering::Relaxed),
-                errors: stats.total_errors.load(Ordering::Relaxed),
+                errors: stats.read_error_count.load(Ordering::Relaxed),
             },
             OperationStats {
                 operation: "write".to_string(),
                 count: stats.write_count.load(Ordering::Relaxed),
                 bytes: stats.total_bytes_written.load(Ordering::Relaxed),
-                errors: 0,
+                errors: stats.write_error_count.load(Ordering::Relaxed),
             },
             OperationStats {
                 operation: "list".to_string(),
                 count: stats.list_count.load(Ordering::Relaxed),
                 bytes: 0,
-                errors: 0,
+                errors: stats.list_error_count.load(Ordering::Relaxed),
             },
             OperationStats {
                 operation: "other".to_string(),
                 count: stats.other_count.load(Ordering::Relaxed),
                 bytes: 0,
-                errors: 0,
+                errors: stats.other_error_count.load(Ordering::Relaxed),
             },
         ])
     }
@@ -190,6 +202,18 @@ impl MetricsHandlers {
         stats.write_count.store(0, Ordering::Relaxed);
         stats.list_count.store(0, Ordering::Relaxed);
         stats.other_count.store(0, Ordering::Relaxed);
+        stats.read_success_count.store(0, Ordering::Relaxed);
+        stats.read_error_count.store(0, Ordering::Relaxed);
+        stats.read_latency_micros_total.store(0, Ordering::Relaxed);
+        stats.write_success_count.store(0, Ordering::Relaxed);
+        stats.write_error_count.store(0, Ordering::Relaxed);
+        stats.write_latency_micros_total.store(0, Ordering::Relaxed);
+        stats.list_success_count.store(0, Ordering::Relaxed);
+        stats.list_error_count.store(0, Ordering::Relaxed);
+        stats.list_latency_micros_total.store(0, Ordering::Relaxed);
+        stats.other_success_count.store(0, Ordering::Relaxed);
+        stats.other_error_count.store(0, Ordering::Relaxed);
+        stats.other_latency_micros_total.store(0, Ordering::Relaxed);
 
         Json(serde_json::json!({
             "message": "Metrics reset successfully"
@@ -247,5 +271,64 @@ impl TrafficStats {
     /// 记录错误
     pub fn record_error(&self) {
         self.total_errors.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// 记录读取结果与延迟
+    pub fn record_read_outcome(&self, success: bool, latency_micros: u64) {
+        Self::record_operation_outcome(
+            success,
+            latency_micros,
+            &self.read_success_count,
+            &self.read_error_count,
+            &self.read_latency_micros_total,
+        );
+    }
+
+    /// 记录写入结果与延迟
+    pub fn record_write_outcome(&self, success: bool, latency_micros: u64) {
+        Self::record_operation_outcome(
+            success,
+            latency_micros,
+            &self.write_success_count,
+            &self.write_error_count,
+            &self.write_latency_micros_total,
+        );
+    }
+
+    /// 记录列表结果与延迟
+    pub fn record_list_outcome(&self, success: bool, latency_micros: u64) {
+        Self::record_operation_outcome(
+            success,
+            latency_micros,
+            &self.list_success_count,
+            &self.list_error_count,
+            &self.list_latency_micros_total,
+        );
+    }
+
+    /// 记录其他操作结果与延迟
+    pub fn record_other_outcome(&self, success: bool, latency_micros: u64) {
+        Self::record_operation_outcome(
+            success,
+            latency_micros,
+            &self.other_success_count,
+            &self.other_error_count,
+            &self.other_latency_micros_total,
+        );
+    }
+
+    fn record_operation_outcome(
+        success: bool,
+        latency_micros: u64,
+        success_count: &AtomicU64,
+        error_count: &AtomicU64,
+        latency_total: &AtomicU64,
+    ) {
+        if success {
+            success_count.fetch_add(1, Ordering::Relaxed);
+        } else {
+            error_count.fetch_add(1, Ordering::Relaxed);
+        }
+        latency_total.fetch_add(latency_micros, Ordering::Relaxed);
     }
 }

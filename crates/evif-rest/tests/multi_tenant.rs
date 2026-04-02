@@ -131,7 +131,66 @@ async fn tenant_get_current() {
     assert_eq!(json["status"], "active");
 }
 
-/// P17.1-04: Create Tenant With Empty Name Error
+/// P17.1-04: Get Tenant By ID
+#[tokio::test]
+async fn tenant_get_by_id() {
+    let mount_table = Arc::new(RadixMountTable::new());
+    let app = create_routes(mount_table);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app.into_make_service())
+            .await
+            .expect("serve");
+    });
+
+    let base = format!("http://127.0.0.1:{}", port);
+    let client = reqwest::Client::new();
+
+    for _ in 0..60 {
+        if let Ok(res) = client.get(&format!("{}/api/v1/health", base)).send().await {
+            if res.status().is_success() {
+                break;
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+    }
+
+    let create_res = client
+        .post(format!("{}/api/v1/tenants", base))
+        .json(&serde_json::json!({
+            "name": "lookup-tenant",
+            "storage_quota": 2048u64
+        }))
+        .send()
+        .await
+        .expect("request succeeds");
+
+    assert!(
+        create_res.status().is_success(),
+        "Tenant create should succeed before lookup"
+    );
+
+    let created: serde_json::Value = create_res.json().await.expect("valid JSON");
+    let tenant_id = created["id"].as_str().expect("tenant id should exist");
+
+    let get_res = client
+        .get(format!("{}/api/v1/tenants/{}", base, tenant_id))
+        .send()
+        .await
+        .expect("request succeeds");
+
+    assert!(get_res.status().is_success(), "Get tenant by id should succeed");
+
+    let json: serde_json::Value = get_res.json().await.expect("valid JSON");
+    assert_eq!(json["id"], tenant_id);
+    assert_eq!(json["name"], "lookup-tenant");
+    assert_eq!(json["storage_quota"], 2048u64);
+    assert_eq!(json["status"], "active");
+}
+
+/// P17.1-05: Create Tenant With Empty Name Error
 #[tokio::test]
 async fn tenant_create_empty_name_error() {
     let mount_table = Arc::new(RadixMountTable::new());
@@ -173,7 +232,7 @@ async fn tenant_create_empty_name_error() {
     );
 }
 
-/// P17.1-05: Delete Non-default Tenant
+/// P17.1-06: Delete Non-default Tenant
 #[tokio::test]
 async fn tenant_delete_non_default() {
     let mount_table = Arc::new(RadixMountTable::new());
@@ -222,7 +281,7 @@ async fn tenant_delete_non_default() {
     assert!(delete_res.status().is_success(), "Delete non-default tenant should succeed");
 }
 
-/// P17.1-06: Cannot Delete Default Tenant
+/// P17.1-07: Cannot Delete Default Tenant
 #[tokio::test]
 async fn tenant_cannot_delete_default() {
     let mount_table = Arc::new(RadixMountTable::new());

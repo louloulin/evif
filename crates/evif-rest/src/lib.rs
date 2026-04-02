@@ -6,6 +6,7 @@ mod compat_fs;
 mod context_handlers;
 mod encryption_handlers;
 mod fs_handlers;
+mod graphql_handlers;
 mod handle_handlers;
 mod handlers;
 mod memory_handlers;
@@ -14,6 +15,7 @@ mod middleware;
 mod plugin_handlers;
 mod routes;
 mod server;
+mod sync_handlers;
 mod tenant_handlers;
 mod wasm_handlers;
 mod ws_handlers;
@@ -45,6 +47,10 @@ pub use tenant_handlers::{
 pub use encryption_handlers::{
     EnableEncryptionRequest, EncryptionConfig, EncryptionHandlers, EncryptionState,
     EncryptionStatus,
+};
+pub use graphql_handlers::{EvifSchema, GraphQLHandlers, GraphQLState, QueryRoot, ServerStatus};
+pub use sync_handlers::{
+    DeltaChange, DeltaRequest, DeltaResponse, SyncHandlers, SyncState, SyncStatus, WatchEvent,
 };
 
 use axum::{

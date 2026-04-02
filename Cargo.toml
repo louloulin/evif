@@ -78,6 +78,10 @@ sha2 = "0.10"
 aes-gcm = "0.10"
 rand = "0.8"
 
+# GraphQL API (Phase 17.4)
+async-graphql = "7.0"
+async-graphql-axum = "7.0"
+
 # Testing
 proptest = "1.4.0"
 criterion = "0.5.1"

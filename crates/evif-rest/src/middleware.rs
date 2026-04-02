@@ -4,7 +4,7 @@ use axum::{
     extract::{Request, State},
     http::{
         header::{AUTHORIZATION, USER_AGENT},
-        HeaderMap, Method, StatusCode,
+        HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
     },
     middleware::Next,
     response::{IntoResponse, Response},
@@ -21,6 +21,10 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::tenant_handlers::{TenantState, TENANT_HEADER};
+use crate::TrafficStats;
+
+const REQUEST_ID_HEADER: &str = "x-request-id";
+const CORRELATION_ID_HEADER: &str = "x-correlation-id";
 
 fn write_scope_id() -> Uuid {
     Uuid::from_u128(0x8f53_7321_9f58_4a6f_8d21_3141_0000_0001)
@@ -34,6 +38,12 @@ fn admin_scope_id() -> Uuid {
 struct ApiKeyIdentity {
     principal: Principal,
     principal_id: Uuid,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequestIdentity {
+    pub request_id: String,
+    pub correlation_id: String,
 }
 
 struct RestAuthInner {
@@ -324,6 +334,113 @@ pub async fn LoggingMiddleware(req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
+/// 为每个请求分配 request id / correlation id，并在响应头中返回。
+#[allow(non_snake_case)]
+pub async fn RequestIdentityMiddleware(mut req: Request, next: Next) -> Response {
+    let identity = resolve_request_identity(req.headers());
+
+    if let Ok(value) = HeaderValue::from_str(&identity.request_id) {
+        req.headers_mut()
+            .insert(HeaderName::from_static(REQUEST_ID_HEADER), value);
+    }
+    if let Ok(value) = HeaderValue::from_str(&identity.correlation_id) {
+        req.headers_mut()
+            .insert(HeaderName::from_static(CORRELATION_ID_HEADER), value);
+    }
+
+    req.extensions_mut().insert(identity.clone());
+
+    let mut response = next.run(req).await;
+    if let Ok(value) = HeaderValue::from_str(&identity.request_id) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static(REQUEST_ID_HEADER), value);
+    }
+    if let Ok(value) = HeaderValue::from_str(&identity.correlation_id) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static(CORRELATION_ID_HEADER), value);
+    }
+
+    response
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TrafficOperation {
+    Read,
+    Write,
+    List,
+    Other,
+}
+
+fn classify_traffic_operation(method: &Method, path: &str) -> Option<TrafficOperation> {
+    if path == "/metrics" || path.starts_with("/api/v1/metrics/") {
+        return None;
+    }
+
+    if *method == Method::GET && path == "/api/v1/files" {
+        return Some(TrafficOperation::Read);
+    }
+
+    if *method == Method::GET && path == "/api/v1/directories" {
+        return Some(TrafficOperation::List);
+    }
+
+    if matches!(*method, Method::POST | Method::PUT | Method::DELETE)
+        && matches!(path, "/api/v1/files" | "/api/v1/directories")
+    {
+        return Some(TrafficOperation::Write);
+    }
+
+    Some(TrafficOperation::Other)
+}
+
+/// 流量统计中间件
+/// 将真实 HTTP 请求接到 TrafficStats，避免 metrics 端点成为空壳。
+#[allow(non_snake_case)]
+pub async fn TrafficMetricsMiddleware(
+    State(traffic_stats): State<Arc<TrafficStats>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let started = std::time::Instant::now();
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+
+    let operation = classify_traffic_operation(&method, &path);
+    let response = next.run(req).await;
+
+    if let Some(operation) = operation {
+        let is_error = response.status().is_client_error() || response.status().is_server_error();
+        let latency_micros = started.elapsed().as_micros() as u64;
+
+        match operation {
+            TrafficOperation::Read => {
+                traffic_stats.record_read(0);
+                traffic_stats.record_read_outcome(!is_error, latency_micros);
+            }
+            TrafficOperation::Write => {
+                traffic_stats.record_write(0);
+                traffic_stats.record_write_outcome(!is_error, latency_micros);
+            }
+            TrafficOperation::List => {
+                traffic_stats.record_list();
+                traffic_stats.record_list_outcome(!is_error, latency_micros);
+            }
+            TrafficOperation::Other => {
+                traffic_stats.record_other();
+                traffic_stats.record_other_outcome(!is_error, latency_micros);
+            }
+        }
+
+        if is_error {
+            traffic_stats.record_error();
+        }
+    }
+
+    response
+}
+
 /// Phase 17.1: 租户中间件
 /// 从 X-Tenant-ID header 提取租户 ID 并注入到请求扩展中
 #[allow(non_snake_case)]
@@ -492,6 +609,25 @@ fn header_value<'a>(
     headers.get(name).and_then(|value| value.to_str().ok())
 }
 
+fn resolve_request_identity(headers: &HeaderMap) -> RequestIdentity {
+    let request_id = header_value(headers, REQUEST_ID_HEADER)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    let correlation_id = header_value(headers, CORRELATION_ID_HEADER)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| request_id.clone());
+
+    RequestIdentity {
+        request_id,
+        correlation_id,
+    }
+}
+
 fn extract_api_key(headers: &HeaderMap) -> Option<&str> {
     header_value(headers, "x-api-key")
         .or_else(|| header_value(headers, "x-evif-api-key"))
@@ -655,5 +791,45 @@ mod tests {
         let events = state.audit_events();
         assert_eq!(events.len(), 1);
         assert!(events[0].details.contains("/api/v1/files"));
+    }
+
+    #[test]
+    fn test_resolve_request_identity_generates_defaults() {
+        let headers = HeaderMap::new();
+        let identity = resolve_request_identity(&headers);
+
+        assert!(Uuid::parse_str(&identity.request_id).is_ok());
+        assert_eq!(identity.correlation_id, identity.request_id);
+    }
+
+    #[test]
+    fn test_resolve_request_identity_preserves_client_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert(REQUEST_ID_HEADER, "req-123".parse().unwrap());
+        headers.insert(CORRELATION_ID_HEADER, "corr-456".parse().unwrap());
+
+        let identity = resolve_request_identity(&headers);
+        assert_eq!(identity.request_id, "req-123");
+        assert_eq!(identity.correlation_id, "corr-456");
+    }
+
+    #[test]
+    fn test_classify_traffic_operation() {
+        assert_eq!(
+            classify_traffic_operation(&Method::GET, "/api/v1/files"),
+            Some(TrafficOperation::Read)
+        );
+        assert_eq!(
+            classify_traffic_operation(&Method::GET, "/api/v1/directories"),
+            Some(TrafficOperation::List)
+        );
+        assert_eq!(
+            classify_traffic_operation(&Method::PUT, "/api/v1/files"),
+            Some(TrafficOperation::Write)
+        );
+        assert_eq!(
+            classify_traffic_operation(&Method::POST, "/api/v1/metrics/reset"),
+            None
+        );
     }
 }

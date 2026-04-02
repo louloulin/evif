@@ -1,0 +1,1 @@
+当前目标：按 mem15.md 的最佳最小方式推进 Phase B，可观测性已完成 TrafficStats 真实请求统计、标准 `/metrics` Prometheus 文本接口、request id / correlation id 请求标识、以及关键路由 success/error/latency 指标闭环，并在真实集成测试通过后同步更新 mem15.md 进度。
