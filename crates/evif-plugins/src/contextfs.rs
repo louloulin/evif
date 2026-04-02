@@ -16,6 +16,148 @@ const DEFAULT_BUDGET_LIMIT: usize = 200_000;
 /// Heuristic: 1 token is approximately 4 bytes.
 const BYTES_PER_TOKEN: usize = 4;
 
+/// LLM 摘要生成 (Phase 12.1)
+///
+/// 当 `OPENAI_API_KEY` 环境变量存在且非空时，使用 GPT 生成 `.abstract` 摘要。
+/// 否则降级为基于规则的头行截断。
+
+/// OpenAI API Host (可通过 `OPENAI_API_HOST` 环境变量覆盖)
+fn openai_host() -> String {
+    std::env::var("OPENAI_API_HOST")
+        .unwrap_or_else(|_| "https://api.openai.com/v1/chat/completions".to_string())
+}
+
+/// OpenAI API Key (通过环境变量获取)
+fn openai_api_key() -> Option<String> {
+    let key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+    if key.is_empty() || key == "dummy" {
+        None
+    } else {
+        Some(key)
+    }
+}
+
+/// 生成 LLM 摘要 (Phase 12.1)
+///
+/// 使用 OpenAI API 生成文件摘要。如果未配置 API Key，降级为头行截断。
+///
+/// `mode` 参数控制摘要长度：
+/// - `"abstract"`: L0 摘要 (~100 tokens)，一句话概括
+/// - `"overview"`: L1 概览 (~500 tokens)，项目结构概述
+/// - `"summary"`: L2 压缩摘要 (~1000 tokens)
+async fn summarize_llm(content: &str, mode: &str) -> String {
+    let Some(api_key) = openai_api_key() else {
+        // 降级方案：头行截断
+        return fallback_summary(content, mode);
+    };
+
+    let prompt = match mode {
+        "abstract" => format!(
+            "Summarize in ONE sentence (max 100 tokens). Focus on the main purpose.\n\n{}",
+            truncate_for_llm(content, 4000)
+        ),
+        "overview" => format!(
+            "Provide a structured overview (max 500 tokens): 1) Main purpose, \
+            2) Key components, 3) Important details.\n\n{}",
+            truncate_for_llm(content, 8000)
+        ),
+        _ => format!(
+            "Summarize in 3-5 bullet points (max 1000 tokens). \
+            Preserve key technical details.\n\n{}",
+            truncate_for_llm(content, 12000)
+        ),
+    };
+
+    let request_body = serde_json::json!({
+        "model": "gpt-3.5-turbo",
+        "messages": [
+            { "role": "system", "content": "You are a helpful assistant." },
+            { "role": "user", "content": prompt }
+        ],
+        "temperature": 0.7
+    });
+
+    let client = reqwest::Client::new();
+    let host = openai_host();
+
+    let result = client
+        .post(&host)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await;
+
+    match result {
+        Ok(resp) if resp.status().is_success() => {
+            #[derive(serde::Deserialize)]
+            struct OpenAIResp {
+                choices: Vec<Choice>,
+            }
+            #[derive(serde::Deserialize)]
+            struct Choice {
+                message: Message,
+            }
+            #[derive(serde::Deserialize)]
+            struct Message {
+                content: String,
+            }
+
+            match resp.json::<OpenAIResp>().await {
+                Ok(openai_resp) => {
+                    openai_resp
+                        .choices
+                        .first()
+                        .and_then(|c| Some(c.message.content.trim().to_string()))
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| fallback_summary(content, mode))
+                }
+                Err(_) => fallback_summary(content, mode),
+            }
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            log::warn!("OpenAI API error {}: falling back to truncation", status);
+            fallback_summary(content, mode)
+        }
+        Err(e) => {
+            log::warn!("OpenAI API request failed: {}: falling back to truncation", e);
+            fallback_summary(content, mode)
+        }
+    }
+}
+
+/// 降级摘要：基于规则的头行截断
+fn fallback_summary(content: &str, mode: &str) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    let max_lines = match mode {
+        "abstract" => 3,
+        "overview" => 10,
+        _ => 8,
+    };
+
+    let taken: Vec<&str> = lines.iter().take(max_lines).cloned().collect();
+    let mut summary = taken.join("\n");
+
+    if lines.len() > max_lines {
+        summary.push_str(&format!(
+            "\n\n[摘要: 前 {} 行，共 {} 行，LLM 未启用]"
+            , max_lines, lines.len()
+        ));
+    }
+    summary
+}
+
+/// 将内容截断到 prompt 限制
+fn truncate_for_llm(content: &str, max_chars: usize) -> String {
+    if content.len() <= max_chars {
+        content.to_string()
+    } else {
+        format!("{}...\n[内容已被截断，共 {} 字符]", &content[..max_chars], content.len())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Token budget & budget status types
 // ---------------------------------------------------------------------------
@@ -136,7 +278,7 @@ impl PersistenceBackend for SqlitePersistence {
 // ---------------------------------------------------------------------------
 
 pub struct ContextFsPlugin {
-    inner: MemFsPlugin,
+    inner: Arc<MemFsPlugin>,
     initialized: OnceCell<()>,
     /// L2 files larger than this get a companion `.summary`.
     max_file_size: usize,
@@ -151,7 +293,7 @@ pub struct ContextFsPlugin {
 impl ContextFsPlugin {
     pub fn new() -> Self {
         Self {
-            inner: MemFsPlugin::new(),
+            inner: Arc::new(MemFsPlugin::new()),
             initialized: OnceCell::const_new(),
             max_file_size: DEFAULT_MAX_FILE_SIZE,
             max_recent_ops: DEFAULT_MAX_RECENT_OPS,
@@ -188,7 +330,7 @@ impl ContextFsPlugin {
     pub fn new_with_persistence(db_path: &str) -> Self {
         let backend = Arc::new(SqlitePersistence::new(db_path));
         Self {
-            inner: MemFsPlugin::new(),
+            inner: Arc::new(MemFsPlugin::new()),
             initialized: OnceCell::const_new(),
             max_file_size: DEFAULT_MAX_FILE_SIZE,
             max_recent_ops: DEFAULT_MAX_RECENT_OPS,
@@ -754,25 +896,36 @@ impl EvifPlugin for ContextFsPlugin {
         }
 
         // Auto-compression for L2 files that exceed the threshold.
-        if Self::is_l2(path) && !path.ends_with(".summary") && data.len() > self.max_file_size {
+        // Phase 12.1: Generate both .summary (head-lines) and .abstract (LLM).
+        if Self::is_l2(path) && !path.ends_with(".summary") && !path.ends_with(".abstract")
+            && data.len() > self.max_file_size
+        {
+            let content_str = String::from_utf8_lossy(&data);
+
+            // 1. Head-line .summary (always generated, synchronous fallback)
             let summary_content = Self::generate_summary(&data, data.len());
             let summary_path = format!("{}.summary", path);
-
-            // Create the summary companion file if it does not exist yet.
             if self.inner.stat(&summary_path).await.is_err() {
-                // Ignore creation error (might already exist due to a race).
                 let _ = self.inner.create(&summary_path, 0o644).await;
             }
-            // Best-effort write of the summary.
             let _ = self
                 .inner
-                .write(
-                    &summary_path,
-                    summary_content.into_bytes(),
-                    0,
-                    WriteFlags::TRUNCATE,
-                )
+                .write(&summary_path, summary_content.into_bytes(), 0, WriteFlags::TRUNCATE)
                 .await;
+
+            // 2. LLM .abstract (Phase 12.1: OpenViking-style ~100-token summary)
+            // Best-effort: don't block the write on LLM availability.
+            let abstract_path = format!("{}.abstract", path);
+            let content_clone = content_str.to_string();
+            let inner_clone = self.inner.clone();
+            if self.inner.stat(&abstract_path).await.is_err() {
+                let _ = self.inner.create(&abstract_path, 0o644).await;
+            }
+            // Spawn a background task to generate LLM abstract (non-blocking).
+            tokio::spawn(async move {
+                let abstract_content = summarize_llm(&content_clone, "abstract").await;
+                let _ = inner_clone.write(&abstract_path, abstract_content.into_bytes(), 0, WriteFlags::TRUNCATE).await;
+            });
         }
 
         Ok(written)

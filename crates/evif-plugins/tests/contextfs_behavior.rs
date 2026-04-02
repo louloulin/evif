@@ -754,3 +754,73 @@ mod sqlite_persistence_tests {
         );
     }
 }
+
+/// Phase 12.1: LLM Summarization Tests
+/// 对标 OpenViking L0CO: 自动生成 .abstract 摘要文件
+
+#[tokio::test]
+async fn contextfs_llm_abstract_generated_for_large_l2_file() {
+    // Without OPENAI_API_KEY, falls back to truncation-based abstract.
+    // With API key, would generate LLM summary (tested separately).
+    let plugin = ContextFsPlugin::new().with_max_file_size(64);
+
+    // Create a large L2 file that triggers auto-compression.
+    plugin
+        .create("/L2/large_doc.md", 0o644)
+        .await
+        .expect("create large doc");
+
+    let content = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
+    assert!(content.len() > 64, "test content must exceed threshold");
+
+    plugin
+        .write("/L2/large_doc.md", content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .await
+        .expect("write large doc");
+
+    // Give the background LLM task a moment to complete.
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // .abstract companion should exist (LLM or fallback).
+    let abstract_raw = plugin
+        .read("/L2/large_doc.md.abstract", 0, 0)
+        .await
+        .expect("read .abstract companion");
+    let abstract_text = String::from_utf8(abstract_raw).expect("abstract is utf8");
+
+    // Fallback: should contain first few lines.
+    assert!(
+        abstract_text.contains("line 1") || abstract_text.contains("摘要"),
+        ".abstract should contain content or fallback marker, got: {}",
+        abstract_text
+    );
+    assert!(
+        abstract_text.len() < content.len(),
+        ".abstract should be shorter than original (got {} vs {})",
+        abstract_text.len(),
+        content.len()
+    );
+}
+
+#[tokio::test]
+async fn contextfs_llm_abstract_not_generated_for_small_file() {
+    // Small files should NOT generate .abstract.
+    let plugin = ContextFsPlugin::new().with_max_file_size(4096);
+
+    plugin
+        .create("/L2/small_llm.md", 0o644)
+        .await
+        .expect("create small file");
+
+    plugin
+        .write("/L2/small_llm.md", b"tiny".to_vec(), 0, WriteFlags::TRUNCATE)
+        .await
+        .expect("write small file");
+
+    // Small file: .abstract should NOT be created.
+    let err = plugin.stat("/L2/small_llm.md.abstract").await;
+    assert!(
+        err.is_err(),
+        "small file should NOT generate .abstract, but stat succeeded"
+    );
+}

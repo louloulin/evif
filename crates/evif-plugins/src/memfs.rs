@@ -44,6 +44,7 @@ impl MemNode {
     }
 }
 
+#[derive(Clone)]
 pub struct MemFsPlugin {
     root: Arc<RwLock<MemNode>>,
 }

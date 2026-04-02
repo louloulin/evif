@@ -361,7 +361,105 @@ impl GptfsPlugin {
             .cloned()
             .ok_or_else(|| EvifError::NotFound(name.to_string()))
     }
+
+    /// LLM 文本摘要生成（用于 ContextFS L0/L1/L2 分层压缩）
+    ///
+    /// 调用 OpenAI API 生成简洁摘要，支持两种模式：
+    /// - `Abstract`: L0 摘要 (~100 tokens)，一句话概括
+    /// - `Overview`: L1 概览 (~500 tokens)，项目结构概述
+    ///
+    /// 如果未配置 API Key 或 API 调用失败，返回基于规则的头行摘要作为降级方案。
+    pub async fn summarize_text(
+        &self,
+        content: &str,
+        mode: SummaryMode,
+    ) -> String {
+        let api_key = &self.config.api_key;
+        if api_key.is_empty() || api_key == "dummy" {
+            // 降级方案：返回头行摘要
+            return fallback_summary(content, mode);
+        }
+
+        let prompt = build_summary_prompt(content, mode);
+        let host = self.config.api_host
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1/chat/completions");
+
+        let result = Self::try_openai(api_key, host, &prompt).await;
+        match result {
+            Ok(summary) if !summary.trim().is_empty() => summary,
+            Ok(_) | Err(_) => {
+                log::warn!("LLM summarization failed, using fallback for {:?} mode", mode);
+                fallback_summary(content, mode)
+            }
+        }
+    }
 }
+
+/// 摘要模式
+#[derive(Debug, Clone, Copy)]
+pub enum SummaryMode {
+    /// L0 摘要：~100 tokens，一句话概括文件/项目
+    Abstract,
+    /// L1 概览：~500 tokens，项目结构和关键点概述
+    Overview,
+    /// L2 压缩摘要：~1000 tokens，文件详细摘要（用于超长文件）
+    Summary,
+}
+
+/// 构建摘要 prompt
+fn build_summary_prompt(content: &str, mode: SummaryMode) -> String {
+    match mode {
+        SummaryMode::Abstract => format!(
+            "Summarize the following text in ONE sentence (max 100 tokens). \
+            Focus on the main purpose or topic.\n\nText:\n{}\n\nOne-sentence summary:",
+            truncate_for_prompt(content, 4000)
+        ),
+        SummaryMode::Overview => format!(
+            "Provide a structured overview (max 500 tokens) of the following text. \
+            Include: 1) Main purpose, 2) Key components/topics, 3) Important details.\n\nText:\n{}\n\nOverview:",
+            truncate_for_prompt(content, 8000)
+        ),
+        SummaryMode::Summary => format!(
+            "Summarize the following text in 3-5 bullet points (max 1000 tokens). \
+            Preserve key technical details.\n\nText:\n{}\n\nSummary:",
+            truncate_for_prompt(content, 12000)
+        ),
+    }
+}
+
+/// 将内容截断到 prompt 限制（token 估算：1 token ≈ 4 字符）
+fn truncate_for_prompt(content: &str, max_chars: usize) -> String {
+    if content.len() <= max_chars {
+        content.to_string()
+    } else {
+        format!("{}...\n[truncated from {} chars]", &content[..max_chars], content.len())
+    }
+}
+
+/// 降级摘要：基于规则的头行截断
+fn fallback_summary(content: &str, mode: SummaryMode) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    let max_lines = match mode {
+        SummaryMode::Abstract => 3,
+        SummaryMode::Overview => 10,
+        SummaryMode::Summary => 20,
+    };
+
+    let taken: Vec<&str> = lines.iter().take(max_lines).cloned().collect();
+    let mut summary = taken.join("\n");
+
+    if lines.len() > max_lines {
+        summary.push_str(&format!(
+            "\n\n[摘要基于前 {} 行，共 {} 行原文]",
+            max_lines,
+            lines.len()
+        ));
+    }
+
+    summary
+}
+
 
 #[async_trait]
 impl EvifPlugin for GptfsPlugin {
