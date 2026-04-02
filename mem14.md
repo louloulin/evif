@@ -6,37 +6,126 @@
 
 ---
 
-## 一、EVIF 核心定位重申
+## 一、EVIF 核心定位（修正版）
 
 ### 1.1 一句话定位
 
-> **EVIF = AI Agent 的 Meta Tool 平台**
-> 以文件为核心，为 AI Agent 提供 Context + Memory + Multi-Agent 协同功能
+> **EVIF = AI Agent 的虚拟上下文文件系统**
+> 以文件为核心，增强 Claude Code / Codex / Cursor 等 AI Agent 的 Context + Memory + Multi-Agent 协同能力
 
 ### 1.2 核心公式
 
 ```
-EVIF = File System + Context Management + Meta Tools + Multi-Agent Coordination
-        ↓                ↓                 ↓                ↓
-     Virtual FS      L0/L1/L2         SKILL.md        PipeFS/QueueFS
+EVIF = Virtual File System + Context Engine + Skill Platform + Multi-Agent Coordination
+              ↓                   ↓              ↓                  ↓
+          Radix Mount        L0/L1/L2       SKILL.md          PipeFS/QueueFS
+              ↓                   ↓              ↓                  ↓
+      统一存储抽象         上下文分层       技能发现          Agent 通信
 ```
 
-### 1.3 EVIF vs AIOS vs OpenViking 定位差异
+### 1.3 与 AGFS 的关系
 
-| 系统 | 定位 | 类比 |
-|------|------|------|
-| **AIOS** | LLM Agent 操作系统 | 类比 Linux Kernel |
-| **OpenViking** | Context Database | 类比 PostgreSQL |
-| **AGFS** | 通用虚拟文件系统 | 类比 FUSE |
-| **EVIF** | **Meta Tool 平台** | 类比 Claude Code CLI |
+**EVIF 是 AGFS 的增强版，而非竞品：**
 
-**EVIF 的差异化定位**：不做通用 OS，不做通用 DB，专注于 **AI Agent 的 Meta Tool 层**
+| 维度 | AGFS | EVIF (AGFS 增强版) |
+|------|------|---------------------|
+| **定位** | 通用虚拟文件系统 | **AI Agent 增强的虚拟上下文文件系统** |
+| **核心语言** | Go | Rust (性能 + 安全) |
+| **上下文管理** | ❌ 无 | ✅ **L0/L1/L2 分层** |
+| **技能系统** | ❌ 无 | ✅ **SkillFS** |
+| **多 Agent** | QueueFS (单向) | **PipeFS (双向)** |
+| **中国云存储** | ❌ 无 | ✅ **OSS/COS/OBS** |
+| **认证** | ❌ 无 | ✅ **RBAC + JWT** |
+
+**EVIF 不是类似 Claude Code，而是增强 Claude Code：**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    AI Agent 生态                                 │
+│                                                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────┐ │
+│  │ Claude     │  │ OpenAI      │  │ Cursor     │  │ OpenClaw│ │
+│  │ Code       │  │ Codex       │  │            │  │         │ │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └────┬────┘ │
+│         │                │                │               │        │
+│         └────────────────┴────────────────┴───────────────┘        │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                    EVIF (AGFS 增强版)                        │ │
+│  │                                                              │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │ │
+│  │  │ ContextFS    │  │ SkillFS      │  │ PipeFS           │  │ │
+│  │  │ L0/L1/L2    │  │ SKILL.md     │  │ Multi-Agent      │  │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────────┘  │ │
+│  │                                                              │ │
+│  │  增强 AI Agent:                                                │ │
+│  │  • 更长的上下文窗口 (L0/L1/L2 分层)                          │ │
+│  │  • 持久化记忆 (文件即记忆)                                    │ │
+│  │  • 技能发现与执行 (SKILL.md 标准)                            │ │
+│  │  • 多 Agent 协同 (PipeFS 双向通信)                           │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 1.4 EVIF vs AIOS vs OpenViking 定位差异
+
+| 系统 | 定位 | 类比 | 关系 |
+|------|------|------|------|
+| **AIOS** | LLM Agent 操作系统 | 类比 Linux Kernel | 底层平台 |
+| **OpenViking** | Context Database | 类比 PostgreSQL | 数据存储 |
+| **AGFS** | 通用虚拟文件系统 | 类比 FUSE | **EVIF 的基础** |
+| **EVIF** | **AI Agent 增强的上下文文件系统** | 类比 AGFS + Context Engine | **AGFS 的超集** |
+
+**EVIF 的差异化定位**：
+1. **不是**通用虚拟文件系统（AGFS 的定位）
+2. **不是**AI Agent 操作系统（AIOS 的定位）
+3. **而是** AI Agent 的上下文增强层 —— 为 Claude Code/Codex/Cursor 提供更好的上下文、记忆和协同能力
 
 ---
 
 ## 二、研究发现总结
 
-### 2.1 学术论文发现
+### 2.0 EVIF 定位验证：为什么文件系统是 AI Agent 的最佳接口
+
+**学术验证：**
+
+| 论文 | 关键发现 | 来源 |
+|------|----------|------|
+| [Agentic File System Abstraction](https://arxiv.org/abs/2512.05470) | 文件系统抽象是上下文工程的最佳接口 | CSIRO/Data61, 2025 |
+| [Context Engineering: Virtual Memory for LLMs](https://www.linkedin.com/pulse/context-engineering-why-building-ai-agents-feels-like-scott-farrell-sf0cc) | LLM 上下文窗口类似虚拟内存系统——按需分页 | LinkedIn |
+| [Martin Fowler: Context Engineering for Coding Agents](https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html) | 最基本的上下文接口是文件读写和搜索 | Martin Fowler |
+
+**工业验证：**
+
+| 实践 | 关键发现 | 来源 |
+|------|----------|------|
+| [Claude Code 成功原因](https://www.reddit.com/r/LocalLLaMA/comments/1qwmxlw/i_built_a_virtual_filesystem_to_replace_mcp_for/) | Claude Code 擅长编程因为所有上下文都是文件 | Reddit |
+| [Context File System (CFS)](https://www.cabeda.dev/reads) | 分层记忆架构：快速访问 + 自动过期 + 向量长期存储 | Data Impostor |
+| [Beads: Memory Upgrade](https://github.com/steveyegge/beads) | 为编程 Agent 设计的持久记忆系统 | GitHub |
+| [CLAUDE.md 永久记忆](https://www.mindstudio.ai/blog/what-is-claude-md-file-permanent-instruction-manual) | claude.md 文件作为永久上下文 | MindStudio |
+
+**关键洞察：**
+> "In 1969, Thompson and Ritchie decided 'everything is a file.' CFS inverts that: **everything is a context.**" — OpenClaw
+
+### 2.1 Claude Code 增强研究
+
+EVIF 作为 Claude Code 的增强层，支持以下功能：
+
+| Claude Code 功能 | EVIF 增强 | 状态 |
+|-----------------|-----------|------|
+| CLAUDE.md | /context/L0/L1/L2 分层上下文 | ✅ 已实现 |
+| Skills (.claude/skills/) | /skills/ SKILL.md 发现 | ✅ 已实现 |
+| MCP Plugins | 20 个 MCP 工具 | ✅ 已实现 |
+| Auto-memory | ContextFS 持久化记忆 | ✅ 已实现 |
+| Subagents | PipeFS 多 Agent 协调 | ✅ 已实现 |
+
+**Claude Code 28 个官方插件分析：**
+- 大多数插件依赖上下文文件（CLAUDE.md）
+- EVIF 可以统一管理这些上下文文件
+- SkillFS 可以增强插件的技能发现能力
+
+### 2.2 学术论文发现
 
 | 论文 | 关键发现 | 对 EVIF 的启示 |
 |------|----------|----------------|
@@ -47,7 +136,21 @@ EVIF = File System + Context Management + Meta Tools + Multi-Agent Coordination
 | [Solving Context Window Overflow](https://arxiv.org/html/2511.22729v1) | 任意长度工具响应的处理方法 | ContextFS L0/L1/L2 分层解决此问题 |
 | [Structured Context Engineering](https://arxiv.org/pdf/2602.05447) | 文件原生代理系统的上下文工程研究 | EVIF 的文件原生设计有学术价值 |
 
-### 2.2 工业实践发现
+### 2.3 基准测试发现
+
+| 基准测试 | 描述 | EVIF 现状 |
+|----------|------|----------|
+| [OSWorld](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) | OS 级 Agent 评估，包含文件系统状态检查 | ❌ 无对应测试 |
+| [IDE-Bench](https://www.emergentmind.com/topics/ide-bench) | AI IDE Agent 评估：文件读写、导航任务 | ❌ 无对应测试 |
+| [AgentBench](https://arxiv.org/abs/2308.03688) | 评估 LLM 作为 Agent 的多环境基准 | ❌ 无对应测试 |
+| [ToolBench](https://github.com/sambanova/toolbench) | 工具操作能力评估 | ⚠️ 基础测试 |
+| [MCP-AgentBench](https://arxiv.org/abs/2509.09734) | MCP 协议基准测试 | ⚠️ 基础连接测试 |
+| [τ-bench](https://siera.ai/blog/benchmarking-ai-agents) | Agent 与用户/API 交互评估 | ❌ 无对应测试 |
+
+**LlamaIndex 文件系统 Agent 基准：**
+> 文件系统 Agent 在平均正确率上比传统 RAG 高 **2 分**
+
+### 2.4 工业实践发现
 
 | 来源 | 关键发现 | 对 EVIF 的启示 |
 |------|----------|----------------|
@@ -55,15 +158,18 @@ EVIF = File System + Context Management + Meta Tools + Multi-Agent Coordination
 | [MongoDB: Multi-Agent Memory Engineering](https://medium.com/mongodb/why-multi-agent-systems-need-memory-engineering-153a81f8d5be) | 多 Agent 失败原因是内存问题，不是通信问题 | EVIF 应加强 Memory 层 |
 | [Anthropic Multi-Agent Research](https://www.anthropic.com/engineering/multi-agent-research-system) | 多 Agent 协调的挑战：协调、评估、可靠性 | EVIF 需要更好的测试和评估 |
 | [Oracle: File System vs DB for Agent Memory](https://blogs.oracle.com/developers/comparing-file-systems-and-databases-for-effective-ai-agent-memory-management) | 并发写入可能静默损坏数据 | EVIF 需要更好的并发控制 |
+| [Skills vs MCP](https://thenewstack.io/skills-vs-mcp-agent-architecture/) | Markdown 技能文件比 MCP 服务器减少 100 倍 token | SkillFS 设计正确 |
 
-### 2.3 基准测试发现
+### 2.5 技能系统 vs MCP 架构
 
-| 基准测试 | 描述 | EVIF 现状 |
-|----------|------|----------|
-| [AgentBench](https://arxiv.org/abs/2308.03688) | 评估 LLM 作为 Agent 的多环境基准 | ❌ 无对应测试 |
-| [ToolBench](https://github.com/sambanova/toolbench) | 工具操作能力评估 | ⚠️ 基础测试 |
-| [MCP-AgentBench](https://arxiv.org/abs/2509.09734) | MCP 协议基准测试 | ⚠️ 基础连接测试 |
-| [τ-bench](https://siera.ai/blog/benchmarking-ai-agents) | Agent 与用户/API 交互评估 | ❌ 无对应测试 |
+| 维度 | MCP 服务器 | SKILL.md 技能文件 |
+|------|-----------|-------------------|
+| Token 成本 | 高（完整 schema） | **低**（YAML frontmatter） |
+| 发现方式 | 工具列表 API | **文件系统 ls** |
+| 理解方式 | 结构化 JSON | **自然语言 Markdown** |
+| EVIF 实现 | evif-mcp (20 工具) | **evif-skillfs (/skills/)** |
+
+**结论：EVIF 同时支持 MCP 和 SKILL.md，兼顾两种架构**
 
 ---
 
@@ -103,27 +209,28 @@ EVIF 总计: 141 文件, 67,165 行 Rust
 
 | 功能 | OpenViking 实现 | EVIF 现状 | 实现方案 |
 |------|-----------------|-----------|----------|
-| **自动 LLM 摘要** | `.abstract` 自动生成 | ❌ 手动摘要 | 集成 GPTFS 或 OpenAI API |
+| **自动 LLM 摘要** | `.abstract` 自动生成 | ⚠️ 手动摘要 | 集成 GPTFS 或 OpenAI API |
 | **目录递归检索** | 多层级递归 | ⚠️ 基础 grep | 重写 grep 支持递归 |
 | **自动会话管理** | 端会话自动总结 | ❌ 无 | 添加 session lifecycle hook |
+| **持久化记忆跨会话** | 自动记忆提取 | ⚠️ 基础 | ContextFS auto-memory |
 
-#### P1 — 重要功能（提升用户体验）
+#### P1 — Claude Code 增强功能
 
-| 功能 | AGFS/OpenViking 实现 | EVIF 现状 | 实现方案 |
-|------|----------------------|-----------|----------|
-| **检索轨迹可视化** | 可视化调试 | ❌ 无 | 添加 trace 文件 |
-| **跨文件系统复制** | `cp local:/s3:/` | ❌ 无 | 添加 FS COPY 命令 |
-| **并发控制增强** | 原子操作 | ⚠️ 基础 | 添加文件锁机制 |
-| **会话持久化** | 自动保存 | ⚠️ 手动 | 添加 auto-save |
+| 功能 | Claude Code 能力 | EVIF 现状 | 实现方案 |
+|------|-----------------|-----------|----------|
+| **更长的上下文** | CLAUDE.md 单文件 | ✅ L0/L1/L2 分层 | 增强 L2 向量搜索 |
+| **技能发现** | .claude/skills/ | ✅ /skills/ SKILL.md | 增强触发词匹配 |
+| **多 Agent** | Subagents | ✅ PipeFS | 增强状态流转 |
+| **Auto-memory** | 基础 | ✅ /mem/ | 增强跨会话持久化 |
 
 #### P2 — 生态功能（提升可发现性）
 
-| 功能 | 描述 | 实现方案 |
-|------|------|----------|
-| **AgentBench 测试集** | 多环境 Agent 评估 | 创建 `evif-bench` crate |
-| **MCP 完整测试** | MCP-AgentBench 对标 | 添加 50+ MCP 协议测试 |
-| **性能基准测试** | 吞吐量/延迟基准 | 创建 `evif-benchmark` |
-| **Claude Code 集成测试** | 端到端验证 | 添加 20+ 集成测试 |
+| 功能 | 对标基准 | 实现方案 |
+|------|----------|----------|
+| **OSWorld 对标** | OS 级 Agent 评估 | 创建文件系统状态测试 |
+| **IDE-Bench 对标** | IDE Agent 评估 | 创建文件读写测试 |
+| **AgentBench 对标** | 多环境 Agent 评估 | 创建 evif-bench crate |
+| **MCP 完整测试** | MCP-AgentBench | 添加 50+ MCP 协议测试 |
 
 ---
 
@@ -225,61 +332,302 @@ pub async fn on_session_end(&self, session_id: &str) -> EvifResult<()> {
 
 ---
 
-### Phase 13: 验证测试集（P1）
+### Phase 13: 验证测试集（P1/P2）
 
-#### 13.1 AgentBench 对标测试
+#### 13.1 OSWorld 对标测试
 
-**目标**：创建 EVIF 自己的 Agent 评估基准
+**对标**：OSWorld 评估 Agent 在完整操作系统中的表现，文件系统状态检查是核心
 
+**EVIF 测试设计**：
 ```rust
-// crates/evif-bench/src/lib.rs
+// crates/evif-bench/src/osworld.rs
 
-/// ContextFS L0/L1/L2 基准测试
-mod context_bench {
-    use super::*;
+/// OSWorld 对标：文件系统状态验证
+#[tokio::test]
+async fn test_file_system_state_after_task() {
+    // 1. 创建测试文件树
+    let server = TestServer::new().await;
+    server.mkdir("/test/project").await;
+    server.write("/test/project/main.rs", "fn main() {}").await;
 
-    #[tokio::test]
-    async fn bench_l0_write_throughput() {
-        let server = TestServer::new().await;
-        let mut handles = Vec::new();
+    // 2. 模拟 Agent 执行任务
+    // ... (通过 MCP 或 CLI 调用)
 
-        // 100 并发写入
-        for i in 0..100 {
-            handles.push(tokio::spawn({
-                let server = server.clone();
-                async move {
-                    server.write(&format!("/context/L0/test_{}", i), b"data").await
-                }
-            }));
-        }
+    // 3. 验证文件系统状态
+    let entries = server.list("/test/project").await;
+    assert!(entries.contains("main.rs"));
 
-        let results = futures::future::join_all(handles).await;
-        let success_count = results.iter().filter(|r| r.is_ok()).count();
-        assert!(success_count >= 95); // 95% 成功率
-    }
-
-    #[tokio::test]
-    async fn bench_l1_persistence() {
-        // 测试 L1 决策在重启后持久化
-    }
-
-    #[tokio::test]
-    async fn bench_l2_semantic_search() {
-        // 测试 L2 向量搜索延迟
-    }
+    // 4. 验证修改时间戳
+    let stat = server.stat("/test/project/main.rs").await;
+    assert!(stat.modified > start_time);
 }
 
-/// SkillFS 基准测试
-mod skill_bench {
-    #[tokio::test]
-    async fn bench_skill_discovery() {
-        // 测试 ls /skills/ 延迟
+/// OSWorld 对标：并发文件操作
+#[tokio::test]
+async fn test_concurrent_file_operations() {
+    let server = TestServer::new().await;
+    let mut handles = Vec::new();
+
+    // 100 个并发 Agent 同时操作
+    for i in 0..100 {
+        handles.push(tokio::spawn({
+            let server = server.clone();
+            async move {
+                server.write(&format!("/test/file_{}", i), b"data").await
+            }
+        }));
     }
 
-    #[tokio::test]
-    async fn bench_skill_execution() {
-        // 测试技能执行时间
+    let results = futures::future::join_all(handles).await;
+    let success_count = results.iter().filter(|r| r.is_ok()).count();
+    assert!(success_count >= 95); // 95% 成功率
+}
+```
+
+#### 13.2 IDE-Bench 对标测试
+
+**对标**：IDE-Bench 评估 AI IDE Agent 的文件读写和导航任务
+
+**EVIF 测试设计**：
+```rust
+// crates/evif-bench/src/idebench.rs
+
+/// IDE-Bench 对标：文件读取任务
+#[tokio::test]
+async fn test_ide_read_file() {
+    let server = TestServer::new().await;
+
+    // 写入测试文件
+    server.write("/test/src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 { a + b }").await;
+
+    // 模拟 Agent 读取文件
+    let content = server.read("/test/src/lib.rs").await.unwrap();
+    assert!(content.contains("fn add"));
+}
+
+/// IDE-Bench 对标：目录导航任务
+#[tokio::test]
+async fn test_ide_navigation() {
+    let server = TestServer::new().await;
+
+    // 创建目录结构
+    server.mkdir("/test/src").await;
+    server.mkdir("/test/tests").await;
+    server.write("/test/Cargo.toml", "[package]").await;
+
+    // 模拟 Agent 导航
+    let entries = server.list("/test").await;
+    assert!(entries.contains("src"));
+    assert!(entries.contains("tests"));
+    assert!(entries.contains("Cargo.toml"));
+}
+
+/// IDE-Bench 对标：文件搜索任务
+#[tokio::test]
+async fn test_ide_search() {
+    let server = TestServer::new().await;
+
+    // 创建多个文件
+    server.write("/test/a.rs", "fn test_a() {}").await;
+    server.write("/test/b.rs", "fn test_b() {}").await;
+    server.write("/test/c.rs", "fn test_c() {}").await;
+
+    // 模拟 Agent 搜索 "fn test"
+    let results = server.grep("/test", "fn test").await;
+    assert_eq!(results.len(), 3);
+}
+```
+
+#### 13.3 AgentBench 对标测试
+
+**对标**：AgentBench 多环境评估框架
+
+**EVIF 测试设计**：
+```rust
+// crates/evif-bench/src/agentbench.rs
+
+/// AgentBench 对标：工具调用评估
+#[tokio::test]
+async fn test_tool_use_success_rate() {
+    let server = TestServer::new().await;
+    let mut success = 0;
+    let total = 100;
+
+    for i in 0..total {
+        let result = server.mkdir(&format!("/test/dir_{}", i)).await;
+        if result.is_ok() {
+            success += 1;
+        }
     }
+
+    let rate = success as f64 / total as f64;
+    assert!(rate >= 0.95); // 95% 成功率
+}
+
+/// AgentBench 对标：多步骤任务
+#[tokio::test]
+async fn test_multi_step_task() {
+    let server = TestServer::new().await;
+
+    // 步骤 1: 创建目录
+    server.mkdir("/test/project").await.unwrap();
+
+    // 步骤 2: 创建文件
+    server.write("/test/project/main.rs", "fn main() {}").await.unwrap();
+
+    // 步骤 3: 读取验证
+    let content = server.read("/test/project/main.rs").await.unwrap();
+    assert!(content.contains("fn main"));
+}
+```
+
+#### 13.4 MCP 协议合规测试
+
+**对标**：MCP-AgentBench 评估 MCP 协议实现
+
+```rust
+// crates/evif-mcp/tests/protocol_compliance.rs
+
+/// MCP 初始化
+#[tokio::test]
+async fn test_mcp_initialize() {
+    let response = send_mcp_request("initialize", json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "test", "version": "1.0"}
+    })).await;
+
+    assert!(response.contains("protocolVersion"));
+    assert!(response.contains("capabilities"));
+}
+
+/// MCP 工具列表（验证 20 个工具）
+#[tokio::test]
+async fn test_mcp_tools_list() {
+    let response = send_mcp_request("tools/list", json!({})).await;
+    let tools = parse_tools(&response);
+
+    assert_eq!(tools.len(), 20);
+    assert!(tools.contains(&"evif_ls".to_string()));
+    assert!(tools.contains(&"evif_cat".to_string()));
+    assert!(tools.contains(&"evif_write".to_string()));
+    assert!(tools.contains(&"evif_skill_execute".to_string()));
+}
+
+/// MCP 资源列表
+#[tokio::test]
+async fn test_mcp_resources_list() {
+    let response = send_mcp_request("resources/list", json!({})).await;
+    assert!(response.contains("resources"));
+}
+
+/// MCP Ping
+#[tokio::test]
+async fn test_mcp_ping() {
+    let response = send_mcp_request("ping", json!({})).await;
+    assert!(response.contains("\"result\":{}"));
+}
+```
+
+#### 13.5 Claude Code E2E 集成测试
+
+**目标**：端到端验证 Claude Code 与 EVIF 的集成
+
+```rust
+// crates/evif-integration/tests/claude_code.rs
+
+/// Claude Code MCP 连接测试
+#[tokio::test]
+async fn test_claude_code_mcp_connection() {
+    // 1. 启动 EVIF REST 服务器
+    let server = EvifServer::new().await;
+
+    // 2. 启动 MCP 服务器
+    let mcp = McpServer::new(&server).await;
+
+    // 3. 验证 Claude Code 可以连接
+    let output = Command::new("claude")
+        .args(["mcp", "list"])
+        .output()
+        .await?;
+
+    assert!(String::from_utf8_lossy(&output.stdout).contains("evif"));
+}
+
+/// Claude Code 上下文工作流测试
+#[tokio::test]
+async fn test_claude_code_context_workflow() {
+    // 1. Agent 读取 L0 当前上下文
+    // 2. Agent 读取 L1 决策记录
+    // 3. Agent 发现技能
+    // 4. Agent 执行技能
+    // 5. Agent 写入 L0 更新状态
+    // 6. Agent 写入 L1 记录决策
+}
+```
+
+#### 13.6 性能基准测试
+
+```rust
+// crates/evif-bench/src/performance.rs
+
+/// 吞吐量测试
+#[tokio::test]
+async fn bench_throughput() {
+    let server = TestServer::new().await;
+    let start = Instant::now();
+    let mut count = 0;
+
+    while start.elapsed().as_secs() < 10 {
+        server.write(&format!("/test/file_{}", count), b"data").await;
+        count += 1;
+    }
+
+    let throughput = count as f64 / 10.0;
+    assert!(throughput >= 100.0); // > 100 req/s
+}
+
+/// P99 延迟测试
+#[tokio::test]
+async fn bench_latency_p99() {
+    let server = TestServer::new().await;
+    let mut latencies = Vec::new();
+
+    for _ in 0..1000 {
+        let start = Instant::now();
+        server.read("/context/L0/current").await;
+        latencies.push(start.elapsed().as_millis() as u64);
+    }
+
+    latencies.sort();
+    let p99 = latencies[990];
+    assert!(p99 <= 50); // P99 < 50ms
+}
+
+/// 并发写入稳定性测试
+#[tokio::test]
+async fn bench_concurrent_writes_stability() {
+    let server = TestServer::new().await;
+    let mut errors = 0;
+
+    // 100 并发连接，每个执行 100 次写入
+    for _ in 0..100 {
+        let server = server.clone();
+        let result = tokio::spawn(async move {
+            for i in 0..100 {
+                if server.write(&format!("/test/f_{}", i), b"x").await.is_err() {
+                    return 1;
+                }
+            }
+            0
+        }).await;
+
+        if result.unwrap_or(1) == 1 {
+            errors += 1;
+        }
+    }
+
+    assert!(errors == 0); // 零错误
 }
 
 /// PipeFS 基准测试
@@ -293,78 +641,6 @@ mod pipe_bench {
     async fn bench_concurrent_pipes() {
         // 测试 100 个并发管道
     }
-}
-```
-
-#### 13.2 MCP 协议测试
-
-**目标**：完整的 MCP 协议合规性测试
-
-```rust
-// crates/evif-mcp/tests/protocol_compliance.rs
-
-#[tokio::test]
-async fn test_mcp_initialize() {
-    let response = send_mcp_request("initialize", json!({
-        "protocolVersion": "2024-11-05",
-        "capabilities": {},
-        "clientInfo": {"name": "test", "version": "1.0"}
-    })).await;
-
-    assert!(response.contains("protocolVersion"));
-    assert!(response.contains("capabilities"));
-    assert!(response.contains("serverInfo"));
-}
-
-#[tokio::test]
-async fn test_mcp_tools_list() {
-    let response = send_mcp_request("tools/list", json!({})).await;
-    let tools = parse_tools(response);
-
-    // 验证 20 个工具
-    assert_eq!(tools.len(), 20);
-    assert!(tools.contains(&"evif_ls".to_string()));
-    assert!(tools.contains(&"evif_cat".to_string()));
-    // ...
-}
-
-#[tokio::test]
-async fn test_mcp_tool_call() {
-    // 测试每个工具的调用
-}
-```
-
-#### 13.3 Claude Code 集成测试
-
-**目标**：端到端 Claude Code 集成验证
-
-```rust
-// crates/evif-integration/tests/claude_code.rs
-
-#[tokio::test]
-async fn test_claude_code_mcp_connection() {
-    // 1. 启动 EVIF REST 服务器
-    let server = EvifServer::new().await;
-
-    // 2. 启动 MCP 服务器
-    let mcp = McpServer::new(&server).await;
-
-    // 3. 模拟 Claude Code 连接
-    let output = Command::new("claude")
-        .args(["mcp", "list"])
-        .output()
-        .await?;
-
-    assert!(String::from_utf8_lossy(&output.stdout).contains("evif"));
-}
-
-#[tokio::test]
-async fn test_claude_code_context_workflow() {
-    // 模拟 Claude Code 使用 EVIF 的完整工作流
-    // 1. cat /context/L0/current
-    // 2. cat /context/L1/decisions.md
-    // 3. ls /skills
-    // 4. 执行技能
 }
 ```
 
@@ -542,24 +818,42 @@ EVIF 测试集
 
 ## 六、里程碑
 
-### Phase 12: Context Engine 增强 (4h)
+### Phase 12: Context Engine 增强 (6h)
 
-- [ ] 自动 LLM 摘要生成
-- [ ] 目录递归检索
-- [ ] 自动会话管理
+- [ ] 自动 LLM 摘要生成（GPTFS 集成）
+- [ ] 目录递归检索（grep -r）
+- [ ] 自动会话管理（session lifecycle hook）
+- [ ] 持久化记忆跨会话增强
 
-### Phase 13: 验证测试集 (8h)
+### Phase 13: 验证测试集 (12h)
 
+- [ ] OSWorld 对标测试 (10 tests)
+  - 文件系统状态验证
+  - 并发文件操作
+  - 任务完成验证
+- [ ] IDE-Bench 对标测试 (20 tests)
+  - 文件读取任务
+  - 目录导航任务
+  - 文件搜索任务
 - [ ] AgentBench 对标测试 (20 tests)
+  - 工具调用成功率
+  - 多步骤任务
 - [ ] MCP 协议合规测试 (50 tests)
 - [ ] Claude Code E2E 测试 (10 tests)
-- [ ] 性能基准测试 (10 tests)
 
-### Phase 14: 生态增强 (6h)
+### Phase 14: 生态增强 (8h)
 
-- [ ] 跨文件系统复制
-- [ ] 并发控制增强
-- [ ] 检索轨迹可视化
+- [ ] 跨文件系统复制（`cp local:/s3:/`）
+- [ ] 并发控制增强（文件锁）
+- [ ] 检索轨迹可视化（debug trace）
+- [ ] 性能基准测试套件（evif-bench crate）
+
+### Phase 15: Claude Code 集成 (4h)
+
+- [ ] Claude Code MCP 完整集成
+- [ ] CLAUDE.md 自动生成
+- [ ] Auto-memory 增强
+- [ ] Subagent 协调示例
 
 ---
 
@@ -576,6 +870,8 @@ EVIF 测试集
 
 ### 基准测试
 
+- [OSWorld: OS-Level Agent Evaluation](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+- [IDE-Bench: AI IDE Agent Evaluation](https://www.emergentmind.com/topics/ide-bench)
 - [AgentBench: Evaluating LLMs as Agents](https://arxiv.org/abs/2308.03688)
 - [ToolBench: LLM Tool Manipulation](https://github.com/sambanova/toolbench)
 - [MCP-AgentBench](https://arxiv.org/abs/2509.09734)
@@ -584,12 +880,26 @@ EVIF 测试集
 ### 工业实践
 
 - [Effective Context Engineering for AI Agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Claude Code Context Management](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
 - [Why Multi-Agent Systems Need Memory Engineering](https://medium.com/mongodb/why-multi-agent-systems-need-memory-engineering-153a81f8d5be)
 - [Multi-Agent Research System](https://www.anthropic.com/engineering/multi-agent-research-system)
 - [File System vs DB for Agent Memory](https://blogs.oracle.com/developers/comparing-file-systems-and-databases-for-effective-ai-agent-memory-management)
+- [Skills vs MCP Architecture](https://thenewstack.io/skills-vs-mcp-agent-architecture/)
+- [Context Engineering for Coding Agents](https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html)
+- [AI Context Flow: Universal Memory](https://plurality.network/blogs/ai-long-term-memory-with-ai-context-flow/)
+- [Mem0: AI Memory Layer](https://mem0.ai/)
+- [Beads: Memory Upgrade for Coding Agents](https://github.com/steveyegge/beads)
+
+### Claude Code 生态
+
+- [Claude Code 28 Official Plugins](https://www.reddit.com/r/ClaudeAI/comments/1r4tk3u/there_are_28_official_claude_code_plugins_most/)
+- [Claude Code Toolkit](https://github.com/applied-artificial-intelligence/claude-code-toolkit)
+- [CLAUDE.md: Permanent Instruction Manual](https://www.mindstudio.ai/blog/what-is-claude-md-file-permanent-instruction-manual)
+- [AGENTS.md: Context File for 2026](https://www.augmentcode.com/guides/how-to-build-agents-md)
 
 ---
 
-*v14 创建时间：2026-04-02*
+*v14 更新时间：2026-04-02*
 *EVIF 版本：1.8.0*
-*后续计划：Phase 12-14 实现 + 验证测试集*
+*后续计划：Phase 12-15 实现 + 验证测试集*
+*核心定位：AI Agent 的虚拟上下文文件系统，增强 Claude Code/Codex/Cursor 等 AI Agent*
