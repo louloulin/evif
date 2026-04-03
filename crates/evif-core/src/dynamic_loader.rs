@@ -13,9 +13,9 @@ use crate::error::{EvifError, EvifResult};
 use crate::plugin::EvifPlugin;
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// 插件 ABI 版本
 /// 用于确保动态库与 EVIF 核心兼容
@@ -178,6 +178,7 @@ struct LoadedLibrary {
     /// 插件信息
     info: PluginInfo,
     /// 库文件路径
+    #[allow(dead_code)]
     path: PathBuf,
 }
 
@@ -536,7 +537,7 @@ mod tests {
     #[test]
     fn test_loader_creation() {
         let loader = DynamicPluginLoader::new();
-        assert!(loader.search_paths.len() > 0);
+        assert!(!loader.search_paths.is_empty());
         assert!(loader.loaded_plugins().is_empty());
     }
 

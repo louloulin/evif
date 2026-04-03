@@ -19,3 +19,6 @@
 - 2026-04-02：因此将 Phase A 的最佳最小子项调整为 `evif-auth derivable_impls`，这是 mem15 明确列出的独立任务，改动面最小且验证最直接；真实验证命令为 `cargo clippy -p evif-auth --all-targets -- -D warnings` 与 `cargo test -p evif-auth --all-targets -- --nocapture`。
 - 2026-04-03：在完成 `evif-auth` 后，继续用 `cargo clippy -p evif-rest --all-targets --no-deps --message-format short -- -D warnings` 抽取 `evif-rest` 自身失败面，并按“先库代码、再测试代码”两批收口 unused import / dead code / module cleanliness。
 - 2026-04-03：`cargo clippy -p evif-rest --all-targets --no-deps -- -D warnings` 仍会打印依赖 crate warning，因此对 `evif-rest` 子项的完成验证改用“过滤后无 `crates/evif-rest` 诊断”加 `cargo test -p evif-rest --lib --tests --quiet` 全绿的组合口径；这代表 `evif-rest` 自身门禁已清理完毕，但全 workspace Phase A 仍未完成。
+- 2026-04-03：Phase A 的第三个最小子项选择 `evif-core` clippy 清理；真实失败面主要由 imports、变量、derive/default、checked_div、测试断言、module_inception 与 test module 布局构成，适合按“先机械项、再测试/布局项”两批收口。
+- 2026-04-03：在 `evif-core` 清理过程中，额外发现 `cache` 统计测试对 moka `entry_count()` 的即时行为假设过强，会导致测试失败；因此将断言收回到当前实现稳定承诺的 `hits/misses` 与可观测读取结果，再完成 `cargo clippy -p evif-core --all-targets -- -D warnings` 和 `cargo test -p evif-core --all-targets -- --nocapture` 的真实验证。
+- 2026-04-03：全 workspace 严格门禁复跑后，已先清掉 `evif-mcp`、`tests/common`、`api/e2e` 测试辅助以及部分 `evif-cli/fuse` 的机械 clippy；当前剩余失败面已明确收敛到 `evif-mem`、`evif-plugins`、`evif-cli`、`evif-fuse` 四块主阻塞，其中 `evif-mem` 仍是最大头。

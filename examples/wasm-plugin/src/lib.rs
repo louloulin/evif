@@ -67,7 +67,7 @@ fn get_kv_key(path: &str) -> String {
 fn extract_name(path: &str) -> String {
     path.trim_start_matches('/')
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("unknown")
         .to_string()
 }
@@ -229,7 +229,7 @@ pub fn evif_write(input: String) -> FnResult<String> {
         path: String,
         data: String, // Base64 编码
         offset: i64,
-        flags: u32,
+        _flags: u32,
     }
 
     let req: Request = serde_json::from_str(&input)
@@ -300,7 +300,7 @@ pub fn evif_readdir(input: String) -> FnResult<String> {
     let mut files = Vec::new();
 
     for path in &all_paths {
-        if path.starts_with(&format!("{}/", prefix).trim_start_matches('/'))
+        if path.starts_with(format!("{}/", prefix).trim_start_matches('/'))
             || path == prefix.trim_start_matches('/')
         {
             let key = get_kv_key(path);
@@ -431,13 +431,10 @@ pub fn evif_remove_all(input: String) -> FnResult<String> {
 
     let prefix = req.path.trim_end_matches('/');
     let all_paths = get_file_index();
-    let mut removed = 0u64;
-
     for path in &all_paths {
         if path.starts_with(prefix) {
             let key = get_kv_key(path);
             let _ = var::remove(&key);
-            removed += 1;
         }
     }
 

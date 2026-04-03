@@ -19,16 +19,16 @@ pub fn workspace_root() -> PathBuf {
 /// Run an EVIF CLI command and return the output
 pub fn run_evif_cli(args: &[&str]) -> std::io::Result<Output> {
     Command::new("cargo")
-        .args(&["run", "-p", "evif-cli", "--bin", "evif", "--"])
+        .args(["run", "-p", "evif-cli", "--bin", "evif", "--"])
         .args(args)
         .current_dir(workspace_root())
         .output()
 }
 
 /// Run an EVIF CLI command with timeout
-pub fn run_evif_cli_timeout(args: &[&str], timeout_secs: u64) -> std::io::Result<Output> {
+pub fn run_evif_cli_timeout(args: &[&str], _timeout_secs: u64) -> std::io::Result<Output> {
     let output = Command::new("cargo")
-        .args(&["run", "-p", "evif-cli", "--bin", "evif", "--"])
+        .args(["run", "-p", "evif-cli", "--bin", "evif", "--"])
         .args(args)
         .current_dir(workspace_root())
         .output()?;
@@ -54,7 +54,7 @@ pub fn cli_exit_code(output: &Output) -> Option<i32> {
 
 /// Create a temporary directory for testing
 pub fn create_temp_dir(prefix: &str) -> std::io::Result<tempfile::TempDir> {
-    Ok(tempfile::Builder::new().prefix(prefix).tempdir()?)
+    tempfile::Builder::new().prefix(prefix).tempdir()
 }
 
 /// Cleanup function for test environment
@@ -71,7 +71,7 @@ pub fn cleanup_test_files(paths: Vec<PathBuf>) {
 /// Build the EVIF CLI if not already built
 pub fn build_cli() -> std::io::Result<Output> {
     Command::new("cargo")
-        .args(&["build", "-p", "evif-cli"])
+        .args(["build", "-p", "evif-cli"])
         .current_dir(workspace_root())
         .output()
 }
@@ -91,9 +91,9 @@ pub fn start_test_server(port: u16) -> Result<(), String> {
 
     // Spawn the server
     let child = Command::new("cargo")
-        .args(&["run", "-p", "evif-rest"])
+        .args(["run", "-p", "evif-rest"])
         .current_dir(workspace_root())
-        .env("EVIF_PORT", &port.to_string())
+        .env("EVIF_PORT", port.to_string())
         .spawn()
         .map_err(|e| format!("Failed to spawn server: {}", e))?;
 
@@ -102,7 +102,7 @@ pub fn start_test_server(port: u16) -> Result<(), String> {
 
     // Wait for server to be ready
     let max_attempts = 30;
-    for attempt in 0..max_attempts {
+    for _attempt in 0..max_attempts {
         if let Ok(response) = reqwest::blocking::get(format!("http://localhost:{}/health", port)) {
             if response.status().is_success() {
                 return Ok(());
@@ -131,9 +131,8 @@ pub fn stop_test_server() {
 pub fn api_get(port: u16, path: &str) -> Result<String, String> {
     let url = format!("http://localhost:{}{}", port, path);
     reqwest::blocking::get(&url)
-        .map_err(|e| e.to_string())?
-        .text()
         .map_err(|e| e.to_string())
+        .and_then(|resp| resp.text().map_err(|e| e.to_string()))
 }
 
 /// Make POST request to REST API

@@ -86,6 +86,10 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - 已清理 `evif-rest` 自身的 unused import / unused variable / dead code / module cleanliness 等问题
   - 真实收口了 GraphQL 占位状态、WASM 条件编译请求、collab 权限映射、middleware clippy 样式项，以及多组测试中的 `reqwest` 多余借用
   - 过滤后的 `--no-deps` clippy 已无 `crates/evif-rest` 诊断
+- [x] 已实现：Phase A 最小闭环中的 **`evif-core` clippy 清理**
+  - 已清理 `evif-core` 自身的 unused import / unused variable / derive default / clamp / checked_div / needless borrow 等门禁问题
+  - 真实收口了 `cache` 模块、动态加载器、文件监控、配置系统、挂载表、批量操作与测试断言/布局问题
+  - 本轮分析额外修正：`cache` 统计测试不再假设 moka `entry_count()` 的即时值，而改为验证当前实现稳定承诺的统计字段与可观测读取行为
 - [x] 真实验证：
   - `cargo test -p evif-rest --test metrics_traffic metrics_traffic_counts_real_requests -- --nocapture`
   - `cargo test -p evif-rest --test metrics_traffic metrics_prometheus_endpoint_exposes_standard_text_format -- --nocapture`
@@ -95,11 +99,14 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - `cargo clippy -p evif-auth --all-targets -- -D warnings`
   - `cargo test -p evif-auth --all-targets -- --nocapture`
   - `cargo clippy -p evif-rest --all-targets --no-deps --message-format short -- -D warnings 2>&1 | rg '^crates/evif-rest|^benches/'`
+  - `cargo clippy -p evif-core --all-targets -- -D warnings`
+  - `cargo test -p evif-core --all-targets -- --nocapture`
   - `cargo test -p evif-rest --lib --tests --quiet`
 - [x] 当前进度：
-  - **Phase A = 50%**（4 个明确子项中完成 2 项）
+  - **Phase A = 75%**（4 个明确子项中完成 3 项）
   - **Phase B = 100%**（5 个明确子项中完成 5 项）
-  - **mem15 总路线图 = 24.1%**（按 Phase A-F 共 29 个明确子项估算，当前完成 7 项）
+  - **mem15 总路线图 = 27.6%**（按 Phase A-F 共 29 个明确子项估算，当前完成 8 项）
+  - **本轮结论：百分比暂不变**，但全 workspace 最终门禁的失败面已从“分散多 crate”进一步收敛到 `evif-mem / evif-plugins / evif-cli / evif-fuse`
 
 ---
 
@@ -402,7 +409,7 @@ cargo clippy -p evif-rest --all-targets -- -D warnings
 
 优先任务：
 
-- 修复 `evif-core` 的未使用 import / dead code / clippy 提示
+- [x] 修复 `evif-core` 的未使用 import / dead code / clippy 提示
 - [x] 修复 `evif-auth` 的 `derivable_impls`
 - [x] 修复 `evif-rest` 的 unused import / dead code / module cleanliness
 - 让下面命令通过：
@@ -411,7 +418,7 @@ cargo clippy -p evif-rest --all-targets -- -D warnings
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-**当前实现：50%**
+**当前实现：75%**
 
 - 已完成最小闭环：
   - `evif-auth` 的 `AuthPolicy` 已改为 derive `Default`
@@ -423,6 +430,14 @@ cargo clippy --workspace --all-targets -- -D warnings
   - 已收口库代码与测试代码中的 unused import / variable、dead code、manual clippy 样式问题
   - 真实验证通过：过滤后的 `cargo clippy -p evif-rest --all-targets --no-deps --message-format short -- -D warnings 2>&1 | rg '^crates/evif-rest|^benches/'`
   - 真实验证通过：`cargo test -p evif-rest --lib --tests --quiet`
+  - `evif-core` 自身的 clippy 失败面已清空
+  - 已收口 ACL、cache、dynamic_loader、file_monitor、config、mount_table、radix_mount_table、batch_operations 等模块的门禁问题
+  - 真实验证通过：`cargo clippy -p evif-core --all-targets -- -D warnings`
+  - 真实验证通过：`cargo test -p evif-core --all-targets -- --nocapture`
+- 本轮额外进展：
+  - 已清理 `evif-mcp`、`tests/common`、`api/e2e` 测试辅助中的机械 clippy
+  - 已额外清理部分 `evif-cli` 测试与 `evif-fuse` 的 import / `div_ceil` / 多余 cast 等问题
+  - 真实复跑 `cargo clippy --workspace --all-targets -- -D warnings` 后，剩余主阻塞已收敛到 `evif-mem`、`evif-plugins`、`evif-cli`、`evif-fuse`
 
 完成标准：
 

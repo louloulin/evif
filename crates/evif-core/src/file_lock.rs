@@ -6,7 +6,7 @@
 use crate::error::{EvifError, EvifResult};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 /// 锁信息
 #[derive(Debug, Clone)]

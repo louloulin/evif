@@ -33,9 +33,9 @@ pub fn start_evif_rest(port: u16) -> Result<(), String> {
     }
 
     let child = Command::new("cargo")
-        .args(&["run", "-p", "evif-rest", "--"])
+        .args(["run", "-p", "evif-rest", "--"])
         .current_dir(crate::workspace_root())
-        .env("EVIF_PORT", &port.to_string())
+        .env("EVIF_PORT", port.to_string())
         .env("EVIF_HOST", "127.0.0.1")
         .spawn()
         .map_err(|e| format!("Failed to spawn server: {}", e))?;

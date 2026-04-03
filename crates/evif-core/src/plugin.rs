@@ -7,7 +7,6 @@
 use crate::error::{EvifError, EvifResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// 插件配置参数元数据（Phase 8.1，对标 AGFS ConfigParameter）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +30,7 @@ pub struct FileInfo {
     pub is_dir: bool,
 }
 
-/// 打开标志（对标 AGFS OpenFlag）
+// 打开标志（对标 AGFS OpenFlag）
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct OpenFlags: u32 {
@@ -130,7 +129,7 @@ pub trait HandleFS: EvifPlugin {
     async fn close_handle(&self, id: i64) -> EvifResult<()>;
 }
 
-/// 写入标志（对标 AGFS WriteFlag）
+// 写入标志（对标 AGFS WriteFlag）
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct WriteFlags: u32 {

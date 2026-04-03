@@ -20,9 +20,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// 最大符号链接递归深度（防止循环）
-const MAX_SYMLINK_DEPTH: usize = 40;
-
 /// 挂载点元数据
 #[derive(Debug, Clone)]
 pub struct MountMetadata {
@@ -503,7 +500,7 @@ impl RadixMountTable {
         // 计算平均路径长度
         let total_path_len: usize = mounts.iter().map(|(key, _)| key.len()).sum();
 
-        let avg_path_len = if count > 0 { total_path_len / count } else { 0 };
+        let avg_path_len = total_path_len.checked_div(count).unwrap_or(0);
 
         MountTableStats {
             mount_count: count,
@@ -528,6 +525,7 @@ pub struct MountTableStats {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 

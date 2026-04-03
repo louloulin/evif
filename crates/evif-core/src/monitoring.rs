@@ -108,7 +108,7 @@ impl MetricsCollector {
         let uptime = self.start_time.elapsed().as_secs();
 
         SystemStats {
-            uptime_secs: uptime as u64,
+            uptime_secs: uptime,
             total_requests: self
                 .counters
                 .read()
@@ -291,7 +291,7 @@ mod tests {
     async fn test_system_stats() {
         let collector = MetricsCollector::new();
         let stats = collector.get_system_stats().await;
-        assert!(stats.uptime_secs >= 0);
+        assert_eq!(stats.uptime_secs, 0);
     }
 
     #[tokio::test]

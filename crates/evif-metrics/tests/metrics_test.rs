@@ -187,8 +187,7 @@ async fn test_multiple_labels() {
         .await
         .unwrap();
 
-    // Should have no errors
-    assert!(true);
+    assert!(registry.export().unwrap().contains("multi_label_counter"));
 }
 
 #[tokio::test]

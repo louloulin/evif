@@ -14,9 +14,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// 最大符号链接递归深度（防止循环）
-const MAX_SYMLINK_DEPTH: usize = 40;
-
 /// 插件挂载表
 ///
 /// 使用最长前缀匹配路由文件操作到对应的插件
@@ -310,6 +307,7 @@ impl Default for MountTable {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 

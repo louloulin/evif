@@ -7,7 +7,6 @@
 // - 线程安全的并发访问
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
 use tracing::{debug, trace};
@@ -17,6 +16,7 @@ pub type Inode = u64;
 
 /// 预定义的特殊 inode
 pub const ROOT_INODE: Inode = 1;
+#[allow(dead_code)]
 pub const PARENT_INODE: Inode = 2;
 
 /// Inode 信息

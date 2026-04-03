@@ -2,7 +2,7 @@
 //
 // 管理文件系统挂载的配置选项
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// FUSE 挂载配置
 #[derive(Debug, Clone)]

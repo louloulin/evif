@@ -51,7 +51,7 @@ impl CrossFsCopyManager {
             // 确保目标目录存在
             let dst_dir = dst_rel_path.rsplit('/').nth(1).unwrap_or("");
             if !dst_dir.is_empty() {
-                let _ = dst_plugin.mkdir(&dst_dir, 0o755).await;
+                let _ = dst_plugin.mkdir(dst_dir, 0o755).await;
             }
             dst_plugin.rename(&src_rel_path, &dst_rel_path).await?;
             return Ok(bytes_copied);
@@ -61,7 +61,7 @@ impl CrossFsCopyManager {
         // 确保目标目录存在
         let dst_dir = dst_rel_path.rsplit('/').nth(1).unwrap_or("");
         if !dst_dir.is_empty() {
-            let _ = dst_plugin.mkdir(&dst_dir, 0o755).await;
+            let _ = dst_plugin.mkdir(dst_dir, 0o755).await;
         }
 
         // 创建目标文件

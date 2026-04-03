@@ -1,6 +1,6 @@
 // EVIF通用缓存实现 - 使用moka
 
-use super::{Cache, CacheKey, CacheStats};
+use super::{Cache, CacheStats};
 use async_trait::async_trait;
 use moka::future::Cache as MokaCache;
 use serde::{Deserialize, Serialize};
@@ -180,8 +180,9 @@ mod tests {
         let _ = cache.get(&"key2".to_string()).await; // miss
 
         let stats = cache.stats().await;
-        // moka 不直接提供 hit/miss，仅校验 entry_count 与可观测行为
-        assert!(stats.entry_count >= 0);
+        // moka 不直接提供 hit/miss，当前实现也不承诺即时 entry_count，一致性以可观测读取为准
+        assert_eq!(stats.hits, 0);
+        assert_eq!(stats.misses, 0);
         assert!(cache.get(&"key1".to_string()).await.is_some());
     }
 

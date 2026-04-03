@@ -161,7 +161,7 @@ impl BatchExecutor {
 
     /// 设置并发度
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
-        self.concurrency = concurrency.max(1).min(64); // 限制在 1-64 之间
+        self.concurrency = concurrency.clamp(1, 64); // 限制在 1-64 之间
         self
     }
 
@@ -199,7 +199,7 @@ impl BatchExecutor {
             let plugin = plugin.clone();
             let dest = _request.destination.clone();
             let recursive = _request.recursive;
-            let overwrite = _request.overwrite;
+            let _overwrite = _request.overwrite;
             let source = source.clone();
 
             join_set.spawn(async move {
@@ -358,8 +358,8 @@ pub trait BatchOperations: Send + Sync {
     /// 批量复制（插件可以实现自己的优化版本）
     async fn batch_copy_optimized(
         &self,
-        request: BatchCopyRequest,
-        callback: Option<ProgressCallback>,
+        _request: BatchCopyRequest,
+        _callback: Option<ProgressCallback>,
     ) -> EvifResult<BatchResult> {
         // 默认实现：使用通用批量执行器
         Err(EvifError::NotSupportedGeneric)
@@ -368,8 +368,8 @@ pub trait BatchOperations: Send + Sync {
     /// 批量删除（插件可以实现自己的优化版本）
     async fn batch_delete_optimized(
         &self,
-        request: BatchDeleteRequest,
-        callback: Option<ProgressCallback>,
+        _request: BatchDeleteRequest,
+        _callback: Option<ProgressCallback>,
     ) -> EvifResult<BatchResult> {
         // 默认实现：使用通用批量执行器
         Err(EvifError::NotSupportedGeneric)
@@ -383,6 +383,7 @@ mod tests {
     use chrono::Utc;
 
     // Mock plugin for testing
+    #[allow(dead_code)]
     struct MockPlugin;
 
     #[async_trait]

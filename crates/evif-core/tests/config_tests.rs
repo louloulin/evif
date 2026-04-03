@@ -36,7 +36,7 @@ format = "json"
 
     assert_eq!(config.server.bind_address, "127.0.0.1");
     assert_eq!(config.server.port, 8080);
-    assert_eq!(config.cache.enabled, true);
+    assert!(config.cache.enabled);
     assert_eq!(config.cache.metadata_ttl_secs, 60);
     assert_eq!(config.logging.level, "info");
 }
@@ -47,7 +47,7 @@ fn test_config_default() {
 
     assert_eq!(config.server.bind_address, "0.0.0.0");
     assert_eq!(config.server.port, 8080);
-    assert_eq!(config.cache.enabled, true);
+    assert!(config.cache.enabled);
     assert_eq!(config.logging.level, "info");
 }
 
@@ -130,6 +130,6 @@ api_keys = ["key1", "key2"]
 
     assert!(config.security.is_some());
     let security = config.security.unwrap();
-    assert_eq!(security.tls_enabled, true);
+    assert!(security.tls_enabled);
     assert_eq!(security.api_keys.unwrap().len(), 2);
 }

@@ -1,7 +1,6 @@
 // EVIF MCP Server - 可执行文件
 
 use evif_mcp::{EvifMcpServer, McpServerConfig};
-use tokio::signal;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

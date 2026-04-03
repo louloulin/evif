@@ -8,7 +8,7 @@ use crate::plugin::FileHandle;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use tracing;
 /// 句柄信息
@@ -22,6 +22,7 @@ struct HandleInfo {
     /// 本地句柄（由插件管理）
     local_handle: Option<Box<dyn FileHandle>>,
     /// 创建时间
+    #[allow(dead_code)]
     created_at: std::time::Instant,
     /// 过期时间
     expires_at: std::time::Instant,

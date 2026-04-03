@@ -1007,7 +1007,7 @@ impl EvifMcpServer {
                     .ok_or("Missing 'path' argument")?;
                 let flags = arguments["flags"].as_u64().unwrap_or(1) as i32;
                 let mode = arguments["mode"].as_u64().unwrap_or(0o644) as u32;
-                let lease = arguments["lease"].as_u64().unwrap_or(300) as u64;
+                let lease = arguments["lease"].as_u64().unwrap_or(300);
 
                 let url = format!("{}/api/v1/handles/open", self.config.evif_url);
                 let response = self
@@ -1539,10 +1539,10 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                 "initialize" => {
                     let client_info = params
                         .and_then(|p| p.get("clientInfo"))
-                        .map(|c| c.clone())
+                        .cloned()
                         .unwrap_or(json!({}));
                     tracing::info!("MCP client initializing: {:?}", client_info);
-                    return json!({
+                    json!({
                         "jsonrpc": "2.0",
                         "result": {
                             "protocolVersion": "2024-11-05",
@@ -1556,13 +1556,13 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                             }
                         },
                         "id": id
-                    });
+                    })
                 }
 
                 // 工具列表
                 "tools/list" => {
                     let tools = self.list_tools().await;
-                    return json!({
+                    json!({
                         "jsonrpc": "2.0",
                         "result": {
                             "tools": tools.into_iter().map(|t| {
@@ -1574,13 +1574,13 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                             }).collect::<Vec<_>>()
                         },
                         "id": id
-                    });
+                    })
                 }
 
                 // 资源列表
                 "resources/list" => {
                     let resources = self.list_resources().await;
-                    return json!({
+                    json!({
                         "jsonrpc": "2.0",
                         "result": {
                             "resources": resources.into_iter().map(|r| {
@@ -1593,13 +1593,13 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                             }).collect::<Vec<_>>()
                         },
                         "id": id
-                    });
+                    })
                 }
 
                 // prompts/list
                 "prompts/list" => {
                     let prompts = self.list_prompts().await;
-                    return json!({
+                    json!({
                         "jsonrpc": "2.0",
                         "result": {
                             "prompts": prompts.into_iter().map(|p| {
@@ -1611,25 +1611,25 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                             }).collect::<Vec<_>>()
                         },
                         "id": id
-                    });
+                    })
                 }
 
                 // ping
                 "ping" => {
-                    return json!({
+                    json!({
                         "jsonrpc": "2.0",
                         "result": {},
                         "id": id
-                    });
+                    })
                 }
 
                 // shutdown
                 "shutdown" => {
-                    return json!({
+                    json!({
                         "jsonrpc": "2.0",
                         "result": {},
                         "id": id
-                    });
+                    })
                 }
 
                 _ => {

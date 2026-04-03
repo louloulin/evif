@@ -336,10 +336,7 @@ mod tests {
         let mut config = HashMap::new();
         config.insert("enabled".to_string(), json!(true));
 
-        assert_eq!(
-            ConfigValidator::require_bool(&config, "enabled").unwrap(),
-            true
-        );
+        assert!(ConfigValidator::require_bool(&config, "enabled").unwrap());
     }
 
     #[test]

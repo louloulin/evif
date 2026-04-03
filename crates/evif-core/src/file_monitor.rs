@@ -12,7 +12,6 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::sync::broadcast;
 
 /// 文件事件类型
@@ -257,6 +256,12 @@ impl EventManager {
     }
 }
 
+impl Default for EventManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// 简单的文件监控器实现（通用）
 pub struct SimpleFileMonitor {
     running: Arc<Mutex<bool>>,
@@ -334,10 +339,10 @@ impl MonitorFactory {
             // macOS: 使用 FSEvents
             // Ok(Box::new(FSEventsMonitor::new(self.event_manager.clone())))
             println!("Creating FSEvents monitor for macOS");
-            return Ok(Box::new(SimpleFileMonitor::new(
+            Ok(Box::new(SimpleFileMonitor::new(
                 "fsevents".to_string(),
                 self.event_manager.clone(),
-            )));
+            )))
         }
 
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]

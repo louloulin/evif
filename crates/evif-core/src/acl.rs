@@ -8,13 +8,13 @@
 // - 继承和默认规则
 // - 权限验证逻辑
 
-use crate::error::{EvifError, EvifResult};
+use crate::error::EvifResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-/// 权限位定义
+// 权限位定义
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct AclPermissions: u32 {

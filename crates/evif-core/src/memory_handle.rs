@@ -22,6 +22,7 @@ pub struct MemoryFileHandle {
     /// 文件内容（使用Cursor支持seek）
     data: Arc<Mutex<Cursor<Vec<u8>>>>,
     /// 创建时间
+    #[allow(dead_code)]
     created_at: std::time::Instant,
 }
 
@@ -172,7 +173,7 @@ impl FileHandle for MemoryFileHandle {
             .map_err(|e| EvifError::Internal(format!("Lock error: {}", e)))?;
 
         Ok(FileInfo {
-            name: self.path.split('/').last().unwrap_or("").to_string(),
+            name: self.path.split('/').next_back().unwrap_or("").to_string(),
             size: data.get_ref().len() as u64,
             mode: 0o644,
             modified: chrono::Utc::now(),

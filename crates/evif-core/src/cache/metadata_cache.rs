@@ -2,7 +2,6 @@
 
 use super::{Cache, CacheConfig, CacheKey, CacheStats};
 use crate::FileInfo;
-use async_trait::async_trait;
 use std::sync::Arc;
 
 /// 元数据缓存
@@ -41,7 +40,7 @@ impl MetadataCache {
     }
 
     /// 批量使元数据失效（路径前缀匹配）
-    pub async fn invalidate_prefix(&self, prefix: &str) {
+    pub async fn invalidate_prefix(&self, _prefix: &str) {
         // 实现前缀匹配失效逻辑
         // 由于缓存层不直接支持前缀查询,这里我们清空整个缓存
         // 在实际生产中,应该在缓存层维护一个路径前缀索引
@@ -61,6 +60,12 @@ impl MetadataCache {
     /// 清空所有缓存
     pub async fn clear(&self) {
         self.cache.clear().await;
+    }
+}
+
+impl Default for MetadataCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -109,7 +114,8 @@ mod tests {
         cache.set("/test.txt".to_string(), info).await;
 
         let stats = cache.stats().await;
-        assert!(stats.entry_count >= 0);
+        assert_eq!(stats.hits, 0);
+        assert_eq!(stats.misses, 0);
         assert!(cache.get("/test.txt").await.is_some());
     }
 }

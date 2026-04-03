@@ -18,16 +18,16 @@ mod mount_config;
 
 use evif_core::{EvifError, EvifResult, FileInfo, WriteFlags};
 use fuser::{
-    FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEntry,
+    FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
     ReplyOpen, ReplyWrite, Request, TimeOrNow,
 };
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::runtime::Runtime;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 pub use dir_cache::{DirCache, DirEntry};
 pub use evif_core::RadixMountTable;
@@ -148,7 +148,7 @@ impl EvifFuseFuse {
         };
 
         // 计算块数（按 4096 字节块大小）
-        let blocks = (file_info.size + 4095) / 4096;
+        let blocks = file_info.size.div_ceil(4096);
 
         // 转换时间
         let mtime = SystemTime::from(file_info.modified);
@@ -426,7 +426,7 @@ impl Filesystem for EvifFuseFuse {
                     ctime,
                     crtime: mtime,
                     kind: file_type,
-                    perm: _mode.unwrap_or_else(|| (file_info.mode & 0o777) as u32) as u16,
+                    perm: _mode.unwrap_or(file_info.mode & 0o777) as u16,
                     nlink: 1,
                     uid: _uid.unwrap_or(501),
                     gid: _gid.unwrap_or(20),
@@ -487,7 +487,7 @@ impl Filesystem for EvifFuseFuse {
                 }
 
                 for (idx, entry) in entries.iter().enumerate() {
-                    if idx < i as usize - 2 {
+                    if idx < i.saturating_sub(2) as usize {
                         continue;
                     }
 
@@ -540,14 +540,14 @@ impl Filesystem for EvifFuseFuse {
             let file_info = plugin.stat(&path_str).await?;
 
             // 检查读权限
-            let read_flags = libc::O_RDONLY as i32 | libc::O_RDWR as i32;
+            let read_flags = libc::O_RDONLY | libc::O_RDWR;
             if (_flags & read_flags != 0) && !file_info.is_dir {
                 // 文件可读
                 debug!("Opened file for reading: {}", path_str);
             }
 
             // 检查写权限
-            let write_flags = libc::O_WRONLY as i32 | libc::O_RDWR as i32;
+            let write_flags = libc::O_WRONLY | libc::O_RDWR;
             if (_flags & write_flags != 0) && !allow_write {
                 return Err(EvifError::PermissionDenied("Read-only mount".to_string()));
             }
@@ -699,7 +699,7 @@ impl Filesystem for EvifFuseFuse {
                 let file_attr = FileAttr {
                     ino: inode,
                     size: file_info.size,
-                    blocks: (file_info.size + 4095) / 4096,
+                    blocks: file_info.size.div_ceil(4096),
                     atime: SystemTime::now(),
                     mtime: SystemTime::from(file_info.modified),
                     ctime: SystemTime::from(file_info.modified),
@@ -825,7 +825,7 @@ impl Filesystem for EvifFuseFuse {
                 let file_attr = FileAttr {
                     ino: inode,
                     size: file_info.size,
-                    blocks: (file_info.size + 4095) / 4096,
+                    blocks: file_info.size.div_ceil(4096),
                     atime: SystemTime::now(),
                     mtime: SystemTime::from(file_info.modified),
                     ctime: SystemTime::from(file_info.modified),

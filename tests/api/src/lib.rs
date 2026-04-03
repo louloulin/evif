@@ -1,8 +1,10 @@
+#![cfg(test)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+
 // EVIF REST API Tests - Health and File Operations (P0)
 // Real integration tests for core REST API endpoints
 
 use reqwest::Client;
-use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const API_BASE: &str = "http://localhost:8081";

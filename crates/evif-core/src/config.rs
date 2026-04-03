@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// EVIF服务器配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EvifConfig {
     /// 服务器配置
     pub server: ServerConfig,
@@ -295,7 +295,7 @@ impl EvifConfig {
 
         for candidate in candidates {
             if candidate.exists() {
-                return PathBuf::from(candidate);
+                return candidate;
             }
         }
 
@@ -322,18 +322,6 @@ impl EvifConfig {
     }
 }
 
-impl Default for EvifConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            plugins: PluginsConfig::default(),
-            cache: CacheConfig::default(),
-            logging: LoggingConfig::default(),
-            security: None,
-        }
-    }
-}
-
 /// 辅助函数：获取用户主目录
 mod dirs {
     use std::path::PathBuf;
@@ -354,7 +342,7 @@ mod tests {
     fn test_default_config() {
         let config = EvifConfig::default();
         assert_eq!(config.server.port, 8080);
-        assert_eq!(config.cache.enabled, true);
+        assert!(config.cache.enabled);
         assert_eq!(config.logging.level, "info");
     }
 

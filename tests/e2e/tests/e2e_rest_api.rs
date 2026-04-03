@@ -1,3 +1,5 @@
+#![allow(clippy::needless_borrows_for_generic_args)]
+
 // E2E REST API Tests for EVIF
 //
 // Tests 30 REST endpoints to validate the EVIF REST API
@@ -30,7 +32,7 @@ impl TestContext {
 /// Helper: Check if server is running
 async fn check_server_ready(client: &Client) -> bool {
     client
-        .get(&format!("{}/health", BASE_URL.replace("/api/v1", "")))
+        .get(format!("{}/health", BASE_URL.replace("/api/v1", "")))
         .send()
         .await
         .map(|r| r.status().is_success())
@@ -46,7 +48,7 @@ async fn assert_success(resp: Response) -> Value {
         panic!("Request failed with status {}: {}", status, body);
     }
 
-    serde_json::from_str(&body).unwrap_or_else(|_| Value::Null)
+    serde_json::from_str(&body).unwrap_or(Value::Null)
 }
 
 /// Helper: Assert specific status code
@@ -75,7 +77,7 @@ async fn e2e_01_health_root() {
 
     let response = ctx
         .client
-        .get(&format!("{}/health", BASE_URL.replace("/api/v1", "")))
+        .get(format!("{}/health", BASE_URL.replace("/api/v1", "")))
         .send()
         .await
         .expect("Health request failed");

@@ -1,6 +1,5 @@
 // EVIF CLI Integration Tests
 
-use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
 
@@ -11,7 +10,7 @@ fn workspace_root() -> std::path::PathBuf {
 #[test]
 fn test_cli_version() {
     let output = Command::new("cargo")
-        .args(&["run", "-p", "evif-cli", "--bin", "evif", "--", "--version"])
+        .args(["run", "-p", "evif-cli", "--bin", "evif", "--", "--version"])
         .current_dir(workspace_root())
         .output()
         .expect("Failed to execute evif");
@@ -25,7 +24,7 @@ fn test_cli_version() {
 #[test]
 fn test_cli_help() {
     let output = Command::new("cargo")
-        .args(&["run", "-p", "evif-cli", "--bin", "evif", "--", "--help"])
+        .args(["run", "-p", "evif-cli", "--bin", "evif", "--", "--help"])
         .current_dir(workspace_root())
         .output()
         .expect("Failed to execute evif");
@@ -50,7 +49,7 @@ echo script-ok
     std::fs::write(&script_path, script_content).unwrap();
 
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "-p",
             "evif-cli",
@@ -75,7 +74,7 @@ fn test_cli_completer() {
     // evif-cli is binary-only; completer is tested in lib tests (completer.rs)
     // Integration test: ensure CLI runs without crash
     let output = Command::new("cargo")
-        .args(&["run", "-p", "evif-cli", "--bin", "evif", "--", "--help"])
+        .args(["run", "-p", "evif-cli", "--bin", "evif", "--", "--help"])
         .current_dir(workspace_root())
         .output()
         .expect("Failed to run evif");

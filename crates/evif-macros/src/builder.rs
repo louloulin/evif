@@ -49,14 +49,9 @@ fn impl_builder_macro(input: &DeriveInput, args: &BuilderArgs) -> proc_macro2::T
     let _field_types: Vec<&syn::Type> = fields.iter().map(|(_, ty, _)| ty).collect();
 
     let builder_fields = fields.iter().map(|(name, ty, default)| {
-        if *default {
-            quote! {
-                pub #name: Option<#ty>,
-            }
-        } else {
-            quote! {
-                pub #name: Option<#ty>,
-            }
+        let _default = default;
+        quote! {
+            pub #name: Option<#ty>,
         }
     });
 
