@@ -16,6 +16,8 @@ use axum::{
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Encryption status
@@ -46,12 +48,21 @@ pub struct EnableEncryptionRequest {
 #[derive(Clone)]
 pub struct EncryptionState {
     inner: Arc<RwLock<EncryptionInner>>,
+    persistence_path: Arc<Option<PathBuf>>,
 }
 
 struct EncryptionInner {
     enabled: bool,
     cipher: Option<Aes256Gcm>,
     key_source: String,
+    key_reference: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EncryptionSnapshot {
+    enabled: bool,
+    key_source: String,
+    key_reference: Option<String>,
 }
 
 impl Default for EncryptionState {
@@ -62,33 +73,35 @@ impl Default for EncryptionState {
 
 impl EncryptionState {
     pub fn new() -> Self {
-        // Check if EVIF_ENCRYPTION_KEY environment variable is set
-        let key = std::env::var("EVIF_ENCRYPTION_KEY").ok();
-        let inner = if let Some(key) = key {
-            if let Ok(cipher) = Self::create_cipher(&key) {
-                EncryptionInner {
-                    enabled: true,
-                    cipher: Some(cipher),
-                    key_source: "env:EVIF_ENCRYPTION_KEY".to_string(),
-                }
-            } else {
-                EncryptionInner {
-                    enabled: false,
-                    cipher: None,
-                    key_source: "env:EVIF_ENCRYPTION_KEY (invalid)".to_string(),
-                }
-            }
+        Self {
+            inner: Arc::new(RwLock::new(Self::runtime_inner())),
+            persistence_path: Arc::new(None),
+        }
+    }
+
+    pub fn from_env() -> Result<Self, String> {
+        match std::env::var("EVIF_REST_ENCRYPTION_STATE_PATH") {
+            Ok(path) if !path.trim().is_empty() => Self::persistent(path.trim()),
+            _ => Ok(Self::new()),
+        }
+    }
+
+    pub fn persistent(path: impl AsRef<Path>) -> Result<Self, String> {
+        let path = path.as_ref().to_path_buf();
+        let inner = if path.exists() {
+            let snapshot = Self::load_snapshot(&path)?;
+            Self::inner_from_snapshot(snapshot)
         } else {
-            EncryptionInner {
-                enabled: false,
-                cipher: None,
-                key_source: String::new(),
-            }
+            let inner = Self::runtime_inner();
+            let snapshot = Self::snapshot_from_inner(&inner);
+            Self::save_snapshot(&path, &snapshot)?;
+            inner
         };
 
-        Self {
+        Ok(Self {
             inner: Arc::new(RwLock::new(inner)),
-        }
+            persistence_path: Arc::new(Some(path)),
+        })
     }
 
     fn create_cipher(key: &str) -> Result<Aes256Gcm, String> {
@@ -105,6 +118,110 @@ impl EncryptionState {
         let key_bytes: [u8; 32] = hasher.finalize().into();
 
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| format!("{:?}", e))
+    }
+
+    fn runtime_inner() -> EncryptionInner {
+        if std::env::var("EVIF_ENCRYPTION_KEY").is_ok() {
+            match Self::create_cipher("env:EVIF_ENCRYPTION_KEY") {
+                Ok(cipher) => EncryptionInner {
+                    enabled: true,
+                    cipher: Some(cipher),
+                    key_source: "env:EVIF_ENCRYPTION_KEY".to_string(),
+                    key_reference: Some("env:EVIF_ENCRYPTION_KEY".to_string()),
+                },
+                Err(_) => EncryptionInner {
+                    enabled: false,
+                    cipher: None,
+                    key_source: "env:EVIF_ENCRYPTION_KEY (invalid)".to_string(),
+                    key_reference: Some("env:EVIF_ENCRYPTION_KEY".to_string()),
+                },
+            }
+        } else {
+            EncryptionInner {
+                enabled: false,
+                cipher: None,
+                key_source: String::new(),
+                key_reference: None,
+            }
+        }
+    }
+
+    fn snapshot_from_inner(inner: &EncryptionInner) -> EncryptionSnapshot {
+        EncryptionSnapshot {
+            enabled: inner.enabled,
+            key_source: inner.key_source.clone(),
+            key_reference: inner.key_reference.clone(),
+        }
+    }
+
+    fn inner_from_snapshot(snapshot: EncryptionSnapshot) -> EncryptionInner {
+        if !snapshot.enabled {
+            return EncryptionInner {
+                enabled: false,
+                cipher: None,
+                key_source: snapshot.key_source,
+                key_reference: snapshot.key_reference,
+            };
+        }
+
+        match snapshot.key_reference.as_deref() {
+            Some(key_reference) => match Self::create_cipher(key_reference) {
+                Ok(cipher) => EncryptionInner {
+                    enabled: true,
+                    cipher: Some(cipher),
+                    key_source: snapshot.key_source,
+                    key_reference: Some(key_reference.to_string()),
+                },
+                Err(_) => EncryptionInner {
+                    enabled: false,
+                    cipher: None,
+                    key_source: snapshot.key_source,
+                    key_reference: Some(key_reference.to_string()),
+                },
+            },
+            None => EncryptionInner {
+                enabled: false,
+                cipher: None,
+                key_source: snapshot.key_source,
+                key_reference: None,
+            },
+        }
+    }
+
+    fn load_snapshot(path: &Path) -> Result<EncryptionSnapshot, String> {
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read encryption state '{}': {}", path.display(), e))?;
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse encryption state '{}': {}", path.display(), e))
+    }
+
+    fn save_snapshot(path: &Path, snapshot: &EncryptionSnapshot) -> Result<(), String> {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent).map_err(|e| {
+                format!(
+                    "Failed to create encryption state parent '{}': {}",
+                    parent.display(),
+                    e
+                )
+            })?;
+        }
+        let content = serde_json::to_string_pretty(snapshot)
+            .map_err(|e| format!("Failed to serialize encryption state: {}", e))?;
+        fs::write(path, content).map_err(|e| {
+            format!(
+                "Failed to write encryption state '{}': {}",
+                path.display(),
+                e
+            )
+        })
+    }
+
+    fn persist_inner(&self, inner: &EncryptionInner) -> Result<(), String> {
+        if let Some(path) = self.persistence_path.as_ref().as_ref() {
+            let snapshot = Self::snapshot_from_inner(inner);
+            Self::save_snapshot(path, &snapshot)?;
+        }
+        Ok(())
     }
 
     pub fn get_config(&self) -> EncryptionConfig {
@@ -129,11 +246,14 @@ impl EncryptionState {
         } else {
             "provided".to_string()
         };
+        let key_reference = key.strip_prefix("env:").map(|_| key.clone());
 
         let mut inner = self.inner.write();
         inner.enabled = true;
         inner.cipher = Some(cipher);
         inner.key_source = key_source;
+        inner.key_reference = key_reference;
+        self.persist_inner(&inner)?;
 
         Ok(EncryptionConfig {
             status: EncryptionStatus::Enabled,
@@ -142,17 +262,19 @@ impl EncryptionState {
         })
     }
 
-    pub async fn disable(&self) -> EncryptionConfig {
+    pub async fn disable(&self) -> Result<EncryptionConfig, String> {
         let mut inner = self.inner.write();
         inner.enabled = false;
         inner.cipher = None;
         inner.key_source = String::new();
+        inner.key_reference = None;
+        self.persist_inner(&inner)?;
 
-        EncryptionConfig {
+        Ok(EncryptionConfig {
             status: EncryptionStatus::Disabled,
             algorithm: "AES-256-GCM".to_string(),
             key_source: String::new(),
-        }
+        })
     }
 
     /// Encrypt data with AES-256-GCM
@@ -228,7 +350,7 @@ impl EncryptionHandlers {
     pub async fn disable(
         State(state): State<EncryptionState>,
     ) -> RestResult<impl IntoResponse> {
-        let config = state.disable().await;
+        let config = state.disable().await.map_err(RestError::Internal)?;
         Ok(Json(config))
     }
 }

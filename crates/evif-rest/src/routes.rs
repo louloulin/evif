@@ -23,12 +23,15 @@ pub fn create_routes_with_memory_state(
 ) -> Router {
     let tenant_state = TenantState::from_env()
         .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH");
+    let encryption_state = EncryptionState::from_env()
+        .expect("failed to initialize encryption state from EVIF_REST_ENCRYPTION_STATE_PATH");
     let sync_state = SyncState::from_env()
         .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH");
     attach_request_identity(build_routes(
         mount_table,
         memory_state,
         tenant_state,
+        encryption_state,
         sync_state,
     ))
 }
@@ -38,12 +41,33 @@ pub fn create_routes_with_tenant_state(
     mount_table: Arc<RadixMountTable>,
     tenant_state: TenantState,
 ) -> Router {
+    let encryption_state = EncryptionState::from_env()
+        .expect("failed to initialize encryption state from EVIF_REST_ENCRYPTION_STATE_PATH");
     let sync_state = SyncState::from_env()
         .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH");
     attach_request_identity(build_routes(
         mount_table,
         memory_handlers::create_memory_state(),
         tenant_state,
+        encryption_state,
+        sync_state,
+    ))
+}
+
+/// 创建带显式加密状态的 API 路由
+pub fn create_routes_with_encryption_state(
+    mount_table: Arc<RadixMountTable>,
+    encryption_state: EncryptionState,
+) -> Router {
+    let tenant_state = TenantState::from_env()
+        .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH");
+    let sync_state = SyncState::from_env()
+        .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH");
+    attach_request_identity(build_routes(
+        mount_table,
+        memory_handlers::create_memory_state(),
+        tenant_state,
+        encryption_state,
         sync_state,
     ))
 }
@@ -55,10 +79,13 @@ pub fn create_routes_with_sync_state(
 ) -> Router {
     let tenant_state = TenantState::from_env()
         .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH");
+    let encryption_state = EncryptionState::from_env()
+        .expect("failed to initialize encryption state from EVIF_REST_ENCRYPTION_STATE_PATH");
     attach_request_identity(build_routes(
         mount_table,
         memory_handlers::create_memory_state(),
         tenant_state,
+        encryption_state,
         sync_state,
     ))
 }
@@ -86,6 +113,9 @@ pub(crate) fn create_routes_with_auth_and_memory_state(
             memory_state,
             TenantState::from_env()
                 .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH"),
+            EncryptionState::from_env().expect(
+                "failed to initialize encryption state from EVIF_REST_ENCRYPTION_STATE_PATH",
+            ),
             SyncState::from_env()
                 .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH"),
         )
@@ -101,6 +131,7 @@ fn build_routes(
     mount_table: Arc<RadixMountTable>,
     memory_state: memory_handlers::MemoryState,
     tenant_state: TenantState,
+    encryption_state: EncryptionState,
     sync_state: SyncState,
 ) -> Router {
     // 创建动态插件加载器
@@ -125,9 +156,6 @@ fn build_routes(
 
     // 创建批量操作管理器
     let batch_manager = batch_handlers::BatchOperationManager::new();
-
-    // Phase 17.2: 创建加密状态管理器
-    let encryption_state = EncryptionState::new();
 
     // Phase 17.4: 创建 GraphQL schema
     let graphql_schema = graphql_handlers::GraphQLState::schema();
@@ -681,6 +709,8 @@ pub fn create_routes_with_context(
         memory_handlers::create_memory_state(),
         TenantState::from_env()
             .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH"),
+        EncryptionState::from_env()
+            .expect("failed to initialize encryption state from EVIF_REST_ENCRYPTION_STATE_PATH"),
         SyncState::from_env()
             .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH"),
     );

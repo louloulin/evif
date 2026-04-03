@@ -680,6 +680,8 @@ fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
                 | "/api/v1/plugins/load"
                 | "/api/v1/plugins/unload"
                 | "/api/v1/plugins/wasm/load"
+                | "/api/v1/encryption/enable"
+                | "/api/v1/encryption/disable"
                 | "/api/v1/metrics/reset"
         ))
         || (*method == Method::POST

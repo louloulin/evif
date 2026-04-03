@@ -23,7 +23,7 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
 
 - 严格质量门禁未通过：`cargo clippy -- -D warnings` 当前失败
 - 可观测性仍偏基础：有 TraceLayer，但标准 metrics / tracing 初始化 / 业务指标接线仍不完整
-- 运行态状态仍大量以内存态存在：TenantState / SyncState 已补上可选文件持久化，但加密状态与部分运行态指标仍主要在进程内
+- 运行态状态的持久化边界已进一步明确：生产模式下已要求 Tenant / Sync / Encryption 状态提供持久化路径，但部分运行态指标仍主要在进程内
 - 文档、实现、门禁之间存在轻微漂移：`mem14.md` 总结为 100%，但中段仍保留 Phase 13 `90%`
 
 ### 1.2 两个必须区分的百分比
@@ -104,6 +104,20 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - 默认路由已支持通过 `EVIF_REST_SYNC_STATE_PATH` 启用同步状态持久化
   - 新增测试入口 `create_routes_with_sync_state`，可真实模拟服务重启恢复
   - 新增集成测试：`sync_persistence_survives_restart`
+- [x] 已实现：Phase C 最小闭环中的 **EncryptionState 可恢复配置持久化**
+  - `EncryptionState` 新增基于 JSON 文件的持久化后端，持久化 `enabled / key_source / key_reference`
+  - 默认路由已支持通过 `EVIF_REST_ENCRYPTION_STATE_PATH` 启用加密状态持久化
+  - 新增测试入口 `create_routes_with_encryption_state`，可真实模拟服务重启恢复
+  - 当前最小策略仅持久化可恢复配置状态：`env:KEY_NAME` 可跨重启恢复，直接提供的裸 key 不写入状态文件
+  - 新增集成测试：`encryption_persistence_survives_restart_with_env_key`
+- [x] 已实现：Phase C 最小闭环中的 **生产模式运行态状态持久化边界校验**
+  - `EvifServer::run` 现在会在生产模式下强制校验 `EVIF_REST_TENANT_STATE_PATH / EVIF_REST_SYNC_STATE_PATH / EVIF_REST_ENCRYPTION_STATE_PATH`
+  - 由启动链路真实拒绝“memory-only runtime state in production”，避免服务启动后才发现状态不可恢复
+  - 新增回归测试：`test_validate_runtime_state_for_production_env`
+- [x] 已实现：Phase D 最小闭环中的 **加密管理端点 admin 能力分级**
+  - `AuthMiddleware` 现在将 `/api/v1/encryption/enable` 与 `/api/v1/encryption/disable` 归类为 `admin` 级敏感端点
+  - `write-key` 不再能直接修改全局加密配置，必须由 `admin-key` 执行
+  - 新增集成测试：`test_encryption_enable_requires_admin_scope`
 - [x] 真实验证：
   - `cargo test -p evif-rest --test metrics_traffic metrics_traffic_counts_real_requests -- --nocapture`
   - `cargo test -p evif-rest --test metrics_traffic metrics_prometheus_endpoint_exposes_standard_text_format -- --nocapture`
@@ -124,14 +138,20 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - `cargo test -p evif-rest --test multi_tenant -- --nocapture`
   - `cargo test -p evif-rest --test incremental_sync -- --nocapture`
   - `cargo test -p evif-rest --test incremental_sync sync_persistence_survives_restart -- --nocapture`
+  - `cargo test -p evif-rest --test encryption_at_rest -- --nocapture`
+  - `cargo test -p evif-rest --test encryption_at_rest encryption_persistence_survives_restart_with_env_key -- --nocapture`
+  - `cargo test -p evif-rest test_validate_runtime_state_for_production_env -- --nocapture`
+  - `cargo test -p evif-rest --test auth_protection -- --nocapture`
+  - `cargo test -p evif-rest --test auth_protection test_encryption_enable_requires_admin_scope -- --nocapture`
   - `cargo clippy -p evif-rest --all-targets -- -D warnings`
   - `cargo test -p evif-rest --lib --tests --quiet`
 - [x] 当前进度：
   - **Phase A = 100%**（4 个明确子项中完成 4 项）
   - **Phase B = 100%**（5 个明确子项中完成 5 项）
-  - **Phase C = 40%**（5 个明确子项中完成 2 项）
-  - **mem15 总路线图 = 37.9%**（按 Phase A-F 共 29 个明确子项估算，当前完成 11 项）
-  - **本轮结论：Phase C 已形成 TenantState + SyncState 两个真实重启恢复闭环**
+  - **Phase C = 100%**（5 个明确子项中完成 5 项）
+  - **Phase D = 20%**（5 个明确子项中完成 1 项）
+  - **mem15 总路线图 = 51.7%**（按 Phase A-F 共 29 个明确子项估算，当前完成 15 项）
+  - **本轮结论：Phase D 已完成首个真实闭环，敏感安全端点的能力边界开始收紧**
 
 ---
 
@@ -390,11 +410,11 @@ cargo clippy -p evif-rest --all-targets -- -D warnings
 
 ### 6.3 状态可靠性不够强
 
-虽然 memory backend 已支持 SQLite，并且生产模式要求持久化 memory，但下列能力仍未完全形成生产级持久化闭环：
+虽然 memory backend 已支持 SQLite，并且生产模式已要求关键运行态状态提供持久化路径，但下列能力仍未完全形成生产级持久化闭环：
 
 - TenantState：已支持可选 JSON 持久化，但默认仍允许内存态启动
 - SyncState：已支持可选 JSON 持久化，但冲突治理与多节点一致性仍未完成
-- EncryptionState 的启停状态
+- EncryptionState：已支持可选 JSON 配置持久化，但当前仅对 `env:KEY_NAME` 这类可恢复 key 引用形成跨重启闭环，尚未形成完整密钥管理体系
 - 多种 traffic / metrics 计数器
 
 这意味着：
@@ -526,11 +546,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 - [x] 给 TenantState 引入持久化后端
 - [x] 给 SyncState 引入持久化版本存储
-- 评估 EncryptionState 的配置与密钥管理持久化方式
-- 明确哪些状态允许内存态，哪些必须持久化
-- 为重启恢复写集成测试
+- [x] 评估 EncryptionState 的配置与密钥管理持久化方式
+- [x] 明确哪些状态允许内存态，哪些必须持久化
+- [x] 为重启恢复写集成测试
 
-**当前实现：40%**
+**当前实现：100%**
 
 - 已完成最小闭环：
   - `TenantState` 已支持从 JSON 文件加载和保存状态
@@ -543,9 +563,21 @@ cargo clippy --workspace --all-targets -- -D warnings
   - 默认路由可通过 `EVIF_REST_SYNC_STATE_PATH` 开启持久化
   - 已新增 `create_routes_with_sync_state` 用于重启恢复测试注入
   - 真实验证通过：`sync_persistence_survives_restart`
+  - `EncryptionState` 已支持从 JSON 文件加载和保存加密配置状态
+  - 默认路由可通过 `EVIF_REST_ENCRYPTION_STATE_PATH` 开启持久化
+  - `env:KEY_NAME` 形式的 key 引用可在重启后恢复为 `enabled` 状态
+  - 显式提供的裸 key 不会写入状态文件，重启后不做隐式恢复
+  - 已新增 `create_routes_with_encryption_state` 用于重启恢复测试注入
+  - 真实验证通过：`encryption_persistence_survives_restart_with_env_key`
+  - 生产模式下，`TenantState / SyncState / EncryptionState` 已明确归为“必须持久化”的运行态
+  - `EvifServer::run` 已在启动前强制校验 `EVIF_REST_TENANT_STATE_PATH / EVIF_REST_SYNC_STATE_PATH / EVIF_REST_ENCRYPTION_STATE_PATH`
+  - 记忆后端继续沿用既有规则：生产模式必须使用持久化 memory backend
   - 真实验证通过：`cargo test -p evif-rest --test multi_tenant -- --nocapture`
   - 真实验证通过：`cargo test -p evif-rest --test incremental_sync -- --nocapture`
   - 真实验证通过：`cargo test -p evif-rest --test incremental_sync sync_persistence_survives_restart -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest --test encryption_at_rest -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest --test encryption_at_rest encryption_persistence_survives_restart_with_env_key -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest test_validate_runtime_state_for_production_env -- --nocapture`
   - 真实验证通过：`cargo clippy -p evif-rest --all-targets -- -D warnings`
   - 真实验证通过：`cargo test -p evif-rest --lib --tests --quiet`
 
@@ -562,11 +594,23 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 优先任务：
 
-- 补充 Auth middleware 的生产场景测试
+- [x] 补充 Auth middleware 的生产场景测试
 - 补充启用 API key 时的拒绝 / 授权 / 审计日志 E2E
 - 明确 GraphQL / REST / MCP 的契约映射边界
 - 清理版本号、状态字段、响应大小写等潜在不一致
 - 对敏感端点增加更严格的能力分级
+
+**当前实现：20%**
+
+- 已完成最小闭环：
+  - 已新增 `test_encryption_enable_requires_admin_scope` 集成测试
+  - 真实验证了敏感安全端点 `/api/v1/encryption/enable` 的拒绝 / 授权 / 审计日志行为
+  - `AuthMiddleware` 已将 `/api/v1/encryption/enable` 与 `/api/v1/encryption/disable` 提升为 `admin` 级端点
+  - `write-key` 调用会收到 `403`，`admin-key` 调用会成功，并在审计日志中留下 `scope=admin` 的 denied / granted 事件
+  - 真实验证通过：`cargo test -p evif-rest --test auth_protection test_encryption_enable_requires_admin_scope -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest --test auth_protection -- --nocapture`
+  - 真实验证通过：`cargo clippy -p evif-rest --all-targets -- -D warnings`
+  - 真实验证通过：`cargo test -p evif-rest --lib --tests --quiet`
 
 完成标准：
 

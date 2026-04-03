@@ -39,7 +39,7 @@ pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState, TenantMid
 pub use plugin_handlers::{PluginHandlers, PluginState};
 pub use routes::{
     create_routes, create_routes_with_auth, create_routes_with_context,
-    create_routes_with_memory_state, create_routes_with_sync_state,
+    create_routes_with_encryption_state, create_routes_with_memory_state, create_routes_with_sync_state,
     create_routes_with_tenant_state,
 };
 pub use server::{EvifServer, ServerConfig};

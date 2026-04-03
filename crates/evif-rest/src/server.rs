@@ -257,6 +257,44 @@ fn load_mount_config() -> Vec<MountConfigEntry> {
     ]
 }
 
+fn validate_runtime_state_for_production(production_mode: bool) -> Result<(), String> {
+    if !production_mode {
+        return Ok(());
+    }
+
+    let required_vars = [
+        (
+            "EVIF_REST_TENANT_STATE_PATH",
+            "tenant state must persist across restarts in production",
+        ),
+        (
+            "EVIF_REST_SYNC_STATE_PATH",
+            "sync state must persist across restarts in production",
+        ),
+        (
+            "EVIF_REST_ENCRYPTION_STATE_PATH",
+            "encryption state must persist across restarts in production",
+        ),
+    ];
+
+    let missing: Vec<String> = required_vars
+        .iter()
+        .filter_map(|(name, reason)| match std::env::var(name) {
+            Ok(value) if !value.trim().is_empty() => None,
+            _ => Some(format!("{} ({})", name, reason)),
+        })
+        .collect();
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "EVIF_REST_PRODUCTION_MODE requires persistent runtime state paths: {}",
+            missing.join(", ")
+        ))
+    }
+}
+
 /// 从文件加载配置（自动检测格式：JSON/YAML/TOML）
 fn load_config_file(path: &str) -> Result<Vec<MountConfigEntry>, String> {
     let content =
@@ -389,6 +427,9 @@ impl EvifServer {
         if let Err(e) = validate_memory_for_production(&memory_config) {
             return Err(RestError::Internal(e));
         }
+        if let Err(e) = validate_runtime_state_for_production(self.config.production_mode) {
+            return Err(RestError::Internal(e));
+        }
 
         let memory_state = create_memory_state_from_env().map_err(RestError::Internal)?;
 
@@ -508,6 +549,37 @@ mod tests {
         let config = ServerConfig::default();
         let server = EvifServer::new(config);
         assert_eq!(server.config.bind_addr, "0.0.0.0");
+    }
+
+    #[test]
+    fn test_validate_runtime_state_for_production_env() {
+        std::env::remove_var("EVIF_REST_TENANT_STATE_PATH");
+        std::env::remove_var("EVIF_REST_SYNC_STATE_PATH");
+        std::env::remove_var("EVIF_REST_ENCRYPTION_STATE_PATH");
+
+        let result = validate_runtime_state_for_production(false);
+        assert!(result.is_ok(), "non-production mode should allow in-memory runtime state");
+
+        let result = validate_runtime_state_for_production(true);
+        assert!(result.is_err(), "production mode should require persistent runtime state");
+        let error = result.expect_err("missing state paths should fail");
+        assert!(error.contains("EVIF_REST_TENANT_STATE_PATH"));
+        assert!(error.contains("EVIF_REST_SYNC_STATE_PATH"));
+        assert!(error.contains("EVIF_REST_ENCRYPTION_STATE_PATH"));
+
+        std::env::set_var("EVIF_REST_TENANT_STATE_PATH", "/tmp/evif-tenant-state.json");
+        std::env::set_var("EVIF_REST_SYNC_STATE_PATH", "/tmp/evif-sync-state.json");
+        std::env::set_var(
+            "EVIF_REST_ENCRYPTION_STATE_PATH",
+            "/tmp/evif-encryption-state.json",
+        );
+
+        let result = validate_runtime_state_for_production(true);
+        assert!(result.is_ok(), "production mode should accept persistent runtime state paths");
+
+        std::env::remove_var("EVIF_REST_TENANT_STATE_PATH");
+        std::env::remove_var("EVIF_REST_SYNC_STATE_PATH");
+        std::env::remove_var("EVIF_REST_ENCRYPTION_STATE_PATH");
     }
 
     #[tokio::test]

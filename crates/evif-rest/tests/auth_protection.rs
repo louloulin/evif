@@ -141,3 +141,58 @@ async fn test_admin_route_rejects_write_key_and_accepts_admin_key() {
             && event.details.contains("scope=admin")
     }));
 }
+
+#[tokio::test]
+async fn test_encryption_enable_requires_admin_scope() {
+    let mount_table = Arc::new(RadixMountTable::new());
+    let auth_state = Arc::new(RestAuthState::from_api_keys(
+        vec!["write-key".to_string()],
+        vec!["admin-key".to_string()],
+    ));
+    let base = spawn_server(create_routes_with_auth(mount_table, auth_state.clone())).await;
+    let client = reqwest::Client::new();
+
+    let forbidden = client
+        .post(format!("{}/api/v1/encryption/enable", base))
+        .header("x-api-key", "write-key")
+        .json(&serde_json::json!({ "key": "env:EVIF_ENCRYPTION_KEY" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), reqwest::StatusCode::FORBIDDEN);
+
+    let env_name = format!(
+        "EVIF_PHASE_D_ENCRYPTION_KEY_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("unix time")
+            .as_nanos()
+    );
+    std::env::set_var(&env_name, "phase-d-admin-secret");
+    let granted = client
+        .post(format!("{}/api/v1/encryption/enable", base))
+        .header("x-api-key", "admin-key")
+        .json(&serde_json::json!({ "key": format!("env:{}", env_name) }))
+        .send()
+        .await
+        .unwrap();
+    assert!(granted.status().is_success());
+
+    let granted_json: serde_json::Value = granted.json().await.unwrap();
+    assert_eq!(granted_json["status"], "enabled");
+
+    let events = auth_state.audit_events();
+    assert!(events.iter().any(|event| {
+        event.event_type == evif_auth::AuditEventType::AccessDenied
+            && event.details.contains("/api/v1/encryption/enable")
+            && event.details.contains("scope=admin")
+    }));
+    assert!(events.iter().any(|event| {
+        event.event_type == evif_auth::AuditEventType::AccessGranted
+            && event.details.contains("/api/v1/encryption/enable")
+            && event.details.contains("scope=admin")
+    }));
+
+    std::env::remove_var(&env_name);
+}

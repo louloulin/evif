@@ -26,3 +26,18 @@
 - 2026-04-03：Phase A 已按 mem15 口径完成 100%。真实最终验收命令为 `cargo clippy --workspace --all-targets -- -D warnings` 与 `cargo test --workspace --all-targets -- --nocapture`，二者均已退出 0。
 - 2026-04-03：Phase C 的最佳最小子项选择 `TenantState` 持久化，而不是先做 `SyncState` 或 `EncryptionState`，因为租户数据结构最小、边界最清晰，也最容易做成“重启恢复”的真实闭环。
 - 2026-04-03：新增 `TenantState::persistent` 与 `create_routes_with_tenant_state`，并让默认路由支持通过 `EVIF_REST_TENANT_STATE_PATH` 启用租户状态文件持久化；真实验证命令为 `cargo test -p evif-rest --test multi_tenant -- --nocapture` 与 `cargo test -p evif-rest --lib --tests --quiet`。
+- 2026-04-03：Phase C 的第二个最小子项选择 `SyncState` 持久化版本存储，沿用 `TenantState` 的 JSON 快照模式，只补 `version / pending_changes / tracked_paths` 的可恢复闭环，不提前扩展到冲突治理或多节点同步。
+- 2026-04-03：先在 `incremental_sync.rs` 新增 `sync_persistence_survives_restart` 回归测试，并通过其编译失败确认当前缺少 `SyncState::persistent` 与 `create_routes_with_sync_state`；随后补齐默认路由的 `EVIF_REST_SYNC_STATE_PATH` 接线与显式注入入口。
+- 2026-04-03：`SyncState` 持久化的真实验收命令为 `cargo test -p evif-rest --test incremental_sync sync_persistence_survives_restart -- --nocapture`、`cargo test -p evif-rest --test incremental_sync -- --nocapture`、`cargo clippy -p evif-rest --all-targets -- -D warnings` 与 `cargo test -p evif-rest --lib --tests --quiet`，均已退出 0。
+- 2026-04-03：Phase C 的第三个最小子项选择 `EncryptionState` 的可恢复配置持久化，不做完整密钥管理系统，只补“启停状态 + key_source + 可恢复 key_reference”的 JSON 快照闭环。
+- 2026-04-03：对加密状态持久化采用保守策略：仅 `env:KEY_NAME` 这类可恢复 key 引用支持跨重启恢复；显式提供的裸 key 不写入状态文件，避免把原始密钥以明文形式落盘。
+- 2026-04-03：先在 `encryption_at_rest.rs` 新增 `encryption_persistence_survives_restart_with_env_key` 回归测试，并通过其编译失败确认当前缺少 `EncryptionState::persistent` 与 `create_routes_with_encryption_state`；随后补齐 `EVIF_REST_ENCRYPTION_STATE_PATH` 接线与显式注入入口。
+- 2026-04-03：`EncryptionState` 持久化的真实验收命令为 `cargo test -p evif-rest --test encryption_at_rest encryption_persistence_survives_restart_with_env_key -- --nocapture`、`cargo test -p evif-rest --test encryption_at_rest -- --nocapture`、`cargo clippy -p evif-rest --all-targets -- -D warnings` 与 `cargo test -p evif-rest --lib --tests --quiet`，均已退出 0。
+- 2026-04-03：Phase C 的最后一个最小子项选择把“哪些状态允许内存态、哪些在生产模式下必须持久化”落实到启动期校验，而不是新增管理接口；这样可以直接复用现有 `validate_memory_for_production` 的模式，以最小改动把规则变成真实门禁。
+- 2026-04-03：生产模式下将 `TenantState / SyncState / EncryptionState` 统一归为“必须持久化”的运行态，要求分别配置 `EVIF_REST_TENANT_STATE_PATH / EVIF_REST_SYNC_STATE_PATH / EVIF_REST_ENCRYPTION_STATE_PATH`；`MemoryState` 继续沿用既有 SQLite 持久化要求。
+- 2026-04-03：先在 `server.rs` 新增 `test_validate_runtime_state_for_production_env` 回归测试，并通过其编译失败确认当前缺少运行态状态生产校验；随后补齐 `validate_runtime_state_for_production` 并接入 `EvifServer::run` 启动链路。
+- 2026-04-03：运行态状态生产校验的真实验收命令为 `cargo test -p evif-rest test_validate_runtime_state_for_production_env -- --nocapture`、`cargo clippy -p evif-rest --all-targets -- -D warnings` 与 `cargo test -p evif-rest --lib --tests --quiet`，均已退出 0；至此 Phase C 的 5 个明确子项全部完成。
+- 2026-04-03：Phase D 的最佳最小子项选择“先收紧最高风险的安全配置端点”，优先把 `/api/v1/encryption/enable` 与 `/api/v1/encryption/disable` 纳入 `admin` 能力分级，而不是一开始就扩展整套契约映射或全量安全端点矩阵。
+- 2026-04-03：先在 `auth_protection.rs` 新增 `test_encryption_enable_requires_admin_scope` 回归测试，并通过其失败确认当前 `write-key` 仍可直接落到加密 handler；随后仅补 `route_requirement` 的最小映射，将加密开关端点提升为 `admin` 路由。
+- 2026-04-03：为避免并发测试互相污染，`test_encryption_enable_requires_admin_scope` 改用每次生成唯一环境变量名来驱动 `env:KEY_NAME` 场景，而不是固定复用 `EVIF_ENCRYPTION_KEY`。
+- 2026-04-03：本轮 Phase D 子项的真实验收命令为 `cargo test -p evif-rest --test auth_protection test_encryption_enable_requires_admin_scope -- --nocapture`、`cargo test -p evif-rest --test auth_protection -- --nocapture`、`cargo clippy -p evif-rest --all-targets -- -D warnings` 与 `cargo test -p evif-rest --lib --tests --quiet`，均已退出 0。
