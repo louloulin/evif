@@ -14,6 +14,7 @@ use std::cmp::Ordering;
 /// 心跳项
 #[derive(Clone)]
 struct HeartbeatItem {
+    #[allow(dead_code)]
     name: String,
     last_heartbeat: Instant,
     expire_time: Instant,
@@ -443,7 +444,9 @@ impl EvifPlugin for HeartbeatFsPlugin {
             })
         } else {
             // 目录中的文件
-            let file = file.unwrap();
+            let Some(file) = file else {
+                unreachable!("file existence checked above");
+            };
             Ok(FileInfo {
                 name: file,
                 size: 0,

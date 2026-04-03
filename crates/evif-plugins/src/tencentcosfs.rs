@@ -6,7 +6,7 @@ use crate::opendal::{OpendalPlugin, OpendalConfig, OpendalService};
 use evif_core::{EvifPlugin, EvifResult, WriteFlags};
 
 /// 腾讯云 COS 配置
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TencentCosConfig {
     /// Bucket 名
     pub bucket: String,
@@ -25,19 +25,6 @@ pub struct TencentCosConfig {
 
     /// 根路径
     pub root: Option<String>,
-}
-
-impl Default for TencentCosConfig {
-    fn default() -> Self {
-        Self {
-            bucket: String::new(),
-            secret_id: String::new(),
-            secret_key: String::new(),
-            endpoint: None,
-            region: None,
-            root: None,
-        }
-    }
 }
 
 /// 腾讯云 COS 插件

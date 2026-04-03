@@ -36,3 +36,6 @@ path = "src/main.rs"
 [dev-dependencies]
 axum = { version = "0.7.4", features = ["json"] }
 tokio-test = { workspace = true }
+evif-core = { path = "../evif-core" }
+evif-plugins = { path = "../evif-plugins", features = ["sqlfs"] }
+evif-rest = { path = "../evif-rest" }

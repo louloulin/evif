@@ -9,7 +9,6 @@ use std::sync::Arc;
 #[tokio::test]
 async fn test_tiered_config_default() {
     let config = TieredConfig::default();
-    ();
     assert_eq!(config.hot_ttl_hours, 24);
     assert_eq!(config.hot_min_accesses, 5);
 }

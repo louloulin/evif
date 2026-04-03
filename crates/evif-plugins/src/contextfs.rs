@@ -20,7 +20,7 @@ const BYTES_PER_TOKEN: usize = 4;
 ///
 /// 当 `OPENAI_API_KEY` 环境变量存在且非空时，使用 GPT 生成 `.abstract` 摘要。
 /// 否则降级为基于规则的头行截断。
-
+///
 /// OpenAI API Host (可通过 `OPENAI_API_HOST` 环境变量覆盖)
 fn openai_host() -> String {
     std::env::var("OPENAI_API_HOST")

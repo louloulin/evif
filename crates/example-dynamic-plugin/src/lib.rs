@@ -2,9 +2,9 @@
 // This plugin demonstrates how to create a dynamically loadable plugin
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use evif_core::EvifPlugin;
-use evif_core::{EvifError, EvifResult, FileInfo, OpenFlags, WriteFlags};
+use evif_core::{EvifError, EvifResult, FileInfo, WriteFlags};
 use std::collections::HashMap;
 
 pub struct ExampleDynamicPlugin {
@@ -89,7 +89,7 @@ impl EvifPlugin for ExampleDynamicPlugin {
                     name,
                     size: value.len() as u64,
                     mode: 0o644,
-                    modified: DateTime::default(),
+                    modified: Utc::now(),
                     is_dir: false,
                 });
             }
@@ -104,7 +104,7 @@ impl EvifPlugin for ExampleDynamicPlugin {
                 name: path.rsplit('/').next().unwrap_or(path).to_string(),
                 size: content.len() as u64,
                 mode: 0o644,
-                modified: DateTime::default(),
+                modified: Utc::now(),
                 is_dir: false,
             })
         } else {
@@ -207,7 +207,7 @@ pub extern "C" fn evif_plugin_info() -> PluginInfo {
 #[no_mangle]
 pub extern "C" fn evif_plugin_create() -> PluginPtr {
     let plugin: Arc<dyn EvifPlugin> = Arc::new(ExampleDynamicPlugin::new());
-    let fat_ptr = Arc::into_raw(plugin) as *const dyn EvifPlugin;
+    let fat_ptr = Arc::into_raw(plugin);
 
     // 将 fat pointer 拆解为 data 和 vtable 指针
     // fat pointer 布局: [data_ptr, vtable_ptr]

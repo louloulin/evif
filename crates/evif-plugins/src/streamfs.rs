@@ -34,6 +34,7 @@ impl Default for StreamConfig {
 struct StreamFile {
     name: String,
     config: StreamConfig,
+    #[allow(dead_code)]
     created: DateTime<Utc>,
     modified: DateTime<Utc>,
     offset: u64,
@@ -79,10 +80,8 @@ impl StreamFile {
             let pos = (self.ring_write_pos + self.config.ring_buffer_size - i) % self.config.ring_buffer_size;
 
             // 从最旧的开始发送
-            if let Some(chunk_ref) = self.ring_buffer.get(pos) {
-                if let Some(chunk) = chunk_ref {
-                    let _ = tx.try_send(chunk.clone());
-                }
+            if let Some(Some(chunk)) = self.ring_buffer.get(pos) {
+                let _ = tx.try_send(chunk.clone());
             }
         }
 

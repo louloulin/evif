@@ -195,6 +195,7 @@ impl Default for SqlfsConfig {
 pub struct SqlfsPlugin {
     db_path: String,
     cache: Arc<RwLock<ListDirCache>>,
+    #[allow(dead_code)]
     config: SqlfsConfig,
 }
 

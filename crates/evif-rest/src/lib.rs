@@ -37,7 +37,11 @@ pub use memory_handlers::{
 pub use metrics_handlers::{MetricsHandlers, MetricsState, TrafficStats};
 pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState, TenantMiddleware};
 pub use plugin_handlers::{PluginHandlers, PluginState};
-pub use routes::{create_routes, create_routes_with_auth, create_routes_with_context, create_routes_with_memory_state};
+pub use routes::{
+    create_routes, create_routes_with_auth, create_routes_with_context,
+    create_routes_with_memory_state, create_routes_with_sync_state,
+    create_routes_with_tenant_state,
+};
 pub use server::{EvifServer, ServerConfig};
 pub use ws_handlers::{WSMessage, WebSocketHandlers, WebSocketState};
 pub use tenant_handlers::{

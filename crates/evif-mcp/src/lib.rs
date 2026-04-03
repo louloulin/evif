@@ -1771,12 +1771,10 @@ mod tests {
         (format!("http://{}", address), captured_body, handle)
     }
 
+    type BodyCaptureState = (Arc<Mutex<Option<String>>>, Value, Value);
+
     async fn capture_string_body(
-        State((captured_body, put_response, _)): State<(
-            Arc<Mutex<Option<String>>>,
-            Value,
-            Value,
-        )>,
+        State((captured_body, put_response, _)): State<BodyCaptureState>,
         body: String,
     ) -> Json<Value> {
         *captured_body.lock().await = Some(body);
@@ -1784,11 +1782,7 @@ mod tests {
     }
 
     async fn return_json_get(
-        State((_, _, get_response)): State<(
-            Arc<Mutex<Option<String>>>,
-            Value,
-            Value,
-        )>,
+        State((_, _, get_response)): State<BodyCaptureState>,
     ) -> Json<Value> {
         Json(get_response.clone())
     }

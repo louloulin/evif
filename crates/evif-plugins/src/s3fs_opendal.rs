@@ -1,15 +1,14 @@
+#![allow(unexpected_cfgs)]
+
 // S3FS - 基于 OpenDAL 的 S3 云存储插件
 //
 // 使用 Apache OpenDAL 提供 AWS S3 和 S3 兼容存储支持
 
-use evif_core::{EvifPlugin, FileInfo, WriteFlags, EvifResult, EvifError};
-use async_trait::async_trait;
-
-#[cfg(feature = "opendal")]
-use crate::opendal::{OpendalPlugin, OpendalConfig, OpendalService};
+#[cfg(all(feature = "opendal", feature = "services-s3"))]
+use crate::opendal::{OpendalConfig, OpendalService};
 
 /// S3 配置 (基于 OpenDAL)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct S3Config {
     /// Bucket 名称
     pub bucket: String,
@@ -30,24 +29,17 @@ pub struct S3Config {
     pub root: Option<String>,
 }
 
-impl Default for S3Config {
-    fn default() -> Self {
-        Self {
-            bucket: String::new(),
-            region: None,
-            endpoint: None,
-            access_key_id: None,
-            secret_access_key: None,
-            root: None,
-        }
-    }
-}
-
 /// S3FS 插件 (基于 OpenDAL)
+#[cfg(all(feature = "opendal", feature = "services-s3"))]
 pub struct S3FsPlugin {
-    inner: OpendalPlugin,
+    #[allow(dead_code)]
+    inner: crate::opendal::OpendalPlugin,
 }
 
+#[cfg(not(all(feature = "opendal", feature = "services-s3")))]
+pub struct S3FsPlugin;
+
+#[cfg(all(feature = "opendal", feature = "services-s3"))]
 impl S3FsPlugin {
     /// 从配置创建 S3FS 插件
     #[cfg(all(feature = "opendal", feature = "services-s3"))]

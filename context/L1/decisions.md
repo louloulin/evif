@@ -22,3 +22,7 @@
 - 2026-04-03：Phase A 的第三个最小子项选择 `evif-core` clippy 清理；真实失败面主要由 imports、变量、derive/default、checked_div、测试断言、module_inception 与 test module 布局构成，适合按“先机械项、再测试/布局项”两批收口。
 - 2026-04-03：在 `evif-core` 清理过程中，额外发现 `cache` 统计测试对 moka `entry_count()` 的即时行为假设过强，会导致测试失败；因此将断言收回到当前实现稳定承诺的 `hits/misses` 与可观测读取结果，再完成 `cargo clippy -p evif-core --all-targets -- -D warnings` 和 `cargo test -p evif-core --all-targets -- --nocapture` 的真实验证。
 - 2026-04-03：全 workspace 严格门禁复跑后，已先清掉 `evif-mcp`、`tests/common`、`api/e2e` 测试辅助以及部分 `evif-cli/fuse` 的机械 clippy；当前剩余失败面已明确收敛到 `evif-mem`、`evif-plugins`、`evif-cli`、`evif-fuse` 四块主阻塞，其中 `evif-mem` 仍是最大头。
+- 2026-04-03：为完成 Phase A 最后一格，继续真实收口了 `evif-mem`、`evif-plugins`、`evif-cli`、`evif-fuse`、`evif-client`、`tests/api`、`tests/cli`、`tests/e2e`、`evif-mcp/tests`、`evif-bench`、示例插件等剩余门禁与测试问题；其中关键修复包括 `evif-client` 对齐当前 `evif-rest` 契约，以及三组集成测试统一改为自举本地测试服务。
+- 2026-04-03：Phase A 已按 mem15 口径完成 100%。真实最终验收命令为 `cargo clippy --workspace --all-targets -- -D warnings` 与 `cargo test --workspace --all-targets -- --nocapture`，二者均已退出 0。
+- 2026-04-03：Phase C 的最佳最小子项选择 `TenantState` 持久化，而不是先做 `SyncState` 或 `EncryptionState`，因为租户数据结构最小、边界最清晰，也最容易做成“重启恢复”的真实闭环。
+- 2026-04-03：新增 `TenantState::persistent` 与 `create_routes_with_tenant_state`，并让默认路由支持通过 `EVIF_REST_TENANT_STATE_PATH` 启用租户状态文件持久化；真实验证命令为 `cargo test -p evif-rest --test multi_tenant -- --nocapture` 与 `cargo test -p evif-rest --lib --tests --quiet`。

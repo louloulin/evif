@@ -1,11 +1,21 @@
+#![allow(dead_code, unused_imports, clippy::needless_borrows_for_generic_args)]
+
 // EVIF CLI Command Tests - File Operations (P0)
 // Real command-based tests for all file operation commands
 
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use evif_core::{EvifPlugin, RadixMountTable};
+use evif_plugins::MemFsPlugin;
+use evif_rest::create_routes;
+
 static TEST_DIR: OnceLock<tempfile::TempDir> = OnceLock::new();
+static API_BASE: OnceLock<String> = OnceLock::new();
+static CLI_BIN: OnceLock<std::path::PathBuf> = OnceLock::new();
+static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn workspace_root() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -20,9 +30,60 @@ fn get_test_dir() -> &'static tempfile::TempDir {
     })
 }
 
+fn ensure_server_base() -> String {
+    API_BASE
+        .get_or_init(|| {
+            let (tx, rx) = std::sync::mpsc::channel();
+
+            std::thread::spawn(move || {
+                let runtime = tokio::runtime::Runtime::new().expect("runtime");
+                runtime.block_on(async move {
+                    let mount_table = Arc::new(RadixMountTable::new());
+                    let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
+                    mount_table
+                        .mount("/mem".to_string(), mem)
+                        .await
+                        .expect("mount memfs");
+
+                    let app = create_routes(mount_table);
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                        .await
+                        .expect("bind");
+                    let address = listener.local_addr().expect("local addr");
+                    tx.send(format!("http://{}", address))
+                        .expect("send base url");
+                    axum::serve(listener, app.into_make_service())
+                        .await
+                        .expect("serve");
+                });
+            });
+
+            let base = rx.recv().expect("receive base url");
+            std::thread::sleep(Duration::from_millis(100));
+            base
+        })
+        .clone()
+}
+
+fn ensure_cli_bin() -> std::path::PathBuf {
+    CLI_BIN
+        .get_or_init(|| {
+            let status = Command::new("cargo")
+                .args(["build", "-p", "evif-cli", "--bin", "evif"])
+                .current_dir(workspace_root())
+                .status()
+                .expect("build evif cli");
+            assert!(status.success(), "evif CLI should build for tests");
+            workspace_root().join("target/debug/evif")
+        })
+        .clone()
+}
+
 fn run_evif_cli(args: &[&str]) -> std::process::Output {
-    let output = Command::new("cargo")
-        .args(&["run", "-p", "evif-cli", "--bin", "evif", "--"])
+    let server = ensure_server_base();
+    let cli_bin = ensure_cli_bin();
+    let output = Command::new(cli_bin)
+        .args(["--server", server.as_str()])
         .args(args)
         .current_dir(workspace_root())
         .output()
@@ -34,8 +95,10 @@ fn run_evif_cli(args: &[&str]) -> std::process::Output {
 }
 
 fn run_evif_cli_no_wait(args: &[&str]) -> std::process::Output {
-    Command::new("cargo")
-        .args(&["run", "-p", "evif-cli", "--bin", "evif", "--"])
+    let server = ensure_server_base();
+    let cli_bin = ensure_cli_bin();
+    Command::new(cli_bin)
+        .args(["--server", server.as_str()])
         .args(args)
         .current_dir(workspace_root())
         .output()
@@ -43,7 +106,7 @@ fn run_evif_cli_no_wait(args: &[&str]) -> std::process::Output {
 }
 
 fn get_test_path(name: &str) -> String {
-    format!("/test_{}", name)
+    format!("/mem/test_{}", name)
 }
 
 fn unique_test_path() -> String {
@@ -51,8 +114,9 @@ fn unique_test_path() -> String {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_millis();
-    format!("/test_{}_{}", std::process::id(), timestamp)
+        .as_nanos();
+    let sequence = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("/mem/test_{}_{}_{}", std::process::id(), timestamp, sequence)
 }
 
 fn cleanup_path(path: &str) {
@@ -290,7 +354,7 @@ mod file_operations {
         );
 
         // Verify file is gone (cat should fail)
-        let cat_output = run_evif_cli(&["cat", &test_file]);
+        let _cat_output = run_evif_cli(&["cat", &test_file]);
         // After deletion, cat should fail or return error
     }
 
@@ -447,8 +511,8 @@ mod file_operations {
         let content = "Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8";
         let _ = run_evif_cli(&["write", &test_file, "-c", content]);
 
-        // When: Run `head <path> -n 5`
-        let output = run_evif_cli(&["head", &test_file, "-n", "5"]);
+        // When: Run `head -n 5 <path>`
+        let output = run_evif_cli(&["head", &test_file, "--lines", "5"]);
 
         // Then: Display first 5 lines
         assert!(
@@ -490,8 +554,8 @@ mod file_operations {
         let content = "Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8";
         let _ = run_evif_cli(&["write", &test_file, "-c", content]);
 
-        // When: Run `tail <path> -n 5`
-        let output = run_evif_cli(&["tail", &test_file, "-n", "5"]);
+        // When: Run `tail -n 5 <path>`
+        let output = run_evif_cli(&["tail", &test_file, "--lines", "5"]);
 
         // Then: Display last 5 lines
         assert!(
@@ -531,8 +595,8 @@ mod file_operations {
         let test_dir = unique_test_path();
         let _ = run_evif_cli(&["mkdir", &format!("{}/a/b/c", test_dir), "-p"]);
 
-        // When: Run `tree <path> -d 2`
-        let output = run_evif_cli(&["tree", &test_dir, "-d", "2"]);
+        // When: Run `tree -d 2 <path>`
+        let output = run_evif_cli(&["tree", &test_dir, "--depth", "2"]);
 
         // Then: Display only 2 levels deep
         assert!(

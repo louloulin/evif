@@ -863,9 +863,15 @@ mod tests {
             Err(SkillRuntimeError::DockerNotAvailable(_)) => {
                 // Docker not available in test environment — expected in CI
             }
+            Err(SkillRuntimeError::SandboxError(message))
+                if message.contains("Cannot connect to the Docker daemon")
+                    || message.contains("docker daemon")
+                    || message.contains("docker.sock") =>
+            {
+                // Docker daemon unavailable in local or CI environment.
+            }
             Err(e) => {
-                // Other errors are acceptable (container issues, etc.)
-                // but it shouldn't be a "not available" error
+                // Other errors are unexpected and should still fail the test.
                 panic!("Unexpected error: {:?}", e);
             }
         }

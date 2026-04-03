@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct PathQuery {
+    #[allow(dead_code)]
     path: String,
 }
 

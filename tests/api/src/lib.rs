@@ -4,16 +4,55 @@
 // EVIF REST API Tests - Health and File Operations (P0)
 // Real integration tests for core REST API endpoints
 
+use evif_core::{EvifPlugin, RadixMountTable};
+use evif_plugins::MemFsPlugin;
+use evif_rest::create_routes;
 use reqwest::Client;
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const API_BASE: &str = "http://localhost:8081";
+static API_BASE: OnceLock<String> = OnceLock::new();
+
+fn ensure_api_base() -> String {
+    API_BASE
+        .get_or_init(|| {
+            let (tx, rx) = std::sync::mpsc::channel();
+
+            std::thread::spawn(move || {
+                let runtime = tokio::runtime::Runtime::new().expect("runtime");
+                runtime.block_on(async move {
+                    let mount_table = Arc::new(RadixMountTable::new());
+                    let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
+                    mount_table
+                        .mount("/".to_string(), mem)
+                        .await
+                        .expect("mount root memfs");
+
+                    let app = create_routes(mount_table);
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                        .await
+                        .expect("bind");
+                    let address = listener.local_addr().expect("local addr");
+                    tx.send(format!("http://{}", address))
+                        .expect("send base url");
+                    axum::serve(listener, app.into_make_service())
+                        .await
+                        .expect("serve");
+                });
+            });
+
+            let base = rx.recv().expect("receive base url");
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            base
+        })
+        .clone()
+}
 
 fn get_api_base() -> String {
     std::env::var("EVIF_TEST_PORT")
         .ok()
         .map(|p| format!("http://localhost:{}", p))
-        .unwrap_or_else(|| API_BASE.to_string())
+        .unwrap_or_else(ensure_api_base)
 }
 
 fn unique_test_path() -> String {

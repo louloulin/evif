@@ -12,6 +12,7 @@ description = "Client SDK for accessing EVIF"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+chrono = { workspace = true }
 
 # Local crates
 evif-core = { path = "../evif-core" }

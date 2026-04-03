@@ -83,8 +83,6 @@ fn test_cli_completer() {
 
 #[cfg(test)]
 mod repl_tests {
-    
-
     #[test]
     fn test_repl_command_parsing() {
         // Test that REPL correctly parses commands

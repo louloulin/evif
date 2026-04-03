@@ -6,7 +6,7 @@ use crate::opendal::{OpendalPlugin, OpendalConfig, OpendalService};
 use evif_core::{EvifPlugin, EvifResult, WriteFlags};
 
 /// 阿里云 OSS 配置
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AliyunOssConfig {
     /// Bucket 名
     pub bucket: String,
@@ -22,18 +22,6 @@ pub struct AliyunOssConfig {
 
     /// 根路径
     pub root: Option<String>,
-}
-
-impl Default for AliyunOssConfig {
-    fn default() -> Self {
-        Self {
-            bucket: String::new(),
-            access_key_id: String::new(),
-            access_key_secret: String::new(),
-            endpoint: None,
-            root: None,
-        }
-    }
 }
 
 /// 阿里云 OSS 插件

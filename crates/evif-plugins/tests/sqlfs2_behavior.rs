@@ -1,7 +1,8 @@
 #[test]
 fn sqlfs2_core_support_is_enabled_in_default_test_surface() {
+    let feature_enabled = cfg!(feature = "sqlfs");
     assert!(
-        cfg!(feature = "sqlfs"),
+        feature_enabled,
         "core sqlfs2 support must be enabled in the default evif-plugins test surface"
     );
 }

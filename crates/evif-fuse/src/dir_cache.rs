@@ -71,6 +71,7 @@ impl CacheEntry {
 #[derive(Debug)]
 struct LruNode {
     /// 路径
+    #[allow(dead_code)]
     path: String,
 
     /// 前驱节点

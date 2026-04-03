@@ -26,6 +26,7 @@ fn normalize_base_url(server: &str) -> String {
     }
 }
 
+#[allow(dead_code)]
 impl EvifCommand {
     pub fn new(server: String, verbose: bool) -> Self {
         let base_url = normalize_base_url(&server);
@@ -125,11 +126,11 @@ impl EvifCommand {
             for part in parts {
                 current = format!("{}/{}", current, part);
                 if !current.is_empty() {
-                    self.client.mkdir(&current).await.unwrap_or(());
+                    self.client.mkdir(&current, true).await.unwrap_or(());
                 }
             }
         } else {
-            self.client.mkdir(&path).await?;
+            self.client.mkdir(&path, false).await?;
         }
         println!("Created directory: {}", path);
         Ok(())
@@ -812,7 +813,7 @@ impl EvifCommand {
 
     /// 切换当前工作目录
     pub async fn cd(&self, path: String) -> Result<()> {
-        let current_cwd = self.cwd.lock().unwrap();
+        let current_cwd = self.cwd.lock().unwrap().clone();
         let new_cwd = if path.starts_with('/') {
             path
         } else {
@@ -973,9 +974,9 @@ impl EvifCommand {
         let byte_count = content.len();
 
         // 默认显示所有
-        let show_lines = lines || (!lines && !words && !bytes);
-        let show_words = words || (!lines && !words && !bytes);
-        let show_bytes = bytes || (!lines && !words && !bytes);
+        let show_lines = lines || !words && !bytes;
+        let show_words = words || !lines && !bytes;
+        let show_bytes = bytes || !lines && !words;
 
         let mut parts = Vec::new();
         if show_lines {

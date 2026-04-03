@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::needless_borrows_for_generic_args)]
+
 // Phase 14.4: IDE-Bench Benchmark Tests
 //
 // 对标 IDE-Bench 评估 AI IDE Agent 的文件读写和导航任务

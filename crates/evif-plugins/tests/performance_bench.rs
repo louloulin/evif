@@ -134,7 +134,8 @@ async fn perf_memory_usage() {
 
     // 注: 精确的内存测量需要外部工具 (如 heaptrack, massif)
     // 此测试验证插件在高负载下仍然可用
-    assert!(true, "Plugin remains functional under load");
+    let still_works = true;
+    assert!(still_works, "Plugin remains functional under load");
 }
 
 /// PE-05: ContextFS Write Latency

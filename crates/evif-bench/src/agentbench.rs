@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::needless_borrows_for_generic_args)]
+
 // Phase 14.4: AgentBench Benchmark Tests
 //
 // 对标 AgentBench 多环境评估框架

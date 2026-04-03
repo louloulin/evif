@@ -489,7 +489,7 @@ impl EvifPlugin for OpendalPlugin {
 
         if offset >= 0 {
             // 如果指定了 offset，需要先读取现有数据，然后写入指定位置
-            let mut existing_data = self.operator.read(&full_path).await.unwrap_or_default();
+            let existing_data = self.operator.read(&full_path).await.unwrap_or_default();
             let offset_usize = offset as usize;
 
             // 将 Buffer 转换为 Vec 以便修改
@@ -572,7 +572,7 @@ impl EvifPlugin for OpendalPlugin {
             EvifError::Other(format!("OpenDAL stat error: {}", e))
         })?;
 
-        let name = full_path.split('/').last().unwrap_or_default().to_string();
+        let name = full_path.split('/').next_back().unwrap_or_default().to_string();
         let is_dir = metadata.is_dir();
 
         // 尝试获取文件大小

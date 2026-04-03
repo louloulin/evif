@@ -11,6 +11,8 @@ use axum::{
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Sync status
@@ -65,12 +67,20 @@ pub struct WatchEvent {
 #[derive(Clone)]
 pub struct SyncState {
     inner: Arc<RwLock<SyncInner>>,
+    persistence_path: Arc<Option<PathBuf>>,
 }
 
 struct SyncInner {
     version: u64,
     pending_changes: Vec<DeltaChange>,
     tracked_paths: HashMap<String, u64>, // path -> last_synced_version
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SyncSnapshot {
+    version: u64,
+    pending_changes: Vec<DeltaChange>,
+    tracked_paths: HashMap<String, u64>,
 }
 
 impl Default for SyncState {
@@ -87,7 +97,78 @@ impl SyncState {
                 pending_changes: Vec::new(),
                 tracked_paths: HashMap::new(),
             })),
+            persistence_path: Arc::new(None),
         }
+    }
+
+    pub fn from_env() -> Result<Self, String> {
+        match std::env::var("EVIF_REST_SYNC_STATE_PATH") {
+            Ok(path) if !path.trim().is_empty() => Self::persistent(path.trim()),
+            _ => Ok(Self::new()),
+        }
+    }
+
+    pub fn persistent(path: impl AsRef<Path>) -> Result<Self, String> {
+        let path = path.as_ref().to_path_buf();
+        let snapshot = if path.exists() {
+            Self::load_snapshot(&path)?
+        } else {
+            let snapshot = Self::default_snapshot();
+            Self::save_snapshot(&path, &snapshot)?;
+            snapshot
+        };
+
+        Ok(Self {
+            inner: Arc::new(RwLock::new(SyncInner {
+                version: snapshot.version,
+                pending_changes: snapshot.pending_changes,
+                tracked_paths: snapshot.tracked_paths,
+            })),
+            persistence_path: Arc::new(Some(path)),
+        })
+    }
+
+    fn default_snapshot() -> SyncSnapshot {
+        SyncSnapshot {
+            version: 0,
+            pending_changes: Vec::new(),
+            tracked_paths: HashMap::new(),
+        }
+    }
+
+    fn load_snapshot(path: &Path) -> Result<SyncSnapshot, String> {
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read sync state '{}': {}", path.display(), e))?;
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse sync state '{}': {}", path.display(), e))
+    }
+
+    fn save_snapshot(path: &Path, snapshot: &SyncSnapshot) -> Result<(), String> {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent).map_err(|e| {
+                format!(
+                    "Failed to create sync state parent '{}': {}",
+                    parent.display(),
+                    e
+                )
+            })?;
+        }
+        let content = serde_json::to_string_pretty(snapshot)
+            .map_err(|e| format!("Failed to serialize sync state: {}", e))?;
+        fs::write(path, content)
+            .map_err(|e| format!("Failed to write sync state '{}': {}", path.display(), e))
+    }
+
+    fn persist_inner(&self, inner: &SyncInner) -> Result<(), String> {
+        if let Some(path) = self.persistence_path.as_ref().as_ref() {
+            let snapshot = SyncSnapshot {
+                version: inner.version,
+                pending_changes: inner.pending_changes.clone(),
+                tracked_paths: inner.tracked_paths.clone(),
+            };
+            Self::save_snapshot(path, &snapshot)?;
+        }
+        Ok(())
     }
 
     pub fn get_status(&self) -> SyncStatus {
@@ -104,6 +185,7 @@ impl SyncState {
         let mut inner = self.inner.write();
         let mut conflicts = Vec::new();
         let mut accepted = 0;
+        let mut applied_changes = Vec::new();
 
         for change in &req.changes {
             // Check for conflicts
@@ -120,10 +202,12 @@ impl SyncState {
                 "created" | "modified" => {
                     inner.tracked_paths.insert(change.path.clone(), change.version);
                     accepted += 1;
+                    applied_changes.push(change.clone());
                 }
                 "deleted" => {
                     inner.tracked_paths.remove(&change.path);
                     accepted += 1;
+                    applied_changes.push(change.clone());
                 }
                 _ => {
                     conflicts.push(format!("unknown operation: {}", change.op));
@@ -141,6 +225,12 @@ impl SyncState {
                 .max()
                 .unwrap_or(0);
             inner.version = inner.version.max(max_change_version);
+        }
+
+        inner.pending_changes = applied_changes;
+        let persist_error = self.persist_inner(&inner).err();
+        if let Some(error) = persist_error {
+            conflicts.push(format!("failed to persist sync state: {}", error));
         }
 
         DeltaResponse {

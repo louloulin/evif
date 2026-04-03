@@ -6,11 +6,15 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 /// 脚本执行器
+#[allow(dead_code)]
 pub struct ScriptExecutor {
+    #[allow(dead_code)]
     variables: HashMap<String, String>,
+    #[allow(dead_code)]
     server: String,
 }
 
+#[allow(dead_code)]
 impl ScriptExecutor {
     /// 创建新的脚本执行器
     pub fn new(server: String) -> Self {
@@ -34,11 +38,10 @@ impl ScriptExecutor {
         println!("Executing AGFS Script with Control Flow Support...");
 
         // 收集要执行的命令，然后逐个执行
-        let mut commands_to_execute = Vec::new();
-        {
+        let commands_to_execute = {
             let mut parser = ScriptParser::new(&mut self.variables);
-            commands_to_execute = parser.parse_commands(script)?;
-        }
+            parser.parse_commands(script)?
+        };
 
         // 逐个执行命令
         for cmd in commands_to_execute {
@@ -261,10 +264,12 @@ impl ScriptExecutor {
 }
 
 /// 脚本解析器
+#[allow(dead_code)]
 struct ScriptParser<'a> {
     variables: &'a mut HashMap<String, String>,
 }
 
+#[allow(dead_code)]
 impl<'a> ScriptParser<'a> {
     fn new(variables: &'a mut HashMap<String, String>) -> Self {
         Self { variables }
@@ -643,6 +648,7 @@ impl<'a> ScriptParser<'a> {
 
 /// 语句类型
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum Statement {
     Command(String),
     If(String, Vec<Statement>),

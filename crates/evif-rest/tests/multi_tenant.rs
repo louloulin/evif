@@ -2,7 +2,7 @@
 //
 // 测试多租户隔离和租户管理功能
 
-use evif_rest::create_routes;
+use evif_rest::{create_routes, create_routes_with_tenant_state, TenantState};
 use evif_core::RadixMountTable;
 use std::sync::Arc;
 
@@ -318,4 +318,95 @@ async fn tenant_cannot_delete_default() {
         res.status().is_client_error(),
         "Cannot delete default tenant"
     );
+}
+
+/// P17.1-08: Tenant Persistence Survives Restart
+#[tokio::test]
+async fn tenant_persistence_survives_restart() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let state_path = temp_dir.path().join("tenant-state.json");
+
+    let first_mount_table = Arc::new(RadixMountTable::new());
+    let first_tenant_state =
+        TenantState::persistent(&state_path).expect("persistent tenant state");
+    let first_app = create_routes_with_tenant_state(first_mount_table, first_tenant_state);
+    let first_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let first_port = first_listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        axum::serve(first_listener, first_app.into_make_service())
+            .await
+            .expect("serve");
+    });
+
+    let first_base = format!("http://127.0.0.1:{}", first_port);
+    let client = reqwest::Client::new();
+
+    for _ in 0..60 {
+        if let Ok(res) = client
+            .get(format!("{}/api/v1/health", first_base))
+            .send()
+            .await
+        {
+            if res.status().is_success() {
+                break;
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+    }
+
+    let created = client
+        .post(format!("{}/api/v1/tenants", first_base))
+        .json(&serde_json::json!({
+            "name": "persisted-tenant",
+            "storage_quota": 4096u64
+        }))
+        .send()
+        .await
+        .expect("create request succeeds");
+    assert!(created.status().is_success(), "tenant create should succeed");
+    let created_json: serde_json::Value = created.json().await.expect("valid JSON");
+    let tenant_id = created_json["id"].as_str().expect("tenant id").to_string();
+
+    let second_mount_table = Arc::new(RadixMountTable::new());
+    let second_tenant_state =
+        TenantState::persistent(&state_path).expect("persistent tenant state reload");
+    let second_app = create_routes_with_tenant_state(second_mount_table, second_tenant_state);
+    let second_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let second_port = second_listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        axum::serve(second_listener, second_app.into_make_service())
+            .await
+            .expect("serve");
+    });
+
+    let second_base = format!("http://127.0.0.1:{}", second_port);
+
+    for _ in 0..60 {
+        if let Ok(res) = client
+            .get(format!("{}/api/v1/health", second_base))
+            .send()
+            .await
+        {
+            if res.status().is_success() {
+                break;
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+    }
+
+    let restored = client
+        .get(format!("{}/api/v1/tenants/{}", second_base, tenant_id))
+        .send()
+        .await
+        .expect("restore request succeeds");
+    assert!(
+        restored.status().is_success(),
+        "tenant should survive restart when persistence is enabled"
+    );
+
+    let restored_json: serde_json::Value = restored.json().await.expect("valid JSON");
+    assert_eq!(restored_json["name"], "persisted-tenant");
+    assert_eq!(restored_json["storage_quota"], 4096u64);
 }

@@ -1,1 +1,1 @@
-当前目标：按 mem15.md 的最佳最小方式推进 Phase A，全 workspace 严格 clippy 门禁已进一步缩小到 evif-mem、evif-plugins、evif-cli、evif-fuse 四块主阻塞；当前优先继续压缩失败面并在真实 lint/test 验证后同步更新 mem15.md。
+当前目标：按 mem15.md 的最佳最小方式推进 Phase C，已完成 TenantState 与 SyncState 持久化及重启恢复闭环，并通过真实集成测试验证；下一步优先评估 EncryptionState 的配置/密钥管理持久化方式与状态边界。

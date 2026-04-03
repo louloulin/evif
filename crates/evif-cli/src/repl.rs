@@ -627,7 +627,7 @@ mod tests {
     fn test_repl_creation() {
         let _repl = Repl::new("localhost:50051".to_string(), false);
         // REPL creation successful
-        assert!(true);
+        assert!(Repl::history_file_path().to_string_lossy().contains('/'));
     }
 
     #[tokio::test]

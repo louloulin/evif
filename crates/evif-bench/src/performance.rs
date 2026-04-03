@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::needless_borrows_for_generic_args)]
+
 // Phase 14.4: Performance Benchmark Tests
 //
 // 吞吐量、延迟、并发稳定性测试

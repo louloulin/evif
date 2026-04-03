@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::needless_borrows_for_generic_args, clippy::assertions_on_constants)]
+
 // Phase 14.4: L0CO (L0 Context Optimization) Benchmark Tests
 //
 // 对标 OpenViking L0CO: 83% token 减少，+49% 性能提升

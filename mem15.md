@@ -23,7 +23,7 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
 
 - 严格质量门禁未通过：`cargo clippy -- -D warnings` 当前失败
 - 可观测性仍偏基础：有 TraceLayer，但标准 metrics / tracing 初始化 / 业务指标接线仍不完整
-- 运行态状态仍大量以内存态存在：多租户、同步、加密状态等均为进程内状态
+- 运行态状态仍大量以内存态存在：TenantState / SyncState 已补上可选文件持久化，但加密状态与部分运行态指标仍主要在进程内
 - 文档、实现、门禁之间存在轻微漂移：`mem14.md` 总结为 100%，但中段仍保留 Phase 13 `90%`
 
 ### 1.2 两个必须区分的百分比
@@ -90,6 +90,20 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - 已清理 `evif-core` 自身的 unused import / unused variable / derive default / clamp / checked_div / needless borrow 等门禁问题
   - 真实收口了 `cache` 模块、动态加载器、文件监控、配置系统、挂载表、批量操作与测试断言/布局问题
   - 本轮分析额外修正：`cache` 统计测试不再假设 moka `entry_count()` 的即时值，而改为验证当前实现稳定承诺的统计字段与可观测读取行为
+- [x] 已实现：Phase A 最小闭环中的 **全 workspace 严格门禁**
+  - 已继续收口 `evif-mem`、`evif-plugins`、`evif-cli`、`evif-fuse`、`evif-client`、`evif-mcp`、`evif-bench` 以及测试/示例 crate 的剩余 clippy 与测试问题
+  - `evif-client` 已对齐当前 `evif-rest` 契约，`cli-tests` 不再依赖外部服务与 `cargo run` 锁竞争
+  - `api-tests`、`cli-tests`、`e2e-tests`、`mcp_phase15` 已统一改为自举本地测试服务，避免依赖外部 `localhost:8081`
+- [x] 已实现：Phase C 最小闭环中的 **TenantState 持久化**
+  - `TenantState` 新增基于 JSON 文件的持久化后端
+  - 默认路由已支持通过 `EVIF_REST_TENANT_STATE_PATH` 启用租户状态持久化
+  - 新增测试入口 `create_routes_with_tenant_state`，可真实模拟服务重启恢复
+  - 新增集成测试：`tenant_persistence_survives_restart`
+- [x] 已实现：Phase C 最小闭环中的 **SyncState 持久化版本存储**
+  - `SyncState` 新增基于 JSON 文件的持久化后端，持久化 `version / pending_changes / tracked_paths`
+  - 默认路由已支持通过 `EVIF_REST_SYNC_STATE_PATH` 启用同步状态持久化
+  - 新增测试入口 `create_routes_with_sync_state`，可真实模拟服务重启恢复
+  - 新增集成测试：`sync_persistence_survives_restart`
 - [x] 真实验证：
   - `cargo test -p evif-rest --test metrics_traffic metrics_traffic_counts_real_requests -- --nocapture`
   - `cargo test -p evif-rest --test metrics_traffic metrics_prometheus_endpoint_exposes_standard_text_format -- --nocapture`
@@ -101,12 +115,23 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - `cargo clippy -p evif-rest --all-targets --no-deps --message-format short -- -D warnings 2>&1 | rg '^crates/evif-rest|^benches/'`
   - `cargo clippy -p evif-core --all-targets -- -D warnings`
   - `cargo test -p evif-core --all-targets -- --nocapture`
+  - `cargo test -p api-tests --lib -- --nocapture`
+  - `cargo test -p cli-tests --lib -- --nocapture`
+  - `cargo test -p e2e-tests --test e2e_rest_api -- --nocapture`
+  - `cargo test -p evif-mcp --test mcp_phase15 -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `cargo test --workspace --all-targets -- --nocapture`
+  - `cargo test -p evif-rest --test multi_tenant -- --nocapture`
+  - `cargo test -p evif-rest --test incremental_sync -- --nocapture`
+  - `cargo test -p evif-rest --test incremental_sync sync_persistence_survives_restart -- --nocapture`
+  - `cargo clippy -p evif-rest --all-targets -- -D warnings`
   - `cargo test -p evif-rest --lib --tests --quiet`
 - [x] 当前进度：
-  - **Phase A = 75%**（4 个明确子项中完成 3 项）
+  - **Phase A = 100%**（4 个明确子项中完成 4 项）
   - **Phase B = 100%**（5 个明确子项中完成 5 项）
-  - **mem15 总路线图 = 27.6%**（按 Phase A-F 共 29 个明确子项估算，当前完成 8 项）
-  - **本轮结论：百分比暂不变**，但全 workspace 最终门禁的失败面已从“分散多 crate”进一步收敛到 `evif-mem / evif-plugins / evif-cli / evif-fuse`
+  - **Phase C = 40%**（5 个明确子项中完成 2 项）
+  - **mem15 总路线图 = 37.9%**（按 Phase A-F 共 29 个明确子项估算，当前完成 11 项）
+  - **本轮结论：Phase C 已形成 TenantState + SyncState 两个真实重启恢复闭环**
 
 ---
 
@@ -365,10 +390,10 @@ cargo clippy -p evif-rest --all-targets -- -D warnings
 
 ### 6.3 状态可靠性不够强
 
-虽然 memory backend 已支持 SQLite，并且生产模式要求持久化 memory，但下列能力仍主要是进程内状态：
+虽然 memory backend 已支持 SQLite，并且生产模式要求持久化 memory，但下列能力仍未完全形成生产级持久化闭环：
 
-- TenantState
-- SyncState
+- TenantState：已支持可选 JSON 持久化，但默认仍允许内存态启动
+- SyncState：已支持可选 JSON 持久化，但冲突治理与多节点一致性仍未完成
 - EncryptionState 的启停状态
 - 多种 traffic / metrics 计数器
 
@@ -412,13 +437,13 @@ cargo clippy -p evif-rest --all-targets -- -D warnings
 - [x] 修复 `evif-core` 的未使用 import / dead code / clippy 提示
 - [x] 修复 `evif-auth` 的 `derivable_impls`
 - [x] 修复 `evif-rest` 的 unused import / dead code / module cleanliness
-- 让下面命令通过：
+- [x] 让下面命令通过：
 
 ```bash
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-**当前实现：75%**
+**当前实现：100%**
 
 - 已完成最小闭环：
   - `evif-auth` 的 `AuthPolicy` 已改为 derive `Default`
@@ -435,9 +460,10 @@ cargo clippy --workspace --all-targets -- -D warnings
   - 真实验证通过：`cargo clippy -p evif-core --all-targets -- -D warnings`
   - 真实验证通过：`cargo test -p evif-core --all-targets -- --nocapture`
 - 本轮额外进展：
-  - 已清理 `evif-mcp`、`tests/common`、`api/e2e` 测试辅助中的机械 clippy
-  - 已额外清理部分 `evif-cli` 测试与 `evif-fuse` 的 import / `div_ceil` / 多余 cast 等问题
-  - 真实复跑 `cargo clippy --workspace --all-targets -- -D warnings` 后，剩余主阻塞已收敛到 `evif-mem`、`evif-plugins`、`evif-cli`、`evif-fuse`
+  - 已清理 `evif-mcp`、`tests/common`、`api/e2e/cli` 测试辅助与示例/基准 crate 中的机械 clippy
+  - 已额外修正 `evif-client` 与 `evif-rest` 的响应契约漂移
+  - 已完成 workspace 级最终门禁：`cargo clippy --workspace --all-targets -- -D warnings`
+  - 已完成 workspace 级最终回归：`cargo test --workspace --all-targets -- --nocapture`
 
 完成标准：
 
@@ -498,11 +524,30 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 优先任务：
 
-- 给 TenantState 引入持久化后端
-- 给 SyncState 引入持久化版本存储
+- [x] 给 TenantState 引入持久化后端
+- [x] 给 SyncState 引入持久化版本存储
 - 评估 EncryptionState 的配置与密钥管理持久化方式
 - 明确哪些状态允许内存态，哪些必须持久化
 - 为重启恢复写集成测试
+
+**当前实现：40%**
+
+- 已完成最小闭环：
+  - `TenantState` 已支持从 JSON 文件加载和保存状态
+  - 创建/删除租户后会真实落盘
+  - 默认路由可通过 `EVIF_REST_TENANT_STATE_PATH` 开启持久化
+  - 已新增 `create_routes_with_tenant_state` 用于重启恢复测试注入
+  - 真实验证通过：`tenant_persistence_survives_restart`
+  - `SyncState` 已支持从 JSON 文件加载和保存同步版本状态
+  - `apply_delta` 后会真实落盘 `version / pending_changes / tracked_paths`
+  - 默认路由可通过 `EVIF_REST_SYNC_STATE_PATH` 开启持久化
+  - 已新增 `create_routes_with_sync_state` 用于重启恢复测试注入
+  - 真实验证通过：`sync_persistence_survives_restart`
+  - 真实验证通过：`cargo test -p evif-rest --test multi_tenant -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest --test incremental_sync -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest --test incremental_sync sync_persistence_survives_restart -- --nocapture`
+  - 真实验证通过：`cargo clippy -p evif-rest --all-targets -- -D warnings`
+  - 真实验证通过：`cargo test -p evif-rest --lib --tests --quiet`
 
 完成标准：
 

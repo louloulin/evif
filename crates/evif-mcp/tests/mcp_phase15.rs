@@ -5,7 +5,75 @@
 // 15.3 Subagent coordination
 
 use evif_mcp::{EvifMcpServer, McpServerConfig};
+use evif_core::{EvifPlugin, RadixMountTable};
+use evif_plugins::MemFsPlugin;
+use evif_rest::create_routes;
 use serde_json::json;
+use std::sync::{Arc, OnceLock};
+
+static EVIF_URL: OnceLock<String> = OnceLock::new();
+
+fn ensure_evif_url() -> String {
+    EVIF_URL
+        .get_or_init(|| {
+            let (tx, rx) = std::sync::mpsc::channel();
+
+            std::thread::spawn(move || {
+                let runtime = tokio::runtime::Runtime::new().expect("runtime");
+                runtime.block_on(async move {
+                    let mount_table = Arc::new(RadixMountTable::new());
+                    let context_mem = Arc::new(MemFsPlugin::new());
+                    context_mem.mkdir("/L0", 0o755).await.expect("mkdir L0");
+                    context_mem.mkdir("/L1", 0o755).await.expect("mkdir L1");
+                    context_mem
+                        .create("/L0/current", 0o644)
+                        .await
+                        .expect("create current");
+                    context_mem
+                        .create("/L1/decisions.md", 0o644)
+                        .await
+                        .expect("create decisions");
+                    let pipes_mem = Arc::new(MemFsPlugin::new());
+                    let skills_mem = Arc::new(MemFsPlugin::new());
+                    mount_table
+                        .mount(
+                            "/context".to_string(),
+                            context_mem as Arc<dyn EvifPlugin>,
+                        )
+                        .await
+                        .expect("mount context");
+                    mount_table
+                        .mount("/pipes".to_string(), pipes_mem as Arc<dyn EvifPlugin>)
+                        .await
+                        .expect("mount pipes");
+                    mount_table
+                        .mount("/skills".to_string(), skills_mem as Arc<dyn EvifPlugin>)
+                        .await
+                        .expect("mount skills");
+
+                    let app = create_routes(mount_table);
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                        .await
+                        .expect("bind");
+                    let address = listener.local_addr().expect("local addr");
+                    tx.send(format!("http://{}", address))
+                        .expect("send url");
+                    axum::serve(listener, app.into_make_service())
+                        .await
+                        .expect("serve");
+                });
+            });
+
+            rx.recv().expect("receive url")
+        })
+        .clone()
+}
+
+fn make_server() -> Arc<EvifMcpServer> {
+    let mut config = McpServerConfig::default();
+    config.evif_url = ensure_evif_url();
+    EvifMcpServer::new(config)
+}
 
 async fn wait_for_tools(server: &evif_mcp::EvifMcpServer) -> Vec<evif_mcp::Tool> {
     for _ in 0..30 {
@@ -22,7 +90,7 @@ async fn wait_for_tools(server: &evif_mcp::EvifMcpServer) -> Vec<evif_mcp::Tool>
 
 #[tokio::test]
 async fn mcp15_claude_md_tool_registered() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
     let tools = wait_for_tools(&server).await;
 
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -34,7 +102,7 @@ async fn mcp15_claude_md_tool_registered() {
 
 #[tokio::test]
 async fn mcp15_claude_md_default_params() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
     let tools = wait_for_tools(&server).await;
 
     let tool = tools.iter().find(|t| t.name == "evif_claude_md_generate");
@@ -49,7 +117,7 @@ async fn mcp15_claude_md_default_params() {
 
 #[tokio::test]
 async fn mcp15_claude_md_returns_content() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool("evif_claude_md_generate", json!({}))
@@ -64,7 +132,7 @@ async fn mcp15_claude_md_returns_content() {
 
 #[tokio::test]
 async fn mcp15_claude_md_with_skills_disabled() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool(
@@ -86,7 +154,7 @@ async fn mcp15_claude_md_with_skills_disabled() {
 
 #[tokio::test]
 async fn mcp15_session_tools_registered() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
     let tools = wait_for_tools(&server).await;
 
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -102,7 +170,7 @@ async fn mcp15_session_tools_registered() {
 
 #[tokio::test]
 async fn mcp15_session_save_l0() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool(
@@ -122,7 +190,7 @@ async fn mcp15_session_save_l0() {
 
 #[tokio::test]
 async fn mcp15_session_save_l1_with_summary() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool(
@@ -143,7 +211,7 @@ async fn mcp15_session_save_l1_with_summary() {
 
 #[tokio::test]
 async fn mcp15_session_list() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool("evif_session_list", json!({}))
@@ -156,7 +224,7 @@ async fn mcp15_session_list() {
 
 #[tokio::test]
 async fn mcp15_session_list_filtered() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool(
@@ -176,7 +244,7 @@ async fn mcp15_session_list_filtered() {
 
 #[tokio::test]
 async fn mcp15_subagent_tools_registered() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
     let tools = wait_for_tools(&server).await;
 
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -196,7 +264,7 @@ async fn mcp15_subagent_tools_registered() {
 
 #[tokio::test]
 async fn mcp15_subagent_create() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool(
@@ -218,7 +286,7 @@ async fn mcp15_subagent_create() {
 
 #[tokio::test]
 async fn mcp15_subagent_create_requires_name() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool(
@@ -235,7 +303,7 @@ async fn mcp15_subagent_create_requires_name() {
 
 #[tokio::test]
 async fn mcp15_subagent_send() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     // Try to send (pipe may not exist, but tool should be callable)
     let result = server
@@ -266,7 +334,7 @@ async fn mcp15_subagent_send() {
 
 #[tokio::test]
 async fn mcp15_subagent_list() {
-    let server = EvifMcpServer::new(McpServerConfig::default());
+    let server = make_server();
 
     let result = server
         .call_tool("evif_subagent_list", json!({}))

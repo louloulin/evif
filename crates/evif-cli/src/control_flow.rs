@@ -52,6 +52,7 @@ impl ControlFlowExecutor {
     }
 
     /// 列出所有变量
+    #[allow(dead_code)]
     pub fn list_variables(&self) -> &HashMap<String, String> {
         &self.variables
     }
@@ -454,7 +455,6 @@ impl ControlFlowExecutor {
                     *i += 1;
                     if next_line.contains('{') {
                         // inline else { ... }
-                        let mut brace_count = 0;
                         let mut else_content = String::new();
                         while *i < lines.len() {
                             let l = lines[*i].trim();
@@ -462,7 +462,6 @@ impl ControlFlowExecutor {
                             if l.contains('}') {
                                 let pos = l.find('}').unwrap();
                                 else_content.push_str(&l[..pos]);
-                                brace_count = 0;
                                 break;
                             } else {
                                 else_content.push_str(l);
@@ -642,27 +641,27 @@ impl ControlFlowExecutor {
                 if expanded == "break" {
                     return Ok(FlowSignal::Break(1));
                 }
-                if expanded.starts_with("break ") {
-                    let level: usize = expanded[6..].trim().parse().unwrap_or(1);
+                if let Some(stripped) = expanded.strip_prefix("break ") {
+                    let level: usize = stripped.trim().parse().unwrap_or(1);
                     return Ok(FlowSignal::Break(level));
                 }
                 if expanded == "continue" {
                     return Ok(FlowSignal::Continue(1));
                 }
-                if expanded.starts_with("continue ") {
-                    let level: usize = expanded[9..].trim().parse().unwrap_or(1);
+                if let Some(stripped) = expanded.strip_prefix("continue ") {
+                    let level: usize = stripped.trim().parse().unwrap_or(1);
                     return Ok(FlowSignal::Continue(level));
                 }
                 if expanded == "return" {
                     return Ok(FlowSignal::Return(None));
                 }
-                if expanded.starts_with("return ") {
-                    let val = expanded[7..].trim().to_string();
+                if let Some(stripped) = expanded.strip_prefix("return ") {
+                    let val = stripped.trim().to_string();
                     return Ok(FlowSignal::Return(Some(val)));
                 }
                 // Handle `set VAR VALUE` to update executor's own variables
-                if expanded.starts_with("set ") {
-                    let rest = expanded[4..].trim();
+                if let Some(stripped) = expanded.strip_prefix("set ") {
+                    let rest = stripped.trim();
                     let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
                     if parts.len() >= 2 {
                         self.set_variable(parts[0].to_string(), parts[1].to_string());

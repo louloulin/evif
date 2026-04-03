@@ -28,6 +28,7 @@ pub struct FuseMountConfig {
 
 impl FuseMountConfig {
     /// 创建默认配置
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Self {
             mount_point: PathBuf::from("/mnt/evif"),
@@ -124,6 +125,7 @@ impl MountOptions {
     }
 
     /// 从字符串解析挂载选项
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "ro" => Some(MountOptions::ReadOnly),

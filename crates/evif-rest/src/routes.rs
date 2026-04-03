@@ -21,7 +21,46 @@ pub fn create_routes_with_memory_state(
     mount_table: Arc<RadixMountTable>,
     memory_state: memory_handlers::MemoryState,
 ) -> Router {
-    attach_request_identity(build_routes(mount_table, memory_state))
+    let tenant_state = TenantState::from_env()
+        .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH");
+    let sync_state = SyncState::from_env()
+        .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH");
+    attach_request_identity(build_routes(
+        mount_table,
+        memory_state,
+        tenant_state,
+        sync_state,
+    ))
+}
+
+/// 创建带显式租户状态的 API 路由
+pub fn create_routes_with_tenant_state(
+    mount_table: Arc<RadixMountTable>,
+    tenant_state: TenantState,
+) -> Router {
+    let sync_state = SyncState::from_env()
+        .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH");
+    attach_request_identity(build_routes(
+        mount_table,
+        memory_handlers::create_memory_state(),
+        tenant_state,
+        sync_state,
+    ))
+}
+
+/// 创建带显式同步状态的 API 路由
+pub fn create_routes_with_sync_state(
+    mount_table: Arc<RadixMountTable>,
+    sync_state: SyncState,
+) -> Router {
+    let tenant_state = TenantState::from_env()
+        .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH");
+    attach_request_identity(build_routes(
+        mount_table,
+        memory_handlers::create_memory_state(),
+        tenant_state,
+        sync_state,
+    ))
 }
 
 /// 创建带认证保护的 API 路由
@@ -42,7 +81,14 @@ pub(crate) fn create_routes_with_auth_and_memory_state(
     memory_state: memory_handlers::MemoryState,
 ) -> Router {
     attach_request_identity(
-        build_routes(mount_table, memory_state)
+        build_routes(
+            mount_table,
+            memory_state,
+            TenantState::from_env()
+                .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH"),
+            SyncState::from_env()
+                .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH"),
+        )
             .layer(middleware::from_fn_with_state(auth_state, AuthMiddleware)),
     )
 }
@@ -51,7 +97,12 @@ fn attach_request_identity(router: Router) -> Router {
     router.layer(middleware::from_fn(crate::middleware::RequestIdentityMiddleware))
 }
 
-fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers::MemoryState) -> Router {
+fn build_routes(
+    mount_table: Arc<RadixMountTable>,
+    memory_state: memory_handlers::MemoryState,
+    tenant_state: TenantState,
+    sync_state: SyncState,
+) -> Router {
     // 创建动态插件加载器
     let dynamic_loader = Arc::new(DynamicPluginLoader::new());
     // Phase 14.2: 创建文件锁管理器
@@ -75,14 +126,8 @@ fn build_routes(mount_table: Arc<RadixMountTable>, memory_state: memory_handlers
     // 创建批量操作管理器
     let batch_manager = batch_handlers::BatchOperationManager::new();
 
-    // Phase 17.1: 创建租户状态管理器
-    let tenant_state = TenantState::new();
-
     // Phase 17.2: 创建加密状态管理器
     let encryption_state = EncryptionState::new();
-
-    // Phase 17.3: 创建增量同步状态管理器
-    let sync_state = SyncState::new();
 
     // Phase 17.4: 创建 GraphQL schema
     let graphql_schema = graphql_handlers::GraphQLState::schema();
@@ -631,7 +676,14 @@ pub fn create_routes_with_context(
     mount_table: Arc<RadixMountTable>,
     context_manager: evif_plugins::ContextManager,
 ) -> Router {
-    let base = build_routes(mount_table, memory_handlers::create_memory_state());
+    let base = build_routes(
+        mount_table,
+        memory_handlers::create_memory_state(),
+        TenantState::from_env()
+            .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH"),
+        SyncState::from_env()
+            .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH"),
+    );
     let context_state = ContextState::new(context_manager);
 
     attach_request_identity(

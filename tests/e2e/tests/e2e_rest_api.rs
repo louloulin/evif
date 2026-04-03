@@ -9,10 +9,16 @@
 
 use reqwest::{Client, Response, StatusCode};
 use serde_json::Value;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+
+use evif_core::{EvifPlugin, RadixMountTable};
+use evif_plugins::MemFsPlugin;
+use evif_rest::create_routes;
 
 const BASE_URL: &str = "http://localhost:8081/api/v1";
 const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+static SERVER_STARTED: OnceLock<()> = OnceLock::new();
 
 struct TestContext {
     client: Client,
@@ -20,6 +26,7 @@ struct TestContext {
 
 impl TestContext {
     fn new() -> Self {
+        ensure_server_running();
         Self {
             client: Client::builder()
                 .timeout(TEST_TIMEOUT)
@@ -27,6 +34,32 @@ impl TestContext {
                 .expect("Failed to create HTTP client"),
         }
     }
+}
+
+fn ensure_server_running() {
+    SERVER_STARTED.get_or_init(|| {
+        std::thread::spawn(|| {
+            let runtime = tokio::runtime::Runtime::new().expect("runtime");
+            runtime.block_on(async {
+                let mount_table = Arc::new(RadixMountTable::new());
+                let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
+                mount_table
+                    .mount("/mem".to_string(), mem)
+                    .await
+                    .expect("mount memfs");
+
+                let app = create_routes(mount_table);
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:8081")
+                    .await
+                    .expect("bind 8081");
+                axum::serve(listener, app.into_make_service())
+                    .await
+                    .expect("serve");
+            });
+        });
+
+        std::thread::sleep(Duration::from_millis(150));
+    });
 }
 
 /// Helper: Check if server is running

@@ -395,8 +395,6 @@ Only respond with the JSON object, no additional text."#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{MemoryItem, MemoryType};
-    use uuid::Uuid;
 
     #[test]
     fn test_intent_config_default() {

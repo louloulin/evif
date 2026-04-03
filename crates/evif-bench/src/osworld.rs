@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::needless_borrows_for_generic_args, clippy::assertions_on_constants, clippy::if_same_then_else)]
+
 // Phase 14.4: OSWorld Benchmark Tests
 //
 // 对标 OSWorld 评估 Agent 在操作系统中的文件操作能力

@@ -12,3 +12,8 @@ path = "src/lib.rs"
 
 [dependencies]
 tempfile = { workspace = true }
+tokio = { workspace = true }
+axum = { version = "0.7.4", features = ["json", "ws"] }
+evif-core = { path = "../../crates/evif-core" }
+evif-plugins = { path = "../../crates/evif-plugins", features = ["sqlfs"] }
+evif-rest = { path = "../../crates/evif-rest" }

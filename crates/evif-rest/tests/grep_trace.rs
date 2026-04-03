@@ -126,7 +126,7 @@ async fn grep_without_trace_has_no_trace_field() {
     let json: serde_json::Value = res.json().await.expect("valid JSON");
     let trace = json.get("trace");
     assert!(
-        trace.is_none() || trace.as_ref().map_or(false, |v| v.is_null()),
+        trace.is_none() || trace.as_ref().is_some_and(|v| v.is_null()),
         "trace field should be absent or null when trace not set, got: {}",
         json
     );

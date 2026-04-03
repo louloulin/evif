@@ -6,7 +6,7 @@ use crate::opendal::{OpendalPlugin, OpendalConfig, OpendalService};
 use evif_core::{EvifPlugin, EvifResult, WriteFlags};
 
 /// 华为云 OBS 配置
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HuaweiObsConfig {
     /// Bucket 名
     pub bucket: String,
@@ -22,18 +22,6 @@ pub struct HuaweiObsConfig {
 
     /// 根路径
     pub root: Option<String>,
-}
-
-impl Default for HuaweiObsConfig {
-    fn default() -> Self {
-        Self {
-            bucket: String::new(),
-            access_key_id: String::new(),
-            secret_access_key: String::new(),
-            endpoint: None,
-            root: None,
-        }
-    }
 }
 
 /// 华为云 OBS 插件

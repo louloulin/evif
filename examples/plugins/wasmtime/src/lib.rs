@@ -62,8 +62,9 @@ struct StatResponse {
 
 // ============== 内存文件系统 ==============
 
-/// 线程局部存储的内存文件系统
-/// WASM 模块是单线程的，所以 thread_local 足够安全
+// 线程局部存储的内存文件系统
+//
+// WASM 模块是单线程的，所以 `thread_local!` 足够安全
 thread_local! {
     static FS: std::cell::RefCell<FileSystem> = std::cell::RefCell::new(FileSystem::new());
 }
@@ -91,7 +92,7 @@ fn current_timestamp() -> String {
 fn extract_name(path: &str) -> String {
     path.trim_end_matches('/')
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("unknown")
         .to_string()
 }
@@ -114,8 +115,8 @@ fn json_ok() -> String {
 
 // ============== 导出函数 ==============
 
-/// 导出的 WASM 函数需要使用 no_mangle
-/// Wasmtime 后端通过函数名查找并调用
+// 导出的 WASM 函数需要使用 no_mangle
+// Wasmtime 后端通过函数名查找并调用
 
 #[no_mangle]
 pub extern "C" fn evif_create(input_ptr: u32, input_len: u32) -> u64 {
@@ -127,6 +128,7 @@ pub extern "C" fn evif_create(input_ptr: u32, input_len: u32) -> u64 {
     #[derive(Deserialize)]
     struct Request {
         path: String,
+        #[allow(dead_code)]
         perm: u32,
     }
 
@@ -140,12 +142,12 @@ pub extern "C" fn evif_create(input_ptr: u32, input_len: u32) -> u64 {
 
     FS.with(|fs| {
         let mut fs = fs.borrow_mut();
-        if fs.files.contains_key(&req.path) {
+        if let std::collections::hash_map::Entry::Vacant(entry) = fs.files.entry(req.path) {
+            entry.insert(Vec::new());
+            encode_response(&json_ok())
+        } else {
             let resp = json_err("File already exists");
             encode_response(&resp)
-        } else {
-            fs.files.insert(req.path, Vec::new());
-            encode_response(&json_ok())
         }
     })
 }
@@ -173,12 +175,12 @@ pub extern "C" fn evif_mkdir(input_ptr: u32, input_len: u32) -> u64 {
 
     FS.with(|fs| {
         let mut fs = fs.borrow_mut();
-        if fs.dirs.contains_key(&req.path) {
+        if let std::collections::hash_map::Entry::Vacant(entry) = fs.dirs.entry(req.path) {
+            entry.insert(req.perm);
+            encode_response(&json_ok())
+        } else {
             let resp = json_err("Directory already exists");
             encode_response(&resp)
-        } else {
-            fs.dirs.insert(req.path, req.perm);
-            encode_response(&json_ok())
         }
     })
 }
@@ -248,6 +250,7 @@ pub extern "C" fn evif_write(input_ptr: u32, input_len: u32) -> u64 {
         path: String,
         data: String,
         offset: i64,
+        #[allow(dead_code)]
         flags: u32,
     }
 
@@ -532,7 +535,7 @@ pub extern "C" fn evif_remove_all(input_ptr: u32, input_len: u32) -> u64 {
 /// Base64 编码（内联实现，不依赖外部 crate）
 fn base64_encode(data: &[u8]) -> String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
 
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;

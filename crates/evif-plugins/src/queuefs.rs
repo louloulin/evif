@@ -82,6 +82,7 @@ struct Queue {
     delayed_messages: Vec<QueueMessage>,
     last_enqueue_time: i64,
     max_size: usize,
+    #[allow(dead_code)]
     dead_letter_queue: Option<String>,
 }
 
@@ -97,6 +98,7 @@ impl Queue {
         }
     }
 
+    #[allow(dead_code)]
     fn is_empty(&self) -> bool {
         self.messages.is_empty() && self.priority_messages.is_empty()
     }
@@ -947,6 +949,12 @@ impl QueueFsPlugin {
         // 这是一个队列目录或父目录
         let queue_name = parts.join("/");
         Ok((queue_name, String::new(), true))
+    }
+}
+
+impl Default for QueueFsPlugin {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

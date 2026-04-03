@@ -176,6 +176,10 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 name = "api-tests"
 version = "0.1.0"
 dependencies = [
+ "axum 0.7.9",
+ "evif-core",
+ "evif-plugins",
+ "evif-rest",
  "reqwest 0.11.27",
  "serde_json",
  "tokio",
@@ -1400,7 +1404,12 @@ checksum = "c3e64b0cc0439b12df2fa678eae89a1c56a529fd067a9115f7827f1fffd22b32"
 name = "cli-tests"
 version = "0.1.0"
 dependencies = [
+ "axum 0.7.9",
+ "evif-core",
+ "evif-plugins",
+ "evif-rest",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -2367,6 +2376,10 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 name = "e2e-tests"
 version = "0.1.0"
 dependencies = [
+ "axum 0.7.9",
+ "evif-core",
+ "evif-plugins",
+ "evif-rest",
  "reqwest 0.11.27",
  "serde_json",
  "tokio",
@@ -2582,6 +2595,7 @@ name = "evif-client"
 version = "0.1.0"
 dependencies = [
  "base64 0.21.7",
+ "chrono",
  "evif-core",
  "mockito",
  "reqwest 0.11.27",
@@ -2670,6 +2684,9 @@ version = "0.1.0"
 dependencies = [
  "axum 0.7.9",
  "chrono",
+ "evif-core",
+ "evif-plugins",
+ "evif-rest",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

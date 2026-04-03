@@ -103,7 +103,7 @@ async fn mcp_tool_input_schemas() {
 /// MC-04: MCP Skill Tools Verification
 #[tokio::test]
 async fn mcp_skill_tools_available() {
-    let skill_tools = vec![
+    let skill_tools = [
         "evif_skill_list",
         "evif_skill_info",
         "evif_skill_execute",
@@ -119,7 +119,7 @@ async fn mcp_skill_tools_available() {
 /// MC-05: MCP Memory Tools Verification
 #[tokio::test]
 async fn mcp_memory_tools_available() {
-    let memory_tools = vec![
+    let memory_tools = [
         "evif_memorize",
         "evif_retrieve",
     ];
@@ -133,7 +133,7 @@ async fn mcp_memory_tools_available() {
 /// MC-06: MCP Handle Tools Verification
 #[tokio::test]
 async fn mcp_handle_tools_available() {
-    let handle_tools = vec![
+    let handle_tools = [
         "evif_open_handle",
         "evif_close_handle",
     ];
@@ -147,7 +147,7 @@ async fn mcp_handle_tools_available() {
 /// MC-07: MCP Admin Tools Verification
 #[tokio::test]
 async fn mcp_admin_tools_available() {
-    let admin_tools = vec![
+    let admin_tools = [
         "evif_mount",
         "evif_unmount",
         "evif_mounts",

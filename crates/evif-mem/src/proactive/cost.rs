@@ -393,6 +393,8 @@ mod tests {
 
     #[test]
     fn test_cache_entry_expiration() {
+        use chrono::Duration;
+
         let mut entry = CacheEntry::new("response".to_string(), "hash123".to_string());
         // Manually set old timestamp
         entry.created_at = Utc::now() - Duration::seconds(7200);

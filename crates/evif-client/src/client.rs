@@ -4,6 +4,7 @@ use crate::{ClientError, ClientResult};
 use base64::Engine;
 use evif_core::FileInfo;
 use reqwest::Client as HttpClient;
+use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
 
@@ -34,6 +35,43 @@ impl Default for ClientConfig {
 pub struct EvifClient {
     config: ClientConfig,
     http_client: HttpClient,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestFileInfo {
+    name: String,
+    #[allow(dead_code)]
+    path: String,
+    is_dir: bool,
+    size: u64,
+    modified: String,
+    #[allow(dead_code)]
+    created: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestFileStat {
+    path: String,
+    size: u64,
+    is_dir: bool,
+    modified: String,
+    #[allow(dead_code)]
+    created: String,
+}
+
+fn parse_modified(ts: &str) -> ClientResult<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::parse_from_rfc3339(ts)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .map_err(|e| ClientError::Protocol(format!("Invalid timestamp '{}': {}", ts, e)))
+}
+
+fn file_name_from_path(path: &str) -> String {
+    path.trim_end_matches('/')
+        .split('/')
+        .next_back()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("/")
+        .to_string()
 }
 
 impl EvifClient {
@@ -88,7 +126,15 @@ impl EvifClient {
         files
             .iter()
             .map(|v| {
-                serde_json::from_value(v.clone()).map_err(|e| ClientError::Protocol(e.to_string()))
+                let info: RestFileInfo = serde_json::from_value(v.clone())
+                    .map_err(|e| ClientError::Protocol(e.to_string()))?;
+                Ok(FileInfo {
+                    name: info.name,
+                    size: info.size,
+                    mode: if info.is_dir { 0o755 } else { 0o644 },
+                    modified: parse_modified(&info.modified)?,
+                    is_dir: info.is_dir,
+                })
             })
             .collect()
     }
@@ -105,11 +151,19 @@ impl EvifClient {
         let response = self.http_client.get(&url).send().await.map_err(|e| {
             ClientError::Transport(e.to_string())
         })?;
+        let status = response.status();
 
         let json: Value = response
             .json()
             .await
             .map_err(|e| ClientError::Protocol(e.to_string()))?;
+
+        if !status.is_success() {
+            if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+                return Err(ClientError::Protocol(msg.to_string()));
+            }
+            return Err(ClientError::Protocol(format!("HTTP {}", status.as_u16())));
+        }
 
         let data = json["data"]
             .as_str()
@@ -122,34 +176,60 @@ impl EvifClient {
 
     /// 写入文件（与 evif-rest 契约一致：JSON body data + encoding=base64）
     pub async fn write(&self, path: &str, content: &str, append: bool) -> ClientResult<()> {
-        let offset = if append { -1 } else { 0 };
-        let bytes = content.as_bytes().to_vec();
+        let payload = if append {
+            match self.cat(path).await {
+                Ok(existing) => format!("{}{}", existing, content),
+                Err(_) => content.to_string(),
+            }
+        } else {
+            content.to_string()
+        };
+
+        let bytes = payload.as_bytes().to_vec();
         let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
 
-        let url = format!(
-            "{}/api/v1/files?path={}&offset={}",
-            self.config.base_url, path, offset
-        );
+        let create_url = format!("{}/api/v1/files", self.config.base_url);
+        let create_body = serde_json::json!({ "path": path });
+        let _ = self.http_client.post(&create_url).json(&create_body).send().await;
+
+        let url = format!("{}/api/v1/files?path={}&offset=0", self.config.base_url, path);
         let body = serde_json::json!({ "data": encoded, "encoding": "base64" });
 
-        self.http_client
+        let response = self
+            .http_client
             .put(&url)
             .json(&body)
             .send()
             .await
             .map_err(|e| ClientError::Transport(e.to_string()))?;
 
+        if !response.status().is_success() {
+            return Err(ClientError::Protocol(format!(
+                "HTTP {}",
+                response.status().as_u16()
+            )));
+        }
+
         Ok(())
     }
 
     /// 创建目录
-    pub async fn mkdir(&self, path: &str) -> ClientResult<()> {
-        let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
-        self.http_client
+    pub async fn mkdir(&self, path: &str, parents: bool) -> ClientResult<()> {
+        let url = format!("{}/api/v1/directories", self.config.base_url);
+        let body = serde_json::json!({ "path": path, "parents": parents });
+        let response = self
+            .http_client
             .post(&url)
+            .json(&body)
             .send()
             .await
             .map_err(|e| ClientError::Transport(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(ClientError::Protocol(format!(
+                "HTTP {}",
+                response.status().as_u16()
+            )));
+        }
         Ok(())
     }
 
@@ -178,14 +258,21 @@ impl EvifClient {
     /// 重命名文件
     pub async fn rename(&self, old_path: &str, new_path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/rename", self.config.base_url);
-        let body = serde_json::json!({"old_path": old_path, "new_path": new_path});
+        let body = serde_json::json!({"from": old_path, "to": new_path});
 
-        self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .json(&body)
             .send()
             .await
             .map_err(|e| ClientError::Transport(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(ClientError::Protocol(format!(
+                "HTTP {}",
+                response.status().as_u16()
+            )));
+        }
         Ok(())
     }
 
@@ -195,13 +282,28 @@ impl EvifClient {
         let response = self.http_client.get(&url).send().await.map_err(|e| {
             ClientError::Transport(e.to_string())
         })?;
+        let status = response.status();
 
         let json: Value = response
             .json()
             .await
             .map_err(|e| ClientError::Protocol(e.to_string()))?;
+        if !status.is_success() {
+            if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+                return Err(ClientError::Protocol(msg.to_string()));
+            }
+            return Err(ClientError::Protocol(format!("HTTP {}", status.as_u16())));
+        }
 
-        serde_json::from_value(json).map_err(|e| ClientError::Protocol(e.to_string()))
+        let stat: RestFileStat =
+            serde_json::from_value(json).map_err(|e| ClientError::Protocol(e.to_string()))?;
+        Ok(FileInfo {
+            name: file_name_from_path(&stat.path),
+            size: stat.size,
+            mode: if stat.is_dir { 0o755 } else { 0o644 },
+            modified: parse_modified(&stat.modified)?,
+            is_dir: stat.is_dir,
+        })
     }
 
     /// 健康检查

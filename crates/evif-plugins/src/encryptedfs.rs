@@ -23,6 +23,7 @@ use argon2::{
 use serde::{Deserialize, Serialize};
 use base64::{Engine as _, engine::general_purpose};
 
+#[allow(dead_code)]
 const NONCE_SIZE: usize = 12; // 96 bits for GCM
 const TAG_SIZE: usize = 16; // 128-bit authentication tag
 const KEY_SIZE: usize = 32; // 256 bits for AES-256
@@ -109,6 +110,7 @@ impl Default for EncryptedConfig {
 pub struct EncryptedFsPlugin {
     backend: Arc<dyn EvifPlugin>,
     cipher: Aes256Gcm,
+    #[allow(dead_code)]
     config: EncryptedConfig,
     file_cache: Arc<RwLock<HashMap<String, Vec<u8>>>>,
 }
@@ -138,8 +140,7 @@ impl EncryptedFsPlugin {
     fn derive_key(config: &EncryptedConfig) -> EvifResult<[u8; KEY_SIZE]> {
         // Use simpler params that match argon2 crate expectations
         let params = Params::new(
-            config.argon2_memory_kb.try_into()
-                .map_err(|e| EvifError::InvalidInput(format!("Invalid memory size: {}", e)))?,
+            config.argon2_memory_kb,
             config.argon2_iterations,
             config.argon2_parallelism,
             Some(KEY_SIZE),
