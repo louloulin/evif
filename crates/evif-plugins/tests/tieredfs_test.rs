@@ -5,7 +5,6 @@
 use evif_core::EvifPlugin;
 use evif_plugins::{MemFsPlugin, StorageTier, TieredConfig, TieredFsPlugin};
 use std::sync::Arc;
-use tokio;
 
 #[tokio::test]
 async fn test_tiered_config_default() {

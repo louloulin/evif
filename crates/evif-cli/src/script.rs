@@ -4,7 +4,6 @@
 use crate::commands::EvifCommand;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::path::Path;
 
 /// 脚本执行器
 pub struct ScriptExecutor {
@@ -560,11 +559,11 @@ impl<'a> ScriptParser<'a> {
 
                 if line.contains('}') {
                     let close_pos = line.find('}').unwrap();
-                    block_content.push_str(" ");
+                    block_content.push(' ');
                     block_content.push_str(&line[..close_pos]);
                     break;
                 } else {
-                    block_content.push_str("\n");
+                    block_content.push('\n');
                     block_content.push_str(line);
                 }
             }

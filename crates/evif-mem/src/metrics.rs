@@ -350,8 +350,8 @@ mod inner {
 
 #[cfg(not(feature = "metrics"))]
 mod inner {
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
+    
+    
 
     /// Stub metrics when metrics feature is not enabled.
     #[derive(Clone, Default)]

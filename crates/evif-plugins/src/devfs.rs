@@ -8,16 +8,12 @@ use async_trait::async_trait;
 
 /// DevFS 配置
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct DevConfig {
     /// 是否只读
     pub read_only: bool,
 }
 
-impl Default for DevConfig {
-    fn default() -> Self {
-        Self { read_only: false }
-    }
-}
 
 /// DevFS 插件
 ///
@@ -68,7 +64,7 @@ impl EvifPlugin for DevFsPlugin {
         )))
     }
 
-    async fn read(&self, path: &str, offset: u64, size: u64) -> EvifResult<Vec<u8>> {
+    async fn read(&self, path: &str, _offset: u64, size: u64) -> EvifResult<Vec<u8>> {
         match path {
             "/null" => Ok(Vec::new()), // /dev/null 总是返回空数据
             "/zero" => {
@@ -78,8 +74,7 @@ impl EvifPlugin for DevFsPlugin {
             }
             "/full" => {
                 // /dev/full 总是返回 ENOSPC (设备已满)
-                Err(EvifError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                Err(EvifError::Io(std::io::Error::other(
                     "No space left on device",
                 )))
             }
@@ -97,8 +92,7 @@ impl EvifPlugin for DevFsPlugin {
             "/zero" => Ok(data.len() as u64), // /dev/zero 吸收所有数据
             "/full" => {
                 // /dev/full 总是返回 ENOSPC
-                Err(EvifError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                Err(EvifError::Io(std::io::Error::other(
                     "No space left on device",
                 )))
             }

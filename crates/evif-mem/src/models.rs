@@ -47,6 +47,14 @@ impl MemoryType {
     }
 }
 
+impl std::str::FromStr for MemoryType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        MemoryType::from_str(s).ok_or(())
+    }
+}
+
 impl std::fmt::Display for MemoryType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
@@ -84,6 +92,14 @@ impl Modality {
             "audio" => Some(Modality::Audio),
             _ => None,
         }
+    }
+}
+
+impl std::str::FromStr for Modality {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Modality::from_str(s).ok_or(())
     }
 }
 

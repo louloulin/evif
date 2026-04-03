@@ -188,7 +188,7 @@ impl L2Cache {
         fs::write(file_path, content)?;
 
         // Update index periodically (every 10 writes)
-        if self.index.len() % 10 == 0 {
+        if self.index.len().is_multiple_of(10) {
             self.save_index()?;
         }
 
@@ -225,7 +225,7 @@ impl L2Cache {
         for entry in fs::read_dir(&self.cache_dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
                 fs::remove_file(path)?;
             }
         }

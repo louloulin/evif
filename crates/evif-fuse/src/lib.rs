@@ -400,7 +400,7 @@ impl Filesystem for EvifFuseFuse {
                 } else {
                     FileType::RegularFile
                 };
-                let blocks = (file_info.size + 4095) / 4096;
+                let blocks = file_info.size.div_ceil(4096);
                 let mtime = SystemTime::from(file_info.modified);
                 let now = SystemTime::now();
 
@@ -487,7 +487,7 @@ impl Filesystem for EvifFuseFuse {
                 }
 
                 for (idx, entry) in entries.iter().enumerate() {
-                    if idx < i.saturating_sub(2) as usize {
+                    if idx < i.saturating_sub(2) {
                         continue;
                     }
 

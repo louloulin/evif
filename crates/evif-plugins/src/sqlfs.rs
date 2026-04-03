@@ -13,10 +13,6 @@ use chrono::{DateTime, Utc};
 
 #[cfg(feature = "sqlfs")]
 use rusqlite::{Connection, params};
-#[cfg(feature = "sqlfs")]
-use std::path::Path as StdPath;
-#[cfg(feature = "sqlfs")]
-use std::sync::Mutex;
 
 /// Maximum file size: 5MB (matches AGFS)
 pub const MAX_FILE_SIZE: usize = 5 * 1024 * 1024;
@@ -211,7 +207,7 @@ impl SqlfsPlugin {
         // Initialize database in blocking thread
         let db_path_clone = db_path.clone();
         tokio::task::block_in_place(|| {
-            let mut conn = Connection::open(&db_path_clone)
+            let conn = Connection::open(&db_path_clone)
                 .map_err(|e| EvifError::InvalidPath(format!("failed to open database: {}", e)))?;
 
             // Create schema
@@ -746,7 +742,7 @@ impl EvifPlugin for SqlfsPlugin {
                 let name = if full_path == "/" {
                     "/".to_string()
                 } else {
-                    full_path.split('/').last().unwrap_or(&full_path).to_string()
+                    full_path.split('/').next_back().unwrap_or(&full_path).to_string()
                 };
 
                 files.push(FileInfo {
@@ -792,7 +788,7 @@ impl EvifPlugin for SqlfsPlugin {
             let name = if path_clone == "/" {
                 "/".to_string()
             } else {
-                path.split('/').last().unwrap_or(&path).to_string()
+                path.split('/').next_back().unwrap_or(&path).to_string()
             };
 
             let info = FileInfo {

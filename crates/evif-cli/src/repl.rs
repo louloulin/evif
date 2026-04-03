@@ -7,7 +7,6 @@ use reedline::DefaultPromptSegment;
 use reedline::{DefaultPrompt, FileBackedHistory, Reedline, Signal};
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::Arc;
 
 pub struct Repl {
     editor: Reedline,
@@ -273,7 +272,7 @@ impl Repl {
         // 展开变量
         let expanded_line = self.command.expand_variables(line);
         let parts: Vec<&str> = expanded_line.split_whitespace().collect();
-        let cmd = parts.get(0).map(|s| *s).unwrap_or("");
+        let cmd = parts.first().copied().unwrap_or("");
 
         match cmd {
             "exit" | "quit" => {
@@ -547,7 +546,7 @@ impl Repl {
                 // 支持变量展开的 echo
                 let text = parts
                     .get(1)
-                    .map(|s| parts[1..].join(" "))
+                    .map(|_s| parts[1..].join(" "))
                     .unwrap_or_default();
                 // 使用 expand_variables 处理变量引用
                 let expanded = self.command.expand_variables(&text);
@@ -626,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_repl_creation() {
-        let repl = Repl::new("localhost:50051".to_string(), false);
+        let _repl = Repl::new("localhost:50051".to_string(), false);
         // REPL creation successful
         assert!(true);
     }

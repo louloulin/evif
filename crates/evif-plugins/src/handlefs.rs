@@ -4,12 +4,11 @@
 
 use evif_core::{EvifError, EvifResult, EvifPlugin, FileInfo, WriteFlags};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 /// 文件句柄标志
 bitflags::bitflags! {
@@ -160,7 +159,7 @@ impl HandleFsPlugin {
             let handles = self.handles.read().await;
             handles.get(&handle_id).cloned()
         }
-        .ok_or_else(|| EvifError::HandleNotFound(handle_id))?;
+        .ok_or(EvifError::HandleNotFound(handle_id))?;
 
         // 检查是否过期
         if handle.is_expired() {
@@ -191,7 +190,7 @@ impl HandleFsPlugin {
             let handles = self.handles.read().await;
             handles.get(&handle_id).cloned()
         }
-        .ok_or_else(|| EvifError::HandleNotFound(handle_id))?;
+        .ok_or(EvifError::HandleNotFound(handle_id))?;
 
         // 检查是否过期
         if handle.is_expired() {
@@ -227,7 +226,7 @@ impl HandleFsPlugin {
         let mut handles = self.handles.write().await;
         handles
             .remove(&handle_id)
-            .ok_or_else(|| EvifError::HandleNotFound(handle_id))?;
+            .ok_or(EvifError::HandleNotFound(handle_id))?;
 
         Ok(())
     }
@@ -237,7 +236,7 @@ impl HandleFsPlugin {
         let handles = self.handles.read().await;
         handles
             .get(&handle_id)
-            .ok_or_else(|| EvifError::HandleNotFound(handle_id))?;
+            .ok_or(EvifError::HandleNotFound(handle_id))?;
 
         // 对于大多数文件系统,flush是no-op
         // 但可以在这里实现sync操作
@@ -251,7 +250,7 @@ impl HandleFsPlugin {
         handles
             .get(&handle_id)
             .cloned()
-            .ok_or_else(|| EvifError::HandleNotFound(handle_id))
+            .ok_or(EvifError::HandleNotFound(handle_id))
     }
 
     /// 列出所有句柄
@@ -275,7 +274,7 @@ impl HandleFsPlugin {
         let mut handles = self.handles.write().await;
         let handle = handles
             .get_mut(&handle_id)
-            .ok_or_else(|| EvifError::HandleNotFound(handle_id))?;
+            .ok_or(EvifError::HandleNotFound(handle_id))?;
 
         if handle.is_expired() {
             return Err(EvifError::LeaseExpired(handle_id));

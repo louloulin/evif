@@ -152,6 +152,12 @@ pub struct StreamFsPlugin {
     config: StreamConfig,
 }
 
+impl Default for StreamFsPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StreamFsPlugin {
     pub fn new() -> Self {
         Self::with_config(StreamConfig::default())

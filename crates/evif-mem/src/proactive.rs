@@ -168,12 +168,14 @@ pub struct ProactiveExtractor {
     /// Configuration
     config: ExtractorConfig,
     /// Memory storage
+    #[allow(dead_code)]
     storage: Arc<MemoryStorage>,
     /// Memorize pipeline for extraction
     memorize_pipeline: Arc<MemorizePipeline>,
     /// Evolve pipeline for post-extraction evolution
     evolve_pipeline: Arc<EvolvePipeline>,
     /// LLM client for intent checking
+    #[allow(dead_code)]
     llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
     /// Statistics
     stats: Arc<RwLock<ExtractionStats>>,
@@ -331,10 +333,12 @@ pub struct ProactiveAgent {
     /// Memory storage
     storage: Arc<MemoryStorage>,
     /// Memorize pipeline for proactive extraction
+    #[allow(dead_code)]
     memorize_pipeline: Arc<MemorizePipeline>,
     /// Evolve pipeline for automatic evolution
     evolve_pipeline: Arc<EvolvePipeline>,
     /// LLM client for intent prediction
+    #[allow(dead_code)]
     llm_client: Arc<RwLock<Box<dyn LLMClient>>>,
     /// Intent predictor (Phase 1.5.2)
     intent_predictor: Option<IntentionPredictor>,
@@ -431,7 +435,7 @@ impl ProactiveAgent {
                         if let Ok(count) = storage.item_count() {
                             if count >= memory_threshold {
                                 // Trigger proactive action
-                                let event = ProactiveEvent::MemoryThreshold { count };
+                                let _event = ProactiveEvent::MemoryThreshold { count };
                                 // Handle event (to be implemented with EventTrigger)
                                 tracing::info!("Memory threshold reached: {} items", count);
                             }
@@ -501,7 +505,7 @@ impl ProactiveAgent {
                     stats.intents_predicted += 1;
 
                     // Emit event
-                    let event = ProactiveEvent::IntentDetected {
+                    let _event = ProactiveEvent::IntentDetected {
                         intent: intent.intent_type.clone(),
                         confidence: intent.confidence,
                     };

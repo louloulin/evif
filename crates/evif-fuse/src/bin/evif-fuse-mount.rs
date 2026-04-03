@@ -10,7 +10,7 @@
 //   cargo run --bin evif-fuse-mount -- /tmp/evif --readwrite
 
 use evif_core::RadixMountTable;
-use evif_fuse::{mount_evif_background, FuseMountBuilder, FuseMountConfig};
+use evif_fuse::{mount_evif_background, FuseMountBuilder};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{error, info, Level};
@@ -151,7 +151,7 @@ async fn main() -> anyhow::Result<()> {
     // 挂载 FUSE 文件系统
     info!("开始挂载 FUSE 文件系统...");
     // 后台挂载（返回 session）
-    let session = mount_evif_background(mount_table, &mount_point, config)?;
+    let _session = mount_evif_background(mount_table, &mount_point, config)?;
 
     info!("✓ FUSE 文件系统挂载成功!");
     info!("  挂载点: {}", mount_point.display());

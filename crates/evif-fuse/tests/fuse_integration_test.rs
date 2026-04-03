@@ -17,12 +17,12 @@ mod fuse_integration_tests {
 
     /// 创建测试用挂载表
     async fn create_test_mount_table() -> Arc<RadixMountTable> {
-        let mount_table = Arc::new(RadixMountTable::new());
+        
 
         // 这里可以添加测试插件
         // 例如 memfs, localfs 等
 
-        mount_table
+        Arc::new(RadixMountTable::new())
     }
 
     #[test]
@@ -209,7 +209,7 @@ mod fuse_functional_tests {
     /// 测试路径解析
     #[test]
     fn test_path_resolution() {
-        let rt = Runtime::new().unwrap();
+        let _rt = Runtime::new().unwrap();
         let mount_table = Arc::new(RadixMountTable::new());
 
         let config = FuseMountConfig {
@@ -237,7 +237,7 @@ mod fuse_functional_tests {
     /// 测试文件句柄管理
     #[test]
     fn test_file_handle_management() {
-        let rt = Runtime::new().unwrap();
+        let _rt = Runtime::new().unwrap();
         let mount_table = Arc::new(RadixMountTable::new());
 
         let config = FuseMountConfig::default();
@@ -263,7 +263,7 @@ mod fuse_functional_tests {
     /// 测试统计信息
     #[test]
     fn test_stats() {
-        let rt = Runtime::new().unwrap();
+        let _rt = Runtime::new().unwrap();
         let mount_table = Arc::new(RadixMountTable::new());
 
         let config = FuseMountConfig::default();

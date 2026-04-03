@@ -111,6 +111,12 @@ pub struct MemoryQueueBackend {
     queues: RwLock<HashMap<String, Queue>>,
 }
 
+impl Default for MemoryQueueBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryQueueBackend {
     pub fn new() -> Self {
         Self {
@@ -1156,7 +1162,7 @@ impl EvifPlugin for QueueFsPlugin {
             } else {
                 queue_name
                     .split('/')
-                    .last()
+                    .next_back()
                     .unwrap_or("unknown")
                     .to_string()
             };

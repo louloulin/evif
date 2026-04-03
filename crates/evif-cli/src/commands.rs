@@ -5,13 +5,9 @@ use anyhow::Result;
 use base64::Engine;
 use chrono::Utc;
 use evif_client::EvifClient;
-use std::collections::HashMap;
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
-use tokio::runtime::Runtime;
-use tracing::{error, info};
 
 pub struct EvifCommand {
     server: String,
@@ -96,7 +92,7 @@ impl EvifCommand {
     }
 
     /// 列出目录内容
-    pub async fn ls(&self, path: Option<String>, recursive: bool, long: bool) -> Result<()> {
+    pub async fn ls(&self, path: Option<String>, _recursive: bool, long: bool) -> Result<()> {
         let output = self.ls_output(path, long).await?;
         print!("{}", output);
         Ok(())
@@ -198,11 +194,7 @@ impl EvifCommand {
         let content = self.client.cat(&path).await?;
         let content_lines: Vec<&str> = content.lines().collect();
         let total_lines = content_lines.len();
-        let start = if total_lines > lines {
-            total_lines - lines
-        } else {
-            0
-        };
+        let start = total_lines.saturating_sub(lines);
         for line in content_lines.iter().skip(start) {
             println!("{}", line);
         }
@@ -294,7 +286,7 @@ impl EvifCommand {
 
     /// 修改文件权限
     /// NOTE: chmod requires backend support (not yet implemented in REST API)
-    pub async fn chmod(&self, path: String, mode: String) -> Result<()> {
+    pub async fn chmod(&self, _path: String, _mode: String) -> Result<()> {
         println!("Error: chmod not yet supported by backend");
         println!("Use write permissions when creating files/directories instead.");
         Ok(())
@@ -302,8 +294,8 @@ impl EvifCommand {
 
     /// 修改文件所有者
     /// NOTE: chown requires backend support (not yet implemented in REST API)
-    pub async fn chown(&self, path: String, owner: String, group: Option<String>) -> Result<()> {
-        let group_info = group
+    pub async fn chown(&self, _path: String, _owner: String, group: Option<String>) -> Result<()> {
+        let _group_info = group
             .as_ref()
             .map(|g| format!(":{}", g))
             .unwrap_or_default();
@@ -397,7 +389,7 @@ impl EvifCommand {
         total_dirs: &mut usize,
         recursive: bool,
     ) -> Result<()> {
-        let files = self.client.ls(&path).await?;
+        let files = self.client.ls(path).await?;
 
         for file in files {
             if file.is_dir {
@@ -455,7 +447,7 @@ impl EvifCommand {
                 .collect();
 
             // 检测新增文件
-            for (name, info) in &current_files {
+            for name in current_files.keys() {
                 if !last_files.contains_key(name) {
                     println!("[+] {}", name);
                 }
@@ -835,7 +827,7 @@ impl EvifCommand {
                 Ok(())
             }
             Ok(_) => Err(anyhow::anyhow!("Not a directory: {}", new_cwd)),
-            Err(e) => Err(anyhow::anyhow!("Directory not found: {}", new_cwd)),
+            Err(_e) => Err(anyhow::anyhow!("Directory not found: {}", new_cwd)),
         }
     }
 
@@ -1478,8 +1470,8 @@ impl EvifCommand {
 
             // 递归搜索子目录
             if is_dir {
-                let name_clone = name.as_ref().map(|s| s.clone());
-                let type_clone = type_.as_ref().map(|s| s.clone());
+                let name_clone = name.clone();
+                let type_clone = type_.clone();
                 Box::pin(self.find_recursive(&entry_path, name_clone, type_clone)).await?;
             }
         }

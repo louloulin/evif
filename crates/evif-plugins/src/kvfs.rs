@@ -14,6 +14,12 @@ pub struct KvStore {
     data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
 }
 
+impl Default for KvStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KvStore {
     pub fn new() -> Self {
         Self {
@@ -107,7 +113,7 @@ impl EvifPlugin for KvfsPlugin {
     async fn read(&self, path: &str, _offset: u64, _size: u64) -> EvifResult<Vec<u8>> {
         let key = self.path_to_key(path)?;
         self.store.get(&key).await?
-            .ok_or_else(|| EvifError::NotFound(key))
+            .ok_or(EvifError::NotFound(key))
     }
 
     async fn write(&self, path: &str, data: Vec<u8>, _offset: i64, _flags: WriteFlags)
@@ -169,7 +175,7 @@ impl EvifPlugin for KvfsPlugin {
             Ok(FileInfo {
                 name: path.trim_start_matches('/')
                     .split('/')
-                    .last()
+                    .next_back()
                     .unwrap_or("unknown")
                     .to_string(),
                 size: data.len() as u64,
@@ -187,7 +193,7 @@ impl EvifPlugin for KvfsPlugin {
                 Ok(FileInfo {
                     name: path.trim_start_matches('/')
                         .split('/')
-                        .last()
+                        .next_back()
                         .unwrap_or("unknown")
                         .to_string(),
                     size: 0,

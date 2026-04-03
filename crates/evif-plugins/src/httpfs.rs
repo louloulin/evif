@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use evif_core::{EvifError, EvifPlugin, EvifResult, FileInfo, WriteFlags};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// HTTP文件系统插件
 ///

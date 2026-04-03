@@ -1224,21 +1224,16 @@ impl LLMClient for OllamaClient {
         for item in items.iter_mut() {
             let content_lower = item.content.to_lowercase();
             let summary_lower = item.summary.to_lowercase();
-            let mut score = 0.0;
-
-            for term in &query_terms {
+            let _score = query_terms.iter().fold(0.0, |acc, term| {
+                let mut score = acc;
                 if content_lower.contains(term.as_str()) {
                     score += 1.0;
                 }
                 if summary_lower.contains(term.as_str()) {
                     score += 0.5;
                 }
-            }
-
-            // Normalize by content length
-            if !content_lower.is_empty() {
-                score /= (content_lower.len() as f32 / 100.0).max(1.0);
-            }
+                score
+            });
         }
 
         // Sort by relevance (content match > summary match)

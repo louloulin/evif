@@ -57,9 +57,11 @@ impl From<tokio::time::error::Elapsed> for SkillRuntimeError {
 
 /// The skill executor mode determines how skills are executed
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum SkillExecutor {
     /// Native execution - for development only
     /// Passes input through to the LLM agent (skill logic in SKILL.md)
+    #[default]
     Native,
 
     /// WASM sandbox execution - recommended for production
@@ -71,11 +73,6 @@ pub enum SkillExecutor {
     Docker,
 }
 
-impl Default for SkillExecutor {
-    fn default() -> Self {
-        Self::Native
-    }
-}
 
 impl std::fmt::Display for SkillExecutor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -622,7 +619,7 @@ async fn execute_docker(
         }
     }
     cmd.args(["-e", &format!("EVIF_SKILL_NAME={}", name)]);
-    cmd.args(["-e", &format!("EVIF_INPUT_FILE=/input")]);
+    cmd.args(["-e", "EVIF_INPUT_FILE=/input"]);
 
     // Container image
     cmd.arg(docker_image);

@@ -801,6 +801,7 @@ pub struct DefaultWorkflowRunner {
     /// Available capabilities
     capabilities: HashSet<Capability>,
     /// Interceptor registry
+    #[allow(dead_code)]
     interceptors: Arc<InterceptorRegistry>,
 }
 

@@ -36,4 +36,3 @@ pub use rbac::{
 pub use masking::{mask_sensitive_data, MaskConfig, SensitiveField};
 
 // Re-export MemResult for convenience
-use crate::error::MemResult;

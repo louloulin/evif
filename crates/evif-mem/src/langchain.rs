@@ -21,7 +21,7 @@ use crate::embedding::EmbeddingManager;
 use crate::error::MemError;
 use crate::models::MemoryItem;
 use crate::storage::MemoryStorage;
-use crate::vector::{SearchResult, VectorIndex};
+use crate::vector::VectorIndex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -156,7 +156,7 @@ impl EvifMemory {
         let items = self.storage.get_items_by_type("knowledge");
 
         // Get recent items up to max_messages
-        let mut messages: Vec<ChatMessage> = items
+        let messages: Vec<ChatMessage> = items
             .into_iter()
             .rev() // Most recent first
             .take(self.config.max_messages)
@@ -239,14 +239,17 @@ impl EvifMemory {
 #[derive(Clone)]
 pub struct BufferMemory {
     inner: EvifMemory,
+    #[allow(dead_code)]
     token_limit: usize,
 }
 
 impl BufferMemory {
     /// Create a new BufferMemory
     pub fn new(storage: Arc<MemoryStorage>, token_limit: usize) -> Self {
-        let mut config = EvifMemoryConfig::default();
-        config.max_tokens = Some(token_limit);
+        let config = EvifMemoryConfig {
+            max_tokens: Some(token_limit),
+            ..EvifMemoryConfig::default()
+        };
 
         Self {
             inner: EvifMemory::new(storage, config),
@@ -278,14 +281,17 @@ impl BufferMemory {
 #[derive(Clone)]
 pub struct ConversationTokenBuffer {
     inner: EvifMemory,
+    #[allow(dead_code)]
     token_limit: usize,
 }
 
 impl ConversationTokenBuffer {
     /// Create a new ConversationTokenBuffer
     pub fn new(storage: Arc<MemoryStorage>, token_limit: usize) -> Self {
-        let mut config = EvifMemoryConfig::default();
-        config.max_tokens = Some(token_limit);
+        let config = EvifMemoryConfig {
+            max_tokens: Some(token_limit),
+            ..EvifMemoryConfig::default()
+        };
 
         Self {
             inner: EvifMemory::new(storage, config),

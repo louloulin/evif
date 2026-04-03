@@ -508,9 +508,9 @@ Identify safe refactor opportunities and describe the intended structural change
         let mut imported = Vec::new();
         let mut entries = tokio::fs::read_dir(input_dir)
             .await
-            .map_err(|err| EvifError::Io(err))?;
+            .map_err(EvifError::Io)?;
 
-        while let Some(entry) = entries.next_entry().await.map_err(|err| EvifError::Io(err))? {
+        while let Some(entry) = entries.next_entry().await.map_err(EvifError::Io)? {
             let path = entry.path();
             if !path.is_dir() {
                 continue;

@@ -10,13 +10,12 @@
 use crate::embedding::EmbeddingManager;
 use crate::error::{MemError, MemResult};
 use crate::llm::LLMClient;
-use crate::models::{MemoryCategory, MemoryItem, MemoryType, Modality, Resource, ToolCall};
+use crate::models::{MemoryItem, MemoryType, Modality, Resource, ToolCall};
 use crate::storage::memory::MemoryStorage;
 use crate::vector::VectorIndex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -292,7 +291,7 @@ impl MemorizePipeline {
 
         // Process each memory
         let mut stored_memories = Vec::new();
-        for (segment_content, memories) in all_memories {
+        for (_segment_content, memories) in all_memories {
             for mut memory in memories {
                 // Apply user context if provided
                 if let Some((user_id, tenant_id)) = user_scope {
@@ -591,15 +590,15 @@ impl ResourceLoader {
 
         if source.starts_with("http://") || source.starts_with("https://") {
             self.load_url(source).await
-        } else if source.starts_with("file://") {
-            let path = &source[7..]; // Remove "file://" prefix
+        } else if let Some(path) = source.strip_prefix("file://") {
+            // Remove "file://" prefix
             self.load_file(Path::new(path)).await
         } else if source.starts_with('/') || source.starts_with("./") || source.starts_with("../") {
             // Likely a file path
             self.load_file(Path::new(source)).await
-        } else if source.starts_with("text://") {
+        } else if let Some(content) = source.strip_prefix("text://") {
             // Direct text input with explicit scheme
-            let content = &source[7..]; // Remove "text://" prefix
+            // Remove "text://" prefix
             self.load_text(content).await
         } else {
             // Default: treat as direct text input
@@ -630,8 +629,7 @@ impl ResourceLoader {
     /// Load from URL (http/https)
     pub async fn load_url(&self, url: &str) -> MemResult<(Resource, String)> {
         let response = self.http_client.get(url).send().await.map_err(|e| {
-            MemError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            MemError::Io(std::io::Error::other(
                 format!("Failed to fetch URL: {}", e),
             ))
         })?;
@@ -657,8 +655,7 @@ impl ResourceLoader {
         } else if content_type.contains("text/html") {
             // For HTML, extract text content (simple approach)
             let html = response.text().await.map_err(|e| {
-                MemError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                MemError::Io(std::io::Error::other(
                     format!("Failed to read HTML: {}", e),
                 ))
             })?;
@@ -666,8 +663,7 @@ impl ResourceLoader {
         } else {
             // Plain text or other
             response.text().await.map_err(|e| {
-                MemError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                MemError::Io(std::io::Error::other(
                     format!("Failed to read content: {}", e),
                 ))
             })?
@@ -870,7 +866,7 @@ impl Preprocessor {
 
         // Try to find natural conversation boundaries
         let mut parts = Vec::new();
-        let mut remaining = content;
+        let remaining = content;
 
         // Split by double newlines first (paragraph/speaker turns)
         for delimiter in &delimiters {
@@ -1030,7 +1026,7 @@ impl Preprocessor {
     /// The content parameter should be a file path to the video.
     /// Extracts middle frame using ffmpeg and analyzes with vision API.
     async fn preprocess_video(&self, video_path: &str) -> MemResult<Vec<(String, Option<String>)>> {
-        let llm = self.llm_client.as_ref().ok_or_else(|| {
+        let _llm = self.llm_client.as_ref().ok_or_else(|| {
             MemError::Processing("LLM client required for video preprocessing".to_string())
         })?;
 
@@ -1277,7 +1273,7 @@ impl RetrievePipeline {
         };
 
         metadata.total_candidates = items.len();
-        let mut items = items;
+        let items = items;
 
         // Step 5: Sufficiency check - evaluate if results are sufficient
         if sufficiency_check && !items.is_empty() {
@@ -1995,11 +1991,10 @@ impl Categorizer {
                 };
 
                 // Check if category still exists
-                if self.storage.get_category(&category_id).is_ok() {
-                    if result.score >= self.similarity_threshold {
+                if self.storage.get_category(&category_id).is_ok()
+                    && result.score >= self.similarity_threshold {
                         return Ok(Some(category_id));
                     }
-                }
             }
         }
 
@@ -2196,7 +2191,7 @@ impl EvolvePipeline {
         );
 
         let mut merged_item = MemoryItem::new(
-            first_item.memory_type.clone(),
+            first_item.memory_type,
             merged_summary,
             merged_content,
         );

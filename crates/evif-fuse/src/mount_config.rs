@@ -2,7 +2,7 @@
 //
 // 管理文件系统挂载的配置选项
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// FUSE 挂载配置
 #[derive(Debug, Clone)]
@@ -146,7 +146,7 @@ impl MountOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
+    
 
     #[test]
     fn test_default_config() {

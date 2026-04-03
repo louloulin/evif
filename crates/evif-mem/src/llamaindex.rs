@@ -21,7 +21,7 @@ use crate::embedding::EmbeddingManager;
 use crate::error::MemError;
 use crate::models::MemoryItem;
 use crate::storage::MemoryStorage;
-use crate::vector::{SearchResult, VectorIndex};
+use crate::vector::VectorIndex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -226,7 +226,7 @@ impl EvifVectorStore {
     pub async fn add_document(
         &self,
         text: &str,
-        metadata: Option<serde_json::Value>,
+        _metadata: Option<serde_json::Value>,
     ) -> Result<String, MemError> {
         // Create embedding
         let embedding_guard = self.embedding_manager.read().await;
@@ -244,7 +244,7 @@ impl EvifVectorStore {
         self.storage.put_item(item.clone())?;
 
         // Add to vector index
-        let mut index_guard = self.vector_index.write().await;
+        let index_guard = self.vector_index.write().await;
         index_guard.add(item.id.clone(), embedding, None).await?;
 
         Ok(item.id.clone())

@@ -716,7 +716,7 @@ impl EvifCli {
                 command.truncate(path.clone(), *size).await?;
             }
             Commands::Split { file, lines } => {
-                command.split(file.clone(), lines.clone()).await?;
+                command.split(file.clone(), *lines).await?;
             }
             Commands::Find { path, name, type_ } => {
                 command

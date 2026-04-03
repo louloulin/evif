@@ -439,7 +439,7 @@ impl ControlFlowExecutor {
         let line = lines[*i - 1].trim();
 
         // fn 语句: fn name(params) { body }
-        if let Some(rest) = line.strip_prefix("fn ") {
+        if let Some(_rest) = line.strip_prefix("fn ") {
             let (name, params, body) = self.parse_function_def(lines, i)?;
             return Ok(Some(Statement::FnDef(name, params, body)));
         }
@@ -601,7 +601,7 @@ impl ControlFlowExecutor {
                 }
 
                 if found_outer_close {
-                    block_content.push_str(" ");
+                    block_content.push(' ');
                     block_content.push_str(&line[..close_pos]);
                     let after_close = line[close_pos + 1..].trim();
                     if start_kw == "if" && after_close.starts_with("else") {
@@ -609,7 +609,7 @@ impl ControlFlowExecutor {
                     }
                     break;
                 } else {
-                    block_content.push_str("\n");
+                    block_content.push('\n');
                     block_content.push_str(line);
                 }
             }

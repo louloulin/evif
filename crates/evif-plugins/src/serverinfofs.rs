@@ -204,12 +204,12 @@ mod tests {
 
         // 测试读取uptime
         let uptime_data = plugin.read("/uptime", 0, 100).await.unwrap();
-        assert!(uptime_data.len() > 0);
+        assert!(!uptime_data.is_empty());
         assert!(uptime_data.ends_with(b"s"));
 
         // 测试读取info (JSON格式)
         let info_data = plugin.read("/info", 0, 1000).await.unwrap();
-        assert!(info_data.len() > 0);
+        assert!(!info_data.is_empty());
         let info_str = String::from_utf8(info_data).unwrap();
         assert!(info_str.contains("version"));
         assert!(info_str.contains("uptime"));

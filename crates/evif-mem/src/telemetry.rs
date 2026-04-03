@@ -75,14 +75,19 @@ pub enum TelemetryError {
 #[derive(Debug, Clone)]
 pub struct TelemetrySpan {
     /// Span name
+    #[allow(dead_code)]
     name: String,
     /// User ID for the operation
+    #[allow(dead_code)]
     user_id: Option<String>,
     /// Tenant ID for the operation
+    #[allow(dead_code)]
     tenant_id: Option<String>,
     /// Operation type (memorize, retrieve, evolve, workflow)
+    #[allow(dead_code)]
     operation_type: String,
     /// Whether span is ended
+    #[allow(dead_code)]
     ended: bool,
 }
 

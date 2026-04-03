@@ -197,14 +197,14 @@ impl HeartbeatFsPlugin {
             };
 
             let last_heartbeat_dt: DateTime<Utc> = DateTime::from_timestamp(
-                (item.last_heartbeat.elapsed().as_secs() as i64),
+                item.last_heartbeat.elapsed().as_secs() as i64,
                 0
-            ).unwrap_or_else(|| Utc::now());
+            ).unwrap_or_else(Utc::now);
 
             let expire_dt: DateTime<Utc> = DateTime::from_timestamp(
-                (item.expire_time.elapsed().as_secs() as i64),
+                item.expire_time.elapsed().as_secs() as i64,
                 0
-            ).unwrap_or_else(|| Utc::now());
+            ).unwrap_or_else(Utc::now);
 
             Ok(format!(
                 "last_heartbeat_ts: {}\nexpire_ts: {}\ntimeout: {}\nstatus: {}\n",

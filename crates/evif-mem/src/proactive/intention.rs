@@ -171,7 +171,7 @@ impl IntentionPredictor {
             let topic = format!("{:?}", memory.memory_type);
             topic_counts
                 .entry(topic)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(memory.id.clone());
         }
 
@@ -219,7 +219,7 @@ impl IntentionPredictor {
             let hour = memory.created_at.hour();
             hour_counts
                 .entry(hour)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(memory.id.clone());
         }
 
@@ -259,7 +259,7 @@ impl IntentionPredictor {
 
             sequence_counts
                 .entry(key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(window[1].id.clone());
         }
 

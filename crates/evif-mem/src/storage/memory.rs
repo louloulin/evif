@@ -53,7 +53,7 @@ impl MemoryStorage {
         if let Some(ref user_id) = resource.user_id {
             self.resources_by_user
                 .entry(user_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(resource.id.clone());
         }
 
@@ -61,7 +61,7 @@ impl MemoryStorage {
         if let Some(ref tenant_id) = resource.tenant_id {
             self.resources_by_tenant
                 .entry(tenant_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(resource.id.clone());
         }
 
@@ -99,7 +99,7 @@ impl MemoryStorage {
         let type_key = item.memory_type.to_string();
         self.items_by_type
             .entry(type_key)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(item.id.clone());
 
         // Add to index by hash
@@ -111,7 +111,7 @@ impl MemoryStorage {
         if let Some(ref user_id) = item.user_id {
             self.items_by_user
                 .entry(user_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(item.id.clone());
         }
 
@@ -119,7 +119,7 @@ impl MemoryStorage {
         if let Some(ref tenant_id) = item.tenant_id {
             self.items_by_tenant
                 .entry(tenant_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(item.id.clone());
         }
 
@@ -324,7 +324,7 @@ impl MemoryStorage {
         if let Some(ref user_id) = category.user_id {
             self.categories_by_user
                 .entry(user_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(category.id.clone());
         }
 
@@ -332,7 +332,7 @@ impl MemoryStorage {
         if let Some(ref tenant_id) = category.tenant_id {
             self.categories_by_tenant
                 .entry(tenant_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(category.id.clone());
         }
 
@@ -371,7 +371,7 @@ impl MemoryStorage {
         let mut ids = self
             .items_by_category
             .entry(category_id.to_string())
-            .or_insert_with(Vec::new);
+            .or_default();
 
         // Only add if not already present
         if !ids.contains(&item_id.to_string()) {

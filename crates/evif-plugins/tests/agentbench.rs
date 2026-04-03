@@ -333,7 +333,7 @@ async fn agentbench_long_running_task() {
         "/long_running/docs",
     ];
     for dir in &file_dirs {
-        let filename = dir.split('/').last().unwrap();
+        let filename = dir.split('/').next_back().unwrap();
         let file_path = format!("{}/{}.rs", dir, filename);
         plugin.create(&file_path, 0o644).await.expect("create");
         plugin

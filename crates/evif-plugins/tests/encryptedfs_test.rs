@@ -5,7 +5,6 @@
 use evif_core::EvifPlugin;
 use evif_plugins::{EncryptedConfig, EncryptedFsPlugin, MemFsPlugin};
 use std::sync::Arc;
-use tokio;
 
 #[tokio::test]
 async fn test_encrypted_config_default() {

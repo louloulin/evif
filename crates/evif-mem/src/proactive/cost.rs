@@ -6,10 +6,8 @@
 //! - Similar query detection to avoid redundant LLM calls
 
 use crate::error::MemError;
-use crate::llm::LLMClient;
-use crate::storage::MemoryStorage;
 use crate::vector::VectorIndex;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -187,11 +185,10 @@ impl CostOptimizer {
         }
 
         // 3. Check similar queries
-        if self.config.enable_similar_detection {
-            if self.find_similar_query(query).await?.is_some() {
+        if self.config.enable_similar_detection
+            && self.find_similar_query(query).await?.is_some() {
                 return Ok(false);
             }
-        }
 
         Ok(true)
     }
@@ -320,9 +317,9 @@ impl CostOptimizer {
     }
 
     /// Find similar query in cache
-    async fn find_similar_query(&self, query: &str) -> CostResult<Option<String>> {
+    async fn find_similar_query(&self, _query: &str) -> CostResult<Option<String>> {
         // Get embedding for query
-        let vector_index = self.vector_index.read().await;
+        let _vector_index = self.vector_index.read().await;
 
         // For now, return None - actual implementation would:
         // 1. Get embedding for query

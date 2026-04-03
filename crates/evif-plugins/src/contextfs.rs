@@ -108,8 +108,7 @@ async fn summarize_llm(content: &str, mode: &str) -> String {
                 Ok(openai_resp) => {
                     openai_resp
                         .choices
-                        .first()
-                        .and_then(|c| Some(c.message.content.trim().to_string()))
+                        .first().map(|c| c.message.content.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .unwrap_or_else(|| fallback_summary(content, mode))
                 }

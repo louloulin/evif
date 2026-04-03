@@ -4,7 +4,6 @@
 // Phase 8: validate / get_readme / get_config_params
 
 use evif_core::{EvifPlugin, FileInfo, WriteFlags, EvifResult, EvifError, PluginConfigParam};
-use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::os::unix::fs::PermissionsExt;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
@@ -341,7 +340,7 @@ impl EvifPlugin for LocalFsPlugin {
         }
 
         let full_path = self.resolve_path(path)?;
-        let mut file = tokio::fs::OpenOptions::new()
+        let file = tokio::fs::OpenOptions::new()
             .write(true)
             .open(full_path)
             .await?;

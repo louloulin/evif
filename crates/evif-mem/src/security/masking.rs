@@ -2,7 +2,6 @@
 //!
 //! Provides utilities to mask sensitive data like passwords, tokens, API keys, etc.
 
-use serde::{Deserialize, Serialize};
 
 /// Mask configuration
 #[derive(Debug, Clone, Default)]
@@ -141,7 +140,7 @@ pub fn mask_sensitive_data(input: &str, config: &MaskConfig) -> String {
             format!("{}={}", field, "*".repeat(20)),
         ];
 
-        for pattern in patterns {
+        for _pattern in patterns {
             if result.contains(field) {
                 // Simple replacement - find the field and mask its value
                 if let Some(start) = result.to_lowercase().find(field) {

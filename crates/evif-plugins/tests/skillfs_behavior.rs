@@ -439,19 +439,19 @@ async fn skillfs_generate_openai_yaml_produces_valid_codex_format() {
     for agent in agents {
         let agent_map = agent.as_mapping().expect("agent should be a mapping");
         assert!(
-            agent_map.contains_key(&serde_yaml::Value::String("name".into())),
+            agent_map.contains_key(serde_yaml::Value::String("name".into())),
             "agent must have 'name'"
         );
         assert!(
-            agent_map.contains_key(&serde_yaml::Value::String("description".into())),
+            agent_map.contains_key(serde_yaml::Value::String("description".into())),
             "agent must have 'description'"
         );
         assert!(
-            agent_map.contains_key(&serde_yaml::Value::String("triggers".into())),
+            agent_map.contains_key(serde_yaml::Value::String("triggers".into())),
             "agent must have 'triggers'"
         );
         assert!(
-            agent_map.contains_key(&serde_yaml::Value::String("instructions".into())),
+            agent_map.contains_key(serde_yaml::Value::String("instructions".into())),
             "agent must have 'instructions'"
         );
     }

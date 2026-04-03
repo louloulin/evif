@@ -83,7 +83,7 @@ fn test_cli_completer() {
 
 #[cfg(test)]
 mod repl_tests {
-    use super::*;
+    
 
     #[test]
     fn test_repl_command_parsing() {
