@@ -118,6 +118,15 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - `AuthMiddleware` 现在将 `/api/v1/encryption/enable` 与 `/api/v1/encryption/disable` 归类为 `admin` 级敏感端点
   - `write-key` 不再能直接修改全局加密配置，必须由 `admin-key` 执行
   - 新增集成测试：`test_encryption_enable_requires_admin_scope`
+- [x] 已实现：Phase D 最小闭环中的 **API key + 审计日志落盘 E2E**
+  - `RestAuthState::from_env` 现在已通过真实 E2E 验证 `EVIF_REST_WRITE_API_KEYS / EVIF_REST_ADMIN_API_KEYS / EVIF_REST_AUTH_AUDIT_LOG`
+  - `FileAuditLogger` 现在会在写入前自动创建父目录，避免嵌套审计路径静默丢失落盘能力
+  - 新增集成测试：`test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests`
+  - 顺带修正黑盒启动日志测试，使其显式清理易漂移环境变量，避免并行测试时误继承外部状态
+- [x] 已实现：Phase D 最小闭环中的 **MCP health 与 REST v1 health 契约对齐**
+  - `evif_health` 现在统一走 `/api/v1/health`，不再使用历史上的根路径 `/health`
+  - 这让 MCP 健康检查与 `evif-client/CLI` 使用的 REST v1 健康契约保持一致，统一字段为 `status / version / uptime`
+  - 新增回归测试：`test_evif_health_calls_rest_v1_health_contract`
 - [x] 真实验证：
   - `cargo test -p evif-rest --test metrics_traffic metrics_traffic_counts_real_requests -- --nocapture`
   - `cargo test -p evif-rest --test metrics_traffic metrics_prometheus_endpoint_exposes_standard_text_format -- --nocapture`
@@ -143,15 +152,22 @@ EVIF 当前已经具备较强的**功能实现能力**和较完整的**产品面
   - `cargo test -p evif-rest test_validate_runtime_state_for_production_env -- --nocapture`
   - `cargo test -p evif-rest --test auth_protection -- --nocapture`
   - `cargo test -p evif-rest --test auth_protection test_encryption_enable_requires_admin_scope -- --nocapture`
+  - `cargo test -p evif-rest --test auth_protection test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests -- --nocapture`
+  - `cargo test -p evif-rest --test tracing_init -- --nocapture`
+  - `cargo clippy -p evif-auth --all-targets -- -D warnings`
   - `cargo clippy -p evif-rest --all-targets -- -D warnings`
   - `cargo test -p evif-rest --lib --tests --quiet`
+  - `cargo test -p evif-mcp test_evif_health_calls_rest_v1_health_contract -- --nocapture`
+  - `cargo test -p evif-mcp --lib -- --nocapture`
+  - `cargo test -p evif-mcp --test mcp_phase15 -- --nocapture`
+  - `cargo clippy -p evif-mcp --all-targets -- -D warnings`
 - [x] 当前进度：
   - **Phase A = 100%**（4 个明确子项中完成 4 项）
   - **Phase B = 100%**（5 个明确子项中完成 5 项）
   - **Phase C = 100%**（5 个明确子项中完成 5 项）
-  - **Phase D = 20%**（5 个明确子项中完成 1 项）
-  - **mem15 总路线图 = 51.7%**（按 Phase A-F 共 29 个明确子项估算，当前完成 15 项）
-  - **本轮结论：Phase D 已完成首个真实闭环，敏感安全端点的能力边界开始收紧**
+  - **Phase D = 60%**（5 个明确子项中完成 3 项）
+  - **mem15 总路线图 = 58.6%**（按 Phase A-F 共 29 个明确子项估算，当前完成 17 项）
+  - **本轮结论：Phase D 已形成“能力分级 + 审计落盘 E2E + MCP/REST 健康契约对齐”三个真实闭环**
 
 ---
 
@@ -595,22 +611,37 @@ cargo clippy --workspace --all-targets -- -D warnings
 优先任务：
 
 - [x] 补充 Auth middleware 的生产场景测试
-- 补充启用 API key 时的拒绝 / 授权 / 审计日志 E2E
-- 明确 GraphQL / REST / MCP 的契约映射边界
+- [x] 补充启用 API key 时的拒绝 / 授权 / 审计日志 E2E
+- [x] 明确 GraphQL / REST / MCP 的契约映射边界
 - 清理版本号、状态字段、响应大小写等潜在不一致
 - 对敏感端点增加更严格的能力分级
 
-**当前实现：20%**
+**当前实现：60%**
 
 - 已完成最小闭环：
   - 已新增 `test_encryption_enable_requires_admin_scope` 集成测试
   - 真实验证了敏感安全端点 `/api/v1/encryption/enable` 的拒绝 / 授权 / 审计日志行为
   - `AuthMiddleware` 已将 `/api/v1/encryption/enable` 与 `/api/v1/encryption/disable` 提升为 `admin` 级端点
   - `write-key` 调用会收到 `403`，`admin-key` 调用会成功，并在审计日志中留下 `scope=admin` 的 denied / granted 事件
+  - 已新增 `test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests` 集成测试
+  - 真实验证了 `EVIF_REST_WRITE_API_KEYS / EVIF_REST_ADMIN_API_KEYS / EVIF_REST_AUTH_AUDIT_LOG` 的 env 驱动链路
+  - 审计日志现在会在嵌套目录下自动创建父目录并真实落盘 denied / granted 事件
+  - 启动日志黑盒测试已清理易漂移环境变量，避免安全类 env 测试污染其他验证
+  - 已新增 `test_evif_health_calls_rest_v1_health_contract` 回归测试
+  - `evif_health` 现在与 REST v1 健康契约对齐，统一调用 `/api/v1/health`
+  - MCP 健康检查返回的关键字段现在与 REST v1/evif-client 一致：`status / version / uptime`
+  - 同轮顺带清理了 `mcp_phase15.rs` 中影响 `clippy -D warnings` 的默认值后赋值写法
   - 真实验证通过：`cargo test -p evif-rest --test auth_protection test_encryption_enable_requires_admin_scope -- --nocapture`
   - 真实验证通过：`cargo test -p evif-rest --test auth_protection -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest --test auth_protection test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-rest --test tracing_init -- --nocapture`
+  - 真实验证通过：`cargo clippy -p evif-auth --all-targets -- -D warnings`
   - 真实验证通过：`cargo clippy -p evif-rest --all-targets -- -D warnings`
   - 真实验证通过：`cargo test -p evif-rest --lib --tests --quiet`
+  - 真实验证通过：`cargo test -p evif-mcp test_evif_health_calls_rest_v1_health_contract -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-mcp --lib -- --nocapture`
+  - 真实验证通过：`cargo test -p evif-mcp --test mcp_phase15 -- --nocapture`
+  - 真实验证通过：`cargo clippy -p evif-mcp --all-targets -- -D warnings`
 
 完成标准：
 

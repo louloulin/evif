@@ -41,3 +41,13 @@
 - 2026-04-03：先在 `auth_protection.rs` 新增 `test_encryption_enable_requires_admin_scope` 回归测试，并通过其失败确认当前 `write-key` 仍可直接落到加密 handler；随后仅补 `route_requirement` 的最小映射，将加密开关端点提升为 `admin` 路由。
 - 2026-04-03：为避免并发测试互相污染，`test_encryption_enable_requires_admin_scope` 改用每次生成唯一环境变量名来驱动 `env:KEY_NAME` 场景，而不是固定复用 `EVIF_ENCRYPTION_KEY`。
 - 2026-04-03：本轮 Phase D 子项的真实验收命令为 `cargo test -p evif-rest --test auth_protection test_encryption_enable_requires_admin_scope -- --nocapture`、`cargo test -p evif-rest --test auth_protection -- --nocapture`、`cargo clippy -p evif-rest --all-targets -- -D warnings` 与 `cargo test -p evif-rest --lib --tests --quiet`，均已退出 0。
+- 2026-04-03：Phase D 的第二个最小子项选择“把 env 驱动的 API key 与 audit log 链路做成真实 E2E”，优先验证 `RestAuthState::from_env` 与 `EVIF_REST_AUTH_AUDIT_LOG`，而不是先扩更大的 GraphQL/REST/MCP 契约对齐面。
+- 2026-04-03：先在 `auth_protection.rs` 新增 `test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests` 回归测试，并通过其失败确认当前文件型 audit logger 在嵌套目录场景下不会真实落盘。
+- 2026-04-03：最小修复落在 `evif-auth` 的 `FileAuditLogger::write_to_file`，写入前自动创建父目录；这样既修复了 REST 鉴权 E2E，也顺手补齐了 auth 基础设施在生产路径下的真实可用性。
+- 2026-04-03：在复验过程中额外暴露并修正了 `tracing_init` 的环境继承脆弱性；测试现在会显式清理会影响启动路径的 env 变量，避免安全类 env 测试与黑盒启动测试互相污染。
+- 2026-04-03：本轮 Phase D 子项的真实验收命令为 `cargo test -p evif-rest --test auth_protection test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests -- --nocapture`、`cargo test -p evif-rest --test auth_protection -- --nocapture`、`cargo test -p evif-rest --test tracing_init -- --nocapture`、`cargo clippy -p evif-auth --all-targets -- -D warnings`、`cargo clippy -p evif-rest --all-targets -- -D warnings` 与 `cargo test -p evif-rest --lib --tests --quiet`，均已退出 0。
+- 2026-04-03：Phase D 的第三个最小子项选择先收敛 MCP/REST 健康检查契约，而不是一次性改动 GraphQL/REST/MCP 全部状态面；这是当前最小、最容易被真实验证的跨接入面契约漂移。
+- 2026-04-03：先在 `evif-mcp` 中新增 `test_evif_health_calls_rest_v1_health_contract` 回归测试，并通过其失败确认 `evif_health` 仍在访问旧的 `/health` 路径，而非 `mcp_protocol` 中约定的 `/api/v1/health`。
+- 2026-04-03：最小修复仅将 `evif_health` 切换到 `/api/v1/health`，使 MCP 健康检查与 REST v1/evif-client 统一为 `status / version / uptime` 契约，不顺手扩展 GraphQL 健康查询模型。
+- 2026-04-03：同轮额外清理了 `crates/evif-mcp/tests/mcp_phase15.rs` 中影响 `clippy -D warnings` 的 `Default` 后字段再赋值写法，保证 Phase D 契约修复不会留下门禁债务。
+- 2026-04-03：本轮 Phase D 子项的真实验收命令为 `cargo test -p evif-mcp test_evif_health_calls_rest_v1_health_contract -- --nocapture`、`cargo test -p evif-mcp --lib -- --nocapture`、`cargo test -p evif-mcp --test mcp_phase15 -- --nocapture` 与 `cargo clippy -p evif-mcp --all-targets -- -D warnings`，均已退出 0。

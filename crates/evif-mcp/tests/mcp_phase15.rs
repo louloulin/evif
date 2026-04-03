@@ -70,8 +70,10 @@ fn ensure_evif_url() -> String {
 }
 
 fn make_server() -> Arc<EvifMcpServer> {
-    let mut config = McpServerConfig::default();
-    config.evif_url = ensure_evif_url();
+    let config = McpServerConfig {
+        evif_url: ensure_evif_url(),
+        ..McpServerConfig::default()
+    };
     EvifMcpServer::new(config)
 }
 

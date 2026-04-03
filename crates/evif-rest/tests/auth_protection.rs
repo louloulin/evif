@@ -196,3 +196,61 @@ async fn test_encryption_enable_requires_admin_scope() {
 
     std::env::remove_var(&env_name);
 }
+
+#[tokio::test]
+async fn test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let audit_log_path = temp_dir
+        .path()
+        .join("nested")
+        .join("audit")
+        .join("auth.log");
+
+    std::env::set_var("EVIF_REST_WRITE_API_KEYS", "write-env-key");
+    std::env::set_var("EVIF_REST_ADMIN_API_KEYS", "admin-env-key");
+    std::env::set_var(
+        "EVIF_REST_AUTH_AUDIT_LOG",
+        audit_log_path.to_string_lossy().to_string(),
+    );
+
+    let mount_table = Arc::new(RadixMountTable::new());
+    let auth_state = Arc::new(RestAuthState::from_env());
+
+    std::env::remove_var("EVIF_REST_WRITE_API_KEYS");
+    std::env::remove_var("EVIF_REST_ADMIN_API_KEYS");
+    std::env::remove_var("EVIF_REST_AUTH_AUDIT_LOG");
+
+    let base = spawn_server(create_routes_with_auth(mount_table, auth_state.clone())).await;
+    let client = reqwest::Client::new();
+
+    let denied = client
+        .post(format!("{}/api/v1/metrics/reset", base))
+        .header("x-api-key", "write-env-key")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
+
+    let granted = client
+        .post(format!("{}/api/v1/metrics/reset", base))
+        .header("x-api-key", "admin-env-key")
+        .send()
+        .await
+        .unwrap();
+    assert!(granted.status().is_success());
+
+    let events = auth_state.audit_events();
+    assert!(events.iter().any(|event| {
+        event.event_type == evif_auth::AuditEventType::AccessDenied
+            && event.details.contains("/api/v1/metrics/reset")
+    }));
+    assert!(events.iter().any(|event| {
+        event.event_type == evif_auth::AuditEventType::AccessGranted
+            && event.details.contains("/api/v1/metrics/reset")
+    }));
+
+    let audit_log = std::fs::read_to_string(&audit_log_path).expect("audit log should be written");
+    assert!(audit_log.contains("AccessDenied"));
+    assert!(audit_log.contains("AccessGranted"));
+    assert!(audit_log.contains("/api/v1/metrics/reset"));
+}

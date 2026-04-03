@@ -49,6 +49,58 @@ async fn graphql_status_query() {
     assert!(json["data"]["status"]["status"].is_string());
 }
 
+/// P17.4-01b: GraphQL Status Matches REST v1 Health Contract
+#[tokio::test]
+async fn graphql_status_matches_rest_health_contract() {
+    let mount_table = Arc::new(RadixMountTable::new());
+    let app = create_routes(mount_table);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app.into_make_service())
+            .await
+            .expect("serve");
+    });
+
+    let base = format!("http://127.0.0.1:{}", port);
+    let client = reqwest::Client::new();
+
+    for _ in 0..60 {
+        if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
+            if res.status().is_success() {
+                break;
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+    }
+
+    let rest_health = client
+        .get(format!("{}/api/v1/health", base))
+        .send()
+        .await
+        .expect("rest health succeeds");
+    assert!(rest_health.status().is_success(), "REST health should succeed");
+    let rest_json: serde_json::Value = rest_health.json().await.expect("valid JSON");
+
+    let graphql_status = client
+        .post(format!("{}/api/v1/graphql", base))
+        .json(&serde_json::json!({
+            "query": "{ status { version status } }"
+        }))
+        .send()
+        .await
+        .expect("graphql request succeeds");
+    assert!(
+        graphql_status.status().is_success(),
+        "GraphQL status query should succeed"
+    );
+    let graphql_json: serde_json::Value = graphql_status.json().await.expect("valid JSON");
+
+    assert_eq!(graphql_json["data"]["status"]["version"], rest_json["version"]);
+    assert_eq!(graphql_json["data"]["status"]["status"], rest_json["status"]);
+}
+
 /// P17.4-02: GraphQL Health Query
 #[tokio::test]
 async fn graphql_health_query() {

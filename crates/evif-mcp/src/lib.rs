@@ -904,7 +904,7 @@ impl EvifMcpServer {
             }
 
             "evif_health" => {
-                let url = format!("{}/health", self.config.evif_url);
+                let url = format!("{}/api/v1/health", self.config.evif_url);
                 let response = self
                     .client
                     .get(&url)
@@ -1996,6 +1996,34 @@ mod tests {
 
         let params = captured.lock().await.clone().unwrap();
         assert_eq!(params.get("path").unwrap(), "/memfs");
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_evif_health_calls_rest_v1_health_contract() {
+        let (base_url, _captured_params, handle) = spawn_get_json_server(
+            "/api/v1/health",
+            json!({
+                "status": "healthy",
+                "version": env!("CARGO_PKG_VERSION"),
+                "uptime": 12
+            }),
+        )
+        .await;
+        let server = EvifMcpServer::new(McpServerConfig {
+            evif_url: base_url,
+            ..McpServerConfig::default()
+        });
+
+        let result = server
+            .call_tool("evif_health", json!({}))
+            .await
+            .expect("health tool should follow REST v1 health contract");
+
+        assert_eq!(result["status"], "healthy");
+        assert_eq!(result["version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(result["uptime"], 12);
 
         handle.abort();
     }

@@ -22,7 +22,7 @@ impl QueryRoot {
     async fn status(&self) -> ServerStatus {
         ServerStatus {
             version: env!("CARGO_PKG_VERSION").to_string(),
-            status: "running".to_string(),
+            status: "healthy".to_string(),
         }
     }
 

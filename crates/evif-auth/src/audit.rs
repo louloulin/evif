@@ -7,7 +7,7 @@ use crate::{AuthError, AuthResult};
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -232,6 +232,17 @@ impl FileAuditLogger {
 
     /// 将事件写入文件
     fn write_to_file(&self, event: &AuditEvent) -> AuthResult<()> {
+        let path = Path::new(&self.log_path);
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent).map_err(|e| {
+                AuthError::IoError(format!(
+                    "Failed to create audit log parent directory '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
+
         let log_line = format!(
             "{} | {:?} | principal={:?} | resource={:?} | success={} | {}\n",
             event.timestamp.format("%Y-%m-%d %H:%M:%S%.3f UTC"),
@@ -245,7 +256,7 @@ impl FileAuditLogger {
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&self.log_path)
+            .open(path)
             .map_err(|e| AuthError::IoError(format!("Failed to open audit log: {}", e)))?;
 
         file.write_all(log_line.as_bytes())
