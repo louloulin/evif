@@ -1,10 +1,11 @@
 // REST API 处理器
 
 use crate::metrics_handlers::TrafficStats;
-use crate::{RestError, RestResult};
+use crate::tenant_handlers::TenantState;
+use crate::{json, RestError, RestResult};
 use axum::{
     extract::{Path, Query, State},
-    http::header,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -13,12 +14,11 @@ use chrono::Utc;
 use evif_core::cross_fs_copy::CrossFsCopyManager;
 use evif_core::file_lock::FileLockManager;
 use evif_core::{
-    DynamicPluginLoader, EvifPlugin, PluginConfigParam, PluginRegistry, RadixMountTable,
-    WriteFlags,
+    DynamicPluginLoader, EvifPlugin, PluginConfigParam, PluginRegistry, RadixMountTable, WriteFlags,
 };
 use evif_plugins::{normalize_plugin_id, plugin_catalog, PluginCatalogEntry};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -37,6 +37,17 @@ pub struct AppState {
     pub lock_manager: Arc<FileLockManager>,
     /// Phase 14.1: 跨文件系统复制管理器
     pub cross_fs_copy_manager: Arc<CrossFsCopyManager>,
+    /// Phase F 深化：租户存储配额管理
+    pub tenant_state: TenantState,
+    /// N9: 就绪探针标志 — 由 server.rs 在所有初始化完成后设置为 true
+    pub is_ready: Arc<AtomicBool>,
+}
+
+impl AppState {
+    /// N9: 将 is_ready 设置为 true，表示服务器已完全初始化
+    pub fn set_ready(&self) {
+        self.is_ready.store(true, Ordering::Relaxed);
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -150,13 +161,31 @@ impl EvifHandlers {
     /// GET /api/v1/status - 分布式健康检查（负载均衡器用）
     pub async fn node_status(State(state): State<AppState>) -> Json<NodeStatus> {
         let uptime_secs = state.start_time.elapsed().as_secs();
+        let ready = state.is_ready.load(Ordering::Relaxed);
+        let status = if ready { "healthy" } else { "initializing" };
 
         Json(NodeStatus {
-            status: "healthy",
+            status,
             version: env!("CARGO_PKG_VERSION"),
             uptime_secs,
-            ready: true,
+            ready,
         })
+    }
+
+    /// N9: GET /api/v1/ready — Kubernetes/负载均衡器就绪探针
+    /// 仅在服务器完全初始化后返回 200，否则返回 503
+    pub async fn readiness() -> impl IntoResponse {
+        use crate::routes::get_ready_flag;
+        use std::sync::atomic::Ordering;
+        let ready = get_ready_flag().load(Ordering::Relaxed);
+        if ready {
+            (StatusCode::OK, Json(json!({"ready": true})))
+        } else {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"ready": false})),
+            )
+        }
     }
 
     /// POST /api/v1/ping - 快速存活检查
@@ -207,14 +236,12 @@ impl EvifHandlers {
         Json(req): Json<CloudConfigRequest>,
     ) -> RestResult<Json<serde_json::Value>> {
         match req.provider.as_str() {
-            "s3" | "oss" | "gcs" => {
-                Ok(Json(serde_json::json!({
-                    "status": "configured",
-                    "provider": req.provider,
-                    "bucket": req.bucket,
-                    "message": "Cloud storage configured successfully"
-                })))
-            }
+            "s3" | "oss" | "gcs" => Ok(Json(serde_json::json!({
+                "status": "configured",
+                "provider": req.provider,
+                "bucket": req.bucket,
+                "message": "Cloud storage configured successfully"
+            }))),
             _ => Err(RestError::BadRequest(format!(
                 "Unknown cloud provider: {}. Supported: s3, oss, gcs",
                 req.provider
@@ -262,7 +289,10 @@ impl EvifHandlers {
 
         // 最小化实现：返回模拟响应（实际需要 Ollama/OpenAI API）
         Ok(Json(LlmCompleteResponse {
-            text: format!("[Mock response to: {}...]", &req.prompt[..req.prompt.len().min(50)]),
+            text: format!(
+                "[Mock response to: {}...]",
+                &req.prompt[..req.prompt.len().min(50)]
+            ),
             model,
             provider,
             tokens: req.prompt.len() as u32 / 4,
@@ -287,20 +317,17 @@ impl EvifHandlers {
                     "message": "Ollama connection OK"
                 })))
             }
-            "openai" => {
-                Ok(Json(serde_json::json!({
-                    "provider": provider,
-                    "status": "available",
-                    "message": "OpenAI API configured"
-                })))
-            }
+            "openai" => Ok(Json(serde_json::json!({
+                "provider": provider,
+                "status": "available",
+                "message": "OpenAI API configured"
+            }))),
             _ => Err(RestError::BadRequest(format!(
                 "Unknown LLM provider: {}",
                 provider
             ))),
         }
     }
-
 
     /// GET /metrics：Prometheus 格式的指标
     pub async fn prometheus_metrics(State(state): State<AppState>) -> Response {
@@ -332,7 +359,9 @@ impl EvifHandlers {
         let uptime_secs = state.start_time.elapsed().as_secs();
 
         let average_latency_micros = |success_count: u64, error_count: u64, total_micros: u64| {
-            total_micros.checked_div(success_count + error_count).unwrap_or(0)
+            total_micros
+                .checked_div(success_count + error_count)
+                .unwrap_or(0)
         };
 
         // Build Prometheus text format output
@@ -457,7 +486,48 @@ evif_operation_latency_micros_average{{operation="other"}} {}
                 other_latency_micros_total,
             ),
         );
-        let metrics = format!("{base_metrics}{operation_metrics}");
+
+        // N7: Request duration histogram — provides p50/p95/p99 buckets
+        let sum_micros = stats.request_duration_sum_micros.load(Ordering::Relaxed);
+        let sum_secs = sum_micros as f64 / 1_000_000.0;
+
+        let histogram_metrics = format!(
+            r#"
+# HELP evif_request_duration_seconds HTTP request duration in seconds (histogram)
+# TYPE evif_request_duration_seconds histogram
+evif_request_duration_seconds_bucket{{le="0.005"}} {}
+evif_request_duration_seconds_bucket{{le="0.01"}} {}
+evif_request_duration_seconds_bucket{{le="0.025"}} {}
+evif_request_duration_seconds_bucket{{le="0.05"}} {}
+evif_request_duration_seconds_bucket{{le="0.1"}} {}
+evif_request_duration_seconds_bucket{{le="0.25"}} {}
+evif_request_duration_seconds_bucket{{le="0.5"}} {}
+evif_request_duration_seconds_bucket{{le="1"}} {}
+evif_request_duration_seconds_bucket{{le="2.5"}} {}
+evif_request_duration_seconds_bucket{{le="5"}} {}
+evif_request_duration_seconds_bucket{{le="10"}} {}
+evif_request_duration_seconds_bucket{{le="+Inf"}} {}
+evif_request_duration_seconds_sum {}
+evif_request_duration_seconds_count {}
+
+"#,
+            stats.request_duration_bucket_5ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_10ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_25ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_50ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_100ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_250ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_500ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_1s.load(Ordering::Relaxed),
+            stats.request_duration_bucket_2500ms.load(Ordering::Relaxed),
+            stats.request_duration_bucket_5s.load(Ordering::Relaxed),
+            stats.request_duration_bucket_10s.load(Ordering::Relaxed),
+            total_requests,
+            sum_secs,
+            total_requests
+        );
+
+        let metrics = format!("{base_metrics}{operation_metrics}{histogram_metrics}");
 
         (
             [(
@@ -535,6 +605,31 @@ evif_operation_latency_micros_average{{operation="other"}} {}
         s.write_count.store(0, Ordering::Relaxed);
         s.list_count.store(0, Ordering::Relaxed);
         s.other_count.store(0, Ordering::Relaxed);
+        s.read_success_count.store(0, Ordering::Relaxed);
+        s.read_error_count.store(0, Ordering::Relaxed);
+        s.read_latency_micros_total.store(0, Ordering::Relaxed);
+        s.write_success_count.store(0, Ordering::Relaxed);
+        s.write_error_count.store(0, Ordering::Relaxed);
+        s.write_latency_micros_total.store(0, Ordering::Relaxed);
+        s.list_success_count.store(0, Ordering::Relaxed);
+        s.list_error_count.store(0, Ordering::Relaxed);
+        s.list_latency_micros_total.store(0, Ordering::Relaxed);
+        s.other_success_count.store(0, Ordering::Relaxed);
+        s.other_error_count.store(0, Ordering::Relaxed);
+        s.other_latency_micros_total.store(0, Ordering::Relaxed);
+        // N7: Reset histogram buckets
+        s.request_duration_bucket_5ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_10ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_25ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_50ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_100ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_250ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_500ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_1s.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_2500ms.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_5s.store(0, Ordering::Relaxed);
+        s.request_duration_bucket_10s.store(0, Ordering::Relaxed);
+        s.request_duration_sum_micros.store(0, Ordering::Relaxed);
         Json(serde_json::json!({ "message": "Metrics reset successfully" }))
     }
 
@@ -587,9 +682,43 @@ evif_operation_latency_micros_average{{operation="other"}} {}
     /// - 插件调用: `mem_plugin.write("/nested/test.txt", data, offset, flags)`
     pub async fn write_file(
         State(state): State<AppState>,
-        Query(params): Query<FileWriteParams>,
-        Json(payload): Json<FileWriteRequest>,
+        req: axum::extract::Request,
     ) -> RestResult<Json<FileWriteResponse>> {
+        // Extract tenant ID from X-Tenant-ID header (defaults to default tenant)
+        let tenant_id = req
+            .headers()
+            .get(crate::tenant_handlers::TENANT_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .filter(|v| !v.is_empty())
+            .unwrap_or(crate::tenant_handlers::DEFAULT_TENANT_ID)
+            .to_string();
+
+        // Parse query params and body from the request
+        let (parts, body) = req.into_parts();
+        let query_string = parts.uri.query().unwrap_or("");
+        let params: FileWriteParams = serde_qs::from_str(query_string)
+            .map_err(|e| RestError::BadRequest(format!("Invalid query params: {}", e)))?;
+
+        let bytes = axum::body::to_bytes(body, 5 * 1024 * 1024)
+            .await
+            .map_err(|e| RestError::Internal(format!("Failed to read body: {}", e)))?;
+        let payload: FileWriteRequest = serde_json::from_slice(&bytes)
+            .map_err(|e| RestError::BadRequest(format!("Invalid JSON body: {}", e)))?;
+
+        let data = if payload.encoding.as_deref() == Some("base64") {
+            base64::engine::general_purpose::STANDARD
+                .decode(payload.data.trim())
+                .map_err(|e| RestError::Internal(format!("Invalid base64: {}", e)))?
+        } else {
+            payload.data.into_bytes()
+        };
+
+        // Phase F 深化：强制租户存储配额检查（从 X-Tenant-ID header 提取租户 ID）
+        let write_bytes = data.len() as u64;
+        if !state.tenant_state.check_quota(&tenant_id, write_bytes) {
+            return Err(RestError::BadRequest("Storage quota exceeded".to_string()));
+        }
+
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
         let plugin = plugin_opt
@@ -601,15 +730,10 @@ evif_operation_latency_micros_average{{operation="other"}} {}
             .and_then(|f| Self::parse_write_flags(&f))
             .unwrap_or(WriteFlags::NONE);
 
-        let data = if payload.encoding.as_deref() == Some("base64") {
-            base64::engine::general_purpose::STANDARD
-                .decode(payload.data.trim())
-                .map_err(|e| RestError::Internal(format!("Invalid base64: {}", e)))?
-        } else {
-            payload.data.into_bytes()
-        };
-
         let bytes_written = plugin.write(&relative_path, data, offset, flags).await?;
+
+        // 记录写入，更新 storage_used
+        let _ = state.tenant_state.record_write(&tenant_id, bytes_written);
 
         Ok(Json(FileWriteResponse {
             bytes_written,
@@ -1059,18 +1183,20 @@ evif_operation_latency_micros_average{{operation="other"}} {}
                 "path must be non-empty and start with /".to_string(),
             ));
         }
-        let plugin = crate::server::create_plugin_from_config(&payload.plugin, payload.config.as_ref())
-            .await
-            .map_err(|e| match e {
-                evif_core::EvifError::InvalidInput(_)
-                | evif_core::EvifError::InvalidArgument(_)
-                | evif_core::EvifError::InvalidPath(_)
-                | evif_core::EvifError::Configuration(_) => {
-                    RestError::BadRequest(e.to_string())
-                }
-                _ => RestError::Internal(format!("Mount failed: {}", e)),
-            })?;
-        let instance_name = payload.instance_name
+        let plugin =
+            crate::server::create_plugin_from_config(&payload.plugin, payload.config.as_ref())
+                .await
+                .map_err(|e| match e {
+                    evif_core::EvifError::InvalidInput(_)
+                    | evif_core::EvifError::InvalidArgument(_)
+                    | evif_core::EvifError::InvalidPath(_)
+                    | evif_core::EvifError::Configuration(_) => {
+                        RestError::BadRequest(e.to_string())
+                    }
+                    _ => RestError::Internal(format!("Mount failed: {}", e)),
+                })?;
+        let instance_name = payload
+            .instance_name
             .unwrap_or_else(|| payload.plugin.clone());
         state
             .mount_table
@@ -1131,7 +1257,9 @@ evif_operation_latency_micros_average{{operation="other"}} {}
     /// 根据插件名创建实例（用于 readme/config 等无需挂载状态的接口）
     fn plugin_by_name(name: &str) -> RestResult<Arc<dyn EvifPlugin>> {
         crate::server::create_builtin_plugin_from_config(name, None)
-            .map_err(|e| RestError::Internal(format!("Failed to prepare plugin '{}': {}", name, e)))?
+            .map_err(|e| {
+                RestError::Internal(format!("Failed to prepare plugin '{}': {}", name, e))
+            })?
             .ok_or_else(|| RestError::NotFound(format!("Plugin '{}' not found", name)))
     }
 
@@ -1324,8 +1452,10 @@ evif_operation_latency_micros_average{{operation="other"}} {}
         }
 
         let mut plugins = Vec::new();
-        let registered_normalized: std::collections::HashSet<String> =
-            registered_names.iter().map(|name| normalize_plugin_id(name)).collect();
+        let registered_normalized: std::collections::HashSet<String> = registered_names
+            .iter()
+            .map(|name| normalize_plugin_id(name))
+            .collect();
 
         // 添加已注册的插件
         for plugin in registered {
@@ -1700,7 +1830,11 @@ impl AvailablePluginInfo {
             is_loaded: false,
             is_mounted: false,
             mount_path: None,
-            aliases: entry.aliases.iter().map(|alias| alias.to_string()).collect(),
+            aliases: entry
+                .aliases
+                .iter()
+                .map(|alias| alias.to_string())
+                .collect(),
         }
     }
 }
@@ -1801,7 +1935,9 @@ impl EvifHandlers {
     }
 
     /// GET /api/v1/locks - 列出所有锁 (Phase 14.2)
-    pub async fn list_locks(State(state): State<AppState>) -> RestResult<Json<Vec<LockInfoResponse>>> {
+    pub async fn list_locks(
+        State(state): State<AppState>,
+    ) -> RestResult<Json<Vec<LockInfoResponse>>> {
         let locks = state.lock_manager.list_locks().await;
         let response: Vec<LockInfoResponse> = locks
             .into_iter()
@@ -1906,5 +2042,4 @@ mod tests {
         let response = rest_err.into_response();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
-
 }

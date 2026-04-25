@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use evif_core::{EvifPlugin, WriteFlags};
-use evif_plugins::PipeFsPlugin;
 use evif_plugins::queuefs::MemoryQueueBackend;
+use evif_plugins::PipeFsPlugin;
 
 #[tokio::test]
 async fn pipefs_creates_pipes_and_tracks_status_transitions() {
@@ -11,14 +11,25 @@ async fn pipefs_creates_pipes_and_tracks_status_transitions() {
 
     plugin.mkdir("/task-001", 0o755).await.expect("mkdir pipe");
 
-    let pending = plugin.read("/task-001/status", 0, 0).await.expect("pending");
+    let pending = plugin
+        .read("/task-001/status", 0, 0)
+        .await
+        .expect("pending");
     assert_eq!(pending, b"pending");
 
     plugin
-        .write("/task-001/input", b"build report".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/task-001/input",
+            b"build report".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write input");
-    let running = plugin.read("/task-001/status", 0, 0).await.expect("running");
+    let running = plugin
+        .read("/task-001/status", 0, 0)
+        .await
+        .expect("running");
     assert_eq!(running, b"running");
 
     plugin
@@ -66,15 +77,26 @@ async fn pipefs_broadcasts_messages_to_subscribers() {
 async fn pipefs_cleans_up_expired_pipes_after_timeout() {
     let plugin = PipeFsPlugin::new();
 
-    plugin.mkdir("/task-expire", 0o755).await.expect("mkdir expiring");
     plugin
-        .write("/task-expire/timeout", b"1".to_vec(), 0, WriteFlags::TRUNCATE)
+        .mkdir("/task-expire", 0o755)
+        .await
+        .expect("mkdir expiring");
+    plugin
+        .write(
+            "/task-expire/timeout",
+            b"1".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("set timeout");
 
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    let err = plugin.read("/task-expire/status", 0, 0).await.expect_err("expired");
+    let err = plugin
+        .read("/task-expire/status", 0, 0)
+        .await
+        .expect_err("expired");
     assert!(matches!(err, evif_core::EvifError::NotFound(_)));
 }
 
@@ -87,12 +109,22 @@ async fn pipefs_with_backend_persists_messages_across_instances() {
     plugin1.mkdir("/persist-task", 0o755).await.expect("mkdir");
 
     plugin1
-        .write("/persist-task/input", b"hello from instance 1".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/persist-task/input",
+            b"hello from instance 1".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write input");
 
     plugin1
-        .write("/persist-task/output", b"response from instance 1".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/persist-task/output",
+            b"response from instance 1".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write output");
 

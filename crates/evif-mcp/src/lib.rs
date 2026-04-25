@@ -19,10 +19,25 @@ pub struct McpServerConfig {
 impl Default for McpServerConfig {
     fn default() -> Self {
         Self {
-            evif_url: "http://localhost:8081".to_string(),
+            evif_url: std::env::var("EVIF_URL")
+                .unwrap_or_else(|_| "http://localhost:8081".to_string()),
             server_name: "evif-mcp".to_string(),
             version: "1.8.0".to_string(),
         }
+    }
+}
+
+impl McpServerConfig {
+    /// Create a config from CLI args, falling back to env vars and defaults.
+    pub fn from_cli(url: Option<String>, server_name: Option<String>) -> Self {
+        let mut base = Self::default();
+        if let Some(u) = url {
+            base.evif_url = u;
+        }
+        if let Some(name) = server_name {
+            base.server_name = name;
+        }
+        base
     }
 }
 
@@ -479,7 +494,9 @@ impl EvifMcpServer {
             // ── CLAUDE.md 自动生成 ────────────────────────────────────────
             Tool {
                 name: "evif_claude_md_generate".to_string(),
-                description: "Auto-generate CLAUDE.md for the current project by analyzing its structure".to_string(),
+                description:
+                    "Auto-generate CLAUDE.md for the current project by analyzing its structure"
+                        .to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
@@ -1170,7 +1187,10 @@ impl EvifMcpServer {
                 if response.status().as_u16() >= 400 {
                     let status = response.status().as_u16();
                     let body = response.text().await.unwrap_or_default();
-                    return Err(format!("Skill '{}' not found (HTTP {}): {}", name, status, body));
+                    return Err(format!(
+                        "Skill '{}' not found (HTTP {}): {}",
+                        name, status, body
+                    ));
                 }
 
                 let body: Value = response
@@ -1270,18 +1290,19 @@ impl EvifMcpServer {
                     .await
                     .map_err(|e| format!("Failed to scan project: {}", e))?;
 
-                let dirs_data: Value = dirs_response
-                    .json()
-                    .await
-                    .unwrap_or(json!({"data": []}));
+                let dirs_data: Value = dirs_response.json().await.unwrap_or(json!({"data": []}));
 
                 // Generate CLAUDE.md content
-                let data = dirs_data.get("data").and_then(|d| d.as_array()).map(|a| {
-                    a.iter()
-                        .filter_map(|e| e.get("name").and_then(|n| n.as_str()))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                }).unwrap_or_default();
+                let data = dirs_data
+                    .get("data")
+                    .and_then(|d| d.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|e| e.get("name").and_then(|n| n.as_str()))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
 
                 let mut claude_md = format!(
                     r#"# Project Context
@@ -1362,7 +1383,10 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                         "path": context_path
                     }))
                 } else {
-                    Err(format!("Failed to save (HTTP {})", response.status().as_u16()))
+                    Err(format!(
+                        "Failed to save (HTTP {})",
+                        response.status().as_u16()
+                    ))
                 }
             }
 
@@ -1471,10 +1495,7 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
             }
 
             "evif_subagent_list" => {
-                let url = format!(
-                    "{}/api/v1/directories?path=/pipes",
-                    self.config.evif_url
-                );
+                let url = format!("{}/api/v1/directories?path=/pipes", self.config.evif_url);
                 let response = self
                     .client
                     .get(&url)
@@ -1482,10 +1503,7 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                     .await
                     .map_err(|e| format!("Failed to list subagents: {}", e))?;
 
-                let result: Value = response
-                    .json()
-                    .await
-                    .unwrap_or(json!({"data": []}));
+                let result: Value = response.json().await.unwrap_or(json!({"data": []}));
 
                 Ok(result)
             }
@@ -1781,18 +1799,15 @@ mod tests {
         Json(put_response)
     }
 
-    async fn return_json_get(
-        State((_, _, get_response)): State<BodyCaptureState>,
-    ) -> Json<Value> {
+    async fn return_json_get(State((_, _, get_response)): State<BodyCaptureState>) -> Json<Value> {
         Json(get_response.clone())
     }
 
     async fn get_capture_query(
-        State((captured_params, response_body)): State<(
-            Arc<Mutex<Option<Value>>>,
-            Value,
-        )>,
-        axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+        State((captured_params, response_body)): State<(Arc<Mutex<Option<Value>>>, Value)>,
+        axum::extract::Query(params): axum::extract::Query<
+            std::collections::HashMap<String, String>,
+        >,
     ) -> Json<Value> {
         let map: serde_json::Map<String, Value> = params
             .into_iter()
@@ -2083,18 +2098,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_evif_write_calls_rest_post() {
-        let (base_url, captured_body, handle) = spawn_json_capture_server(
-            "/api/v1/fs/write",
-            json!({"data": {"bytes_written": 5}}),
-        )
-        .await;
+        let (base_url, captured_body, handle) =
+            spawn_json_capture_server("/api/v1/fs/write", json!({"data": {"bytes_written": 5}}))
+                .await;
         let server = EvifMcpServer::new(McpServerConfig {
             evif_url: base_url,
             ..McpServerConfig::default()
         });
 
         let result = server
-            .call_tool("evif_write", json!({"path": "/memfs/hello.txt", "content": "hello"}))
+            .call_tool(
+                "evif_write",
+                json!({"path": "/memfs/hello.txt", "content": "hello"}),
+            )
             .await
             .unwrap();
 
@@ -2108,11 +2124,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_evif_mkdir_calls_rest_post() {
-        let (base_url, captured_body, handle) = spawn_json_capture_server(
-            "/api/v1/directories",
-            json!({"data": {}}),
-        )
-        .await;
+        let (base_url, captured_body, handle) =
+            spawn_json_capture_server("/api/v1/directories", json!({"data": {}})).await;
         let server = EvifMcpServer::new(McpServerConfig {
             evif_url: base_url,
             ..McpServerConfig::default()
@@ -2145,11 +2158,14 @@ mod tests {
         });
 
         let result = server
-            .call_tool("evif_mount", json!({
-                "plugin": "s3fs",
-                "path": "/s3",
-                "config": {"region": "us-west-1"}
-            }))
+            .call_tool(
+                "evif_mount",
+                json!({
+                    "plugin": "s3fs",
+                    "path": "/s3",
+                    "config": {"region": "us-west-1"}
+                }),
+            )
             .await
             .unwrap();
 
@@ -2176,11 +2192,14 @@ mod tests {
         });
 
         let result = server
-            .call_tool("evif_grep", json!({
-                "path": "/memfs",
-                "pattern": "TODO",
-                "recursive": true
-            }))
+            .call_tool(
+                "evif_grep",
+                json!({
+                    "path": "/memfs",
+                    "pattern": "TODO",
+                    "recursive": true
+                }),
+            )
             .await
             .unwrap();
 
@@ -2196,11 +2215,9 @@ mod tests {
     #[tokio::test]
     async fn test_agent_workflow_write_read_stat() {
         // Simulate a complete agent workflow: write → cat → stat
-        let (base_url, _captured_body, handle) = spawn_json_capture_server(
-            "/api/v1/fs/write",
-            json!({"data": {"bytes_written": 12}}),
-        )
-        .await;
+        let (base_url, _captured_body, handle) =
+            spawn_json_capture_server("/api/v1/fs/write", json!({"data": {"bytes_written": 12}}))
+                .await;
         let server = EvifMcpServer::new(McpServerConfig {
             evif_url: base_url,
             ..McpServerConfig::default()
@@ -2208,7 +2225,10 @@ mod tests {
 
         // Write
         let write_result = server
-            .call_tool("evif_write", json!({"path": "/memfs/agent.txt", "content": "hello agent"}))
+            .call_tool(
+                "evif_write",
+                json!({"path": "/memfs/agent.txt", "content": "hello agent"}),
+            )
             .await
             .unwrap();
         assert_eq!(write_result["data"]["bytes_written"], 12);
@@ -2223,9 +2243,21 @@ mod tests {
 
         for tool in &tools {
             assert!(!tool.name.is_empty(), "tool name should not be empty");
-            assert!(!tool.description.is_empty(), "tool {} description should not be empty", tool.name);
-            assert!(tool.input_schema.is_object(), "tool {} input_schema should be an object", tool.name);
-            assert!(tool.input_schema.get("type").is_some(), "tool {} input_schema should have type", tool.name);
+            assert!(
+                !tool.description.is_empty(),
+                "tool {} description should not be empty",
+                tool.name
+            );
+            assert!(
+                tool.input_schema.is_object(),
+                "tool {} input_schema should be an object",
+                tool.name
+            );
+            assert!(
+                tool.input_schema.get("type").is_some(),
+                "tool {} input_schema should have type",
+                tool.name
+            );
         }
     }
 
@@ -2315,7 +2347,10 @@ mod tests {
             .unwrap();
 
         // The result should contain the skill data
-        assert!(result["data"].as_str().unwrap_or_default().contains("code-review"));
+        assert!(result["data"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("code-review"));
 
         handle.abort();
     }
@@ -2324,9 +2359,7 @@ mod tests {
     async fn test_evif_skill_info_rejects_missing_name() {
         let server = EvifMcpServer::new(McpServerConfig::default());
 
-        let result = server
-            .call_tool("evif_skill_info", json!({}))
-            .await;
+        let result = server.call_tool("evif_skill_info", json!({})).await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Missing 'name'"));
@@ -2347,11 +2380,14 @@ mod tests {
         });
 
         let result = server
-            .call_tool("evif_skill_execute", json!({
-                "name": "code-review",
-                "input": "fn main() { println!(\"hello\"); }",
-                "mode": "native"
-            }))
+            .call_tool(
+                "evif_skill_execute",
+                json!({
+                    "name": "code-review",
+                    "input": "fn main() { println!(\"hello\"); }",
+                    "mode": "native"
+                }),
+            )
             .await
             .unwrap();
 

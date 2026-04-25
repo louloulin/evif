@@ -2,8 +2,8 @@
 //
 // 测试 WASM 插件热重载功能
 
-use evif_rest::create_routes;
 use evif_core::RadixMountTable;
+use evif_rest::create_routes;
 use std::sync::Arc;
 
 /// P16.1-01: Reload Endpoint Exists
@@ -186,7 +186,9 @@ async fn wasm_unload_plugin_works() {
 
     // 端点应该返回任何有效响应（4xx 或 5xx 都算可达）
     assert!(
-        res.status().is_client_error() || res.status().is_server_error() || res.status().is_success(),
+        res.status().is_client_error()
+            || res.status().is_server_error()
+            || res.status().is_success(),
         "Unload endpoint should return valid HTTP response"
     );
 }

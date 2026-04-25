@@ -14,6 +14,8 @@ path = "src/lib.rs"
 tempfile = { workspace = true }
 tokio = { workspace = true }
 axum = { version = "0.7.4", features = ["json", "ws"] }
+reqwest = { version = "0.11", default-features = false, features = ["json"] }
 evif-core = { path = "../../crates/evif-core" }
 evif-plugins = { path = "../../crates/evif-plugins", features = ["sqlfs"] }
 evif-rest = { path = "../../crates/evif-rest" }
+serde_json = { workspace = true }

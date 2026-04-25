@@ -3,16 +3,11 @@
 // 提供租户隔离和多租户管理功能
 
 use crate::{RestError, RestResult};
-use axum::{
-    extract::State,
-    http::HeaderValue,
-    response::IntoResponse,
-    Json,
-};
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::collections::HashMap;
+use axum::{extract::State, http::HeaderValue, response::IntoResponse, Json};
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -24,7 +19,7 @@ pub const DEFAULT_TENANT_ID: &str = "default";
 pub const TENANT_HEADER: &str = "x-tenant-id";
 
 /// Tenant information
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, async_graphql::SimpleObject)]
 pub struct TenantInfo {
     pub id: String,
     pub name: String,
@@ -36,7 +31,7 @@ pub struct TenantInfo {
     pub created_at: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Copy, async_graphql::Enum)]
 #[serde(rename_all = "lowercase")]
 pub enum TenantStatus {
     Active,
@@ -114,13 +109,16 @@ impl TenantState {
 
     fn save_snapshot(path: &Path, tenants: &HashMap<String, TenantInfo>) -> Result<(), String> {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-            fs::create_dir_all(parent).map_err(|e| {
-                format!(
-                    "Failed to create tenant state parent '{}': {}",
-                    parent.display(),
-                    e
-                )
-            })?;
+            if let Err(e) = fs::create_dir_all(parent) {
+                // Ignore "already exists" errors — directory is fine as-is
+                if e.kind() != std::io::ErrorKind::AlreadyExists {
+                    return Err(format!(
+                        "Failed to create tenant state parent '{}': {}",
+                        parent.display(),
+                        e
+                    ));
+                }
+            }
         }
         let content = serde_json::to_string_pretty(tenants)
             .map_err(|e| format!("Failed to serialize tenant state: {}", e))?;
@@ -180,6 +178,56 @@ impl TenantState {
         self.persist(&tenants)
     }
 
+    /// 检查租户是否有足够配额写入指定字节数
+    /// quota=0 表示无限制（不限制）
+    pub fn check_quota(&self, id: &str, additional_bytes: u64) -> bool {
+        let tenants = self.tenants.read();
+        if let Some(tenant) = tenants.get(id) {
+            if tenant.storage_quota == 0 {
+                return true; // unlimited
+            }
+            return tenant.storage_used.saturating_add(additional_bytes) <= tenant.storage_quota;
+        }
+        false // 租户不存在，拒绝写入
+    }
+
+    /// 记录一次写入操作，更新 storage_used
+    /// 返回是否成功
+    pub fn record_write(&self, id: &str, bytes: u64) -> Result<(), String> {
+        let mut tenants = self.tenants.write();
+        if let Some(tenant) = tenants.get_mut(id) {
+            tenant.storage_used = tenant.storage_used.saturating_add(bytes);
+        }
+        self.persist(&tenants)
+    }
+
+    /// Update storage quota for a tenant
+    pub async fn update_storage_quota(&self, id: &str, quota: u64) -> Result<TenantInfo, String> {
+        let mut tenants = self.tenants.write();
+        let tenant = tenants
+            .get_mut(id)
+            .ok_or_else(|| format!("Tenant '{}' not found", id))?;
+        tenant.storage_quota = quota;
+        let info = tenant.clone();
+        self.persist(&tenants)?;
+        Ok(info)
+    }
+
+    /// 同步设置租户存储配额（供测试和初始化使用）
+    pub fn update_storage_quota_sync(&self, id: &str, quota: u64) {
+        let mut tenants = self.tenants.write();
+        if let Some(tenant) = tenants.get_mut(id) {
+            tenant.storage_quota = quota;
+        }
+        // Don't persist here — caller should call persist() explicitly if needed
+    }
+
+    /// 直接插入租户（ID 由调用方指定，用于测试）
+    pub fn insert_tenant(&self, id: &str, tenant: TenantInfo) {
+        let mut tenants = self.tenants.write();
+        tenants.insert(id.to_string(), tenant);
+    }
+
     /// Get the effective tenant ID, defaulting to DEFAULT_TENANT_ID
     pub fn effective_tenant_id(tenant_header: Option<&HeaderValue>) -> String {
         tenant_header
@@ -196,6 +244,12 @@ pub struct CreateTenantRequest {
     pub name: String,
     #[serde(default)]
     pub storage_quota: Option<u64>,
+}
+
+/// Request to update tenant storage quota
+#[derive(Debug, Deserialize)]
+pub struct UpdateQuotaRequest {
+    pub storage_quota: u64,
 }
 
 /// Tenant handlers
@@ -233,7 +287,10 @@ impl TenantHandlers {
         let tenant = state.get_tenant(&tenant_id).await;
         match tenant {
             Some(t) => Ok(Json(t)),
-            None => Err(RestError::NotFound(format!("Tenant {:?} not found", tenant_id))),
+            None => Err(RestError::NotFound(format!(
+                "Tenant {:?} not found",
+                tenant_id
+            ))),
         }
     }
 
@@ -249,10 +306,21 @@ impl TenantHandlers {
         if deleted {
             Ok(Json(serde_json::json!({ "deleted": true })))
         } else {
-            Err(RestError::BadRequest(
-                "Cannot delete default tenant".into(),
-            ))
+            Err(RestError::BadRequest("Cannot delete default tenant".into()))
         }
+    }
+
+    /// PATCH /api/v1/tenants/:id/quota - Update storage quota
+    pub async fn update_quota(
+        State(state): State<TenantState>,
+        tenant_id: axum::extract::Path<String>,
+        Json(req): Json<UpdateQuotaRequest>,
+    ) -> RestResult<impl IntoResponse> {
+        let updated = state
+            .update_storage_quota(&tenant_id, req.storage_quota)
+            .await
+            .map_err(RestError::NotFound)?;
+        Ok(Json(updated))
     }
 
     /// GET /api/v1/tenants/me - Get current tenant info

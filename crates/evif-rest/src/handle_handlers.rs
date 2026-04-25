@@ -545,10 +545,7 @@ impl From<EvifError> for RestError {
 
 impl axum::response::IntoResponse for RestError {
     fn into_response(self) -> axum::response::Response {
-        use axum::{
-            http::StatusCode,
-            Json,
-        };
+        use axum::{http::StatusCode, Json};
         use serde_json::json;
 
         let (status, message) = match self {

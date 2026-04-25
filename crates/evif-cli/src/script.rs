@@ -169,9 +169,7 @@ impl ScriptExecutor {
 
         // Use ControlFlowExecutor with command dispatcher
         executor
-            .execute_script(&content, |cmd| {
-                Self::dispatch_command(cmd, client)
-            })
+            .execute_script(&content, |cmd| Self::dispatch_command(cmd, client))
             .await?;
 
         Ok(())

@@ -2,8 +2,8 @@
 //
 // 测试云存储（S3/OSS）后端集成功能
 
-use evif_rest::create_routes;
 use evif_core::RadixMountTable;
+use evif_rest::create_routes;
 use std::sync::Arc;
 
 /// P16.3-01: Cloud Storage Status Endpoint

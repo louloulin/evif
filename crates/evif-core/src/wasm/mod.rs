@@ -188,9 +188,11 @@ impl WasmPluginManager {
                     .with_name(&config.name)
                     .with_mount_point(&config.mount_point)
                     .with_config(config.config.clone())
-                    .with_security(crate::extism_plugin::SecurityConfig::new()
-                        .with_memory_limit(config.memory_limit)
-                        .with_timeout_ms(config.timeout_ms));
+                    .with_security(
+                        crate::extism_plugin::SecurityConfig::new()
+                            .with_memory_limit(config.memory_limit)
+                            .with_timeout_ms(config.timeout_ms),
+                    );
                 let extism_plugin = crate::extism_plugin::ExtismPlugin::new(extism_config)?;
                 Arc::new(extism_plugin)
             }
@@ -256,10 +258,7 @@ impl WasmPluginManager {
             tracing::info!("Unloaded WASM plugin: {} (id: {})", handle.name, handle.id);
             Ok(())
         } else {
-            Err(EvifError::NotFound(format!(
-                "Plugin not found: {}",
-                id
-            )))
+            Err(EvifError::NotFound(format!("Plugin not found: {}", id)))
         }
     }
 

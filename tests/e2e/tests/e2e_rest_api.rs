@@ -5,67 +5,85 @@
 // Tests 30 REST endpoints to validate the EVIF REST API
 //
 // Requirements:
-// - EVIF server running on http://localhost:8081
+// - Test harness bootstraps an in-process EVIF server on an ephemeral port
 
 use reqwest::{Client, Response, StatusCode};
 use serde_json::Value;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use evif_core::{EvifPlugin, RadixMountTable};
 use evif_plugins::MemFsPlugin;
 use evif_rest::create_routes;
 
-const BASE_URL: &str = "http://localhost:8081/api/v1";
 const TEST_TIMEOUT: Duration = Duration::from_secs(60);
-static SERVER_STARTED: OnceLock<()> = OnceLock::new();
+static SERVER_BASE_URL: OnceLock<String> = OnceLock::new();
+static TEST_GUARD: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
 
 struct TestContext {
     client: Client,
+    base_url: String,
+    _guard: OwnedMutexGuard<()>,
 }
 
 impl TestContext {
-    fn new() -> Self {
-        ensure_server_running();
+    async fn new() -> Self {
+        let guard = TEST_GUARD
+            .get_or_init(|| Arc::new(Mutex::new(())))
+            .clone()
+            .lock_owned()
+            .await;
+        let base_url = ensure_server_running();
         Self {
             client: Client::builder()
                 .timeout(TEST_TIMEOUT)
                 .build()
                 .expect("Failed to create HTTP client"),
+            base_url,
+            _guard: guard,
         }
     }
 }
 
-fn ensure_server_running() {
-    SERVER_STARTED.get_or_init(|| {
-        std::thread::spawn(|| {
-            let runtime = tokio::runtime::Runtime::new().expect("runtime");
-            runtime.block_on(async {
-                let mount_table = Arc::new(RadixMountTable::new());
-                let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-                mount_table
-                    .mount("/mem".to_string(), mem)
-                    .await
-                    .expect("mount memfs");
+fn ensure_server_running() -> String {
+    SERVER_BASE_URL
+        .get_or_init(|| {
+            let (tx, rx) = std::sync::mpsc::channel();
 
-                let app = create_routes(mount_table);
-                let listener = tokio::net::TcpListener::bind("127.0.0.1:8081")
-                    .await
-                    .expect("bind 8081");
-                axum::serve(listener, app.into_make_service())
-                    .await
-                    .expect("serve");
+            std::thread::spawn(move || {
+                let runtime = tokio::runtime::Runtime::new().expect("runtime");
+                runtime.block_on(async {
+                    let mount_table = Arc::new(RadixMountTable::new());
+                    let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
+                    mount_table
+                        .mount("/mem".to_string(), mem)
+                        .await
+                        .expect("mount memfs");
+
+                    let app = create_routes(mount_table);
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                        .await
+                        .expect("bind ephemeral port");
+                    let port = listener.local_addr().expect("listener addr").port();
+                    tx.send(format!("http://127.0.0.1:{}/api/v1", port))
+                        .expect("send base url");
+                    axum::serve(listener, app.into_make_service())
+                        .await
+                        .expect("serve");
+                });
             });
-        });
 
-        std::thread::sleep(Duration::from_millis(150));
-    });
+            rx.recv().expect("receive base url")
+        })
+        .clone()
 }
 
 /// Helper: Check if server is running
 async fn check_server_ready(client: &Client) -> bool {
+    let base_url = ensure_server_running();
     client
-        .get(format!("{}/health", BASE_URL.replace("/api/v1", "")))
+        .get(format!("{}/health", base_url.replace("/api/v1", "")))
         .send()
         .await
         .map(|r| r.status().is_success())
@@ -106,11 +124,11 @@ async fn assert_status(resp: Response, expected: StatusCode) -> Value {
 
 #[tokio::test]
 async fn e2e_01_health_root() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/health", BASE_URL.replace("/api/v1", "")))
+        .get(format!("{}/health", ctx.base_url.replace("/api/v1", "")))
         .send()
         .await
         .expect("Health request failed");
@@ -123,11 +141,11 @@ async fn e2e_01_health_root() {
 
 #[tokio::test]
 async fn e2e_02_health_v1() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/health", BASE_URL))
+        .get(format!("{}/health", ctx.base_url))
         .send()
         .await
         .expect("Health v1 request failed");
@@ -145,11 +163,11 @@ async fn e2e_02_health_v1() {
 
 #[tokio::test]
 async fn e2e_03_list_mounts() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/mounts", BASE_URL))
+        .get(format!("{}/mounts", ctx.base_url))
         .send()
         .await
         .expect("List mounts request failed");
@@ -162,11 +180,11 @@ async fn e2e_03_list_mounts() {
 
 #[tokio::test]
 async fn e2e_04_mount_plugin() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .post(format!("{}/mount", BASE_URL))
+        .post(format!("{}/mount", ctx.base_url))
         .json(&serde_json::json!({
             "plugin": "localfs",
             "path": "/e2e-test-mount",
@@ -184,7 +202,7 @@ async fn e2e_04_mount_plugin() {
     // Cleanup
     let _ = ctx
         .client
-        .post(format!("{}/unmount", BASE_URL))
+        .post(format!("{}/unmount", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/e2e-test-mount"
         }))
@@ -194,12 +212,12 @@ async fn e2e_04_mount_plugin() {
 
 #[tokio::test]
 async fn e2e_05_unmount_plugin() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // First mount
     let _ = ctx
         .client
-        .post(format!("{}/mount", BASE_URL))
+        .post(format!("{}/mount", ctx.base_url))
         .json(&serde_json::json!({
             "plugin": "memfs",
             "path": "/e2e-test-unmount"
@@ -210,7 +228,7 @@ async fn e2e_05_unmount_plugin() {
     // Then unmount
     let response = ctx
         .client
-        .post(format!("{}/unmount", BASE_URL))
+        .post(format!("{}/unmount", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/e2e-test-unmount"
         }))
@@ -227,11 +245,11 @@ async fn e2e_05_unmount_plugin() {
 
 #[tokio::test]
 async fn e2e_06_list_plugins() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/plugins", BASE_URL))
+        .get(format!("{}/plugins", ctx.base_url))
         .send()
         .await
         .expect("List plugins request failed");
@@ -244,11 +262,11 @@ async fn e2e_06_list_plugins() {
 
 #[tokio::test]
 async fn e2e_07_get_plugin_config() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/plugins/localfs/config", BASE_URL))
+        .get(format!("{}/plugins/localfs/config", ctx.base_url))
         .send()
         .await
         .expect("Get plugin config request failed");
@@ -261,11 +279,11 @@ async fn e2e_07_get_plugin_config() {
 
 #[tokio::test]
 async fn e2e_08_get_plugin_readme() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/plugins/localfs/readme", BASE_URL))
+        .get(format!("{}/plugins/localfs/readme", ctx.base_url))
         .send()
         .await
         .expect("Get plugin readme request failed");
@@ -278,11 +296,11 @@ async fn e2e_08_get_plugin_readme() {
 
 #[tokio::test]
 async fn e2e_09_plugin_not_found() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/plugins/nonexistent/config", BASE_URL))
+        .get(format!("{}/plugins/nonexistent/config", ctx.base_url))
         .send()
         .await
         .expect("Plugin not found request failed");
@@ -296,7 +314,7 @@ async fn e2e_09_plugin_not_found() {
 
 #[tokio::test]
 async fn e2e_10_create_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Use timestamp to ensure unique path
     let timestamp = std::time::SystemTime::now()
@@ -306,7 +324,7 @@ async fn e2e_10_create_file() {
 
     let response = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": format!("/mem/e2e_test_{}.txt", timestamp),
             "content": "Hello E2E"
@@ -326,7 +344,7 @@ async fn e2e_10_create_file() {
 
 #[tokio::test]
 async fn e2e_11_read_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Use timestamp for unique path
     let timestamp = std::time::SystemTime::now()
@@ -338,7 +356,7 @@ async fn e2e_11_read_file() {
     // First create the file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": file_path
         }))
@@ -348,7 +366,7 @@ async fn e2e_11_read_file() {
     // Then write content
     let _ = ctx
         .client
-        .put(format!("{}/files", BASE_URL))
+        .put(format!("{}/files", ctx.base_url))
         .query(&[("path", &file_path)])
         .json(&serde_json::json!({
             "data": "Read test content"
@@ -359,7 +377,7 @@ async fn e2e_11_read_file() {
     // Then read it
     let response = ctx
         .client
-        .get(format!("{}/files", BASE_URL))
+        .get(format!("{}/files", ctx.base_url))
         .query(&[("path", &file_path)])
         .send()
         .await
@@ -372,11 +390,11 @@ async fn e2e_11_read_file() {
 
 #[tokio::test]
 async fn e2e_12_read_file_not_found() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/files", BASE_URL))
+        .get(format!("{}/files", ctx.base_url))
         .query(&[("path", "/mem/nonexistent.txt")])
         .send()
         .await
@@ -387,7 +405,7 @@ async fn e2e_12_read_file_not_found() {
 
 #[tokio::test]
 async fn e2e_13_write_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -398,7 +416,7 @@ async fn e2e_13_write_file() {
     // First create empty file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": file_path
         }))
@@ -408,7 +426,7 @@ async fn e2e_13_write_file() {
     // Write initial content
     let _ = ctx
         .client
-        .put(format!("{}/files", BASE_URL))
+        .put(format!("{}/files", ctx.base_url))
         .query(&[("path", &file_path)])
         .json(&serde_json::json!({
             "data": "Initial"
@@ -419,7 +437,7 @@ async fn e2e_13_write_file() {
     // Then write updated content
     let response = ctx
         .client
-        .put(format!("{}/files", BASE_URL))
+        .put(format!("{}/files", ctx.base_url))
         .query(&[("path", &file_path)])
         .json(&serde_json::json!({
             "data": "Updated content"
@@ -433,7 +451,7 @@ async fn e2e_13_write_file() {
 
 #[tokio::test]
 async fn e2e_14_delete_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -444,7 +462,7 @@ async fn e2e_14_delete_file() {
     // First create empty file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": file_path
         }))
@@ -454,7 +472,7 @@ async fn e2e_14_delete_file() {
     // Then delete
     let response = ctx
         .client
-        .delete(format!("{}/files", BASE_URL))
+        .delete(format!("{}/files", ctx.base_url))
         .query(&[("path", &file_path)])
         .send()
         .await
@@ -465,7 +483,7 @@ async fn e2e_14_delete_file() {
     // Verify deleted
     let read_resp = ctx
         .client
-        .get(format!("{}/files", BASE_URL))
+        .get(format!("{}/files", ctx.base_url))
         .query(&[("path", &file_path)])
         .send()
         .await
@@ -480,7 +498,7 @@ async fn e2e_14_delete_file() {
 
 #[tokio::test]
 async fn e2e_15_create_directory() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -489,7 +507,7 @@ async fn e2e_15_create_directory() {
 
     let response = ctx
         .client
-        .post(format!("{}/directories", BASE_URL))
+        .post(format!("{}/directories", ctx.base_url))
         .json(&serde_json::json!({
             "path": format!("/mem/e2e_test_dir_{}", timestamp)
         }))
@@ -507,12 +525,12 @@ async fn e2e_15_create_directory() {
 
 #[tokio::test]
 async fn e2e_16_list_directory() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create some files
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/file1.txt",
             "content": "test1"
@@ -522,7 +540,7 @@ async fn e2e_16_list_directory() {
 
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/file2.txt",
             "content": "test2"
@@ -533,7 +551,7 @@ async fn e2e_16_list_directory() {
     // List directory
     let response = ctx
         .client
-        .get(format!("{}/directories", BASE_URL))
+        .get(format!("{}/directories", ctx.base_url))
         .query(&[("path", "/mem")])
         .send()
         .await
@@ -557,7 +575,7 @@ async fn e2e_16_list_directory() {
 
 #[tokio::test]
 async fn e2e_17_delete_directory() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -568,7 +586,7 @@ async fn e2e_17_delete_directory() {
     // Create directory
     let _ = ctx
         .client
-        .post(format!("{}/directories", BASE_URL))
+        .post(format!("{}/directories", ctx.base_url))
         .json(&serde_json::json!({
             "path": dir_path
         }))
@@ -578,7 +596,7 @@ async fn e2e_17_delete_directory() {
     // Delete it
     let response = ctx
         .client
-        .delete(format!("{}/directories", BASE_URL))
+        .delete(format!("{}/directories", ctx.base_url))
         .query(&[("path", &dir_path)])
         .send()
         .await
@@ -593,7 +611,7 @@ async fn e2e_17_delete_directory() {
 
 #[tokio::test]
 async fn e2e_18_stat_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -604,7 +622,7 @@ async fn e2e_18_stat_file() {
     // Create file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": file_path
         }))
@@ -614,7 +632,7 @@ async fn e2e_18_stat_file() {
     // Stat it
     let response = ctx
         .client
-        .get(format!("{}/stat", BASE_URL))
+        .get(format!("{}/stat", ctx.base_url))
         .query(&[("path", &file_path)])
         .send()
         .await
@@ -629,12 +647,12 @@ async fn e2e_18_stat_file() {
 
 #[tokio::test]
 async fn e2e_19_digest_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_digest_test.txt",
             "content": "digest test content"
@@ -645,7 +663,7 @@ async fn e2e_19_digest_file() {
     // Calculate digest
     let response = ctx
         .client
-        .post(format!("{}/digest", BASE_URL))
+        .post(format!("{}/digest", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_digest_test.txt",
             "algorithm": "sha256"
@@ -661,12 +679,12 @@ async fn e2e_19_digest_file() {
 
 #[tokio::test]
 async fn e2e_20_touch_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_touch_test.txt",
             "content": "touch test"
@@ -677,7 +695,7 @@ async fn e2e_20_touch_file() {
     // Touch it
     let response = ctx
         .client
-        .post(format!("{}/touch", BASE_URL))
+        .post(format!("{}/touch", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_touch_test.txt"
         }))
@@ -694,12 +712,12 @@ async fn e2e_20_touch_file() {
 
 #[tokio::test]
 async fn e2e_21_rename_file() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_rename_old.txt",
             "content": "rename test"
@@ -710,7 +728,7 @@ async fn e2e_21_rename_file() {
     // Rename it
     let response = ctx
         .client
-        .post(format!("{}/rename", BASE_URL))
+        .post(format!("{}/rename", ctx.base_url))
         .json(&serde_json::json!({
             "from": "/mem/e2e_rename_old.txt",
             "to": "/mem/e2e_rename_new.txt"
@@ -724,12 +742,12 @@ async fn e2e_21_rename_file() {
 
 #[tokio::test]
 async fn e2e_22_grep_content() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create files with content
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/grep1.txt",
             "content": "hello world\nfoo bar\ntest pattern"
@@ -739,7 +757,7 @@ async fn e2e_22_grep_content() {
 
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/grep2.txt",
             "content": "pattern match\nno match here"
@@ -750,7 +768,7 @@ async fn e2e_22_grep_content() {
     // Search for pattern
     let response = ctx
         .client
-        .post(format!("{}/grep", BASE_URL))
+        .post(format!("{}/grep", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem",
             "pattern": "pattern"
@@ -773,12 +791,12 @@ async fn e2e_22_grep_content() {
 #[tokio::test]
 #[ignore = "HandleFS not yet implemented"]
 async fn e2e_23_open_handle() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_handle_test.txt",
             "content": "handle test content"
@@ -789,7 +807,7 @@ async fn e2e_23_open_handle() {
     // Open handle
     let response = ctx
         .client
-        .post(format!("{}/handles/open", BASE_URL))
+        .post(format!("{}/handles/open", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_handle_test.txt",
             "flags": "r"
@@ -807,12 +825,12 @@ async fn e2e_23_open_handle() {
 #[tokio::test]
 #[ignore = "HandleFS not yet implemented"]
 async fn e2e_24_get_handle() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create and open file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_get_handle_test.txt",
             "content": "test"
@@ -822,7 +840,7 @@ async fn e2e_24_get_handle() {
 
     let open_resp = ctx
         .client
-        .post(format!("{}/handles/open", BASE_URL))
+        .post(format!("{}/handles/open", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_get_handle_test.txt",
             "flags": "r"
@@ -840,7 +858,7 @@ async fn e2e_24_get_handle() {
     // Get handle info
     let response = ctx
         .client
-        .get(format!("{}/handles/{}", BASE_URL, handle_id))
+        .get(format!("{}/handles/{}", ctx.base_url, handle_id))
         .send()
         .await
         .expect("Get handle request failed");
@@ -851,12 +869,12 @@ async fn e2e_24_get_handle() {
 #[tokio::test]
 #[ignore = "HandleFS not yet implemented"]
 async fn e2e_25_read_handle() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create and open file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_read_handle_test.txt",
             "content": "handle read test"
@@ -866,7 +884,7 @@ async fn e2e_25_read_handle() {
 
     let open_resp = ctx
         .client
-        .post(format!("{}/handles/open", BASE_URL))
+        .post(format!("{}/handles/open", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_read_handle_test.txt",
             "flags": "r"
@@ -884,7 +902,7 @@ async fn e2e_25_read_handle() {
     // Read from handle
     let response = ctx
         .client
-        .post(format!("{}/handles/{}/read", BASE_URL, handle_id))
+        .post(format!("{}/handles/{}/read", ctx.base_url, handle_id))
         .json(&serde_json::json!({
             "size": 1024
         }))
@@ -900,12 +918,12 @@ async fn e2e_25_read_handle() {
 #[tokio::test]
 #[ignore = "HandleFS not yet implemented"]
 async fn e2e_26_close_handle() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create and open file
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_close_handle_test.txt",
             "content": "close test"
@@ -915,7 +933,7 @@ async fn e2e_26_close_handle() {
 
     let open_resp = ctx
         .client
-        .post(format!("{}/handles/open", BASE_URL))
+        .post(format!("{}/handles/open", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/e2e_close_handle_test.txt",
             "flags": "r"
@@ -933,7 +951,7 @@ async fn e2e_26_close_handle() {
     // Close handle
     let response = ctx
         .client
-        .post(format!("{}/handles/{}/close", BASE_URL, handle_id))
+        .post(format!("{}/handles/{}/close", ctx.base_url, handle_id))
         .send()
         .await
         .expect("Close handle request failed");
@@ -947,12 +965,12 @@ async fn e2e_26_close_handle() {
 
 #[tokio::test]
 async fn e2e_27_batch_copy() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create source files
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/batch_src1.txt",
             "content": "source 1"
@@ -962,7 +980,7 @@ async fn e2e_27_batch_copy() {
 
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/batch_src2.txt",
             "content": "source 2"
@@ -973,7 +991,7 @@ async fn e2e_27_batch_copy() {
     // Batch copy
     let response = ctx
         .client
-        .post(format!("{}/batch/copy", BASE_URL))
+        .post(format!("{}/batch/copy", ctx.base_url))
         .json(&serde_json::json!({
             "sources": ["/mem/batch_src1.txt", "/mem/batch_src2.txt"],
             "destination": "/mem"
@@ -987,12 +1005,12 @@ async fn e2e_27_batch_copy() {
 
 #[tokio::test]
 async fn e2e_28_batch_delete() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // Create files
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/batch_del1.txt",
             "content": "delete 1"
@@ -1002,7 +1020,7 @@ async fn e2e_28_batch_delete() {
 
     let _ = ctx
         .client
-        .post(format!("{}/files", BASE_URL))
+        .post(format!("{}/files", ctx.base_url))
         .json(&serde_json::json!({
             "path": "/mem/batch_del2.txt",
             "content": "delete 2"
@@ -1013,7 +1031,7 @@ async fn e2e_28_batch_delete() {
     // Batch delete
     let response = ctx
         .client
-        .post(format!("{}/batch/delete", BASE_URL))
+        .post(format!("{}/batch/delete", ctx.base_url))
         .json(&serde_json::json!({
             "paths": [
                 "/mem/batch_del1.txt",
@@ -1033,11 +1051,11 @@ async fn e2e_28_batch_delete() {
 
 #[tokio::test]
 async fn e2e_29_metrics_traffic() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/metrics/traffic", BASE_URL))
+        .get(format!("{}/metrics/traffic", ctx.base_url))
         .send()
         .await
         .expect("Traffic metrics request failed");
@@ -1050,11 +1068,11 @@ async fn e2e_29_metrics_traffic() {
 
 #[tokio::test]
 async fn e2e_30_metrics_operations() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     let response = ctx
         .client
-        .get(format!("{}/metrics/operations", BASE_URL))
+        .get(format!("{}/metrics/operations", ctx.base_url))
         .send()
         .await
         .expect("Operations metrics request failed");
@@ -1071,7 +1089,7 @@ async fn e2e_30_metrics_operations() {
 
 #[tokio::test]
 async fn e2e_server_ready() {
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
 
     // This test checks if the server is running
     // Run this first: cargo test e2e_server_ready
@@ -1079,6 +1097,6 @@ async fn e2e_server_ready() {
     assert!(
         check_server_ready(&ctx.client).await,
         "EVIF server is not running on {}. Start it with: cargo run --bin evif-rest",
-        BASE_URL
+        ctx.base_url
     );
 }

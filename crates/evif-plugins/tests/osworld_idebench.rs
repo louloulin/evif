@@ -49,11 +49,20 @@ async fn osworld_file_system_state_after_write() {
     // 验证目录结构
     let project_entries = plugin.readdir("/test/project").await.expect("list project");
     let project_names: Vec<String> = project_entries.into_iter().map(|e| e.name).collect();
-    assert!(project_names.contains(&"src".to_string()), "should have src dir");
-    assert!(project_names.contains(&"tests".to_string()), "should have tests dir");
+    assert!(
+        project_names.contains(&"src".to_string()),
+        "should have src dir"
+    );
+    assert!(
+        project_names.contains(&"tests".to_string()),
+        "should have tests dir"
+    );
 
     // 验证文件存在
-    let src_stat = plugin.stat("/test/project/src/main.rs").await.expect("stat main.rs");
+    let src_stat = plugin
+        .stat("/test/project/src/main.rs")
+        .await
+        .expect("stat main.rs");
     assert!(!src_stat.is_dir, "main.rs should be a file");
 }
 
@@ -100,7 +109,12 @@ async fn osworld_file_modification_time() {
         .await
         .expect("create");
     plugin
-        .write("/test/timestamp.txt", b"content".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/test/timestamp.txt",
+            b"content".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write");
 
@@ -123,10 +137,22 @@ async fn osworld_nested_directory_operations() {
 
     // 创建多层嵌套目录
     plugin.mkdir("/test", 0o755).await.expect("mkdir /test");
-    plugin.mkdir("/test/deep", 0o755).await.expect("mkdir /test/deep");
-    plugin.mkdir("/test/deep/a", 0o755).await.expect("mkdir /test/deep/a");
-    plugin.mkdir("/test/deep/a/b", 0o755).await.expect("mkdir /test/deep/a/b");
-    plugin.mkdir("/test/deep/a/b/c", 0o755).await.expect("mkdir /test/deep/a/b/c");
+    plugin
+        .mkdir("/test/deep", 0o755)
+        .await
+        .expect("mkdir /test/deep");
+    plugin
+        .mkdir("/test/deep/a", 0o755)
+        .await
+        .expect("mkdir /test/deep/a");
+    plugin
+        .mkdir("/test/deep/a/b", 0o755)
+        .await
+        .expect("mkdir /test/deep/a/b");
+    plugin
+        .mkdir("/test/deep/a/b/c", 0o755)
+        .await
+        .expect("mkdir /test/deep/a/b/c");
 
     // 在最深目录写入文件
     plugin
@@ -173,7 +199,10 @@ async fn idebench_read_file() {
     let plugin = ContextFsPlugin::new();
 
     plugin.mkdir("/test", 0o755).await.expect("mkdir /test");
-    plugin.mkdir("/test/src", 0o755).await.expect("mkdir /test/src");
+    plugin
+        .mkdir("/test/src", 0o755)
+        .await
+        .expect("mkdir /test/src");
     plugin
         .create("/test/src/lib.rs", 0o644)
         .await
@@ -198,10 +227,7 @@ async fn idebench_read_file() {
         content_str.contains("fn add"),
         "Content should contain 'fn add'"
     );
-    assert!(
-        content_str.contains("i32"),
-        "Content should contain 'i32'"
-    );
+    assert!(content_str.contains("i32"), "Content should contain 'i32'");
 }
 
 /// IDEBench-02: 目录导航任务
@@ -210,10 +236,22 @@ async fn idebench_navigation() {
     let plugin = ContextFsPlugin::new();
 
     // 创建典型 Rust 项目结构
-    plugin.mkdir("/test_project", 0o755).await.expect("create project");
-    plugin.mkdir("/test_project/src", 0o755).await.expect("create src");
-    plugin.mkdir("/test_project/tests", 0o755).await.expect("create tests");
-    plugin.mkdir("/test_project/target", 0o755).await.expect("create target");
+    plugin
+        .mkdir("/test_project", 0o755)
+        .await
+        .expect("create project");
+    plugin
+        .mkdir("/test_project/src", 0o755)
+        .await
+        .expect("create src");
+    plugin
+        .mkdir("/test_project/tests", 0o755)
+        .await
+        .expect("create tests");
+    plugin
+        .mkdir("/test_project/target", 0o755)
+        .await
+        .expect("create target");
 
     plugin
         .create("/test_project/Cargo.toml", 0o644)
@@ -234,8 +272,14 @@ async fn idebench_navigation() {
     let root_names: Vec<String> = root_entries.into_iter().map(|e| e.name).collect();
 
     assert!(root_names.contains(&"src".to_string()), "should have src/");
-    assert!(root_names.contains(&"tests".to_string()), "should have tests/");
-    assert!(root_names.contains(&"Cargo.toml".to_string()), "should have Cargo.toml");
+    assert!(
+        root_names.contains(&"tests".to_string()),
+        "should have tests/"
+    );
+    assert!(
+        root_names.contains(&"Cargo.toml".to_string()),
+        "should have Cargo.toml"
+    );
 
     // 导航到 src/
     let src_entries = plugin.readdir("/test_project/src").await.expect("list src");
@@ -302,8 +346,14 @@ async fn idebench_multi_file_edits() {
         .await
         .expect("read lib.rs");
     let lib_str = String::from_utf8_lossy(&lib_content);
-    assert!(lib_str.contains("module1"), "lib.rs should reference module1");
-    assert!(lib_str.contains("module2"), "lib.rs should reference module2");
+    assert!(
+        lib_str.contains("module1"),
+        "lib.rs should reference module1"
+    );
+    assert!(
+        lib_str.contains("module2"),
+        "lib.rs should reference module2"
+    );
 }
 
 /// IDEBench-05: 文件重命名任务
@@ -366,7 +416,12 @@ async fn idebench_large_file_operations() {
         .await
         .expect("create");
     plugin
-        .write("/test/large.rs", content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/test/large.rs",
+            content.as_bytes().to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write");
 

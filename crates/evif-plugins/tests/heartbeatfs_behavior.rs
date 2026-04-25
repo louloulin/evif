@@ -5,7 +5,10 @@ use evif_plugins::HeartbeatFsPlugin;
 async fn heartbeatfs_rejects_missing_item_directory_and_exposes_root_readme() {
     let plugin = HeartbeatFsPlugin::new();
 
-    let err = plugin.readdir("/missing").await.expect_err("missing item should fail");
+    let err = plugin
+        .readdir("/missing")
+        .await
+        .expect_err("missing item should fail");
     assert!(matches!(err, evif_core::EvifError::NotFound(_)));
 
     let readme = plugin.read("/README", 0, 0).await.expect("readme");

@@ -4,8 +4,8 @@
 //
 // 对标 IDE-Bench 评估 AI IDE Agent 的文件读写和导航任务
 
-use evif_rest::create_routes;
 use evif_core::RadixMountTable;
+use evif_rest::create_routes;
 use std::sync::Arc;
 
 async fn setup_server() -> (Arc<RadixMountTable>, String) {
@@ -229,8 +229,5 @@ async fn idebench_large_file_performance() {
     );
 
     // 记录性能数据
-    println!(
-        "Large file: write={}ms, read={}ms",
-        write_ms, read_ms
-    );
+    println!("Large file: write={}ms, read={}ms", write_ms, read_ms);
 }

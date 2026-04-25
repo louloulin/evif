@@ -3,10 +3,7 @@
 // 流量监控 HTTP 接口
 // 对标 AGFS Traffic Monitor
 
-use axum::{
-    extract::State,
-    Json,
-};
+use axum::{extract::State, Json};
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -44,6 +41,48 @@ pub struct TrafficStats {
     pub other_success_count: AtomicU64,
     pub other_error_count: AtomicU64,
     pub other_latency_micros_total: AtomicU64,
+    // N7: Histogram buckets for request duration — exponential buckets in seconds
+    pub request_duration_bucket_5ms: AtomicU64,
+    pub request_duration_bucket_10ms: AtomicU64,
+    pub request_duration_bucket_25ms: AtomicU64,
+    pub request_duration_bucket_50ms: AtomicU64,
+    pub request_duration_bucket_100ms: AtomicU64,
+    pub request_duration_bucket_250ms: AtomicU64,
+    pub request_duration_bucket_500ms: AtomicU64,
+    pub request_duration_bucket_1s: AtomicU64,
+    pub request_duration_bucket_2500ms: AtomicU64,
+    pub request_duration_bucket_5s: AtomicU64,
+    pub request_duration_bucket_10s: AtomicU64,
+    pub request_duration_sum_micros: AtomicU64,
+}
+
+impl TrafficStats {
+    /// Record a request latency into the correct histogram bucket.
+    /// Records into ALL buckets that the latency falls below (cumulative histogram).
+    pub fn record_request_duration_secs(&self, duration_secs: f64) {
+        self.request_duration_sum_micros
+            .fetch_add((duration_secs * 1_000_000.0) as u64, Ordering::Relaxed);
+
+        let buckets: &[(&AtomicU64, f64)] = &[
+            (&self.request_duration_bucket_5ms, 0.005),
+            (&self.request_duration_bucket_10ms, 0.01),
+            (&self.request_duration_bucket_25ms, 0.025),
+            (&self.request_duration_bucket_50ms, 0.05),
+            (&self.request_duration_bucket_100ms, 0.1),
+            (&self.request_duration_bucket_250ms, 0.25),
+            (&self.request_duration_bucket_500ms, 0.5),
+            (&self.request_duration_bucket_1s, 1.0),
+            (&self.request_duration_bucket_2500ms, 2.5),
+            (&self.request_duration_bucket_5s, 5.0),
+            (&self.request_duration_bucket_10s, 10.0),
+        ];
+
+        for (counter, threshold) in buckets {
+            if duration_secs <= *threshold {
+                counter.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
 }
 
 /// 流量统计响应
@@ -195,6 +234,39 @@ impl MetricsHandlers {
         stats.other_success_count.store(0, Ordering::Relaxed);
         stats.other_error_count.store(0, Ordering::Relaxed);
         stats.other_latency_micros_total.store(0, Ordering::Relaxed);
+        // N7: Reset histogram buckets
+        stats
+            .request_duration_bucket_5ms
+            .store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_10ms
+            .store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_25ms
+            .store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_50ms
+            .store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_100ms
+            .store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_250ms
+            .store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_500ms
+            .store(0, Ordering::Relaxed);
+        stats.request_duration_bucket_1s.store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_2500ms
+            .store(0, Ordering::Relaxed);
+        stats.request_duration_bucket_5s.store(0, Ordering::Relaxed);
+        stats
+            .request_duration_bucket_10s
+            .store(0, Ordering::Relaxed);
+        stats
+            .request_duration_sum_micros
+            .store(0, Ordering::Relaxed);
 
         Json(serde_json::json!({
             "message": "Metrics reset successfully"

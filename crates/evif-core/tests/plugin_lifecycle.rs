@@ -124,9 +124,11 @@ async fn test_unmount_calls_plugin_shutdown() {
     let plugin = Arc::new(LifecyclePlugin::new(flags.clone())) as Arc<dyn EvifPlugin>;
     let mount_table = RadixMountTable::new();
 
-    mount_table.mount("/lifecycle".to_string(), plugin).await.unwrap();
+    mount_table
+        .mount("/lifecycle".to_string(), plugin)
+        .await
+        .unwrap();
     mount_table.unmount("/lifecycle").await.unwrap();
 
     assert!(flags.shutdown.load(Ordering::SeqCst));
 }
-

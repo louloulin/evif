@@ -34,7 +34,10 @@ async fn skill_and_pipe_plugins_can_be_mounted_via_rest() {
             .await;
 
         let skill_res = client
-            .get(format!("{}/api/v1/files?path=/skills/code-review/SKILL.md", base))
+            .get(format!(
+                "{}/api/v1/files?path=/skills/code-review/SKILL.md",
+                base
+            ))
             .send()
             .await;
         let pipe_res = client

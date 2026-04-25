@@ -350,8 +350,6 @@ mod inner {
 
 #[cfg(not(feature = "metrics"))]
 mod inner {
-    
-    
 
     /// Stub metrics when metrics feature is not enabled.
     #[derive(Clone, Default)]

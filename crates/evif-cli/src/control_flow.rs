@@ -43,7 +43,10 @@ impl ControlFlowExecutor {
 
     /// 获取变量
     pub fn get_variable(&self, name: &str) -> Option<String> {
-        self.variables.get(name).cloned().or_else(|| std::env::var(name).ok())
+        self.variables
+            .get(name)
+            .cloned()
+            .or_else(|| std::env::var(name).ok())
     }
 
     /// 删除变量
@@ -76,7 +79,7 @@ impl ControlFlowExecutor {
                     // $((arithmetic))
                     Some('(') if next2 == Some('(') => {
                         pos += 2; // consume ((
-                        // Collect everything until matching ))
+                                  // Collect everything until matching ))
                         let mut expr = String::new();
                         // We need to find )) that closes the $(( — track nesting of inner ()
                         let mut paren_depth = 0;
@@ -217,7 +220,9 @@ impl ControlFlowExecutor {
                 if let Some(second_colon) = rest.find(':') {
                     let offset_str = &rest[..second_colon];
                     let length_str = &rest[second_colon + 1..];
-                    if let (Ok(offset), Ok(length)) = (offset_str.parse::<usize>(), length_str.parse::<usize>()) {
+                    if let (Ok(offset), Ok(length)) =
+                        (offset_str.parse::<usize>(), length_str.parse::<usize>())
+                    {
                         let val = self.resolve_special_var(var_name);
                         let chars: Vec<char> = val.chars().collect();
                         if offset < chars.len() {
@@ -278,9 +283,17 @@ impl ControlFlowExecutor {
 
         while let Some(&c) = chars.peek() {
             match c {
-                ' ' | '\t' => { chars.next(); }
-                '+' => { chars.next(); tokens.push(ArithToken::Plus); }
-                '-' => { chars.next(); tokens.push(ArithToken::Minus); }
+                ' ' | '\t' => {
+                    chars.next();
+                }
+                '+' => {
+                    chars.next();
+                    tokens.push(ArithToken::Plus);
+                }
+                '-' => {
+                    chars.next();
+                    tokens.push(ArithToken::Minus);
+                }
                 '*' => {
                     chars.next();
                     if chars.peek() == Some(&'*') {
@@ -290,10 +303,22 @@ impl ControlFlowExecutor {
                         tokens.push(ArithToken::Mul);
                     }
                 }
-                '/' => { chars.next(); tokens.push(ArithToken::Div); }
-                '%' => { chars.next(); tokens.push(ArithToken::Mod); }
-                '(' => { chars.next(); tokens.push(ArithToken::LParen); }
-                ')' => { chars.next(); tokens.push(ArithToken::RParen); }
+                '/' => {
+                    chars.next();
+                    tokens.push(ArithToken::Div);
+                }
+                '%' => {
+                    chars.next();
+                    tokens.push(ArithToken::Mod);
+                }
+                '(' => {
+                    chars.next();
+                    tokens.push(ArithToken::LParen);
+                }
+                ')' => {
+                    chars.next();
+                    tokens.push(ArithToken::RParen);
+                }
                 '0'..='9' | '.' => {
                     let mut num = String::new();
                     while let Some(&nc) = chars.peek() {
@@ -327,21 +352,46 @@ impl ControlFlowExecutor {
         let mut left = self.parse_arith_multiplicative(tokens, pos)?;
         while *pos < tokens.len() {
             match &tokens[*pos] {
-                ArithToken::Plus => { *pos += 1; left += self.parse_arith_multiplicative(tokens, pos)?; }
-                ArithToken::Minus => { *pos += 1; left -= self.parse_arith_multiplicative(tokens, pos)?; }
+                ArithToken::Plus => {
+                    *pos += 1;
+                    left += self.parse_arith_multiplicative(tokens, pos)?;
+                }
+                ArithToken::Minus => {
+                    *pos += 1;
+                    left -= self.parse_arith_multiplicative(tokens, pos)?;
+                }
                 _ => break,
             }
         }
         Ok(left)
     }
 
-    fn parse_arith_multiplicative(&self, tokens: &[ArithToken], pos: &mut usize) -> Result<f64, ()> {
+    fn parse_arith_multiplicative(
+        &self,
+        tokens: &[ArithToken],
+        pos: &mut usize,
+    ) -> Result<f64, ()> {
         let mut left = self.parse_arith_power(tokens, pos)?;
         while *pos < tokens.len() {
             match &tokens[*pos] {
-                ArithToken::Mul => { *pos += 1; left *= self.parse_arith_power(tokens, pos)?; }
-                ArithToken::Div => { *pos += 1; let right = self.parse_arith_power(tokens, pos)?; if right != 0.0 { left = ((left as i64) / (right as i64)) as f64; } }
-                ArithToken::Mod => { *pos += 1; let right = self.parse_arith_power(tokens, pos)?; if right != 0.0 { left = (left as i64 % right as i64) as f64; } }
+                ArithToken::Mul => {
+                    *pos += 1;
+                    left *= self.parse_arith_power(tokens, pos)?;
+                }
+                ArithToken::Div => {
+                    *pos += 1;
+                    let right = self.parse_arith_power(tokens, pos)?;
+                    if right != 0.0 {
+                        left = ((left as i64) / (right as i64)) as f64;
+                    }
+                }
+                ArithToken::Mod => {
+                    *pos += 1;
+                    let right = self.parse_arith_power(tokens, pos)?;
+                    if right != 0.0 {
+                        left = (left as i64 % right as i64) as f64;
+                    }
+                }
                 _ => break,
             }
         }
@@ -362,8 +412,14 @@ impl ControlFlowExecutor {
     fn parse_arith_unary(&self, tokens: &[ArithToken], pos: &mut usize) -> Result<f64, ()> {
         if *pos < tokens.len() {
             match &tokens[*pos] {
-                ArithToken::Minus => { *pos += 1; Ok(-self.parse_arith_primary(tokens, pos)?) }
-                ArithToken::Plus => { *pos += 1; self.parse_arith_primary(tokens, pos) }
+                ArithToken::Minus => {
+                    *pos += 1;
+                    Ok(-self.parse_arith_primary(tokens, pos)?)
+                }
+                ArithToken::Plus => {
+                    *pos += 1;
+                    self.parse_arith_primary(tokens, pos)
+                }
                 _ => self.parse_arith_primary(tokens, pos),
             }
         } else {
@@ -376,7 +432,11 @@ impl ControlFlowExecutor {
             return Ok(0.0);
         }
         match &tokens[*pos] {
-            ArithToken::Num(n) => { let v = *n; *pos += 1; Ok(v) }
+            ArithToken::Num(n) => {
+                let v = *n;
+                *pos += 1;
+                Ok(v)
+            }
             ArithToken::LParen => {
                 *pos += 1;
                 let v = self.parse_arith_additive(tokens, pos)?;
@@ -401,7 +461,9 @@ impl ControlFlowExecutor {
     {
         let statements = self.parse_statements(script)?;
         for statement in statements {
-            let signal = self.execute_statement(&statement, &mut execute_command).await?;
+            let signal = self
+                .execute_statement(&statement, &mut execute_command)
+                .await?;
             if signal != FlowSignal::None {
                 break;
             }
@@ -508,7 +570,11 @@ impl ControlFlowExecutor {
     }
 
     /// Parse function definition
-    fn parse_function_def(&self, lines: &[&str], i: &mut usize) -> Result<(String, Vec<String>, Vec<Statement>)> {
+    fn parse_function_def(
+        &self,
+        lines: &[&str],
+        i: &mut usize,
+    ) -> Result<(String, Vec<String>, Vec<Statement>)> {
         let first_line = lines[*i - 1].trim();
         let rest = first_line.strip_prefix("fn ").unwrap().trim();
 
@@ -519,7 +585,11 @@ impl ControlFlowExecutor {
         let params = if open_paren < rest.len() {
             let close_paren = rest[open_paren..].find(')').unwrap_or(0);
             let params_str = &rest[open_paren + 1..open_paren + close_paren];
-            params_str.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect()
+            params_str
+                .split(',')
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty())
+                .collect()
         } else {
             Vec::new()
         };
@@ -529,7 +599,12 @@ impl ControlFlowExecutor {
     }
 
     /// Parse until end keyword
-    fn parse_until_end(&self, lines: &[&str], i: &mut usize, end_kw: &str) -> Result<Vec<Statement>> {
+    fn parse_until_end(
+        &self,
+        lines: &[&str],
+        i: &mut usize,
+        end_kw: &str,
+    ) -> Result<Vec<Statement>> {
         let mut block_lines = Vec::new();
         while *i < lines.len() {
             let line = lines[*i].trim();
@@ -543,7 +618,13 @@ impl ControlFlowExecutor {
     }
 
     /// 解析代码块
-    fn parse_block(&self, lines: &[&str], i: &mut usize, start_kw: &str, end_kw: &str) -> Result<(String, Vec<Statement>)> {
+    fn parse_block(
+        &self,
+        lines: &[&str],
+        i: &mut usize,
+        start_kw: &str,
+        end_kw: &str,
+    ) -> Result<(String, Vec<Statement>)> {
         let first_line = lines[*i - 1].trim();
 
         // 检查是否有花括号
@@ -554,7 +635,9 @@ impl ControlFlowExecutor {
                 // fn name(params) { — everything before { is the signature, not condition
                 String::new()
             } else {
-                first_line[start_kw.len() + 1..open_brace].trim().to_string()
+                first_line[start_kw.len() + 1..open_brace]
+                    .trim()
+                    .to_string()
             };
 
             // 收集块内容
@@ -634,157 +717,162 @@ impl ControlFlowExecutor {
         Fut: Future<Output = Result<()>>,
     {
         Box::pin(async move {
-        match statement {
-            Statement::Command(cmd) => {
-                let expanded = self.expand_variables(cmd);
-                // Handle break/continue/return as commands
-                if expanded == "break" {
-                    return Ok(FlowSignal::Break(1));
-                }
-                if let Some(stripped) = expanded.strip_prefix("break ") {
-                    let level: usize = stripped.trim().parse().unwrap_or(1);
-                    return Ok(FlowSignal::Break(level));
-                }
-                if expanded == "continue" {
-                    return Ok(FlowSignal::Continue(1));
-                }
-                if let Some(stripped) = expanded.strip_prefix("continue ") {
-                    let level: usize = stripped.trim().parse().unwrap_or(1);
-                    return Ok(FlowSignal::Continue(level));
-                }
-                if expanded == "return" {
-                    return Ok(FlowSignal::Return(None));
-                }
-                if let Some(stripped) = expanded.strip_prefix("return ") {
-                    let val = stripped.trim().to_string();
-                    return Ok(FlowSignal::Return(Some(val)));
-                }
-                // Handle `set VAR VALUE` to update executor's own variables
-                if let Some(stripped) = expanded.strip_prefix("set ") {
-                    let rest = stripped.trim();
-                    let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
-                    if parts.len() >= 2 {
-                        self.set_variable(parts[0].to_string(), parts[1].to_string());
-                    } else if parts.len() == 1 {
-                        self.set_variable(parts[0].to_string(), String::new());
+            match statement {
+                Statement::Command(cmd) => {
+                    let expanded = self.expand_variables(cmd);
+                    // Handle break/continue/return as commands
+                    if expanded == "break" {
+                        return Ok(FlowSignal::Break(1));
                     }
-                    return Ok(FlowSignal::None);
-                }
-                // Handle `export VAR=VALUE` style
-                if expanded.contains('=') && !expanded.starts_with("echo") {
-                    let eq_pos = expanded.find('=').unwrap();
-                    if eq_pos > 0 {
-                        let var_name = &expanded[..eq_pos];
-                        // Only treat as assignment if var name is a valid identifier
-                        if var_name.chars().all(|c| c.is_alphanumeric() || c == '_') && !var_name.chars().next().unwrap().is_ascii_digit() {
-                            let value = expanded[eq_pos + 1..].to_string();
-                            self.set_variable(var_name.to_string(), value);
-                            return Ok(FlowSignal::None);
+                    if let Some(stripped) = expanded.strip_prefix("break ") {
+                        let level: usize = stripped.trim().parse().unwrap_or(1);
+                        return Ok(FlowSignal::Break(level));
+                    }
+                    if expanded == "continue" {
+                        return Ok(FlowSignal::Continue(1));
+                    }
+                    if let Some(stripped) = expanded.strip_prefix("continue ") {
+                        let level: usize = stripped.trim().parse().unwrap_or(1);
+                        return Ok(FlowSignal::Continue(level));
+                    }
+                    if expanded == "return" {
+                        return Ok(FlowSignal::Return(None));
+                    }
+                    if let Some(stripped) = expanded.strip_prefix("return ") {
+                        let val = stripped.trim().to_string();
+                        return Ok(FlowSignal::Return(Some(val)));
+                    }
+                    // Handle `set VAR VALUE` to update executor's own variables
+                    if let Some(stripped) = expanded.strip_prefix("set ") {
+                        let rest = stripped.trim();
+                        let parts: Vec<&str> = rest.splitn(2, char::is_whitespace).collect();
+                        if parts.len() >= 2 {
+                            self.set_variable(parts[0].to_string(), parts[1].to_string());
+                        } else if parts.len() == 1 {
+                            self.set_variable(parts[0].to_string(), String::new());
+                        }
+                        return Ok(FlowSignal::None);
+                    }
+                    // Handle `export VAR=VALUE` style
+                    if expanded.contains('=') && !expanded.starts_with("echo") {
+                        let eq_pos = expanded.find('=').unwrap();
+                        if eq_pos > 0 {
+                            let var_name = &expanded[..eq_pos];
+                            // Only treat as assignment if var name is a valid identifier
+                            if var_name.chars().all(|c| c.is_alphanumeric() || c == '_')
+                                && !var_name.chars().next().unwrap().is_ascii_digit()
+                            {
+                                let value = expanded[eq_pos + 1..].to_string();
+                                self.set_variable(var_name.to_string(), value);
+                                return Ok(FlowSignal::None);
+                            }
                         }
                     }
-                }
-                // Check for function call
-                let parts: Vec<&str> = expanded.split_whitespace().collect();
-                if let Some(fname) = parts.first() {
-                    if self.functions.contains_key(*fname) {
-                        let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
-                        return self.execute_function_call(fname, &args, execute_command).await;
-                    }
-                }
-                execute_command(expanded).await?;
-                Ok(FlowSignal::None)
-            }
-            Statement::If(condition, then_body, else_body) => {
-                if self.evaluate_condition(condition)? {
-                    for stmt in then_body {
-                        let signal = self.execute_statement(stmt, execute_command).await?;
-                        if signal != FlowSignal::None {
-                            return Ok(signal);
+                    // Check for function call
+                    let parts: Vec<&str> = expanded.split_whitespace().collect();
+                    if let Some(fname) = parts.first() {
+                        if self.functions.contains_key(*fname) {
+                            let args: Vec<String> =
+                                parts[1..].iter().map(|s| s.to_string()).collect();
+                            return self
+                                .execute_function_call(fname, &args, execute_command)
+                                .await;
                         }
                     }
-                } else if let Some(else_stmts) = else_body {
-                    for stmt in else_stmts {
-                        let signal = self.execute_statement(stmt, execute_command).await?;
-                        if signal != FlowSignal::None {
-                            return Ok(signal);
+                    execute_command(expanded).await?;
+                    Ok(FlowSignal::None)
+                }
+                Statement::If(condition, then_body, else_body) => {
+                    if self.evaluate_condition(condition)? {
+                        for stmt in then_body {
+                            let signal = self.execute_statement(stmt, execute_command).await?;
+                            if signal != FlowSignal::None {
+                                return Ok(signal);
+                            }
+                        }
+                    } else if let Some(else_stmts) = else_body {
+                        for stmt in else_stmts {
+                            let signal = self.execute_statement(stmt, execute_command).await?;
+                            if signal != FlowSignal::None {
+                                return Ok(signal);
+                            }
                         }
                     }
+                    Ok(FlowSignal::None)
                 }
-                Ok(FlowSignal::None)
-            }
-            Statement::For(var_name, list_expr, body) => {
-                let expanded_list = self.expand_variables(list_expr);
-                let values: Vec<String> = expanded_list
-                    .split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect();
+                Statement::For(var_name, list_expr, body) => {
+                    let expanded_list = self.expand_variables(list_expr);
+                    let values: Vec<String> = expanded_list
+                        .split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect();
 
-                for (idx, value) in values.iter().enumerate() {
-                    self.set_variable(var_name.clone(), value.clone());
-                    self.set_variable("_idx".to_string(), idx.to_string());
-                    for stmt in body {
-                        let signal = self.execute_statement(stmt, execute_command).await?;
-                        match signal {
-                            FlowSignal::Break(n) => {
-                                if n <= 1 {
-                                    return Ok(FlowSignal::None);
+                    for (idx, value) in values.iter().enumerate() {
+                        self.set_variable(var_name.clone(), value.clone());
+                        self.set_variable("_idx".to_string(), idx.to_string());
+                        for stmt in body {
+                            let signal = self.execute_statement(stmt, execute_command).await?;
+                            match signal {
+                                FlowSignal::Break(n) => {
+                                    if n <= 1 {
+                                        return Ok(FlowSignal::None);
+                                    }
+                                    return Ok(FlowSignal::Break(n - 1));
                                 }
-                                return Ok(FlowSignal::Break(n - 1));
-                            }
-                            FlowSignal::Continue(n) => {
-                                if n <= 1 {
-                                    break; // continue to next iteration
+                                FlowSignal::Continue(n) => {
+                                    if n <= 1 {
+                                        break; // continue to next iteration
+                                    }
+                                    return Ok(FlowSignal::Continue(n - 1));
                                 }
-                                return Ok(FlowSignal::Continue(n - 1));
+                                FlowSignal::Return(v) => return Ok(FlowSignal::Return(v)),
+                                FlowSignal::None => {}
                             }
-                            FlowSignal::Return(v) => return Ok(FlowSignal::Return(v)),
-                            FlowSignal::None => {}
                         }
                     }
+                    Ok(FlowSignal::None)
                 }
-                Ok(FlowSignal::None)
-            }
-            Statement::While(condition, body) => {
-                let mut iterations = 0u64;
-                while self.evaluate_condition(condition)? {
-                    iterations += 1;
-                    if iterations > 100_000 {
-                        eprintln!("Warning: while loop exceeded 100000 iterations, breaking");
-                        break;
-                    }
-                    for stmt in body {
-                        let signal = self.execute_statement(stmt, execute_command).await?;
-                        match signal {
-                            FlowSignal::Break(n) => {
-                                if n <= 1 {
-                                    return Ok(FlowSignal::None);
+                Statement::While(condition, body) => {
+                    let mut iterations = 0u64;
+                    while self.evaluate_condition(condition)? {
+                        iterations += 1;
+                        if iterations > 100_000 {
+                            eprintln!("Warning: while loop exceeded 100000 iterations, breaking");
+                            break;
+                        }
+                        for stmt in body {
+                            let signal = self.execute_statement(stmt, execute_command).await?;
+                            match signal {
+                                FlowSignal::Break(n) => {
+                                    if n <= 1 {
+                                        return Ok(FlowSignal::None);
+                                    }
+                                    return Ok(FlowSignal::Break(n - 1));
                                 }
-                                return Ok(FlowSignal::Break(n - 1));
-                            }
-                            FlowSignal::Continue(n) => {
-                                if n <= 1 {
-                                    break; // continue to next iteration
+                                FlowSignal::Continue(n) => {
+                                    if n <= 1 {
+                                        break; // continue to next iteration
+                                    }
+                                    return Ok(FlowSignal::Continue(n - 1));
                                 }
-                                return Ok(FlowSignal::Continue(n - 1));
+                                FlowSignal::Return(v) => return Ok(FlowSignal::Return(v)),
+                                FlowSignal::None => {}
                             }
-                            FlowSignal::Return(v) => return Ok(FlowSignal::Return(v)),
-                            FlowSignal::None => {}
                         }
                     }
+                    Ok(FlowSignal::None)
                 }
-                Ok(FlowSignal::None)
+                Statement::FnDef(name, params, body) => {
+                    self.functions.insert(
+                        name.clone(),
+                        Function {
+                            params: params.clone(),
+                            body: body.clone(),
+                        },
+                    );
+                    Ok(FlowSignal::None)
+                }
             }
-            Statement::FnDef(name, params, body) => {
-                self.functions.insert(
-                    name.clone(),
-                    Function {
-                        params: params.clone(),
-                        body: body.clone(),
-                    },
-                );
-                Ok(FlowSignal::None)
-            }
-        }
         })
     }
 
@@ -808,66 +896,66 @@ impl ControlFlowExecutor {
                 }
             };
 
-        // Save current param state and set function params
-        let mut saved_vars = Vec::new();
-        for (idx, param) in func.params.iter().enumerate() {
-            let old_val = self.get_variable(param);
-            saved_vars.push((param.clone(), old_val));
-            let arg_val = args.get(idx).cloned().unwrap_or_default();
-            self.set_variable(param.clone(), arg_val);
-        }
-        // Also set $1, $2, etc and $#
-        let saved_positional: Vec<(String, Option<String>)> = (1..=args.len())
-            .map(|i| {
-                let key = i.to_string();
-                let old = self.get_variable(&key);
-                (key.clone(), old)
-            })
-            .collect();
-        for (idx, arg) in args.iter().enumerate() {
-            self.set_variable((idx + 1).to_string(), arg.clone());
-        }
-        let saved_argc = self.get_variable("#");
-        self.set_variable("#".to_string(), args.len().to_string());
+            // Save current param state and set function params
+            let mut saved_vars = Vec::new();
+            for (idx, param) in func.params.iter().enumerate() {
+                let old_val = self.get_variable(param);
+                saved_vars.push((param.clone(), old_val));
+                let arg_val = args.get(idx).cloned().unwrap_or_default();
+                self.set_variable(param.clone(), arg_val);
+            }
+            // Also set $1, $2, etc and $#
+            let saved_positional: Vec<(String, Option<String>)> = (1..=args.len())
+                .map(|i| {
+                    let key = i.to_string();
+                    let old = self.get_variable(&key);
+                    (key.clone(), old)
+                })
+                .collect();
+            for (idx, arg) in args.iter().enumerate() {
+                self.set_variable((idx + 1).to_string(), arg.clone());
+            }
+            let saved_argc = self.get_variable("#");
+            self.set_variable("#".to_string(), args.len().to_string());
 
-        let mut return_signal = FlowSignal::None;
-        for stmt in &func.body {
-            let signal = self.execute_statement(stmt, execute_command).await?;
-            match signal {
-                FlowSignal::Return(v) => {
-                    if let Some(val) = v {
-                        self.set_variable("?".to_string(), val);
+            let mut return_signal = FlowSignal::None;
+            for stmt in &func.body {
+                let signal = self.execute_statement(stmt, execute_command).await?;
+                match signal {
+                    FlowSignal::Return(v) => {
+                        if let Some(val) = v {
+                            self.set_variable("?".to_string(), val);
+                        }
+                        return_signal = FlowSignal::None;
+                        break;
                     }
-                    return_signal = FlowSignal::None;
-                    break;
+                    FlowSignal::Break(_) | FlowSignal::Continue(_) => {
+                        return_signal = signal;
+                        break;
+                    }
+                    FlowSignal::None => {}
                 }
-                FlowSignal::Break(_) | FlowSignal::Continue(_) => {
-                    return_signal = signal;
-                    break;
+            }
+
+            // Restore params
+            for (param, old_val) in saved_vars {
+                match old_val {
+                    Some(v) => self.set_variable(param, v),
+                    None => self.remove_variable(&param),
                 }
-                FlowSignal::None => {}
             }
-        }
+            for (key, old_val) in saved_positional {
+                match old_val {
+                    Some(v) => self.set_variable(key, v),
+                    None => self.remove_variable(&key),
+                }
+            }
+            match saved_argc {
+                Some(v) => self.set_variable("#".to_string(), v),
+                None => self.remove_variable("#"),
+            }
 
-        // Restore params
-        for (param, old_val) in saved_vars {
-            match old_val {
-                Some(v) => self.set_variable(param, v),
-                None => self.remove_variable(&param),
-            }
-        }
-        for (key, old_val) in saved_positional {
-            match old_val {
-                Some(v) => self.set_variable(key, v),
-                None => self.remove_variable(&key),
-            }
-        }
-        match saved_argc {
-            Some(v) => self.set_variable("#".to_string(), v),
-            None => self.remove_variable("#"),
-        }
-
-        Ok(return_signal)
+            Ok(return_signal)
         })
     }
 
@@ -991,7 +1079,13 @@ if "test" == "test" {
 }
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo hello"]);
     }
 
@@ -1004,7 +1098,13 @@ for i in 1 2 3 {
 }
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo 1", "echo 2", "echo 3"]);
     }
 
@@ -1027,7 +1127,13 @@ if "a" == "b" {
 }
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo yes"]);
     }
 
@@ -1042,8 +1148,17 @@ for x in a b {
 }
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
-        assert_eq!(commands, vec!["echo a 1", "echo a 2", "echo b 1", "echo b 2"]);
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            commands,
+            vec!["echo a 1", "echo a 2", "echo b 1", "echo b 2"]
+        );
     }
 
     #[tokio::test]
@@ -1051,7 +1166,10 @@ for x in a b {
         let mut executor = ControlFlowExecutor::new();
         executor.set_variable("ITEMS".to_string(), "x y z".to_string());
         let expanded = executor.expand_variables("for i in $ITEMS { echo $i }");
-        assert!(expanded.contains("x y z"), "Variable should expand in for loop");
+        assert!(
+            expanded.contains("x y z"),
+            "Variable should expand in for loop"
+        );
     }
 
     // ── New feature tests ────────────────────────────────────
@@ -1067,7 +1185,13 @@ greet world
 greet rust
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo hello world", "echo hello rust"]);
     }
 
@@ -1081,7 +1205,13 @@ fn add(a, b) {
 add 3 4
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo result is 7"]);
     }
 
@@ -1134,7 +1264,10 @@ add 3 4
     #[test]
     fn test_default_value() {
         let executor = ControlFlowExecutor::new();
-        assert_eq!(executor.expand_variables("${UNSET_VAR:-fallback}"), "fallback");
+        assert_eq!(
+            executor.expand_variables("${UNSET_VAR:-fallback}"),
+            "fallback"
+        );
     }
 
     #[test]
@@ -1172,7 +1305,13 @@ for i in 1 2 3 4 5 {
 }
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo 1", "echo 2"]);
     }
 
@@ -1188,7 +1327,13 @@ for i in 1 2 3 4 5 {
 }
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo 1", "echo 2", "echo 4", "echo 5"]);
     }
 
@@ -1206,7 +1351,13 @@ while 1 == 1 {
 }
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert!(commands.contains(&"echo 0".to_string()));
     }
 
@@ -1228,7 +1379,13 @@ fn hello() {
 hello
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo world"]);
     }
 
@@ -1243,7 +1400,13 @@ test_scope 42
 echo outer
 "#;
         let mut commands = Vec::new();
-        executor.execute_script(script, |cmd| { commands.push(cmd); async { Ok(()) } }).await.unwrap();
+        executor
+            .execute_script(script, |cmd| {
+                commands.push(cmd);
+                async { Ok(()) }
+            })
+            .await
+            .unwrap();
         assert_eq!(commands, vec!["echo inner 42", "echo outer"]);
     }
 

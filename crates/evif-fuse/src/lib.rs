@@ -18,8 +18,8 @@ mod mount_config;
 
 use evif_core::{EvifError, EvifResult, FileInfo, WriteFlags};
 use fuser::{
-    FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
-    ReplyOpen, ReplyWrite, Request, TimeOrNow,
+    FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyOpen,
+    ReplyWrite, Request, TimeOrNow,
 };
 use std::collections::HashMap;
 use std::ffi::OsStr;

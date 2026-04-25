@@ -41,74 +41,181 @@ impl SQLiteStorage {
         Self::new(":memory:")
     }
 
-    /// Initialize database schema
+    /// N11: Create a backup of the SQLite database to a destination path.
+    ///
+    /// Uses SQLite's online backup API (`VACUUM INTO` or `Connection::backup()`)
+    /// for a consistent point-in-time snapshot without locking the database.
+    ///
+    /// # Arguments
+    /// * `dest_path` - Destination path for the backup file
+    ///
+    /// # Returns
+    /// Path to the backup file on success
+    pub fn backup<P: AsRef<Path>>(&self, dest_path: P) -> MemResult<String> {
+        let dest_path = dest_path.as_ref();
+        let conn = self.conn.lock().unwrap();
+
+        // Use VACUUM INTO for a consistent online backup (SQLite 3.31.0+)
+        // This creates a consistent snapshot without blocking readers
+        conn.execute_batch(&format!(
+            "VACUUM INTO '{}'",
+            dest_path.to_string_lossy().replace('\'', "''")
+        ))
+        .map_err(|e| MemError::Storage(format!("Backup failed: {}", e)))?;
+
+        Ok(dest_path.to_string_lossy().into_owned())
+    }
+
+    /// N3: Initialize database schema using versioned migrations.
+    ///
+    /// Each migration is a numbered version with SQL to apply.
+    /// Applied versions are tracked in `schema_migrations` table.
     fn initialize_schema(&self) -> MemResult<()> {
         let conn = self.conn.lock().unwrap();
 
+        // Step 1: Create migrations tracking table (always safe to run)
         conn.execute_batch(
             r#"
-            -- Resources table
-            CREATE TABLE IF NOT EXISTS resources (
-                id TEXT PRIMARY KEY,
-                url TEXT NOT NULL,
-                modality TEXT NOT NULL,
-                local_path TEXT,
-                caption TEXT,
-                embedding_id TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
             );
-
-            -- Memory items table
-            CREATE TABLE IF NOT EXISTS memory_items (
-                id TEXT PRIMARY KEY,
-                resource_id TEXT,
-                memory_type TEXT NOT NULL,
-                summary TEXT NOT NULL,
-                content TEXT NOT NULL,
-                embedding_id TEXT,
-                happened_at TEXT,
-                content_hash TEXT,
-                reinforcement_count INTEGER DEFAULT 0,
-                last_reinforced_at TEXT,
-                ref_id TEXT,
-                category_id TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            -- Categories table
-            CREATE TABLE IF NOT EXISTS categories (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT NOT NULL,
-                embedding_id TEXT,
-                summary TEXT,
-                item_count INTEGER DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            -- Category-Item relationships table
-            CREATE TABLE IF NOT EXISTS category_items (
-                id TEXT PRIMARY KEY,
-                item_id TEXT NOT NULL,
-                category_id TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (item_id) REFERENCES memory_items(id),
-                FOREIGN KEY (category_id) REFERENCES categories(id),
-                UNIQUE(item_id, category_id)
-            );
-
-            -- Indexes for performance
-            CREATE INDEX IF NOT EXISTS idx_items_type ON memory_items(memory_type);
-            CREATE INDEX IF NOT EXISTS idx_items_hash ON memory_items(content_hash);
-            CREATE INDEX IF NOT EXISTS idx_items_ref_id ON memory_items(ref_id);
-            CREATE INDEX IF NOT EXISTS idx_category_items_item ON category_items(item_id);
-            CREATE INDEX IF NOT EXISTS idx_category_items_category ON category_items(category_id);
             "#,
         )
-        .map_err(|e| MemError::Storage(format!("Failed to initialize schema: {}", e)))?;
+        .map_err(|e| MemError::Storage(format!("Failed to create migrations table: {}", e)))?;
+
+        // Step 2: Define all migrations in order
+        let migrations: &[(&str, &str)] = &[
+            // V1: Initial schema — all core tables
+            (
+                "V1__initial_schema.sql",
+                r#"
+                CREATE TABLE IF NOT EXISTS resources (
+                    id TEXT PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    modality TEXT NOT NULL,
+                    local_path TEXT,
+                    caption TEXT,
+                    embedding_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS memory_items (
+                    id TEXT PRIMARY KEY,
+                    resource_id TEXT,
+                    memory_type TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    embedding_id TEXT,
+                    happened_at TEXT,
+                    content_hash TEXT,
+                    reinforcement_count INTEGER DEFAULT 0,
+                    last_reinforced_at TEXT,
+                    ref_id TEXT,
+                    category_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS categories (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    embedding_id TEXT,
+                    summary TEXT,
+                    item_count INTEGER DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS category_items (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL,
+                    category_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (item_id) REFERENCES memory_items(id),
+                    FOREIGN KEY (category_id) REFERENCES categories(id),
+                    UNIQUE(item_id, category_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_items_type ON memory_items(memory_type);
+                CREATE INDEX IF NOT EXISTS idx_items_hash ON memory_items(content_hash);
+                CREATE INDEX IF NOT EXISTS idx_items_ref_id ON memory_items(ref_id);
+                CREATE INDEX IF NOT EXISTS idx_category_items_item ON category_items(item_id);
+                CREATE INDEX IF NOT EXISTS idx_category_items_category ON category_items(category_id);
+                "#,
+            ),
+            // V2: Add full-text search virtual table (future use)
+            (
+                "V2__fts5_search.sql",
+                r#"
+                CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+                    summary,
+                    content,
+                    content='memory_items',
+                    content_rowid='rowid'
+                );
+                "#,
+            ),
+            // V3: Add audit log table (future use — EVIF_AUDIT_PATH)
+            (
+                "V3__audit_log.sql",
+                r#"
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id TEXT PRIMARY KEY,
+                    actor TEXT,
+                    action TEXT NOT NULL,
+                    resource_type TEXT,
+                    resource_id TEXT,
+                    details TEXT,
+                    ip_address TEXT,
+                    timestamp TEXT NOT NULL
+                );
+                "#,
+            ),
+        ];
+
+        // Step 3: Apply pending migrations
+        for (version, sql) in migrations {
+            let version_num: i64 = version
+                .split("__")
+                .next()
+                .and_then(|v| v.trim_start_matches('V').parse().ok())
+                .unwrap_or(0);
+
+            // Check if already applied
+            let already_applied: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+                    [version_num],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+
+            if already_applied {
+                continue;
+            }
+
+            // Apply migration
+            conn.execute_batch(sql)
+                .map_err(|e| MemError::Storage(format!("Migration {} failed: {}", version, e)))?;
+
+            // Record migration
+            let applied_at = chrono::Utc::now().to_rfc3339();
+            conn.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
+                params![version_num, applied_at],
+            )
+            .map_err(|e| {
+                MemError::Storage(format!(
+                    "Migration {} applied but failed to record: {}",
+                    version, e
+                ))
+            })?;
+
+            tracing::info!(version = version, "SQLite migration applied");
+        }
 
         Ok(())
     }

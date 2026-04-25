@@ -185,10 +185,9 @@ impl CostOptimizer {
         }
 
         // 3. Check similar queries
-        if self.config.enable_similar_detection
-            && self.find_similar_query(query).await?.is_some() {
-                return Ok(false);
-            }
+        if self.config.enable_similar_detection && self.find_similar_query(query).await?.is_some() {
+            return Ok(false);
+        }
 
         Ok(true)
     }

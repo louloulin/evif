@@ -48,8 +48,14 @@ async fn mcp_initialize_protocol() {
     assert_eq!(expected_tools.len(), 20, "MCP should have 20 tools");
     assert!(expected_tools.contains(&"evif_ls"), "Should have evif_ls");
     assert!(expected_tools.contains(&"evif_cat"), "Should have evif_cat");
-    assert!(expected_tools.contains(&"evif_write"), "Should have evif_write");
-    assert!(expected_tools.contains(&"evif_skill_execute"), "Should have evif_skill_execute");
+    assert!(
+        expected_tools.contains(&"evif_write"),
+        "Should have evif_write"
+    );
+    assert!(
+        expected_tools.contains(&"evif_skill_execute"),
+        "Should have evif_skill_execute"
+    );
 }
 
 /// MC-02: MCP Tools List Verification
@@ -93,7 +99,11 @@ async fn mcp_tool_input_schemas() {
         ("evif_skill_execute", vec!["name"]),
     ];
 
-    assert_eq!(required_params.len(), 7, "7 tools have required params defined");
+    assert_eq!(
+        required_params.len(),
+        7,
+        "7 tools have required params defined"
+    );
 
     for (tool, params) in &required_params {
         assert!(!params.is_empty(), "{} should have required params", tool);
@@ -103,11 +113,7 @@ async fn mcp_tool_input_schemas() {
 /// MC-04: MCP Skill Tools Verification
 #[tokio::test]
 async fn mcp_skill_tools_available() {
-    let skill_tools = [
-        "evif_skill_list",
-        "evif_skill_info",
-        "evif_skill_execute",
-    ];
+    let skill_tools = ["evif_skill_list", "evif_skill_info", "evif_skill_execute"];
 
     // 验证 3 个技能相关工具
     assert_eq!(skill_tools.len(), 3, "Should have 3 skill tools");
@@ -119,10 +125,7 @@ async fn mcp_skill_tools_available() {
 /// MC-05: MCP Memory Tools Verification
 #[tokio::test]
 async fn mcp_memory_tools_available() {
-    let memory_tools = [
-        "evif_memorize",
-        "evif_retrieve",
-    ];
+    let memory_tools = ["evif_memorize", "evif_retrieve"];
 
     // 验证 2 个记忆工具
     assert_eq!(memory_tools.len(), 2, "Should have 2 memory tools");
@@ -133,10 +136,7 @@ async fn mcp_memory_tools_available() {
 /// MC-06: MCP Handle Tools Verification
 #[tokio::test]
 async fn mcp_handle_tools_available() {
-    let handle_tools = [
-        "evif_open_handle",
-        "evif_close_handle",
-    ];
+    let handle_tools = ["evif_open_handle", "evif_close_handle"];
 
     // 验证 2 个句柄工具
     assert_eq!(handle_tools.len(), 2, "Should have 2 handle tools");
@@ -147,11 +147,7 @@ async fn mcp_handle_tools_available() {
 /// MC-07: MCP Admin Tools Verification
 #[tokio::test]
 async fn mcp_admin_tools_available() {
-    let admin_tools = [
-        "evif_mount",
-        "evif_unmount",
-        "evif_mounts",
-    ];
+    let admin_tools = ["evif_mount", "evif_unmount", "evif_mounts"];
 
     // 验证 3 个管理工具
     assert_eq!(admin_tools.len(), 3, "Should have 3 admin tools");
@@ -165,16 +161,29 @@ async fn mcp_admin_tools_available() {
 async fn mcp_total_tool_count() {
     let all_tools = vec![
         // 文件操作 (9)
-        "evif_ls", "evif_cat", "evif_write", "evif_mkdir", "evif_rm",
-        "evif_stat", "evif_mv", "evif_cp", "evif_grep",
+        "evif_ls",
+        "evif_cat",
+        "evif_write",
+        "evif_mkdir",
+        "evif_rm",
+        "evif_stat",
+        "evif_mv",
+        "evif_cp",
+        "evif_grep",
         // 管理 (3)
-        "evif_mount", "evif_unmount", "evif_mounts",
+        "evif_mount",
+        "evif_unmount",
+        "evif_mounts",
         // Handle (2)
-        "evif_open_handle", "evif_close_handle",
+        "evif_open_handle",
+        "evif_close_handle",
         // Memory (2)
-        "evif_memorize", "evif_retrieve",
+        "evif_memorize",
+        "evif_retrieve",
         // Skill (3)
-        "evif_skill_list", "evif_skill_info", "evif_skill_execute",
+        "evif_skill_list",
+        "evif_skill_info",
+        "evif_skill_execute",
         // 其他 (1)
         "evif_health",
     ];

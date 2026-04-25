@@ -29,6 +29,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# CLI argument parsing
+clap = { version = "4.4.18", features = ["derive", "env"] }
+
 [[bin]]
 name = "evif-mcp"
 path = "src/main.rs"

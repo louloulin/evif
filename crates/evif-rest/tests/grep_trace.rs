@@ -204,10 +204,26 @@ async fn grep_trace_contains_latency_info() {
 
     if let Some(arr) = steps {
         for step in arr {
-            assert!(step.get("path").is_some(), "each trace step should have a path: {:?}", step);
-            assert!(step.get("operation").is_some(), "each trace step should have an operation: {:?}", step);
-            assert!(step.get("hits").is_some(), "each trace step should have hits: {:?}", step);
-            assert!(step.get("latency_ms").is_some(), "each trace step should have latency_ms: {:?}", step);
+            assert!(
+                step.get("path").is_some(),
+                "each trace step should have a path: {:?}",
+                step
+            );
+            assert!(
+                step.get("operation").is_some(),
+                "each trace step should have an operation: {:?}",
+                step
+            );
+            assert!(
+                step.get("hits").is_some(),
+                "each trace step should have hits: {:?}",
+                step
+            );
+            assert!(
+                step.get("latency_ms").is_some(),
+                "each trace step should have latency_ms: {:?}",
+                step
+            );
         }
     }
 }

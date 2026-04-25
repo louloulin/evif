@@ -4,12 +4,18 @@
 //
 // 对标 AgentBench 多环境评估框架
 
-use evif_rest::create_routes;
 use evif_core::RadixMountTable;
+use evif_plugins::MemFsPlugin;
+use evif_rest::create_routes;
 use std::sync::Arc;
 
 async fn setup_server() -> (Arc<RadixMountTable>, String) {
     let mount_table = Arc::new(RadixMountTable::new());
+    // 挂载内存文件系统，使所有文件操作端点可用
+    mount_table
+        .mount("/test".into(), Arc::new(MemFsPlugin::new()))
+        .await
+        .expect("mount memfs for benchmark");
     let app = create_routes(mount_table.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -70,9 +76,10 @@ async fn agentbench_tool_success_rate() {
     }
 
     let rate = success as f64 / total as f64;
+    // 目标：95%+ 成功率（对标 AgentBench 工具调用成功率基准）
     assert!(
-        rate >= 0.0,
-        "Tool calls should complete (got {:.1}% success rate, baseline test)",
+        rate >= 0.95,
+        "Tool calls should achieve >= 95% success rate (got {:.1}%, baseline >= 90%)",
         rate * 100.0
     );
 }
@@ -268,7 +275,8 @@ async fn agentbench_concurrent_operations() {
         }));
     }
 
-    let results: Vec<bool> = futures::future::join_all(handles).await
+    let results: Vec<bool> = futures::future::join_all(handles)
+        .await
         .into_iter()
         .filter_map(|r| r.ok())
         .collect();

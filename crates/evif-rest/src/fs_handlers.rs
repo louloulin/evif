@@ -126,10 +126,7 @@ impl axum::response::IntoResponse for StreamResponse {
                     })
             }
             StreamResponse::Write(bytes_written) => {
-                let body = format!(
-                    "{{\"bytes_written\":{}}}",
-                    bytes_written
-                );
+                let body = format!("{{\"bytes_written\":{}}}", bytes_written);
                 axum::response::Response::builder()
                     .status(axum::http::StatusCode::OK)
                     .header(axum::http::header::CONTENT_TYPE, "application/json")
@@ -631,7 +628,7 @@ impl FsHandlers {
         }
     }
 
-// ==================== 流式操作 ====================
+    // ==================== 流式操作 ====================
 
     /// 流式读取文件内容（无 JSON/base64 封装，适合大文件）
     /// POST /api/v1/fs/stream?op=read&path=<path>&offset=<offset>&size=<size>

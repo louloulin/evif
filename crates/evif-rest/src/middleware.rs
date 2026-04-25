@@ -14,10 +14,14 @@ use evif_auth::{
     AuditEvent, AuditEventType, AuditFilter, AuditLogManager, AuthManager, AuthPolicy, Capability,
     Permission, Permissions, Principal,
 };
+use parking_lot::Mutex;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{info, warn};
+use std::sync::OnceLock;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::tenant_handlers::{TenantState, TENANT_HEADER};
@@ -25,6 +29,10 @@ use crate::TrafficStats;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const CORRELATION_ID_HEADER: &str = "x-correlation-id";
+const RATE_LIMIT_LIMIT_HEADER: &str = "x-ratelimit-limit";
+const RATE_LIMIT_REMAINING_HEADER: &str = "x-ratelimit-remaining";
+const RETRY_AFTER_HEADER: &str = "retry-after";
+const RETRY_AFTER_SECS: u64 = 1;
 
 fn write_scope_id() -> Uuid {
     Uuid::from_u128(0x8f53_7321_9f58_4a6f_8d21_3141_0000_0001)
@@ -49,8 +57,11 @@ pub struct RequestIdentity {
 struct RestAuthInner {
     manager: AuthManager,
     api_keys: HashMap<String, ApiKeyIdentity>,
+    hashed_api_keys: HashMap<String, ApiKeyIdentity>,
     audit_log: Arc<AuditLogManager>,
     enforce: bool,
+    api_key_max_concurrent_requests: Option<usize>,
+    api_key_limiters: Mutex<HashMap<Uuid, Arc<Semaphore>>>,
 }
 
 /// REST 认证共享状态
@@ -74,6 +85,56 @@ enum AuthDecision {
     Internal(String),
 }
 
+struct ApiKeyRateLimitLease {
+    _permit: OwnedSemaphorePermit,
+    limit: usize,
+    remaining: usize,
+}
+
+#[derive(Clone)]
+pub(crate) struct IpRateLimitState {
+    max_concurrent_requests: Option<usize>,
+    limiters: Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
+}
+
+impl IpRateLimitState {
+    pub(crate) fn from_env() -> Self {
+        Self::new(parse_optional_usize_env(
+            "EVIF_REST_IP_MAX_CONCURRENT_REQUESTS",
+        ))
+    }
+
+    fn new(max_concurrent_requests: Option<usize>) -> Self {
+        Self {
+            max_concurrent_requests,
+            limiters: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn try_acquire(&self, ip: &str) -> Result<Option<ApiKeyRateLimitLease>, usize> {
+        let Some(limit) = self.max_concurrent_requests else {
+            return Ok(None);
+        };
+
+        let semaphore = {
+            let mut limiters = self.limiters.lock();
+            limiters
+                .entry(ip.to_string())
+                .or_insert_with(|| Arc::new(Semaphore::new(limit)))
+                .clone()
+        };
+
+        match semaphore.clone().try_acquire_owned() {
+            Ok(permit) => Ok(Some(ApiKeyRateLimitLease {
+                _permit: permit,
+                limit,
+                remaining: semaphore.available_permits(),
+            })),
+            Err(_) => Err(limit),
+        }
+    }
+}
+
 impl RestAuthState {
     /// 从环境变量构造 REST 认证配置。
     ///
@@ -93,17 +154,32 @@ impl RestAuthState {
 
         let write_keys = parse_key_list("EVIF_REST_WRITE_API_KEYS");
         let admin_keys = parse_key_list("EVIF_REST_ADMIN_API_KEYS");
+        let write_key_hashes = parse_hashed_key_list("EVIF_REST_WRITE_API_KEYS_SHA256");
+        let admin_key_hashes = parse_hashed_key_list("EVIF_REST_ADMIN_API_KEYS_SHA256");
         let audit_log = audit_log_from_env();
+        let api_key_max_concurrent_requests =
+            parse_optional_usize_env("EVIF_REST_API_KEY_MAX_CONCURRENT_REQUESTS");
 
-        Self::new(write_keys, admin_keys, audit_log, enforce)
+        Self::new(
+            write_keys,
+            admin_keys,
+            write_key_hashes,
+            admin_key_hashes,
+            audit_log,
+            enforce,
+            api_key_max_concurrent_requests,
+        )
     }
 
     pub fn disabled() -> Self {
         Self::new(
             vec![],
             vec![],
+            vec![],
+            vec![],
             Arc::new(AuditLogManager::from_memory()),
             false,
+            None,
         )
     }
 
@@ -111,11 +187,22 @@ impl RestAuthState {
         write_keys: impl IntoIterator<Item = String>,
         admin_keys: impl IntoIterator<Item = String>,
     ) -> Self {
+        Self::from_api_keys_with_concurrency_limit(write_keys, admin_keys, 0)
+    }
+
+    pub fn from_api_keys_with_concurrency_limit(
+        write_keys: impl IntoIterator<Item = String>,
+        admin_keys: impl IntoIterator<Item = String>,
+        max_concurrent_requests: usize,
+    ) -> Self {
         Self::new(
             write_keys.into_iter().collect(),
             admin_keys.into_iter().collect(),
+            vec![],
+            vec![],
             Arc::new(AuditLogManager::from_memory()),
             true,
+            normalize_rate_limit(max_concurrent_requests),
         )
     }
 
@@ -129,11 +216,15 @@ impl RestAuthState {
     fn new(
         write_keys: Vec<String>,
         admin_keys: Vec<String>,
+        write_key_hashes: Vec<String>,
+        admin_key_hashes: Vec<String>,
         audit_log: Arc<AuditLogManager>,
         enforce: bool,
+        api_key_max_concurrent_requests: Option<usize>,
     ) -> Self {
         let manager = AuthManager::with_policy(AuthPolicy::Strict);
         let mut api_keys = HashMap::new();
+        let mut hashed_api_keys = HashMap::new();
 
         if enforce {
             for key in write_keys {
@@ -143,14 +234,25 @@ impl RestAuthState {
             for key in admin_keys {
                 register_key(&manager, &mut api_keys, key, true);
             }
+
+            for key_hash in write_key_hashes {
+                register_hashed_key(&manager, &mut hashed_api_keys, key_hash, false);
+            }
+
+            for key_hash in admin_key_hashes {
+                register_hashed_key(&manager, &mut hashed_api_keys, key_hash, true);
+            }
         }
 
         Self {
             inner: Arc::new(RestAuthInner {
                 manager,
                 api_keys,
+                hashed_api_keys,
                 audit_log,
                 enforce,
+                api_key_max_concurrent_requests,
+                api_key_limiters: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -159,12 +261,43 @@ impl RestAuthState {
         self.inner.enforce
     }
 
+    fn try_acquire_rate_limit(
+        &self,
+        principal_id: Uuid,
+    ) -> Result<Option<ApiKeyRateLimitLease>, usize> {
+        let Some(limit) = self.inner.api_key_max_concurrent_requests else {
+            return Ok(None);
+        };
+
+        let semaphore = {
+            let mut limiters = self.inner.api_key_limiters.lock();
+            limiters
+                .entry(principal_id)
+                .or_insert_with(|| Arc::new(Semaphore::new(limit)))
+                .clone()
+        };
+
+        match semaphore.clone().try_acquire_owned() {
+            Ok(permit) => Ok(Some(ApiKeyRateLimitLease {
+                _permit: permit,
+                limit,
+                remaining: semaphore.available_permits(),
+            })),
+            Err(_) => Err(limit),
+        }
+    }
+
     fn authorize(&self, headers: &HeaderMap, requirement: RouteRequirement) -> AuthDecision {
         let Some(api_key) = extract_api_key(headers) else {
             return AuthDecision::MissingCredentials;
         };
 
-        let Some(identity) = self.inner.api_keys.get(api_key).cloned() else {
+        let identity = self.inner.api_keys.get(api_key).cloned().or_else(|| {
+            let api_key_hash = sha256_hex(api_key);
+            self.inner.hashed_api_keys.get(&api_key_hash).cloned()
+        });
+
+        let Some(identity) = identity else {
             return AuthDecision::InvalidCredentials;
         };
 
@@ -224,96 +357,12 @@ impl RestAuthState {
     }
 }
 
-/// Validates and sanitizes a filesystem path to prevent path traversal attacks.
-///
-/// Returns the sanitized path on success. Rejects paths containing:
-/// - `..` (directory traversal)
-/// - Null bytes (`\x00`)
-/// - Double slashes (`//`)
-/// - Paths exceeding max length (4096 bytes)
-pub fn validate_path(path: &str) -> Result<String, String> {
-    if path.is_empty() {
-        return Err("Path cannot be empty".to_string());
-    }
-
-    if path.len() > 4096 {
-        return Err(format!("Path too long: {} bytes (max 4096)", path.len()));
-    }
-
-    // Reject null bytes
-    if path.contains('\0') {
-        return Err("Path contains null bytes".to_string());
-    }
-
-    // Reject path traversal attempts
-    let segments: Vec<&str> = path.split('/').collect();
-    for seg in &segments {
-        if *seg == ".." {
-            return Err("Path traversal not allowed (..)".to_string());
-        }
-    }
-
-    // Normalize: remove double slashes. Ensure leading /.
-    let normalized = {
-        let mut result = String::with_capacity(path.len());
-        let mut last_was_slash = false;
-        for ch in path.chars() {
-            if ch == '/' {
-                if last_was_slash {
-                    continue;
-                }
-                last_was_slash = true;
-            } else {
-                last_was_slash = false;
-            }
-            result.push(ch);
-        }
-        result
-    };
-
-    // Ensure path starts with /
-    if !normalized.starts_with('/') {
-        return Ok(format!("/{}", normalized));
-    }
-
-    Ok(normalized)
-}
-
-/// Path validation middleware - sanitizes path query parameters.
-/// Blocks requests with path traversal patterns, null bytes, or oversized paths.
-#[allow(non_snake_case)]
-pub async fn PathValidationMiddleware(request: Request, next: Next) -> Response {
-    // Check for path parameter in query string
-    if let Some(query) = request.uri().query() {
-        for pair in query.split('&') {
-            if let Some(path_val) = pair.strip_prefix("path=") {
-                match validate_path(path_val) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        return (
-                            StatusCode::BAD_REQUEST,
-                            Json(json!({
-                                "error": "INVALID_PATH",
-                                "message": e,
-                            })),
-                        )
-                        .into_response();
-                    }
-                }
-            }
-        }
-    }
-    next.run(request).await
-}
-
-/// 日志中间件
+/// N10: Structured logging middleware — emits structured fields to tracing.
 #[allow(non_snake_case)]
 pub async fn LoggingMiddleware(req: Request, next: Next) -> Response {
     let method = req.method().clone();
     let uri = req.uri().clone();
-
-    info!("{} {}", method, uri);
-
+    tracing::info!(method = %method, path = %uri, "HTTP request started");
     next.run(req).await
 }
 
@@ -345,6 +394,36 @@ pub async fn RequestIdentityMiddleware(mut req: Request, next: Next) -> Response
             .insert(HeaderName::from_static(CORRELATION_ID_HEADER), value);
     }
 
+    response
+}
+
+#[allow(non_snake_case)]
+pub async fn IpRateLimitMiddleware(
+    State(ip_rate_limit_state): State<Arc<IpRateLimitState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let ip = header_value(req.headers(), "x-forwarded-for")
+        .and_then(|raw| raw.split(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| header_value(req.headers(), "x-real-ip"))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+
+    let lease = match ip.as_deref() {
+        Some(ip) => match ip_rate_limit_state.try_acquire(ip) {
+            Ok(lease) => lease,
+            Err(limit) => return rate_limit_response(limit, "IP concurrency limit exceeded"),
+        },
+        None => None,
+    };
+
+    let mut response = next.run(req).await;
+    if let Some(lease) = lease {
+        apply_rate_limit_headers_if_missing(&mut response, lease.limit, lease.remaining);
+    }
     response
 }
 
@@ -419,6 +498,10 @@ pub async fn TrafficMetricsMiddleware(
         if is_error {
             traffic_stats.record_error();
         }
+
+        // N7: Record duration in histogram buckets (seconds) for p50/p95/p99
+        let duration_secs = started.elapsed().as_secs_f64();
+        traffic_stats.record_request_duration_secs(duration_secs);
     }
 
     response
@@ -461,6 +544,13 @@ pub async fn AuthMiddleware(
 
     match auth_state.authorize(req.headers(), requirement) {
         AuthDecision::Granted(identity) => {
+            let lease = match auth_state.try_acquire_rate_limit(identity.principal_id) {
+                Ok(lease) => lease,
+                Err(limit) => {
+                    warn!("rate limit exceeded for {} {}", method, path);
+                    return rate_limit_response(limit, "API key concurrency limit exceeded");
+                }
+            };
             auth_state.record_event(
                 AuditEventType::AccessGranted,
                 Some(identity.principal_id),
@@ -472,7 +562,11 @@ pub async fn AuthMiddleware(
                 "authorized",
             );
             req.extensions_mut().insert(identity.principal_id);
-            next.run(req).await
+            let mut response = next.run(req).await;
+            if let Some(lease) = lease {
+                apply_rate_limit_headers(&mut response, lease.limit, lease.remaining);
+            }
+            response
         }
         AuthDecision::MissingCredentials => {
             warn!("missing credentials for {} {}", method, path);
@@ -532,6 +626,61 @@ pub async fn AuthMiddleware(
     }
 }
 
+fn rate_limit_response(limit: usize, message: &str) -> Response {
+    let mut response = (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({
+            "error": "TOO_MANY_REQUESTS",
+            "message": message,
+        })),
+    )
+        .into_response();
+    apply_rate_limit_headers(&mut response, limit, 0);
+    if let Ok(value) = HeaderValue::from_str(&RETRY_AFTER_SECS.to_string()) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static(RETRY_AFTER_HEADER), value);
+    }
+    response
+}
+
+fn apply_rate_limit_headers(response: &mut Response, limit: usize, remaining: usize) {
+    if let Ok(value) = HeaderValue::from_str(&limit.to_string()) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static(RATE_LIMIT_LIMIT_HEADER), value);
+    }
+    if let Ok(value) = HeaderValue::from_str(&remaining.to_string()) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static(RATE_LIMIT_REMAINING_HEADER), value);
+    }
+}
+
+fn apply_rate_limit_headers_if_missing(response: &mut Response, limit: usize, remaining: usize) {
+    if !response
+        .headers()
+        .contains_key(HeaderName::from_static(RATE_LIMIT_LIMIT_HEADER))
+    {
+        apply_rate_limit_headers(response, limit, remaining);
+    }
+}
+
+fn normalize_rate_limit(limit: usize) -> Option<usize> {
+    if limit == 0 {
+        None
+    } else {
+        Some(limit)
+    }
+}
+
+fn parse_optional_usize_env(key: &str) -> Option<usize> {
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .and_then(normalize_rate_limit)
+}
+
 fn parse_key_list(var_name: &str) -> Vec<String> {
     std::env::var(var_name)
         .ok()
@@ -544,6 +693,14 @@ fn parse_key_list(var_name: &str) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn parse_hashed_key_list(var_name: &str) -> Vec<String> {
+    parse_key_list(var_name)
+        .into_iter()
+        .map(|value| value.to_ascii_lowercase())
+        .filter(|value| value.len() == 64 && value.chars().all(|ch| ch.is_ascii_hexdigit()))
+        .collect()
 }
 
 fn audit_log_from_env() -> Arc<AuditLogManager> {
@@ -585,10 +742,43 @@ fn register_key(
     api_keys.insert(key, identity);
 }
 
-fn header_value(
-    headers: &HeaderMap,
-    name: impl axum::http::header::AsHeaderName,
-) -> Option<&str> {
+fn register_hashed_key(
+    manager: &AuthManager,
+    api_keys: &mut HashMap<String, ApiKeyIdentity>,
+    key_hash: String,
+    admin: bool,
+) {
+    let principal_id = Uuid::new_v4();
+    let identity = ApiKeyIdentity {
+        principal: Principal::Service(principal_id),
+        principal_id,
+    };
+
+    let _ = manager.grant(Capability::new(
+        principal_id,
+        write_scope_id(),
+        Permissions::read_write(),
+    ));
+
+    if admin {
+        let _ = manager.grant(Capability::new(
+            principal_id,
+            admin_scope_id(),
+            Permissions::all(),
+        ));
+    }
+
+    api_keys.insert(key_hash, identity);
+}
+
+fn sha256_hex(value: &str) -> String {
+    Sha256::digest(value.as_bytes())
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect()
+}
+
+fn header_value(headers: &HeaderMap, name: impl axum::http::header::AsHeaderName) -> Option<&str> {
     headers.get(name).and_then(|value| value.to_str().ok())
 }
 
@@ -682,8 +872,23 @@ fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
                 | "/api/v1/plugins/wasm/load"
                 | "/api/v1/encryption/enable"
                 | "/api/v1/encryption/disable"
+                | "/api/v1/encryption/rotate"
+                | "/api/v1/tenants"
                 | "/api/v1/metrics/reset"
         ))
+        || (*method == Method::GET && path == "/api/v1/tenants")
+        || (*method == Method::GET
+            && path.starts_with("/api/v1/tenants/")
+            && path != "/api/v1/tenants/me")
+        || (*method == Method::GET
+            && matches!(
+                path,
+                "/api/v1/encryption/status" | "/api/v1/encryption/versions"
+            ))
+        || (*method == Method::DELETE && path.starts_with("/api/v1/tenants/"))
+        || (*method == Method::PATCH
+            && path.starts_with("/api/v1/tenants/")
+            && path.ends_with("/quota"))
         || (*method == Method::POST
             && path.starts_with("/api/v1/plugins/")
             && path.ends_with("/reload"));
@@ -706,9 +911,62 @@ fn auth_error_response(status: StatusCode, message: &str) -> Response {
         .into_response()
 }
 
+/// Panic catcher middleware — prevents panics from killing Axum worker threads.
+/// Catches any panic from the inner handler and returns a 500 response.
+pub async fn panic_catcher(request: Request, next: Next) -> Response {
+    match tokio::spawn(async move { next.run(request).await }).await {
+        Ok(response) => response,
+        Err(_) => {
+            warn!("Request handler panicked and was caught by panic_catcher");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "INTERNAL_SERVER_ERROR",
+                    "message": "Request handler panicked",
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
+// N8: Timeout middleware — 30s request timeout using tokio::time::timeout.
+const REQUEST_TIMEOUT_SECS: u64 = 30;
+
+pub async fn timeout_middleware(request: Request, next: Next) -> Response {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS),
+        next.run(request),
+    )
+    .await
+    {
+        Ok(response) => response,
+        Err(_) => {
+            tracing::info!(timeout_secs = REQUEST_TIMEOUT_SECS, "Request timed out");
+            (StatusCode::REQUEST_TIMEOUT, "Request timeout").into_response()
+        }
+    }
+}
+
+// N5: Concurrency limit middleware — limit concurrent requests via semaphore.
+static CONCURRENCY_SEMAPHORE: OnceLock<Semaphore> = OnceLock::new();
+const MAX_CONCURRENT_REQUESTS: usize = 256;
+
+pub async fn concurrency_limit_middleware(request: Request, next: Next) -> Response {
+    let semaphore = CONCURRENCY_SEMAPHORE.get_or_init(|| Semaphore::new(MAX_CONCURRENT_REQUESTS));
+    let permit = semaphore.acquire().await.expect("semaphore closed");
+    let response = next.run(request).await;
+    drop(permit);
+    response
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{middleware, routing::post, Router};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+    use tokio::net::TcpListener;
 
     #[test]
     fn test_write_route_classification() {
@@ -727,6 +985,24 @@ mod tests {
     fn test_admin_route_classification() {
         assert_eq!(
             route_requirement(&Method::POST, "/api/v1/mount").map(|req| req.permission),
+            Some(Permission::Admin)
+        );
+        assert_eq!(
+            route_requirement(&Method::POST, "/api/v1/tenants").map(|req| req.permission),
+            Some(Permission::Admin)
+        );
+        assert_eq!(
+            route_requirement(&Method::PATCH, "/api/v1/tenants/default/quota")
+                .map(|req| req.permission),
+            Some(Permission::Admin)
+        );
+        assert_eq!(
+            route_requirement(&Method::GET, "/api/v1/encryption/status").map(|req| req.permission),
+            Some(Permission::Admin)
+        );
+        assert_eq!(
+            route_requirement(&Method::GET, "/api/v1/encryption/versions")
+                .map(|req| req.permission),
             Some(Permission::Admin)
         );
         assert_eq!(
@@ -813,5 +1089,209 @@ mod tests {
             classify_traffic_operation(&Method::POST, "/api/v1/metrics/reset"),
             None
         );
+    }
+
+    async fn spawn_server(app: Router) -> (String, reqwest::Client) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        tokio::spawn(async move {
+            axum::serve(listener, app.into_make_service())
+                .await
+                .expect("serve");
+        });
+
+        let base = format!("http://127.0.0.1:{}", port);
+        let client = reqwest::Client::new();
+        for _ in 0..60 {
+            if let Ok(res) = client.get(format!("{}/api/v1/health", base)).send().await {
+                if res.status().is_success() {
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+
+        (base, client)
+    }
+
+    #[tokio::test]
+    async fn test_api_key_rate_limit_headers_are_present() {
+        async fn handler() -> &'static str {
+            "ok"
+        }
+
+        let auth_state = Arc::new(RestAuthState::from_api_keys_with_concurrency_limit(
+            vec!["write-key".to_string()],
+            vec![],
+            2,
+        ));
+        let app = Router::new()
+            .route("/api/v1/files", post(handler))
+            .route("/api/v1/health", axum::routing::get(|| async { "ok" }))
+            .layer(middleware::from_fn_with_state(auth_state, AuthMiddleware));
+
+        let (base, client) = spawn_server(app).await;
+        let response = client
+            .post(format!("{}/api/v1/files", base))
+            .header("x-api-key", "write-key")
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get("x-ratelimit-limit")
+                .and_then(|value| value.to_str().ok()),
+            Some("2")
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get("x-ratelimit-remaining")
+                .and_then(|value| value.to_str().ok()),
+            Some("1")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_api_key_rate_limit_rejects_second_inflight_request() {
+        async fn slow_handler(State(started): State<Arc<AtomicBool>>) -> &'static str {
+            started.store(true, Ordering::Relaxed);
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            "ok"
+        }
+
+        let auth_state = Arc::new(RestAuthState::from_api_keys_with_concurrency_limit(
+            vec!["write-key".to_string()],
+            vec![],
+            1,
+        ));
+        let started = Arc::new(AtomicBool::new(false));
+        let app = Router::new()
+            .route("/api/v1/files", post(slow_handler))
+            .route("/api/v1/health", axum::routing::get(|| async { "ok" }))
+            .with_state(started.clone())
+            .layer(middleware::from_fn_with_state(auth_state, AuthMiddleware));
+
+        let (base, client) = spawn_server(app).await;
+        let in_flight_client = client.clone();
+        let in_flight_base = base.clone();
+        let first = tokio::spawn(async move {
+            in_flight_client
+                .post(format!("{}/api/v1/files", in_flight_base))
+                .header("x-api-key", "write-key")
+                .send()
+                .await
+                .unwrap()
+        });
+
+        for _ in 0..20 {
+            if started.load(Ordering::Relaxed) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let second = client
+            .post(format!("{}/api/v1/files", base))
+            .header("x-api-key", "write-key")
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(second.status(), reqwest::StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            second
+                .headers()
+                .get("x-ratelimit-limit")
+                .and_then(|value| value.to_str().ok()),
+            Some("1")
+        );
+        assert_eq!(
+            second
+                .headers()
+                .get("x-ratelimit-remaining")
+                .and_then(|value| value.to_str().ok()),
+            Some("0")
+        );
+        assert_eq!(
+            second
+                .headers()
+                .get("retry-after")
+                .and_then(|value| value.to_str().ok()),
+            Some("1")
+        );
+
+        let first = first.await.unwrap();
+        assert_eq!(first.status(), reqwest::StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_ip_rate_limit_isolated_per_client_ip() {
+        async fn slow_handler(State(started): State<Arc<AtomicBool>>) -> &'static str {
+            started.store(true, Ordering::Relaxed);
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            "ok"
+        }
+
+        let started = Arc::new(AtomicBool::new(false));
+        let app = Router::new()
+            .route("/api/v1/files", post(slow_handler))
+            .route("/api/v1/health", axum::routing::get(|| async { "ok" }))
+            .with_state(started.clone())
+            .layer(middleware::from_fn_with_state(
+                Arc::new(IpRateLimitState::new(Some(1))),
+                IpRateLimitMiddleware,
+            ));
+
+        let (base, client) = spawn_server(app).await;
+        let first_client = client.clone();
+        let first_base = base.clone();
+        let first = tokio::spawn(async move {
+            first_client
+                .post(format!("{}/api/v1/files", first_base))
+                .header("x-real-ip", "203.0.113.10")
+                .send()
+                .await
+                .unwrap()
+        });
+
+        for _ in 0..20 {
+            if started.load(Ordering::Relaxed) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let same_ip = client
+            .post(format!("{}/api/v1/files", base))
+            .header("x-real-ip", "203.0.113.10")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(same_ip.status(), reqwest::StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            same_ip
+                .headers()
+                .get("retry-after")
+                .and_then(|value| value.to_str().ok()),
+            Some("1")
+        );
+        let same_ip_json: serde_json::Value = same_ip.json().await.unwrap();
+        assert_eq!(same_ip_json["message"], "IP concurrency limit exceeded");
+
+        let different_ip = client
+            .post(format!("{}/api/v1/files", base))
+            .header("x-real-ip", "203.0.113.11")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(different_ip.status(), reqwest::StatusCode::OK);
+
+        let first = first.await.unwrap();
+        assert_eq!(first.status(), reqwest::StatusCode::OK);
     }
 }

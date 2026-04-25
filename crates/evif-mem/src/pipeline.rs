@@ -629,9 +629,7 @@ impl ResourceLoader {
     /// Load from URL (http/https)
     pub async fn load_url(&self, url: &str) -> MemResult<(Resource, String)> {
         let response = self.http_client.get(url).send().await.map_err(|e| {
-            MemError::Io(std::io::Error::other(
-                format!("Failed to fetch URL: {}", e),
-            ))
+            MemError::Io(std::io::Error::other(format!("Failed to fetch URL: {}", e)))
         })?;
 
         // Detect content type
@@ -655,17 +653,16 @@ impl ResourceLoader {
         } else if content_type.contains("text/html") {
             // For HTML, extract text content (simple approach)
             let html = response.text().await.map_err(|e| {
-                MemError::Io(std::io::Error::other(
-                    format!("Failed to read HTML: {}", e),
-                ))
+                MemError::Io(std::io::Error::other(format!("Failed to read HTML: {}", e)))
             })?;
             extract_text_from_html(&html)
         } else {
             // Plain text or other
             response.text().await.map_err(|e| {
-                MemError::Io(std::io::Error::other(
-                    format!("Failed to read content: {}", e),
-                ))
+                MemError::Io(std::io::Error::other(format!(
+                    "Failed to read content: {}",
+                    e
+                )))
             })?
         };
 
@@ -1990,9 +1987,10 @@ impl Categorizer {
 
                 // Check if category still exists
                 if self.storage.get_category(&category_id).is_ok()
-                    && result.score >= self.similarity_threshold {
-                        return Ok(Some(category_id));
-                    }
+                    && result.score >= self.similarity_threshold
+                {
+                    return Ok(Some(category_id));
+                }
             }
         }
 
@@ -2011,7 +2009,8 @@ impl Categorizer {
         // Use LLM to analyze and generate category info
         let analysis = {
             let llm = self.llm_client.read().await;
-            llm.analyze_category(std::slice::from_ref(&item.content)).await?
+            llm.analyze_category(std::slice::from_ref(&item.content))
+                .await?
         };
 
         // Create new category
@@ -2188,11 +2187,8 @@ impl EvolvePipeline {
                 .join("; ")
         );
 
-        let mut merged_item = MemoryItem::new(
-            first_item.memory_type,
-            merged_summary,
-            merged_content,
-        );
+        let mut merged_item =
+            MemoryItem::new(first_item.memory_type, merged_summary, merged_content);
 
         // Set category from first item
         merged_item.category_id = first_item.category_id.clone();
@@ -3132,7 +3128,10 @@ Respond ONLY with valid JSON, no additional text."#,
             .1
             .as_ref()
             .expect("Caption should exist for single conversation segment");
-        assert!(caption.contains("segment"), "Caption should mention segment");
+        assert!(
+            caption.contains("segment"),
+            "Caption should mention segment"
+        );
     }
 
     #[test]
@@ -3245,10 +3244,7 @@ Respond ONLY with valid JSON, no additional text."#,
             "Placeholder should mention transcription"
         );
         assert!(result[0].1.is_some(), "Audio should have caption");
-        let caption = result[0]
-            .1
-            .as_ref()
-            .expect("Audio caption should exist");
+        let caption = result[0].1.as_ref().expect("Audio caption should exist");
         assert!(
             caption.contains("transcription"),
             "Caption should mention transcription"

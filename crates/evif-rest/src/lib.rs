@@ -25,8 +25,23 @@ pub use batch_handlers::{
     BatchOperationManager, OperationStatus,
 };
 pub use compat_fs::CompatFsHandlers;
-pub use context_handlers::{ContextState, SemanticSearchRequest, SemanticSearchResponse, SemanticResultJson, SummarizeRequest, SummarizeResponse};
+pub use context_handlers::{
+    ContextState, SemanticResultJson, SemanticSearchRequest, SemanticSearchResponse,
+    SummarizeRequest, SummarizeResponse,
+};
+pub use encryption_handlers::{
+    EnableEncryptionRequest, EncryptionConfig, EncryptionHandlers, EncryptionState,
+    EncryptionStatus, KeyVersion, RotateKeyRequest,
+};
 pub use fs_handlers::{FsHandlers, FsState};
+pub use graphql_handlers::{
+    ConflictResolution, DeltaChangeInput, DeltaResponseGql, DirectoryDeleteInput,
+    DirectoryDeleteResult, EncryptionOperationResult, EncryptionStatusGql, EvifSchema,
+    FileCreateInput, FileCreateResult, FileDeleteInput, FileDeleteResult, FileListEntry,
+    FileListResult, FileReadInput, FileReadResult, FileWriteInput, FileWriteResult,
+    GraphQLHandlers, GraphQLState, GraphqlAppContext, GraphqlTrafficStats, KeyVersionGql,
+    MountInfo, MutationRoot, QueryRoot, ServerStatus, SyncStatusGql,
+};
 pub use handle_handlers::{HandleHandlers, HandleState};
 pub use handlers::{AppState, EvifHandlers};
 pub use memory_handlers::{
@@ -39,23 +54,20 @@ pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState, TenantMid
 pub use plugin_handlers::{PluginHandlers, PluginState};
 pub use routes::{
     create_routes, create_routes_with_auth, create_routes_with_context,
-    create_routes_with_encryption_state, create_routes_with_memory_state, create_routes_with_sync_state,
-    create_routes_with_tenant_state,
+    create_routes_with_encryption_state, create_routes_with_memory_state,
+    create_routes_with_sync_state, create_routes_with_tenant_state,
 };
 pub use server::{EvifServer, ServerConfig};
-pub use ws_handlers::{WSMessage, WebSocketHandlers, WebSocketState};
+pub use sync_handlers::{
+    ConflictHistoryResponse, ConflictRecord, DeltaChange, DeltaRequest, DeltaResponse,
+    ResolveConflictRequest, SingleConflictResolution, SyncHandlers, SyncState, SyncStatus,
+    WatchEvent,
+};
 pub use tenant_handlers::{
-    CreateTenantRequest, TenantHandlers, TenantInfo, TenantState, TenantStatus,
+    CreateTenantRequest, TenantHandlers, TenantInfo, TenantState, TenantStatus, UpdateQuotaRequest,
     DEFAULT_TENANT_ID, TENANT_HEADER,
 };
-pub use encryption_handlers::{
-    EnableEncryptionRequest, EncryptionConfig, EncryptionHandlers, EncryptionState,
-    EncryptionStatus,
-};
-pub use graphql_handlers::{EvifSchema, GraphQLHandlers, GraphQLState, QueryRoot, ServerStatus};
-pub use sync_handlers::{
-    DeltaChange, DeltaRequest, DeltaResponse, SyncHandlers, SyncState, SyncStatus, WatchEvent,
-};
+pub use ws_handlers::{WSMessage, WebSocketHandlers, WebSocketState};
 
 use axum::{
     http::StatusCode,

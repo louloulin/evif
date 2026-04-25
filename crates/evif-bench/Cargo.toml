@@ -16,6 +16,7 @@ evif-plugins = { path = "../evif-plugins", features = ["sqlfs"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+urlencoding = "2.1"
 
 # HTTP client & server
 reqwest = { version = "0.11", default-features = false, features = ["json"] }

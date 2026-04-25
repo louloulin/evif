@@ -2,8 +2,8 @@
 //
 // 测试分布式部署相关功能：节点状态、健康检查
 
-use evif_rest::create_routes;
 use evif_core::RadixMountTable;
+use evif_rest::create_routes;
 use std::sync::Arc;
 
 /// P16.2-01: Status Endpoint Returns Node Info
@@ -45,7 +45,10 @@ async fn distributed_status_endpoint() {
     let json: serde_json::Value = res.json().await.expect("valid JSON");
     assert!(json.get("status").is_some(), "Should have status field");
     assert!(json.get("version").is_some(), "Should have version field");
-    assert!(json.get("uptime_secs").is_some(), "Should have uptime_secs field");
+    assert!(
+        json.get("uptime_secs").is_some(),
+        "Should have uptime_secs field"
+    );
     assert!(json.get("ready").is_some(), "Should have ready field");
 }
 
@@ -196,10 +199,7 @@ async fn distributed_ping_latency() {
     let mut samples = Vec::new();
     for _ in 0..20 {
         let start = std::time::Instant::now();
-        let _ = client
-            .get(format!("{}/api/v1/ping", base))
-            .send()
-            .await;
+        let _ = client.get(format!("{}/api/v1/ping", base)).send().await;
         samples.push(start.elapsed().as_millis() as u64);
     }
 
@@ -208,9 +208,5 @@ async fn distributed_ping_latency() {
     println!("Ping P50 latency: {}ms", p50);
 
     // Ping 应该很快（< 50ms）
-    assert!(
-        p50 < 50,
-        "Ping latency should be < 50ms, got {}ms",
-        p50
-    );
+    assert!(p50 < 50, "Ping latency should be < 50ms, got {}ms", p50);
 }

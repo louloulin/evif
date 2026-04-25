@@ -99,9 +99,7 @@ fn get_file_index() -> Vec<String> {
     var::get::<String>(INDEX_KEY)
         .ok()
         .flatten()
-        .map(|s| {
-            serde_json::from_str::<Vec<String>>(&s).unwrap_or_default()
-        })
+        .map(|s| serde_json::from_str::<Vec<String>>(&s).unwrap_or_default())
         .unwrap_or_default()
 }
 
@@ -138,8 +136,8 @@ pub fn evif_create(input: String) -> FnResult<String> {
         perm: u32,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let file_data = serde_json::json!({
         "data": "",
@@ -153,7 +151,11 @@ pub fn evif_create(input: String) -> FnResult<String> {
 
     add_to_index(&req.path);
 
-    Ok(serde_json::to_string(&SuccessResponse { success: true, error: None }).unwrap())
+    Ok(serde_json::to_string(&SuccessResponse {
+        success: true,
+        error: None,
+    })
+    .unwrap())
 }
 
 /// 创建目录
@@ -165,8 +167,8 @@ pub fn evif_mkdir(input: String) -> FnResult<String> {
         perm: u32,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let dir_data = serde_json::json!({
         "data": "",
@@ -180,7 +182,11 @@ pub fn evif_mkdir(input: String) -> FnResult<String> {
 
     add_to_index(&req.path);
 
-    Ok(serde_json::to_string(&SuccessResponse { success: true, error: None }).unwrap())
+    Ok(serde_json::to_string(&SuccessResponse {
+        success: true,
+        error: None,
+    })
+    .unwrap())
 }
 
 /// 读取文件
@@ -193,8 +199,8 @@ pub fn evif_read(input: String) -> FnResult<String> {
         size: u64,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let key = get_kv_key(&req.path);
     let file_data: String = var::get(&key)
@@ -205,8 +211,8 @@ pub fn evif_read(input: String) -> FnResult<String> {
         .map_err(|e| anyhow::anyhow!("Corrupted file data: {}", e))?;
 
     let base64_data = data["data"].as_str().unwrap_or("");
-    let full_data = b64_decode(base64_data)
-        .map_err(|e| anyhow::anyhow!("Base64 decode failed: {}", e))?;
+    let full_data =
+        b64_decode(base64_data).map_err(|e| anyhow::anyhow!("Base64 decode failed: {}", e))?;
 
     let start = req.offset as usize;
     let end = if req.size == 0 {
@@ -218,7 +224,11 @@ pub fn evif_read(input: String) -> FnResult<String> {
     let sliced_data = &full_data[start.min(full_data.len())..end];
     let encoded = b64_encode(sliced_data);
 
-    Ok(serde_json::to_string(&ReadResponse { data: encoded, error: None }).unwrap())
+    Ok(serde_json::to_string(&ReadResponse {
+        data: encoded,
+        error: None,
+    })
+    .unwrap())
 }
 
 /// 写入文件
@@ -232,18 +242,16 @@ pub fn evif_write(input: String) -> FnResult<String> {
         _flags: u32,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
-    let new_data = b64_decode(&req.data)
-        .map_err(|e| anyhow::anyhow!("Base64 decode failed: {}", e))?;
+    let new_data =
+        b64_decode(&req.data).map_err(|e| anyhow::anyhow!("Base64 decode failed: {}", e))?;
 
     let key = get_kv_key(&req.path);
 
     // 读取现有数据（如果存在）
-    let existing_opt: Option<String> = var::get(&key)
-        .ok()
-        .flatten();
+    let existing_opt: Option<String> = var::get(&key).ok().flatten();
 
     let mut final_data = new_data.clone();
 
@@ -281,7 +289,11 @@ pub fn evif_write(input: String) -> FnResult<String> {
 
     add_to_index(&req.path);
 
-    Ok(serde_json::to_string(&WriteResponse { bytes_written: final_data.len() as u64, error: None }).unwrap())
+    Ok(serde_json::to_string(&WriteResponse {
+        bytes_written: final_data.len() as u64,
+        error: None,
+    })
+    .unwrap())
 }
 
 /// 列出目录
@@ -292,8 +304,8 @@ pub fn evif_readdir(input: String) -> FnResult<String> {
         path: String,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let prefix = req.path.trim_end_matches('/');
     let all_paths = get_file_index();
@@ -338,8 +350,8 @@ pub fn evif_stat(input: String) -> FnResult<String> {
         path: String,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let key = get_kv_key(&req.path);
     let file_data: String = var::get(&key)
@@ -359,9 +371,16 @@ pub fn evif_stat(input: String) -> FnResult<String> {
     let is_dir = data_json["is_dir"].as_bool().unwrap_or(false);
 
     Ok(serde_json::to_string(&StatResponse {
-        file: Some(FileInfo { name, size, mode, modified, is_dir }),
+        file: Some(FileInfo {
+            name,
+            size,
+            mode,
+            modified,
+            is_dir,
+        }),
         error: None,
-    }).unwrap())
+    })
+    .unwrap())
 }
 
 /// 删除文件
@@ -372,16 +391,19 @@ pub fn evif_remove(input: String) -> FnResult<String> {
         path: String,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let key = get_kv_key(&req.path);
-    var::remove(&key)
-        .map_err(|e| anyhow::anyhow!("Failed to remove file: {}", e))?;
+    var::remove(&key).map_err(|e| anyhow::anyhow!("Failed to remove file: {}", e))?;
 
     remove_from_index(&req.path);
 
-    Ok(serde_json::to_string(&SuccessResponse { success: true, error: None }).unwrap())
+    Ok(serde_json::to_string(&SuccessResponse {
+        success: true,
+        error: None,
+    })
+    .unwrap())
 }
 
 /// 重命名文件
@@ -393,8 +415,8 @@ pub fn evif_rename(input: String) -> FnResult<String> {
         new_path: String,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let old_key = get_kv_key(&req.old_path);
     let new_key = get_kv_key(&req.new_path);
@@ -409,13 +431,16 @@ pub fn evif_rename(input: String) -> FnResult<String> {
         .map_err(|e| anyhow::anyhow!("Failed to create new file: {}", e))?;
 
     // 删除旧文件
-    var::remove(&old_key)
-        .map_err(|e| anyhow::anyhow!("Failed to remove old file: {}", e))?;
+    var::remove(&old_key).map_err(|e| anyhow::anyhow!("Failed to remove old file: {}", e))?;
 
     remove_from_index(&req.old_path);
     add_to_index(&req.new_path);
 
-    Ok(serde_json::to_string(&SuccessResponse { success: true, error: None }).unwrap())
+    Ok(serde_json::to_string(&SuccessResponse {
+        success: true,
+        error: None,
+    })
+    .unwrap())
 }
 
 /// 递归删除目录
@@ -426,8 +451,8 @@ pub fn evif_remove_all(input: String) -> FnResult<String> {
         path: String,
     }
 
-    let req: Request = serde_json::from_str(&input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
+    let req: Request =
+        serde_json::from_str(&input).map_err(|e| anyhow::anyhow!("Invalid JSON: {}", e))?;
 
     let prefix = req.path.trim_end_matches('/');
     let all_paths = get_file_index();
@@ -440,5 +465,9 @@ pub fn evif_remove_all(input: String) -> FnResult<String> {
 
     remove_from_index(prefix);
 
-    Ok(serde_json::to_string(&SuccessResponse { success: true, error: None }).unwrap())
+    Ok(serde_json::to_string(&SuccessResponse {
+        success: true,
+        error: None,
+    })
+    .unwrap())
 }

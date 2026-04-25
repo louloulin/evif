@@ -96,11 +96,7 @@ async fn perf_latency_p99() {
     let p99 = latencies[p99_index];
 
     // 验证 P99 < 50ms
-    assert!(
-        p99 < 50,
-        "P99 latency {}ms > 50ms target",
-        p99
-    );
+    assert!(p99 < 50, "P99 latency {}ms > 50ms target", p99);
 }
 
 /// PE-04: Memory Usage Test
@@ -207,12 +203,14 @@ async fn perf_large_file_write() {
     let content = "line of data\n".repeat(1000); // ~14KB
 
     let start = std::time::Instant::now();
+    plugin.create("/L2/large.txt", 0o644).await.expect("create");
     plugin
-        .create("/L2/large.txt", 0o644)
-        .await
-        .expect("create");
-    plugin
-        .write("/L2/large.txt", content.into_bytes(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/large.txt",
+            content.into_bytes(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write");
     let elapsed = start.elapsed().as_millis();
@@ -247,7 +245,12 @@ async fn perf_multi_layer_read() {
         .await
         .expect("create L2");
     plugin
-        .write("/L2/perf_test.txt", b"test content".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/perf_test.txt",
+            b"test content".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write L2");
 

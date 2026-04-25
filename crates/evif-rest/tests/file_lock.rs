@@ -132,8 +132,5 @@ async fn file_lock_list() {
         .expect("request succeeds");
 
     // 应该成功
-    assert!(
-        res.status().is_success(),
-        "Lock list should succeed"
-    );
+    assert!(res.status().is_success(), "Lock list should succeed");
 }

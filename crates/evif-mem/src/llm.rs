@@ -291,7 +291,11 @@ Text:
         let response = self.generate(&prompt).await?;
 
         // Parse JSON from response
-        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
         let start = match cleaned.find('[') {
             Some(s) => s,
             None => return Ok(vec![]),
@@ -318,8 +322,16 @@ Text:
                 Some("tool") => MemoryType::Tool,
                 _ => MemoryType::Knowledge,
             };
-            let summary = raw.get("summary").and_then(|t| t.as_str()).unwrap_or("").to_string();
-            let content = raw.get("content").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let summary = raw
+                .get("summary")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = raw
+                .get("content")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
 
             items.push(MemoryItem {
                 id: uuid::Uuid::new_v4().to_string(),
@@ -426,9 +438,33 @@ Return ONLY JSON (no markdown):
             truncated
         );
         let response = self.generate(&prompt).await?;
-        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
-        let start = match cleaned.find('{') { Some(s) => s, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
-        let end = match cleaned.rfind('}') { Some(e) => e, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('{') {
+            Some(s) => s,
+            None => {
+                return Ok(CategoryAnalysis {
+                    name: "uncategorized".to_string(),
+                    description: "Default".to_string(),
+                    themes: vec![],
+                    tags: vec![],
+                })
+            }
+        };
+        let end = match cleaned.rfind('}') {
+            Some(e) => e,
+            None => {
+                return Ok(CategoryAnalysis {
+                    name: "uncategorized".to_string(),
+                    description: "Default".to_string(),
+                    themes: vec![],
+                    tags: vec![],
+                })
+            }
+        };
         serde_json::from_str(&cleaned[start..=end])
             .map_err(|e| MemError::Llm(format!("Failed to parse category: {}", e)))
     }
@@ -437,11 +473,22 @@ Return ONLY JSON (no markdown):
         if items.is_empty() {
             return Ok(items);
         }
-        let items_json: Vec<String> = items.iter().enumerate()
-            .map(|(i, item)| format!(r#"{{"index": {}, "summary": "{}", "content": "{}"}}"#,
-                i,
-                item.summary.replace('"', "\\\"").replace('\n', "\\n"),
-                item.content.chars().take(200).collect::<String>().replace('"', "\\\"").replace('\n', "\\n")))
+        let items_json: Vec<String> = items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                format!(
+                    r#"{{"index": {}, "summary": "{}", "content": "{}"}}"#,
+                    i,
+                    item.summary.replace('"', "\\\"").replace('\n', "\\n"),
+                    item.content
+                        .chars()
+                        .take(200)
+                        .collect::<String>()
+                        .replace('"', "\\\"")
+                        .replace('\n', "\\n")
+                )
+            })
             .collect();
         let prompt = format!(
             r#"Given the query "{}", rerank the following items by relevance (most relevant first).
@@ -454,9 +501,19 @@ Return ONLY a JSON array of indices in order of relevance, e.g. [2, 0, 1, 3]. Re
             items_json.join(",\n")
         );
         let response = self.generate(&prompt).await?;
-        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
-        let start = match cleaned.find('[') { Some(s) => s, None => return Ok(items) };
-        let end = match cleaned.rfind(']') { Some(e) => e, None => return Ok(items) };
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(items),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(items),
+        };
         let indices: Vec<usize> = match serde_json::from_str(&cleaned[start..=end]) {
             Ok(v) => v,
             Err(_) => return Ok(items),
@@ -697,7 +754,11 @@ Text:
         let response = self.generate(&prompt).await?;
 
         // Parse JSON from response
-        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
         let start = match cleaned.find('[') {
             Some(s) => s,
             None => return Ok(vec![]),
@@ -724,8 +785,16 @@ Text:
                 Some("tool") => MemoryType::Tool,
                 _ => MemoryType::Knowledge,
             };
-            let summary = raw.get("summary").and_then(|t| t.as_str()).unwrap_or("").to_string();
-            let content = raw.get("content").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let summary = raw
+                .get("summary")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = raw
+                .get("content")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
 
             items.push(MemoryItem {
                 id: uuid::Uuid::new_v4().to_string(),
@@ -788,9 +857,33 @@ Return ONLY JSON (no markdown):
             truncated
         );
         let response = self.generate(&prompt).await?;
-        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
-        let start = match cleaned.find('{') { Some(s) => s, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
-        let end = match cleaned.rfind('}') { Some(e) => e, None => return Ok(CategoryAnalysis { name: "uncategorized".to_string(), description: "Default".to_string(), themes: vec![], tags: vec![] }) };
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('{') {
+            Some(s) => s,
+            None => {
+                return Ok(CategoryAnalysis {
+                    name: "uncategorized".to_string(),
+                    description: "Default".to_string(),
+                    themes: vec![],
+                    tags: vec![],
+                })
+            }
+        };
+        let end = match cleaned.rfind('}') {
+            Some(e) => e,
+            None => {
+                return Ok(CategoryAnalysis {
+                    name: "uncategorized".to_string(),
+                    description: "Default".to_string(),
+                    themes: vec![],
+                    tags: vec![],
+                })
+            }
+        };
         serde_json::from_str(&cleaned[start..=end])
             .map_err(|e| MemError::Llm(format!("Failed to parse category: {}", e)))
     }
@@ -799,11 +892,22 @@ Return ONLY JSON (no markdown):
         if items.is_empty() {
             return Ok(items);
         }
-        let items_json: Vec<String> = items.iter().enumerate()
-            .map(|(i, item)| format!(r#"{{"index": {}, "summary": "{}", "content": "{}"}}"#,
-                i,
-                item.summary.replace('"', "\\\"").replace('\n', "\\n"),
-                item.content.chars().take(200).collect::<String>().replace('"', "\\\"").replace('\n', "\\n")))
+        let items_json: Vec<String> = items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                format!(
+                    r#"{{"index": {}, "summary": "{}", "content": "{}"}}"#,
+                    i,
+                    item.summary.replace('"', "\\\"").replace('\n', "\\n"),
+                    item.content
+                        .chars()
+                        .take(200)
+                        .collect::<String>()
+                        .replace('"', "\\\"")
+                        .replace('\n', "\\n")
+                )
+            })
             .collect();
         let prompt = format!(
             r#"Given the query "{}", rerank the following items by relevance (most relevant first).
@@ -816,9 +920,19 @@ Return ONLY a JSON array of indices in order of relevance, e.g. [2, 0, 1, 3]. Re
             items_json.join(",\n")
         );
         let response = self.generate(&prompt).await?;
-        let cleaned = response.trim().trim_start_matches("```json").trim_end_matches("```").trim();
-        let start = match cleaned.find('[') { Some(s) => s, None => return Ok(items) };
-        let end = match cleaned.rfind(']') { Some(e) => e, None => return Ok(items) };
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(items),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(items),
+        };
         let indices: Vec<usize> = match serde_json::from_str(&cleaned[start..=end]) {
             Ok(v) => v,
             Err(_) => return Ok(items),
@@ -1113,10 +1227,99 @@ impl LLMClient for OllamaClient {
         Ok(result.response)
     }
 
-    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement LLM-based memory extraction with Ollama
-        // For now, return empty vec
-        Ok(vec![])
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+        use crate::models::MemoryType;
+
+        let truncated: String = if text.len() > 6000 {
+            text.chars().take(6000).collect()
+        } else {
+            text.to_string()
+        };
+
+        let prompt = format!(
+            r#"Extract Memory Items from Text
+
+Analyze the following text and extract structured memory items.
+For each item, provide:
+  - memory_type: one of [profile, event, knowledge, behavior, skill, tool]
+  - summary: a concise 1-sentence summary
+  - content: the full relevant content
+
+Return ONLY a JSON array (no markdown fences):
+[{{"memory_type":"<type>","summary":"<summary>","content":"<content>"}}]
+
+Text:
+```
+{}
+```"#,
+            truncated
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse JSON from response
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut items = Vec::new();
+        let now = chrono::Utc::now();
+        for raw in raw_items {
+            let memory_type = match raw.get("memory_type").and_then(|t| t.as_str()) {
+                Some("profile") => MemoryType::Profile,
+                Some("event") => MemoryType::Event,
+                Some("knowledge") => MemoryType::Knowledge,
+                Some("behavior") => MemoryType::Behavior,
+                Some("skill") => MemoryType::Skill,
+                Some("tool") => MemoryType::Tool,
+                _ => MemoryType::Knowledge,
+            };
+            let summary = raw
+                .get("summary")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = raw
+                .get("content")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            items.push(MemoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                memory_type,
+                summary,
+                content,
+                embedding_id: None,
+                happened_at: Some(now),
+                content_hash: None,
+                reinforcement_count: 0,
+                last_reinforced_at: None,
+                resource_id: None,
+                ref_id: None,
+                category_id: None,
+                user_id: None,
+                tenant_id: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        Ok(items)
     }
 
     async fn embed(&self, text: &str) -> MemResult<Vec<f32>> {
@@ -1351,10 +1554,99 @@ impl LLMClient for OpenRouterClient {
             .ok_or_else(|| MemError::Llm("No response generated".to_string()))
     }
 
-    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement LLM-based memory extraction with OpenRouter
-        // For now, return empty vec
-        Ok(vec![])
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+        use crate::models::MemoryType;
+
+        let truncated: String = if text.len() > 6000 {
+            text.chars().take(6000).collect()
+        } else {
+            text.to_string()
+        };
+
+        let prompt = format!(
+            r#"Extract Memory Items from Text
+
+Analyze the following text and extract structured memory items.
+For each item, provide:
+  - memory_type: one of [profile, event, knowledge, behavior, skill, tool]
+  - summary: a concise 1-sentence summary
+  - content: the full relevant content
+
+Return ONLY a JSON array (no markdown fences):
+[{{"memory_type":"<type>","summary":"<summary>","content":"<content>"}}]
+
+Text:
+```
+{}
+```"#,
+            truncated
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse JSON from response
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut items = Vec::new();
+        let now = chrono::Utc::now();
+        for raw in raw_items {
+            let memory_type = match raw.get("memory_type").and_then(|t| t.as_str()) {
+                Some("profile") => MemoryType::Profile,
+                Some("event") => MemoryType::Event,
+                Some("knowledge") => MemoryType::Knowledge,
+                Some("behavior") => MemoryType::Behavior,
+                Some("skill") => MemoryType::Skill,
+                Some("tool") => MemoryType::Tool,
+                _ => MemoryType::Knowledge,
+            };
+            let summary = raw
+                .get("summary")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = raw
+                .get("content")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            items.push(MemoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                memory_type,
+                summary,
+                content,
+                embedding_id: None,
+                happened_at: Some(now),
+                content_hash: None,
+                reinforcement_count: 0,
+                last_reinforced_at: None,
+                resource_id: None,
+                ref_id: None,
+                category_id: None,
+                user_id: None,
+                tenant_id: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        Ok(items)
     }
 
     async fn embed(&self, text: &str) -> MemResult<Vec<f32>> {
@@ -1721,10 +2013,99 @@ impl LLMClient for GrokClient {
             .ok_or_else(|| MemError::Llm("No response generated".to_string()))
     }
 
-    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement LLM-based memory extraction with Grok
-        // For now, return empty vec
-        Ok(vec![])
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+        use crate::models::MemoryType;
+
+        let truncated: String = if text.len() > 6000 {
+            text.chars().take(6000).collect()
+        } else {
+            text.to_string()
+        };
+
+        let prompt = format!(
+            r#"Extract Memory Items from Text
+
+Analyze the following text and extract structured memory items.
+For each item, provide:
+  - memory_type: one of [profile, event, knowledge, behavior, skill, tool]
+  - summary: a concise 1-sentence summary
+  - content: the full relevant content
+
+Return ONLY a JSON array (no markdown fences):
+[{{"memory_type":"<type>","summary":"<summary>","content":"<content>"}}]
+
+Text:
+```
+{}
+```"#,
+            truncated
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse JSON from response
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut items = Vec::new();
+        let now = chrono::Utc::now();
+        for raw in raw_items {
+            let memory_type = match raw.get("memory_type").and_then(|t| t.as_str()) {
+                Some("profile") => MemoryType::Profile,
+                Some("event") => MemoryType::Event,
+                Some("knowledge") => MemoryType::Knowledge,
+                Some("behavior") => MemoryType::Behavior,
+                Some("skill") => MemoryType::Skill,
+                Some("tool") => MemoryType::Tool,
+                _ => MemoryType::Knowledge,
+            };
+            let summary = raw
+                .get("summary")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = raw
+                .get("content")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            items.push(MemoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                memory_type,
+                summary,
+                content,
+                embedding_id: None,
+                happened_at: Some(now),
+                content_hash: None,
+                reinforcement_count: 0,
+                last_reinforced_at: None,
+                resource_id: None,
+                ref_id: None,
+                category_id: None,
+                user_id: None,
+                tenant_id: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        Ok(items)
     }
 
     async fn embed(&self, _text: &str) -> MemResult<Vec<f32>> {
@@ -2127,10 +2508,99 @@ impl LLMClient for LazyLLMClient {
             .ok_or_else(|| MemError::Llm("No response generated".to_string()))
     }
 
-    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement LLM-based memory extraction with LazyLLM
-        // For now, return empty vec
-        Ok(vec![])
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+        use crate::models::MemoryType;
+
+        let truncated: String = if text.len() > 6000 {
+            text.chars().take(6000).collect()
+        } else {
+            text.to_string()
+        };
+
+        let prompt = format!(
+            r#"Extract Memory Items from Text
+
+Analyze the following text and extract structured memory items.
+For each item, provide:
+  - memory_type: one of [profile, event, knowledge, behavior, skill, tool]
+  - summary: a concise 1-sentence summary
+  - content: the full relevant content
+
+Return ONLY a JSON array (no markdown fences):
+[{{"memory_type":"<type>","summary":"<summary>","content":"<content>"}}]
+
+Text:
+```
+{}
+```"#,
+            truncated
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse JSON from response
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut items = Vec::new();
+        let now = chrono::Utc::now();
+        for raw in raw_items {
+            let memory_type = match raw.get("memory_type").and_then(|t| t.as_str()) {
+                Some("profile") => MemoryType::Profile,
+                Some("event") => MemoryType::Event,
+                Some("knowledge") => MemoryType::Knowledge,
+                Some("behavior") => MemoryType::Behavior,
+                Some("skill") => MemoryType::Skill,
+                Some("tool") => MemoryType::Tool,
+                _ => MemoryType::Knowledge,
+            };
+            let summary = raw
+                .get("summary")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = raw
+                .get("content")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            items.push(MemoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                memory_type,
+                summary,
+                content,
+                embedding_id: None,
+                happened_at: Some(now),
+                content_hash: None,
+                reinforcement_count: 0,
+                last_reinforced_at: None,
+                resource_id: None,
+                ref_id: None,
+                category_id: None,
+                user_id: None,
+                tenant_id: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        Ok(items)
     }
 
     async fn embed(&self, text: &str) -> MemResult<Vec<f32>> {
@@ -2397,10 +2867,99 @@ impl LLMClient for DoubaoClient {
             .ok_or_else(|| MemError::Llm("No response generated".to_string()))
     }
 
-    async fn extract_memories(&self, _text: &str) -> MemResult<Vec<MemoryItem>> {
-        // TODO: Implement LLM-based memory extraction with Doubao
-        // For now, return empty vec
-        Ok(vec![])
+    async fn extract_memories(&self, text: &str) -> MemResult<Vec<MemoryItem>> {
+        use crate::models::MemoryType;
+
+        let truncated: String = if text.len() > 6000 {
+            text.chars().take(6000).collect()
+        } else {
+            text.to_string()
+        };
+
+        let prompt = format!(
+            r#"Extract Memory Items from Text
+
+Analyze the following text and extract structured memory items.
+For each item, provide:
+  - memory_type: one of [profile, event, knowledge, behavior, skill, tool]
+  - summary: a concise 1-sentence summary
+  - content: the full relevant content
+
+Return ONLY a JSON array (no markdown fences):
+[{{"memory_type":"<type>","summary":"<summary>","content":"<content>"}}]
+
+Text:
+```
+{}
+```"#,
+            truncated
+        );
+
+        let response = self.generate(&prompt).await?;
+
+        // Parse JSON from response
+        let cleaned = response
+            .trim()
+            .trim_start_matches("```json")
+            .trim_end_matches("```")
+            .trim();
+        let start = match cleaned.find('[') {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        let end = match cleaned.rfind(']') {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&cleaned[start..=end]) {
+            Ok(v) => v,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let mut items = Vec::new();
+        let now = chrono::Utc::now();
+        for raw in raw_items {
+            let memory_type = match raw.get("memory_type").and_then(|t| t.as_str()) {
+                Some("profile") => MemoryType::Profile,
+                Some("event") => MemoryType::Event,
+                Some("knowledge") => MemoryType::Knowledge,
+                Some("behavior") => MemoryType::Behavior,
+                Some("skill") => MemoryType::Skill,
+                Some("tool") => MemoryType::Tool,
+                _ => MemoryType::Knowledge,
+            };
+            let summary = raw
+                .get("summary")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = raw
+                .get("content")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            items.push(MemoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                memory_type,
+                summary,
+                content,
+                embedding_id: None,
+                happened_at: Some(now),
+                content_hash: None,
+                reinforcement_count: 0,
+                last_reinforced_at: None,
+                resource_id: None,
+                ref_id: None,
+                category_id: None,
+                user_id: None,
+                tenant_id: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        Ok(items)
     }
 
     async fn embed(&self, _text: &str) -> MemResult<Vec<f32>> {

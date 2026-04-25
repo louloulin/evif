@@ -5,7 +5,10 @@ use evif_plugins::QueueFsPlugin;
 async fn queuefs_rejects_missing_queue_directory_and_exposes_root_readme() {
     let plugin = QueueFsPlugin::new();
 
-    let err = plugin.readdir("/missing").await.expect_err("missing queue should fail");
+    let err = plugin
+        .readdir("/missing")
+        .await
+        .expect_err("missing queue should fail");
     assert!(matches!(err, evif_core::EvifError::NotFound(_)));
 
     let readme = plugin.read("/README", 0, 0).await.expect("readme");

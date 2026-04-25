@@ -2,7 +2,6 @@
 //!
 //! Provides utilities to mask sensitive data like passwords, tokens, API keys, etc.
 
-
 /// Mask configuration
 #[derive(Debug, Clone, Default)]
 pub struct MaskConfig {

@@ -4,7 +4,10 @@ use evif_plugins::{core_supported_plugins, experimental_plugins};
 
 #[test]
 fn core_supported_plugins_inventory_matches_supported_surface() {
-    let core_ids: BTreeSet<&str> = core_supported_plugins().iter().map(|plugin| plugin.id).collect();
+    let core_ids: BTreeSet<&str> = core_supported_plugins()
+        .iter()
+        .map(|plugin| plugin.id)
+        .collect();
     let expected = BTreeSet::from([
         "contextfs",
         "heartbeatfs",
@@ -22,7 +25,9 @@ fn core_supported_plugins_inventory_matches_supported_surface() {
     ]);
 
     assert_eq!(core_ids, expected);
-    assert!(core_supported_plugins().iter().all(|plugin| plugin.is_mountable));
+    assert!(core_supported_plugins()
+        .iter()
+        .all(|plugin| plugin.is_mountable));
 }
 
 #[test]

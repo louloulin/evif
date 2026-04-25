@@ -1,0 +1,16 @@
+[package]
+name = "core-tests"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+evif-core = { path = "../../crates/evif-core" }
+evif-plugins = { path = "../../crates/evif-plugins", features = ["sqlfs"] }
+tokio = { workspace = true }
+serde_json = { workspace = true }

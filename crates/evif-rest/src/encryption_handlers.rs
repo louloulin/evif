@@ -7,13 +7,9 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use rand::{RngCore, rngs::OsRng};
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, response::IntoResponse, Json};
 use parking_lot::RwLock;
+use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -37,6 +33,17 @@ pub struct EncryptionConfig {
     pub key_source: String,
 }
 
+/// A single encryption key version entry
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct KeyVersion {
+    pub id: String,
+    pub version: u32,
+    /// Truncated hint of key source (e.g., "env:MY_KEY" or "provided")
+    pub source_hint: String,
+    pub created_at: String,
+    pub is_current: bool,
+}
+
 /// Request to enable encryption
 #[derive(Debug, Deserialize)]
 pub struct EnableEncryptionRequest {
@@ -56,6 +63,10 @@ struct EncryptionInner {
     cipher: Option<Aes256Gcm>,
     key_source: String,
     key_reference: Option<String>,
+    /// History of key versions (oldest first, current marked with is_current)
+    key_versions: Vec<KeyVersion>,
+    /// Next version number to assign
+    next_version: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -63,6 +74,10 @@ struct EncryptionSnapshot {
     enabled: bool,
     key_source: String,
     key_reference: Option<String>,
+    #[serde(default)]
+    key_versions: Vec<KeyVersion>,
+    #[serde(default)]
+    next_version: u32,
 }
 
 impl Default for EncryptionState {
@@ -128,12 +143,16 @@ impl EncryptionState {
                     cipher: Some(cipher),
                     key_source: "env:EVIF_ENCRYPTION_KEY".to_string(),
                     key_reference: Some("env:EVIF_ENCRYPTION_KEY".to_string()),
+                    key_versions: vec![],
+                    next_version: 1,
                 },
                 Err(_) => EncryptionInner {
                     enabled: false,
                     cipher: None,
                     key_source: "env:EVIF_ENCRYPTION_KEY (invalid)".to_string(),
                     key_reference: Some("env:EVIF_ENCRYPTION_KEY".to_string()),
+                    key_versions: vec![],
+                    next_version: 1,
                 },
             }
         } else {
@@ -142,6 +161,8 @@ impl EncryptionState {
                 cipher: None,
                 key_source: String::new(),
                 key_reference: None,
+                key_versions: vec![],
+                next_version: 1,
             }
         }
     }
@@ -151,16 +172,22 @@ impl EncryptionState {
             enabled: inner.enabled,
             key_source: inner.key_source.clone(),
             key_reference: inner.key_reference.clone(),
+            key_versions: inner.key_versions.clone(),
+            next_version: inner.next_version,
         }
     }
 
     fn inner_from_snapshot(snapshot: EncryptionSnapshot) -> EncryptionInner {
+        let key_versions = snapshot.key_versions;
+        let next_version = snapshot.next_version;
         if !snapshot.enabled {
             return EncryptionInner {
                 enabled: false,
                 cipher: None,
                 key_source: snapshot.key_source,
                 key_reference: snapshot.key_reference,
+                key_versions,
+                next_version,
             };
         }
 
@@ -171,12 +198,16 @@ impl EncryptionState {
                     cipher: Some(cipher),
                     key_source: snapshot.key_source,
                     key_reference: Some(key_reference.to_string()),
+                    key_versions,
+                    next_version,
                 },
                 Err(_) => EncryptionInner {
                     enabled: false,
                     cipher: None,
                     key_source: snapshot.key_source,
                     key_reference: Some(key_reference.to_string()),
+                    key_versions,
+                    next_version,
                 },
             },
             None => EncryptionInner {
@@ -184,15 +215,27 @@ impl EncryptionState {
                 cipher: None,
                 key_source: snapshot.key_source,
                 key_reference: None,
+                key_versions,
+                next_version,
             },
         }
     }
 
     fn load_snapshot(path: &Path) -> Result<EncryptionSnapshot, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read encryption state '{}': {}", path.display(), e))?;
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse encryption state '{}': {}", path.display(), e))
+        let content = fs::read_to_string(path).map_err(|e| {
+            format!(
+                "Failed to read encryption state '{}': {}",
+                path.display(),
+                e
+            )
+        })?;
+        serde_json::from_str(&content).map_err(|e| {
+            format!(
+                "Failed to parse encryption state '{}': {}",
+                path.display(),
+                e
+            )
+        })
     }
 
     fn save_snapshot(path: &Path, snapshot: &EncryptionSnapshot) -> Result<(), String> {
@@ -239,6 +282,29 @@ impl EncryptionState {
         }
     }
 
+    /// 获取所有密钥版本历史（按时间正序，最新版本在最后）
+    pub fn get_key_versions(&self) -> Vec<KeyVersion> {
+        let inner = self.inner.read();
+        inner.key_versions.clone()
+    }
+
+    /// 记录一个新的密钥版本（enable 和 rotate_key 调用）
+    fn record_version(inner: &mut EncryptionInner, source_hint: String) {
+        // Mark all previous as non-current
+        for v in &mut inner.key_versions {
+            v.is_current = false;
+        }
+        let version = KeyVersion {
+            id: uuid::Uuid::new_v4().to_string(),
+            version: inner.next_version,
+            source_hint,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            is_current: true,
+        };
+        inner.next_version += 1;
+        inner.key_versions.push(version);
+    }
+
     pub async fn enable(&self, key: String) -> Result<EncryptionConfig, String> {
         let cipher = Self::create_cipher(&key)?;
         let key_source = if let Some(env_name) = key.strip_prefix("env:") {
@@ -251,8 +317,9 @@ impl EncryptionState {
         let mut inner = self.inner.write();
         inner.enabled = true;
         inner.cipher = Some(cipher);
-        inner.key_source = key_source;
+        inner.key_source = key_source.clone();
         inner.key_reference = key_reference;
+        Self::record_version(&mut inner, key_source);
         self.persist_inner(&inner)?;
 
         Ok(EncryptionConfig {
@@ -268,6 +335,10 @@ impl EncryptionState {
         inner.cipher = None;
         inner.key_source = String::new();
         inner.key_reference = None;
+        // Mark all versions as non-current on disable
+        for v in &mut inner.key_versions {
+            v.is_current = false;
+        }
         self.persist_inner(&inner)?;
 
         Ok(EncryptionConfig {
@@ -318,6 +389,44 @@ impl EncryptionState {
     pub fn is_enabled(&self) -> bool {
         self.inner.read().enabled
     }
+
+    /// Rotate the encryption key with a new key.
+    /// Returns the updated config on success.
+    /// Note: existing encrypted data is NOT re-encrypted; rotation affects future operations only.
+    pub async fn rotate_key(&self, new_key: String) -> Result<EncryptionConfig, String> {
+        if new_key.is_empty() {
+            return Err("New encryption key cannot be empty".to_string());
+        }
+
+        let cipher = Self::create_cipher(&new_key)?;
+        let key_source = if let Some(env_name) = new_key.strip_prefix("env:") {
+            format!("env:{} (rotated)", env_name)
+        } else {
+            "provided (rotated)".to_string()
+        };
+        let key_reference = new_key.strip_prefix("env:").map(|s| s.to_string());
+
+        let mut inner = self.inner.write();
+        inner.enabled = true;
+        inner.cipher = Some(cipher);
+        inner.key_source = key_source.clone();
+        inner.key_reference = key_reference;
+        Self::record_version(&mut inner, key_source.clone());
+        self.persist_inner(&inner)?;
+
+        Ok(EncryptionConfig {
+            status: EncryptionStatus::Enabled,
+            algorithm: "AES-256-GCM".to_string(),
+            key_source: inner.key_source.clone(),
+        })
+    }
+}
+
+/// Request to rotate the encryption key
+#[derive(Debug, Deserialize)]
+pub struct RotateKeyRequest {
+    /// Base64-encoded 256-bit key, or "env:KEY_NAME" to load from environment
+    pub new_key: String,
 }
 
 /// Encryption handlers
@@ -325,9 +434,7 @@ pub struct EncryptionHandlers;
 
 impl EncryptionHandlers {
     /// GET /api/v1/encryption/status - Get encryption status
-    pub async fn get_status(
-        State(state): State<EncryptionState>,
-    ) -> RestResult<impl IntoResponse> {
+    pub async fn get_status(State(state): State<EncryptionState>) -> RestResult<impl IntoResponse> {
         Ok(Json(state.get_config()))
     }
 
@@ -337,7 +444,9 @@ impl EncryptionHandlers {
         Json(req): Json<EnableEncryptionRequest>,
     ) -> RestResult<impl IntoResponse> {
         if req.key.is_empty() {
-            return Err(RestError::BadRequest("Encryption key cannot be empty".into()));
+            return Err(RestError::BadRequest(
+                "Encryption key cannot be empty".into(),
+            ));
         }
 
         match state.enable(req.key).await {
@@ -347,10 +456,26 @@ impl EncryptionHandlers {
     }
 
     /// POST /api/v1/encryption/disable - Disable encryption
-    pub async fn disable(
-        State(state): State<EncryptionState>,
-    ) -> RestResult<impl IntoResponse> {
+    pub async fn disable(State(state): State<EncryptionState>) -> RestResult<impl IntoResponse> {
         let config = state.disable().await.map_err(RestError::Internal)?;
         Ok(Json(config))
+    }
+
+    /// GET /api/v1/encryption/versions - List all key versions
+    pub async fn list_versions(
+        State(state): State<EncryptionState>,
+    ) -> RestResult<impl IntoResponse> {
+        Ok(Json(state.get_key_versions()))
+    }
+
+    /// POST /api/v1/encryption/rotate - Rotate the encryption key
+    pub async fn rotate(
+        State(state): State<EncryptionState>,
+        Json(req): Json<RotateKeyRequest>,
+    ) -> RestResult<impl IntoResponse> {
+        match state.rotate_key(req.new_key).await {
+            Ok(config) => Ok(Json(config)),
+            Err(e) => Err(RestError::BadRequest(e)),
+        }
     }
 }

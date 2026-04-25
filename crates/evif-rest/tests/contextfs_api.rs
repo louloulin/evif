@@ -38,7 +38,10 @@ async fn context_plugin_can_be_mounted_and_read_via_rest_api() {
         }
 
         let read_res = client
-            .get(format!("{}/api/v1/files?path=/context/L2/architecture.md", base))
+            .get(format!(
+                "{}/api/v1/files?path=/context/L2/architecture.md",
+                base
+            ))
             .send()
             .await;
 

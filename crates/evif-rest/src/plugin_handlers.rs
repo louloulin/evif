@@ -11,9 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use evif_core::{
-    DynamicPluginLoader, EvifPlugin, MountTable, PluginRegistry,
-};
+use evif_core::{DynamicPluginLoader, EvifPlugin, MountTable, PluginRegistry};
 
 /// 应用状态
 #[derive(Clone)]

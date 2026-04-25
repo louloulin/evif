@@ -100,12 +100,21 @@ async fn metrics_traffic_counts_real_requests() {
         .send()
         .await
         .expect("metrics request succeeds");
-    assert!(metrics.status().is_success(), "metrics endpoint should succeed");
+    assert!(
+        metrics.status().is_success(),
+        "metrics endpoint should succeed"
+    );
 
     let json: serde_json::Value = metrics.json().await.expect("metrics should be valid JSON");
     assert_eq!(json["total_requests"], 5, "expected 5 tracked requests");
-    assert_eq!(json["write_count"], 2, "expected 2 write requests including create");
-    assert_eq!(json["read_count"], 2, "expected 2 read requests including missing read");
+    assert_eq!(
+        json["write_count"], 2,
+        "expected 2 write requests including create"
+    );
+    assert_eq!(
+        json["read_count"], 2,
+        "expected 2 read requests including missing read"
+    );
     assert_eq!(json["list_count"], 1, "expected 1 list request");
     assert_eq!(json["total_errors"], 1, "expected 1 error request");
 }
@@ -143,7 +152,10 @@ async fn metrics_prometheus_endpoint_exposes_standard_text_format() {
         .send()
         .await
         .expect("metrics request succeeds");
-    assert!(metrics.status().is_success(), "metrics endpoint should succeed");
+    assert!(
+        metrics.status().is_success(),
+        "metrics endpoint should succeed"
+    );
 
     let content_type = metrics
         .headers()
@@ -151,12 +163,14 @@ async fn metrics_prometheus_endpoint_exposes_standard_text_format() {
         .and_then(|value| value.to_str().ok())
         .unwrap_or("");
     assert_eq!(
-        content_type,
-        "text/plain; version=0.0.4; charset=utf-8",
+        content_type, "text/plain; version=0.0.4; charset=utf-8",
         "prometheus endpoint should expose the standard text format",
     );
 
-    let body = metrics.text().await.expect("metrics body should be readable");
+    let body = metrics
+        .text()
+        .await
+        .expect("metrics body should be readable");
     assert!(
         body.contains("# HELP evif_total_requests Total number of requests processed"),
         "metrics body should include HELP metadata",
@@ -197,7 +211,10 @@ async fn metrics_prometheus_endpoint_exposes_success_error_and_latency_by_operat
     assert!(create.status().is_success(), "create should succeed");
 
     let write = client
-        .put(format!("{}/api/v1/files?path=/mem/operation-metrics.txt", base))
+        .put(format!(
+            "{}/api/v1/files?path=/mem/operation-metrics.txt",
+            base
+        ))
         .json(&serde_json::json!({
             "data": "metrics-content",
             "encoding": null
@@ -208,7 +225,10 @@ async fn metrics_prometheus_endpoint_exposes_success_error_and_latency_by_operat
     assert!(write.status().is_success(), "write should succeed");
 
     let read = client
-        .get(format!("{}/api/v1/files?path=/mem/operation-metrics.txt", base))
+        .get(format!(
+            "{}/api/v1/files?path=/mem/operation-metrics.txt",
+            base
+        ))
         .send()
         .await
         .expect("read request succeeds");
@@ -222,7 +242,10 @@ async fn metrics_prometheus_endpoint_exposes_success_error_and_latency_by_operat
     assert!(list.status().is_success(), "list should succeed");
 
     let missing = client
-        .get(format!("{}/api/v1/files?path=/mem/does-not-exist.txt", base))
+        .get(format!(
+            "{}/api/v1/files?path=/mem/does-not-exist.txt",
+            base
+        ))
         .send()
         .await
         .expect("missing request succeeds");
@@ -236,9 +259,15 @@ async fn metrics_prometheus_endpoint_exposes_success_error_and_latency_by_operat
         .send()
         .await
         .expect("metrics request succeeds");
-    assert!(metrics.status().is_success(), "metrics endpoint should succeed");
+    assert!(
+        metrics.status().is_success(),
+        "metrics endpoint should succeed"
+    );
 
-    let body = metrics.text().await.expect("metrics body should be readable");
+    let body = metrics
+        .text()
+        .await
+        .expect("metrics body should be readable");
     assert!(
         body.contains("# HELP evif_operation_success_total Successful HTTP requests by operation"),
         "metrics body should include success metric metadata",

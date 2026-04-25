@@ -33,7 +33,10 @@ async fn skillfs_exposes_builtin_skills_and_trigger_matching() {
 async fn skillfs_registers_custom_skills_and_produces_output_from_input() {
     let plugin = SkillFsPlugin::new();
 
-    plugin.mkdir("/demo-skill", 0o755).await.expect("mkdir skill");
+    plugin
+        .mkdir("/demo-skill", 0o755)
+        .await
+        .expect("mkdir skill");
     plugin
         .write(
             "/demo-skill/SKILL.md",
@@ -197,12 +200,7 @@ This skill has no YAML frontmatter at all.
     // A SKILL.md with empty content (no frontmatter, no body)
     let empty_doc = b"".to_vec();
     let result2 = plugin
-        .write(
-            "/bad-skill/SKILL.md",
-            empty_doc,
-            0,
-            WriteFlags::TRUNCATE,
-        )
+        .write("/bad-skill/SKILL.md", empty_doc, 0, WriteFlags::TRUNCATE)
         .await;
 
     assert!(
@@ -234,7 +232,11 @@ async fn skillfs_exports_claude_compatible_skills_dir() {
     // Verify each SKILL.md file exists and contains valid frontmatter + body
     for skill_name in &exported {
         let skill_md_path = output_dir.join(skill_name).join("SKILL.md");
-        assert!(skill_md_path.exists(), "SKILL.md should exist for {}", skill_name);
+        assert!(
+            skill_md_path.exists(),
+            "SKILL.md should exist for {}",
+            skill_name
+        );
 
         let content = tokio::fs::read_to_string(&skill_md_path)
             .await
@@ -283,7 +285,10 @@ async fn skillfs_exports_codex_agents_yaml() {
 
     // Verify top-level structure
     assert!(content.contains("version:"), "should contain version");
-    assert!(content.contains("generated_by: evif-skillfs"), "should contain generated_by");
+    assert!(
+        content.contains("generated_by: evif-skillfs"),
+        "should contain generated_by"
+    );
     assert!(content.contains("skills:"), "should contain skills list");
 
     // Verify each builtin skill is represented
@@ -299,11 +304,18 @@ async fn skillfs_exports_codex_agents_yaml() {
     assert!(content.contains("triggers:"), "should contain triggers");
 
     // Verify descriptions are present
-    assert!(content.contains("description:"), "should contain descriptions");
+    assert!(
+        content.contains("description:"),
+        "should contain descriptions"
+    );
 
     // Parse the YAML to validate structure
     let parsed: serde_yaml::Value = serde_yaml::from_str(&content).expect("valid yaml");
-    let skills = parsed.get("skills").expect("skills key").as_sequence().expect("skills is a list");
+    let skills = parsed
+        .get("skills")
+        .expect("skills key")
+        .as_sequence()
+        .expect("skills is a list");
     assert_eq!(skills.len(), 4, "should have 4 skills in the yaml");
 }
 
@@ -379,7 +391,10 @@ async fn skillfs_list_skill_definitions_returns_all_skills() {
 
     assert_eq!(definitions.len(), 4, "should have 4 builtin skills");
 
-    let names: HashSet<String> = definitions.iter().map(|(name, _, _)| name.clone()).collect();
+    let names: HashSet<String> = definitions
+        .iter()
+        .map(|(name, _, _)| name.clone())
+        .collect();
     assert!(names.contains("code-review"));
     assert!(names.contains("test-gen"));
     assert!(names.contains("doc-gen"));
@@ -459,13 +474,7 @@ async fn skillfs_generate_openai_yaml_produces_valid_codex_format() {
     // Verify all builtin skill names are present
     let names: HashSet<String> = agents
         .iter()
-        .map(|a| {
-            a.get("name")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .to_string()
-        })
+        .map(|a| a.get("name").unwrap().as_str().unwrap().to_string())
         .collect();
     assert!(names.contains("code-review"));
     assert!(names.contains("test-gen"));
@@ -474,11 +483,7 @@ async fn skillfs_generate_openai_yaml_produces_valid_codex_format() {
 
     // Verify instructions contain actual skill body content (not empty)
     for agent in agents {
-        let instructions = agent
-            .get("instructions")
-            .unwrap()
-            .as_str()
-            .unwrap();
+        let instructions = agent.get("instructions").unwrap().as_str().unwrap();
         assert!(
             !instructions.trim().is_empty(),
             "instructions should not be empty"
@@ -514,10 +519,7 @@ Do something special with Codex.
         .await
         .expect("write custom skill");
 
-    let yaml_str = plugin
-        .generate_openai_yaml()
-        .await
-        .expect("generate yaml");
+    let yaml_str = plugin.generate_openai_yaml().await.expect("generate yaml");
 
     let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml_str).expect("valid yaml");
     let agents = parsed.get("agents").unwrap().as_sequence().unwrap();
@@ -536,15 +538,8 @@ Do something special with Codex.
         "Custom skill for Codex"
     );
 
-    let triggers = custom
-        .get("triggers")
-        .unwrap()
-        .as_sequence()
-        .unwrap();
-    let trigger_strs: Vec<&str> = triggers
-        .iter()
-        .map(|t| t.as_str().unwrap())
-        .collect();
+    let triggers = custom.get("triggers").unwrap().as_sequence().unwrap();
+    let trigger_strs: Vec<&str> = triggers.iter().map(|t| t.as_str().unwrap()).collect();
     assert!(trigger_strs.contains(&"custom-codex"));
     assert!(trigger_strs.contains(&"codex run"));
 
@@ -668,12 +663,19 @@ async fn skillfs_sync_to_claude_skills_can_be_written_to_disk() {
     // Verify the written files match what Claude Code expects
     for skill_name in &["code-review", "test-gen", "doc-gen", "refactor"] {
         let skill_md = skills_dir.join(skill_name).join("SKILL.md");
-        assert!(skill_md.exists(), "SKILL.md for {} should exist", skill_name);
+        assert!(
+            skill_md.exists(),
+            "SKILL.md for {} should exist",
+            skill_name
+        );
 
         let written = tokio::fs::read_to_string(&skill_md)
             .await
             .expect("read file");
-        assert!(written.starts_with("---"), "written file should have frontmatter");
+        assert!(
+            written.starts_with("---"),
+            "written file should have frontmatter"
+        );
         assert!(written.contains(&format!("name: {}", skill_name)));
     }
 }

@@ -2,8 +2,8 @@
 //
 // 测试 LLM 本地模型（Ollama）集成功能
 
-use evif_rest::create_routes;
 use evif_core::RadixMountTable;
+use evif_rest::create_routes;
 use std::sync::Arc;
 
 /// P16.4-01: LLM Status Endpoint

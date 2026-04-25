@@ -1,8 +1,4 @@
-use axum::{
-    extract::Query,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::Query, routing::get, Json, Router};
 use base64::Engine;
 use evif_core::{EvifPlugin, WriteFlags};
 use evif_plugins::ProxyFsPlugin;
@@ -83,7 +79,10 @@ async fn proxyfs_maps_to_evif_rest_contract() {
     }
 
     let app = Router::new()
-        .route("/api/v1/files", get(read_file).put(write_file).delete(delete_file))
+        .route(
+            "/api/v1/files",
+            get(read_file).put(write_file).delete(delete_file),
+        )
         .route("/api/v1/directories", get(list_directory))
         .route("/api/v1/stat", get(stat_file));
 

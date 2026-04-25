@@ -378,11 +378,29 @@ evif umount /mnt/evif
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EVIF_PORT` | 8081 | REST API server port |
-| `EVIF_HOST` | 0.0.0.0 | Server bind address |
+| `EVIF_PORT` / `EVIF_REST_PORT` | 8081 | REST API server port |
+| `EVIF_HOST` / `EVIF_REST_HOST` | 0.0.0.0 | Server bind address |
 | `EVIF_LOG_LEVEL` | info | Logging level |
 | `EVIF_CACHE_SIZE` | 10000 | Inode cache size |
 | `EVIF_CACHE_TIMEOUT` | 60 | Cache timeout (seconds) |
+| `EVIF_CORS_ENABLED` | true | Enable CORS |
+| `EVIF_CORS_ORIGINS` | (any) | CORS allowed origins (comma-separated) |
+| `EVIF_REST_PRODUCTION_MODE` | false | Enable production mode (strict config checks) |
+
+### CLI Flags
+
+```bash
+# REST API server
+evif-rest --help
+evif-rest --port 3000       # or -p 3000
+evif-rest --host 127.0.0.1
+evif-rest --production
+
+# MCP server
+evif-mcp --help
+evif-mcp --url http://localhost:3000
+evif-mcp --server-name evif-mcp
+```
 
 ### Configuration File
 

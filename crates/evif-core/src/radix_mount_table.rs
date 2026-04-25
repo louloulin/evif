@@ -189,7 +189,8 @@ impl RadixMountTable {
     pub async fn mount(&self, path: String, plugin: Arc<dyn EvifPlugin>) -> EvifResult<()> {
         let plugin_name = plugin.name().to_string();
         let instance_name = plugin_name.clone();
-        self.mount_with_metadata(path, plugin, plugin_name, instance_name).await
+        self.mount_with_metadata(path, plugin, plugin_name, instance_name)
+            .await
     }
 
     /// 挂载插件（带实例名称）

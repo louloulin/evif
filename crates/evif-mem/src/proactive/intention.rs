@@ -217,10 +217,7 @@ impl IntentionPredictor {
         // Group by hour of day
         for memory in memories {
             let hour = memory.created_at.hour();
-            hour_counts
-                .entry(hour)
-                .or_default()
-                .push(memory.id.clone());
+            hour_counts.entry(hour).or_default().push(memory.id.clone());
         }
 
         // Find peak hours

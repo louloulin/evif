@@ -1,4 +1,8 @@
-#![allow(dead_code, clippy::needless_borrows_for_generic_args, clippy::assertions_on_constants)]
+#![allow(
+    dead_code,
+    clippy::needless_borrows_for_generic_args,
+    clippy::assertions_on_constants
+)]
 
 // Phase 14.4: L0CO (L0 Context Optimization) Benchmark Tests
 //
@@ -8,8 +12,8 @@
 // Token Reduction = 1 - (L0_tokens + L1_tokens) / Original_tokens
 // 目标: ≥ 80%
 
-use evif_rest::create_routes;
 use evif_core::RadixMountTable;
+use evif_rest::create_routes;
 use std::sync::Arc;
 
 async fn setup_server() -> (Arc<RadixMountTable>, String) {
@@ -47,7 +51,12 @@ async fn setup_server() -> (Arc<RadixMountTable>, String) {
 async fn l0co_token_reduction() {
     // 模拟原始大文档 (10000 tokens)
     let original_content: String = (0..1000)
-        .map(|i| format!("Line {}: This is a detailed line of context with various information.\n", i))
+        .map(|i| {
+            format!(
+                "Line {}: This is a detailed line of context with various information.\n",
+                i
+            )
+        })
         .collect();
 
     let original_tokens = original_content.len() / 4; // 粗略估算
@@ -89,10 +98,7 @@ async fn l0co_progressive_loading() {
     let mut l0_samples = Vec::new();
     for _ in 0..20 {
         let start = std::time::Instant::now();
-        let _ = client
-            .get(&format!("{}/api/v1/health", base))
-            .send()
-            .await;
+        let _ = client.get(&format!("{}/api/v1/health", base)).send().await;
         l0_samples.push(start.elapsed().as_millis() as u64);
     }
     l0_samples.sort();
@@ -121,10 +127,7 @@ async fn l0co_progressive_loading() {
     l1_samples.sort();
     let l1_p50 = l1_samples[9];
 
-    println!(
-        "L0CO Progressive: L0 P50={}ms, L1 P50={}ms",
-        l0_p50, l1_p50
-    );
+    println!("L0CO Progressive: L0 P50={}ms, L1 P50={}ms", l0_p50, l1_p50);
 
     assert!(
         l0_p50 <= 20,
@@ -181,11 +184,7 @@ async fn l0co_l2_lazy_loading() {
         samples.sort();
         let p50 = samples[samples.len() / 2];
         println!("L2 Lazy Load P50: {}ms", p50);
-        assert!(
-            p50 <= 100,
-            "L2 lazy load should be <= 100ms, got {}ms",
-            p50
-        );
+        assert!(p50 <= 100, "L2 lazy load should be <= 100ms, got {}ms", p50);
     } else {
         // 基准测试：端点可达即可
         println!("L2 lazy load: endpoint accessible (no plugin mounted)");

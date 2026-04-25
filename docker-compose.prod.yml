@@ -2,35 +2,54 @@
 # EVIF Production Docker Compose Override
 # =============================================================================
 # Production-specific configuration
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 # =============================================================================
 
 services:
   evif-rest:
     # Use pre-built image in production
     image: evif/evif-rest:latest
+    container_name: evif-rest
     restart: always
     environment:
-      # Production settings
+      # ─── Server binding ───────────────────────────────────────────────────
       - EVIF_REST_BIND_ADDR=0.0.0.0
       - EVIF_REST_PORT=8081
 
-      # Production authentication (set via secrets in CI)
-      - EVIF_REST_AUTH_MODE=enabled
-      # - EVIF_REST_WRITE_API_KEYS=${EVIF_WRITE_API_KEYS}
-      # - EVIF_REST_ADMIN_API_KEYS=${EVIF_ADMIN_API_KEYS}
+      # ─── Authentication (set via secrets in CI) ─────────────────────────
+      # Uncomment and set via Docker secrets or .env file in production:
+      # - EVIF_REST_AUTH_MODE=enabled
+      # - EVIF_REST_WRITE_API_KEYS=${WRITE_API_KEY}
+      # - EVIF_REST_ADMIN_API_KEYS=${ADMIN_API_KEY}
+      # - EVIF_REST_AUTH_AUDIT_LOG=/var/log/evif/audit.log
 
-      # Production memory backend (SQLite required in production mode)
+      # ─── Memory backend ─────────────────────────────────────────────────
+      # SQLite is required in production mode (enforced by EvifServer)
       - EVIF_REST_MEMORY_BACKEND=sqlite
       - EVIF_REST_MEMORY_SQLITE_PATH=/data/evif-memory.db
-      - EVIF_REST_PRODUCTION_MODE=true
 
-      # Production logging
+      # ─── Production mode enforcement ────────────────────────────────────
+      # Production mode validates persistent state paths at startup.
+      # Without these, the server refuses to start.
+      - EVIF_REST_PRODUCTION_MODE=true
+      - EVIF_REST_TENANT_STATE_PATH=/data/tenant-state.json
+      - EVIF_REST_SYNC_STATE_PATH=/data/sync-state.json
+      - EVIF_REST_ENCRYPTION_STATE_PATH=/data/encryption-state.json
+
+      # ─── Logging ────────────────────────────────────────────────────────
       - RUST_LOG=warn
-      - EVIF_REST_AUTH_AUDIT_LOG=/var/log/evif/audit.log
+
+      # ─── Mount configuration ────────────────────────────────────────────
+      # Uncomment to override defaults via config file:
+      # - EVIF_CONFIG=/etc/evif/evif.json
+
     volumes:
+      # Named volumes (defined in docker-compose.yml)
       - evif-data:/data
       - evif-logs:/var/log/evif
+      # Optional: mount config file from host
+      # - ./evif.json:/etc/evif/evif.json:ro
+
     deploy:
       resources:
         limits:
@@ -39,12 +58,27 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+      # Readiness probe: only mark ready after health check passes
+      # Kubernetes uses readinessProbe; Docker Compose uses service_deps
+      # For Docker Compose, use condition: service_healthy in depends_on
+
+    # Service dependency ensures healthy before dependent services start
+    # (Compose v2+ feature)
+    # depends_on:
+    #   evif-rest:
+    #     condition: service_healthy
 
   # Remove development services
   evif-web:

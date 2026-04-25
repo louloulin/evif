@@ -26,7 +26,10 @@ mod sqlfs2_behavior {
         assert_eq!(plugin.name(), "sqlfs2");
 
         plugin.mkdir("/queries", 0o755).await.expect("mkdir");
-        plugin.create("/queries/task.sql", 0o644).await.expect("create");
+        plugin
+            .create("/queries/task.sql", 0o644)
+            .await
+            .expect("create");
         plugin
             .write(
                 "/queries/task.sql",
@@ -37,10 +40,7 @@ mod sqlfs2_behavior {
             .await
             .expect("write");
 
-        let data = plugin
-            .read("/queries/task.sql", 0, 0)
-            .await
-            .expect("read");
+        let data = plugin.read("/queries/task.sql", 0, 0).await.expect("read");
         assert_eq!(data, b"select 1;");
 
         let entries = plugin.readdir("/queries").await.expect("readdir");

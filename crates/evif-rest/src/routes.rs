@@ -4,12 +4,43 @@ use crate::{
     batch_handlers, collab_handlers, context_handlers, encryption_handlers, graphql_handlers,
     handle_handlers, handlers, memory_handlers, metrics_handlers, sync_handlers, tenant_handlers,
     wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState,
-    HandleState, RestAuthState, SyncState, TenantState,
+    GraphqlAppContext, HandleState, RestAuthState, SyncState, TenantState,
 };
+use axum::extract::DefaultBodyLimit;
 use axum::{middleware, routing, Router};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::Instant;
+
+// N9: Readiness probe — module-level flag shared between build_routes() and server.rs
+static SERVER_READY_FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+
+const DEFAULT_MAX_BODY_BYTES: usize = 1024 * 1024;
+
+fn max_body_bytes_from_env() -> usize {
+    std::env::var("EVIF_REST_MAX_BODY_BYTES")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_MAX_BODY_BYTES)
+}
+
+/// Returns the shared readiness flag, initializing to `false` if not yet set.
+/// (Tests that bypass EvifServer::run() get `true` via mark_server_ready call at startup)
+pub fn get_ready_flag() -> Arc<AtomicBool> {
+    SERVER_READY_FLAG
+        .get_or_init(|| Arc::new(AtomicBool::new(true)))
+        .clone()
+}
+
+/// Marks the server as ready (called by server.rs after axum::serve starts).
+pub fn mark_server_ready() {
+    if let Some(flag) = SERVER_READY_FLAG.get() {
+        flag.store(true, Ordering::Relaxed);
+    }
+}
 
 /// 创建 API 路由
 pub fn create_routes(mount_table: Arc<RadixMountTable>) -> Router {
@@ -107,26 +138,34 @@ pub(crate) fn create_routes_with_auth_and_memory_state(
     auth_state: Arc<RestAuthState>,
     memory_state: memory_handlers::MemoryState,
 ) -> Router {
+    let router = build_routes(
+        mount_table,
+        memory_state,
+        TenantState::from_env()
+            .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH"),
+        EncryptionState::from_env()
+            .expect("failed to initialize encryption state from EVIF_REST_ENCRYPTION_STATE_PATH"),
+        SyncState::from_env()
+            .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH"),
+    );
     attach_request_identity(
-        build_routes(
-            mount_table,
-            memory_state,
-            TenantState::from_env()
-                .expect("failed to initialize tenant state from EVIF_REST_TENANT_STATE_PATH"),
-            EncryptionState::from_env().expect(
-                "failed to initialize encryption state from EVIF_REST_ENCRYPTION_STATE_PATH",
-            ),
-            SyncState::from_env()
-                .expect("failed to initialize sync state from EVIF_REST_SYNC_STATE_PATH"),
-        )
-            .layer(middleware::from_fn_with_state(auth_state, AuthMiddleware)),
+        router.layer(middleware::from_fn_with_state(auth_state, AuthMiddleware)),
     )
 }
 
 fn attach_request_identity(router: Router) -> Router {
-    router.layer(middleware::from_fn(crate::middleware::RequestIdentityMiddleware))
+    let ip_rate_limit_state = Arc::new(crate::middleware::IpRateLimitState::from_env());
+    router
+        .layer(middleware::from_fn_with_state(
+            ip_rate_limit_state,
+            crate::middleware::IpRateLimitMiddleware,
+        ))
+        .layer(middleware::from_fn(
+            crate::middleware::RequestIdentityMiddleware,
+        ))
 }
 
+/// N9: 模块级就绪标志 — 在 server.rs 中 axum::serve 启动后设置为 true
 fn build_routes(
     mount_table: Arc<RadixMountTable>,
     memory_state: memory_handlers::MemoryState,
@@ -151,14 +190,24 @@ fn build_routes(
         plugin_registry: Arc::new(PluginRegistry::new()),
         lock_manager,
         cross_fs_copy_manager,
+        tenant_state: tenant_state.clone(),
+        is_ready: get_ready_flag(),
     };
     let traffic_stats = app_state.traffic_stats.clone();
+    let _app_state_for_return = app_state.clone();
 
     // 创建批量操作管理器
     let batch_manager = batch_handlers::BatchOperationManager::new();
 
-    // Phase 17.4: 创建 GraphQL schema
-    let graphql_schema = graphql_handlers::GraphQLState::schema();
+    // Phase 17.4: 创建 GraphQL schema with full application context
+    let graphql_app_context = GraphqlAppContext {
+        mount_table: mount_table.clone(),
+        traffic_stats: traffic_stats.clone(),
+        tenant_state: tenant_state.clone(),
+        encryption_state: encryption_state.clone(),
+        sync_state: sync_state.clone(),
+    };
+    let graphql_schema = graphql_handlers::GraphQLState::schema_with_context(graphql_app_context);
 
     // 创建全局Handle管理器并启动清理任务
     let handle_manager = Arc::new(GlobalHandleManager::new());
@@ -183,6 +232,11 @@ fn build_routes(
         .route(
             "/api/v1/status",
             axum::routing::get(handlers::EvifHandlers::node_status),
+        )
+        // N9: Kubernetes/负载均衡器就绪探针 — 200=就绪，503=未就绪
+        .route(
+            "/api/v1/ready",
+            axum::routing::get(handlers::EvifHandlers::readiness),
         )
         // POST /api/v1/ping：快速存活检查
         .route(
@@ -596,6 +650,11 @@ fn build_routes(
             "/api/v1/tenants/:id",
             axum::routing::delete(tenant_handlers::TenantHandlers::delete_tenant),
         )
+        // 更新租户存储配额
+        .route(
+            "/api/v1/tenants/:id/quota",
+            axum::routing::patch(tenant_handlers::TenantHandlers::update_quota),
+        )
         .with_state(tenant_state);
 
     // Phase 17.2: 加密管理路由
@@ -611,6 +670,14 @@ fn build_routes(
         .route(
             "/api/v1/encryption/disable",
             axum::routing::post(encryption_handlers::EncryptionHandlers::disable),
+        )
+        .route(
+            "/api/v1/encryption/versions",
+            axum::routing::get(encryption_handlers::EncryptionHandlers::list_versions),
+        )
+        .route(
+            "/api/v1/encryption/rotate",
+            axum::routing::post(encryption_handlers::EncryptionHandlers::rotate),
         )
         .with_state(encryption_state);
 
@@ -632,12 +699,26 @@ fn build_routes(
             "/api/v1/sync/:path/version",
             axum::routing::get(sync_handlers::SyncHandlers::get_path_version),
         )
+        .route(
+            "/api/v1/sync/resolve",
+            axum::routing::post(sync_handlers::SyncHandlers::resolve),
+        )
+        .route(
+            "/api/v1/sync/conflicts",
+            axum::routing::get(sync_handlers::SyncHandlers::get_conflicts),
+        )
         .with_state(sync_state);
 
     // Phase 17.4: GraphQL API 路由
     let graphql_routes = Router::new()
-        .route("/api/v1/graphql", routing::post(graphql_handlers::GraphQLHandlers::handler))
-        .route("/api/v1/graphql/graphiql", routing::get(graphql_handlers::GraphQLHandlers::graphiql))
+        .route(
+            "/api/v1/graphql",
+            routing::post(graphql_handlers::GraphQLHandlers::handler),
+        )
+        .route(
+            "/api/v1/graphql/graphiql",
+            routing::get(graphql_handlers::GraphQLHandlers::graphiql),
+        )
         .with_state(graphql_schema);
 
     let memory_routes = Router::new()
@@ -697,6 +778,7 @@ fn build_routes(
         .merge(sync_routes)
         .merge(graphql_routes)
         .merge(memory_routes)
+        .layer(DefaultBodyLimit::max(max_body_bytes_from_env()))
 }
 
 /// 创建带 ContextManager 的路由
@@ -718,16 +800,16 @@ pub fn create_routes_with_context(
 
     attach_request_identity(
         Router::new()
-        .route(
-            "/context/semantic_search",
-            axum::routing::post(context_handlers::semantic_search),
-        )
-        .route(
-            "/context/summarize",
-            axum::routing::post(context_handlers::summarize),
-        )
-        .with_state(context_state)
-        .merge(base),
+            .route(
+                "/context/semantic_search",
+                axum::routing::post(context_handlers::semantic_search),
+            )
+            .route(
+                "/context/summarize",
+                axum::routing::post(context_handlers::summarize),
+            )
+            .with_state(context_state)
+            .merge(base),
     )
 }
 

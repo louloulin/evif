@@ -14,14 +14,15 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_qs = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
 
 # Web framework
 axum = { version = "0.7.4", features = ["json", "ws"] }
-tower = "0.4.13"
+tower = { version = "0.4.13", features = ["limit", "timeout"] }
 tower-http = { version = "0.5.1", features = ["cors", "trace"] }
 hyper = "1.1.0"
 
@@ -52,13 +53,28 @@ async-graphql-axum = { workspace = true }
 # Local crates
 evif-core = { path = "../evif-core" }
 evif-plugins = { path = "../evif-plugins", features = ["sqlfs"] }
-evif-mem = { path = "../evif-mem", features = ["sqlite"] }
+evif-mem = { path = "../evif-mem", features = ["sqlite", "postgres"] }
 evif-auth = { path = "../evif-auth" }
 evif-metrics = { path = "../evif-metrics", features = ["prometheus"] }
 
 # Config file formats (re-export from evif-core for mount config)
 toml = "0.8"
 serde_yaml = "0.9"
+
+# CLI argument parsing
+clap = { version = "4.4.18", features = ["derive", "env"] }
+
+# N12: Config hot-reload via file watching
+notify = "6"
+
+# N10b: Log rotation — non-blocking async file writer with daily rotation
+tracing-appender = "0.2"
+
+# N0: TLS transport encryption — tokio-rustls for HTTPS
+tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pki-types = "1.13"
+hyper-util = { version = "0.1.19", features = ["tokio", "http1", "server-auto", "service"] }
 
 [features]
 wasm = ["evif-core/wasm"]

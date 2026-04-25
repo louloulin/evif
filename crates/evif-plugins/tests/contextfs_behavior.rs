@@ -73,13 +73,14 @@ async fn contextfs_meta_reflects_auto_compression_capabilities() {
     let plugin = ContextFsPlugin::new();
 
     let meta_raw = plugin.read("/.meta", 0, 0).await.expect("read .meta");
-    let meta: serde_json::Value =
-        serde_json::from_slice(&meta_raw).expect(".meta is valid JSON");
+    let meta: serde_json::Value = serde_json::from_slice(&meta_raw).expect(".meta is valid JSON");
 
     assert_eq!(meta["version"], 2);
     assert_eq!(meta["compression"], "auto-summary");
 
-    let caps = meta["capabilities"].as_array().expect("capabilities is array");
+    let caps = meta["capabilities"]
+        .as_array()
+        .expect("capabilities is array");
     let cap_strs: Vec<&str> = caps.iter().filter_map(|v| v.as_str()).collect();
     assert!(
         cap_strs.contains(&"auto-compression"),
@@ -95,9 +96,7 @@ async fn contextfs_meta_reflects_auto_compression_capabilities() {
     );
 
     // Verify the threshold is present.
-    assert_eq!(
-        meta["compression_threshold_bytes"], 4096,
-    );
+    assert_eq!(meta["compression_threshold_bytes"], 4096,);
 }
 
 #[tokio::test]
@@ -111,14 +110,20 @@ async fn contextfs_auto_compression_creates_summary_for_large_l2_file() {
         .await
         .expect("create bigdoc");
 
-    let content = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
+    let content =
+        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
     assert!(
         content.len() > 64,
         "test content must exceed the 64-byte threshold"
     );
 
     plugin
-        .write("/L2/bigdoc.md", content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/bigdoc.md",
+            content.as_bytes().to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write bigdoc");
 
@@ -152,7 +157,12 @@ async fn contextfs_no_summary_for_small_l2_file() {
         .expect("create small");
 
     plugin
-        .write("/L2/small.md", b"tiny content".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/small.md",
+            b"tiny content".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write small");
 
@@ -375,7 +385,7 @@ async fn contextfs_config_params_reflect_new_fields() {
 // Token estimation, session lifecycle, and budget status tests
 // ---------------------------------------------------------------------------
 
-use evif_plugins::{BudgetLevel};
+use evif_plugins::BudgetLevel;
 
 #[tokio::test]
 async fn contextfs_estimate_tokens_counts_l0_l1_l2() {
@@ -605,7 +615,8 @@ async fn contextfs_budget_status_tracks_usage() {
 
     // With 1000-token budget and >1000 tokens used, usage should exceed 80% => Critical.
     assert!(
-        budget_json["level"].as_str() == Some("critical") || budget_json["level"].as_str() == Some("warning"),
+        budget_json["level"].as_str() == Some("critical")
+            || budget_json["level"].as_str() == Some("warning"),
         "budget level should be warning or critical after heavy usage, got: {:?}",
         budget_json["level"],
     );
@@ -613,7 +624,10 @@ async fn contextfs_budget_status_tracks_usage() {
     // Also verify via direct check_budget call.
     let status_heavy = plugin.check_budget().await.expect("check budget heavy");
     assert!(
-        matches!(status_heavy.level, BudgetLevel::Critical | BudgetLevel::Warning),
+        matches!(
+            status_heavy.level,
+            BudgetLevel::Critical | BudgetLevel::Warning
+        ),
         "level should be Critical or Warning with heavy usage, got {:?} ({}%)",
         status_heavy.level,
         status_heavy.usage_percent,
@@ -770,11 +784,17 @@ async fn contextfs_llm_abstract_generated_for_large_l2_file() {
         .await
         .expect("create large doc");
 
-    let content = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
+    let content =
+        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
     assert!(content.len() > 64, "test content must exceed threshold");
 
     plugin
-        .write("/L2/large_doc.md", content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/large_doc.md",
+            content.as_bytes().to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write large doc");
 
@@ -813,7 +833,12 @@ async fn contextfs_llm_abstract_not_generated_for_small_file() {
         .expect("create small file");
 
     plugin
-        .write("/L2/small_llm.md", b"tiny".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/small_llm.md",
+            b"tiny".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write small file");
 
@@ -855,7 +880,12 @@ async fn l0co_token_reduction() {
         .await
         .expect("create project file");
     plugin
-        .write("/L2/project.rs", project_content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/project.rs",
+            project_content.as_bytes().to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write project");
 
@@ -891,7 +921,12 @@ async fn l0co_progressive_loading() {
 
     // 创建不同层级的文件
     plugin
-        .write("/L0/current", b"quick context".to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L0/current",
+            b"quick context".to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write L0");
 
@@ -929,21 +964,13 @@ async fn l0co_progressive_loading() {
     let l0_start = std::time::Instant::now();
     let _ = plugin.read("/L0/current", 0, 0).await.unwrap();
     let l0_time = l0_start.elapsed().as_millis();
-    assert!(
-        l0_time < 10,
-        "L0 should load in < 10ms, got {}ms",
-        l0_time
-    );
+    assert!(l0_time < 10, "L0 should load in < 10ms, got {}ms", l0_time);
 
     // L1 加载测试
     let l1_start = std::time::Instant::now();
     let _ = plugin.read("/L1/overview.txt", 0, 0).await.unwrap();
     let l1_time = l1_start.elapsed().as_millis();
-    assert!(
-        l1_time < 50,
-        "L1 should load in < 50ms, got {}ms",
-        l1_time
-    );
+    assert!(l1_time < 50, "L1 should load in < 50ms, got {}ms", l1_time);
 
     // L2 加载测试
     let l2_start = std::time::Instant::now();
@@ -969,7 +996,12 @@ async fn l0co_l2_lazy_loading() {
         .await
         .expect("create module");
     plugin
-        .write("/L2/module.rs", file_content.into_bytes(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/module.rs",
+            file_content.into_bytes(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write module");
 
@@ -1005,7 +1037,8 @@ async fn l0co_memory_self_iteration() {
     plugin
         .write(
             "/L1/decisions.md",
-            b"# Decisions\n\n1. Use Rust for performance\n2. Use EVIF for context management\n".to_vec(),
+            b"# Decisions\n\n1. Use Rust for performance\n2. Use EVIF for context management\n"
+                .to_vec(),
             0,
             WriteFlags::TRUNCATE,
         )
@@ -1047,7 +1080,10 @@ async fn l0co_memory_self_iteration() {
     );
 
     // 验证 L0 被重置为 idle
-    let current_data = plugin.read("/L0/current", 0, 0).await.expect("read current");
+    let current_data = plugin
+        .read("/L0/current", 0, 0)
+        .await
+        .expect("read current");
     let current_str = String::from_utf8_lossy(&current_data);
     assert!(
         current_str.contains("idle"),
@@ -1071,7 +1107,12 @@ async fn l0co_l0_abstract_generation() {
         .await
         .expect("create readme");
     plugin
-        .write("/L2/readme.md", content.as_bytes().to_vec(), 0, WriteFlags::TRUNCATE)
+        .write(
+            "/L2/readme.md",
+            content.as_bytes().to_vec(),
+            0,
+            WriteFlags::TRUNCATE,
+        )
         .await
         .expect("write readme");
 
@@ -1093,8 +1134,9 @@ async fn l0co_l0_abstract_generation() {
         tokens
     );
     assert!(
-        abstract_str.contains("Rust") || abstract_str.contains("摘要") || abstract_str.contains("truncated"),
+        abstract_str.contains("Rust")
+            || abstract_str.contains("摘要")
+            || abstract_str.contains("truncated"),
         ".abstract should contain key content or fallback marker"
     );
 }
-

@@ -4,7 +4,7 @@
 //! with connection pooling and async operations.
 
 use crate::error::{MemError, MemResult};
-use crate::models::{CategoryItem, MemoryCategory, MemoryItem, Resource};
+use crate::models::{MemoryCategory, MemoryItem, Resource};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::Row;
 use std::sync::Arc;
@@ -66,8 +66,8 @@ impl PostgresStorage {
                 embedding_id VARCHAR(255),
                 user_id VARCHAR(255),
                 tenant_id VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
         )
@@ -85,15 +85,15 @@ impl PostgresStorage {
                 summary TEXT NOT NULL,
                 content TEXT NOT NULL,
                 embedding_id VARCHAR(255),
-                happened_at TIMESTAMP,
+                happened_at TIMESTAMPTZ,
                 content_hash VARCHAR(64),
                 reinforcement_count INTEGER DEFAULT 0,
-                last_reinforced_at TIMESTAMP,
+                last_reinforced_at TIMESTAMPTZ,
                 category_id VARCHAR(255),
                 user_id VARCHAR(255),
                 tenant_id VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
         )
@@ -112,8 +112,8 @@ impl PostgresStorage {
                 item_count INTEGER DEFAULT 0,
                 user_id VARCHAR(255),
                 tenant_id VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
         )
@@ -127,7 +127,7 @@ impl PostgresStorage {
                 id VARCHAR(255) PRIMARY KEY,
                 item_id VARCHAR(255) NOT NULL,
                 category_id VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(item_id, category_id)
             )
             "#,
@@ -281,10 +281,10 @@ impl PostgresStorage {
         .bind(&item.summary)
         .bind(&item.content)
         .bind(&item.embedding_id)
-        .bind(&item.happened_at)
+        .bind(item.happened_at)
         .bind(&item.content_hash)
         .bind(item.reinforcement_count as i32)
-        .bind(&item.last_reinforced_at)
+        .bind(item.last_reinforced_at)
         .bind(&item.category_id)
         .bind(&item.user_id)
         .bind(&item.tenant_id)

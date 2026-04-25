@@ -6,13 +6,14 @@
 pub mod acl;
 pub mod batch_operations;
 pub mod cache;
+pub mod circuit_breaker;
 pub mod config;
 pub mod config_validation;
 pub mod cross_fs_copy;
 pub mod dynamic_loader;
 pub mod error;
-pub mod file_monitor;
 pub mod file_lock;
+pub mod file_monitor;
 pub mod handle_manager;
 pub mod memory_handle;
 pub mod monitoring;
@@ -40,6 +41,10 @@ pub use batch_operations::{
     BatchProgress, BatchResult, ProgressCallback,
 };
 pub use cache::{Cache, CacheConfig, CacheStats, DirectoryCache, EvifCache, MetadataCache};
+pub use circuit_breaker::{
+    all_circuit_breakers, get_circuit_breaker, CircuitBreaker, CircuitBreakerConfig,
+    CircuitBreakerError, CircuitBreakerSnapshot, CircuitState,
+};
 pub use config::{
     CacheConfig as EvifCacheConfig, EvifConfig, LoggingConfig, PluginsConfig, ServerConfig,
 };
@@ -70,7 +75,8 @@ pub use streaming::{LineReader, MemoryStreamReader, StreamReader, Streamer};
 // WASM plugin exports
 #[cfg(feature = "wasm")]
 pub use wasm::{
-    detect_backend_from_path, WasmBackendType, WasmPluginConfig, WasmPluginHandle, WasmPluginManager,
+    detect_backend_from_path, WasmBackendType, WasmPluginConfig, WasmPluginHandle,
+    WasmPluginManager,
 };
 
 // Extism plugin exports

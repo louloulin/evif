@@ -2,11 +2,11 @@
 //
 // OSWorld, IDE-Bench, AgentBench, L0CO benchmarks
 
-pub mod osworld;
-pub mod idebench;
 pub mod agentbench;
-pub mod performance;
+pub mod idebench;
 pub mod l0co;
+pub mod osworld;
+pub mod performance;
 
 use evif_core::RadixMountTable;
 use std::sync::Arc;

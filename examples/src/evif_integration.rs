@@ -22,26 +22,58 @@ fn curl_get(url: &str) -> Result<String, String> {
 
 fn curl_put(url: &str, data: &str) -> Result<(String, u16), String> {
     let output = Command::new("curl")
-        .args(["-s", "-w", "\n%{http_code}", "-X", "PUT", url,
-               "-H", "Content-Type: application/json", "-d", data])
+        .args([
+            "-s",
+            "-w",
+            "\n%{http_code}",
+            "-X",
+            "PUT",
+            url,
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            data,
+        ])
         .output()
         .map_err(|e| e.to_string())?;
 
     let text = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
     let status: u16 = text.lines().last().unwrap_or("0").parse().unwrap_or(0);
-    Ok((text.lines().take(text.lines().count() - 1).collect::<Vec<_>>().join("\n"), status))
+    Ok((
+        text.lines()
+            .take(text.lines().count() - 1)
+            .collect::<Vec<_>>()
+            .join("\n"),
+        status,
+    ))
 }
 
 fn curl_post(url: &str, data: &str) -> Result<(String, u16), String> {
     let output = Command::new("curl")
-        .args(["-s", "-w", "\n%{http_code}", "-X", "POST", url,
-               "-H", "Content-Type: application/json", "-d", data])
+        .args([
+            "-s",
+            "-w",
+            "\n%{http_code}",
+            "-X",
+            "POST",
+            url,
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            data,
+        ])
         .output()
         .map_err(|e| e.to_string())?;
 
     let text = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
     let status: u16 = text.lines().last().unwrap_or("0").parse().unwrap_or(0);
-    Ok((text.lines().take(text.lines().count().saturating_sub(1)).collect::<Vec<_>>().join("\n"), status))
+    Ok((
+        text.lines()
+            .take(text.lines().count().saturating_sub(1))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        status,
+    ))
 }
 
 fn main() {
@@ -55,8 +87,11 @@ fn main() {
         Ok(body) => {
             let status_line = body.lines().next().unwrap_or("{}");
             let verified = status_line.contains("healthy");
-            println!("[{}] REST API health: {}",
-                if verified { "OK" } else { "WARN" }, status_line);
+            println!(
+                "[{}] REST API health: {}",
+                if verified { "OK" } else { "WARN" },
+                status_line
+            );
         }
         Err(e) => {
             println!("[FAIL] REST API health: {}", e);
@@ -79,10 +114,16 @@ fn main() {
     }
 
     // Read L0 current context
-    match curl_get(&format!("{}/api/v1/files?path=/context/L0/current", base_url)) {
+    match curl_get(&format!(
+        "{}/api/v1/files?path=/context/L0/current",
+        base_url
+    )) {
         Ok(body) => {
             let has_content = body.contains("status") || body.contains("focus");
-            println!("[{}] Read /context/L0/current", if has_content { "OK" } else { "WARN" });
+            println!(
+                "[{}] Read /context/L0/current",
+                if has_content { "OK" } else { "WARN" }
+            );
         }
         Err(e) => println!("[WARN] L0 read: {}", e),
     }
@@ -91,15 +132,26 @@ fn main() {
     let (body, status) = curl_put(
         &format!("{}/api/v1/files?path=/context/L0/current", base_url),
         r#"{"data":"status: running example: evif_integration agent: cli"}"#,
-    ).unwrap_or_else(|_| ("".to_string(), 0));
+    )
+    .unwrap_or_else(|_| ("".to_string(), 0));
     let ok = body.contains("bytes_written");
-    println!("[{}] Write /context/L0/current (HTTP {})", if ok { "OK" } else { "FAIL" }, status);
+    println!(
+        "[{}] Write /context/L0/current (HTTP {})",
+        if ok { "OK" } else { "FAIL" },
+        status
+    );
 
     // Read back
-    match curl_get(&format!("{}/api/v1/files?path=/context/L0/current", base_url)) {
+    match curl_get(&format!(
+        "{}/api/v1/files?path=/context/L0/current",
+        base_url
+    )) {
         Ok(body) => {
             let verified = body.contains("evif_integration");
-            println!("[{}] Read back /context/L0/current", if verified { "OK" } else { "FAIL" });
+            println!(
+                "[{}] Read back /context/L0/current",
+                if verified { "OK" } else { "FAIL" }
+            );
         }
         Err(e) => println!("[WARN] Read back: {}", e),
     }
@@ -109,9 +161,13 @@ fn main() {
     let (body, _) = curl_put(
         &format!("{}/api/v1/files?path=/context/L1/decisions.md", base_url),
         l1_data,
-    ).unwrap_or_else(|_| ("".to_string(), 0));
+    )
+    .unwrap_or_else(|_| ("".to_string(), 0));
     let l1_ok = body.contains("bytes_written");
-    println!("[{}] Write /context/L1/decisions.md", if l1_ok { "OK" } else { "FAIL" });
+    println!(
+        "[{}] Write /context/L1/decisions.md",
+        if l1_ok { "OK" } else { "FAIL" }
+    );
 
     // ============================================================
     // 2. SkillFS Examples
@@ -126,10 +182,16 @@ fn main() {
         Err(e) => println!("[WARN] skills list: {}", e),
     }
 
-    match curl_get(&format!("{}/api/v1/files?path=/skills/code-review/SKILL.md", base_url)) {
+    match curl_get(&format!(
+        "{}/api/v1/files?path=/skills/code-review/SKILL.md",
+        base_url
+    )) {
         Ok(body) => {
             let has_skill_md = body.contains("name:") && body.contains("triggers:");
-            println!("[{}] Read /skills/code-review/SKILL.md", if has_skill_md { "OK" } else { "WARN" });
+            println!(
+                "[{}] Read /skills/code-review/SKILL.md",
+                if has_skill_md { "OK" } else { "WARN" }
+            );
         }
         Err(e) => println!("[WARN] code-review skill: {}", e),
     }
@@ -141,22 +203,39 @@ fn main() {
 
     // Create pipe
     let (body, _) = curl_post(
-        &format!("{}/api/v1/directories?path=/pipes/evif-integration-test", base_url),
+        &format!(
+            "{}/api/v1/directories?path=/pipes/evif-integration-test",
+            base_url
+        ),
         r#"{"path":"/pipes/evif-integration-test"}"#,
-    ).unwrap_or_else(|_| ("".to_string(), 0));
+    )
+    .unwrap_or_else(|_| ("".to_string(), 0));
     let pipe_created = body.contains("created") || body.contains("already exists");
-    println!("[{}] Create pipe /pipes/evif-integration-test", if pipe_created { "OK" } else { "FAIL" });
+    println!(
+        "[{}] Create pipe /pipes/evif-integration-test",
+        if pipe_created { "OK" } else { "FAIL" }
+    );
 
     // Write input
     let (body, _) = curl_put(
-        &format!("{}/api/v1/files?path=/pipes/evif-integration-test/input", base_url),
+        &format!(
+            "{}/api/v1/files?path=/pipes/evif-integration-test/input",
+            base_url
+        ),
         r#"{"data":"EVIF integration test - bidirectional PipeFS channel"}"#,
-    ).unwrap_or_else(|_| ("".to_string(), 0));
+    )
+    .unwrap_or_else(|_| ("".to_string(), 0));
     let input_written = body.contains("bytes_written");
-    println!("[{}] Write pipe input", if input_written { "OK" } else { "FAIL" });
+    println!(
+        "[{}] Write pipe input",
+        if input_written { "OK" } else { "FAIL" }
+    );
 
     // Read input
-    match curl_get(&format!("{}/api/v1/files?path=/pipes/evif-integration-test/input", base_url)) {
+    match curl_get(&format!(
+        "{}/api/v1/files?path=/pipes/evif-integration-test/input",
+        base_url
+    )) {
         Ok(body) => {
             let verified = body.contains("PipeFS") && body.contains("bidirectional");
             println!("[{}] Read pipe input", if verified { "OK" } else { "FAIL" });
@@ -166,16 +245,33 @@ fn main() {
 
     // Write output
     let (body, _) = curl_put(
-        &format!("{}/api/v1/files?path=/pipes/evif-integration-test/output", base_url),
+        &format!(
+            "{}/api/v1/files?path=/pipes/evif-integration-test/output",
+            base_url
+        ),
         r#"{"data":"SUCCESS: PipeFS bidirectional communication verified"}"#,
-    ).unwrap_or_else(|_| ("".to_string(), 0));
-    println!("[{}] Write pipe output", if body.contains("bytes_written") { "OK" } else { "FAIL" });
+    )
+    .unwrap_or_else(|_| ("".to_string(), 0));
+    println!(
+        "[{}] Write pipe output",
+        if body.contains("bytes_written") {
+            "OK"
+        } else {
+            "FAIL"
+        }
+    );
 
     // Read output
-    match curl_get(&format!("{}/api/v1/files?path=/pipes/evif-integration-test/output", base_url)) {
+    match curl_get(&format!(
+        "{}/api/v1/files?path=/pipes/evif-integration-test/output",
+        base_url
+    )) {
         Ok(body) => {
             let verified = body.contains("PipeFS") && body.contains("SUCCESS");
-            println!("[{}] Read pipe output", if verified { "OK" } else { "FAIL" });
+            println!(
+                "[{}] Read pipe output",
+                if verified { "OK" } else { "FAIL" }
+            );
         }
         Err(e) => println!("[WARN] read output: {}", e),
     }

@@ -1,0 +1,39 @@
+{"timestamp":"2026-04-13T02:24:54.870467Z","level":"INFO","fields":{"message":"EVIF REST API v0.1.0 starting on 0.0.0.0:8081 (production=false, log_dir=logs)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.871270Z","level":"INFO","fields":{"message":"Using default mount config (no EVIF_CONFIG/EVIF_MOUNTS/evif config files)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.872253Z","level":"INFO","fields":{"message":"Loading plugins (6 mount(s))..."},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.872989Z","level":"INFO","fields":{"message":"✓ Mounted mem at /mem"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.873082Z","level":"INFO","fields":{"message":"✓ Mounted hello at /hello"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.873175Z","level":"INFO","fields":{"message":"✓ Mounted local at /local"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.873282Z","level":"INFO","fields":{"message":"✓ Mounted contextfs at /context"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.873314Z","level":"INFO","fields":{"message":"✓ Mounted skillfs at /skills"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.873332Z","level":"INFO","fields":{"message":"✓ Mounted pipefs at /pipes"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.873372Z","level":"INFO","fields":{"message":"All plugins loaded successfully"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.873392Z","level":"INFO","fields":{"message":"Configured REST memory backend: memory"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.882358Z","level":"INFO","fields":{"message":"CORS enabled (origins: any)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:24:54.882714Z","level":"INFO","fields":{"message":"EVIF REST API listening on http://0.0.0.0:8081"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.146656Z","level":"INFO","fields":{"message":"EVIF REST API v0.1.0 starting on 0.0.0.0:8081 (production=false, log_dir=logs)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.146656Z","level":"INFO","fields":{"message":"EVIF REST API v0.1.0 starting on 0.0.0.0:8081 (production=false, log_dir=logs)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.147221Z","level":"INFO","fields":{"message":"Using default mount config (no EVIF_CONFIG/EVIF_MOUNTS/evif config files)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.147222Z","level":"INFO","fields":{"message":"Using default mount config (no EVIF_CONFIG/EVIF_MOUNTS/evif config files)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.147828Z","level":"INFO","fields":{"message":"Loading plugins (6 mount(s))..."},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.147833Z","level":"INFO","fields":{"message":"Loading plugins (6 mount(s))..."},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148546Z","level":"INFO","fields":{"message":"✓ Mounted mem at /mem"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148547Z","level":"INFO","fields":{"message":"✓ Mounted mem at /mem"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148637Z","level":"INFO","fields":{"message":"✓ Mounted hello at /hello"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148655Z","level":"INFO","fields":{"message":"✓ Mounted hello at /hello"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148735Z","level":"INFO","fields":{"message":"✓ Mounted local at /local"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148737Z","level":"INFO","fields":{"message":"✓ Mounted local at /local"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148805Z","level":"INFO","fields":{"message":"✓ Mounted contextfs at /context"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148805Z","level":"INFO","fields":{"message":"✓ Mounted contextfs at /context"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148835Z","level":"INFO","fields":{"message":"✓ Mounted skillfs at /skills"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148836Z","level":"INFO","fields":{"message":"✓ Mounted skillfs at /skills"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148854Z","level":"INFO","fields":{"message":"✓ Mounted pipefs at /pipes"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148856Z","level":"INFO","fields":{"message":"✓ Mounted pipefs at /pipes"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148897Z","level":"INFO","fields":{"message":"All plugins loaded successfully"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148898Z","level":"INFO","fields":{"message":"All plugins loaded successfully"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148920Z","level":"INFO","fields":{"message":"Configured REST memory backend: memory"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.148921Z","level":"INFO","fields":{"message":"Configured REST memory backend: memory"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.154815Z","level":"INFO","fields":{"message":"CORS enabled (origins: any)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.154843Z","level":"INFO","fields":{"message":"CORS enabled (origins: any)"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.155055Z","level":"INFO","fields":{"message":"EVIF REST API listening on http://0.0.0.0:8081"},"threadName":"main","threadId":"ThreadId(1)"}
+{"timestamp":"2026-04-13T02:39:24.155058Z","level":"INFO","fields":{"message":"EVIF REST API listening on http://0.0.0.0:8081"},"threadName":"main","threadId":"ThreadId(1)"}

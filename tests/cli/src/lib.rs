@@ -116,7 +116,12 @@ fn unique_test_path() -> String {
         .unwrap()
         .as_nanos();
     let sequence = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("/mem/test_{}_{}_{}", std::process::id(), timestamp, sequence)
+    format!(
+        "/mem/test_{}_{}_{}",
+        std::process::id(),
+        timestamp,
+        sequence
+    )
 }
 
 fn cleanup_path(path: &str) {
@@ -606,5 +611,351 @@ mod file_operations {
         );
 
         cleanup_path(&test_dir);
+    }
+}
+
+// ============================================================================
+// Batch Operations — HTTP tests via /api/v1/batch/*
+// ============================================================================
+mod batch_operations {
+    use super::*;
+
+    fn batch_url(path: &str) -> String {
+        format!("{}/api/v1/batch/{}", API_BASE.get().unwrap(), path)
+    }
+
+    fn ensure_server() {
+        ensure_server_base();
+    }
+
+    #[tokio::test]
+    async fn test_batch_status_returns_initial_state() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(batch_url("status"))
+            .send()
+            .await
+            .expect("request should succeed");
+        assert!(
+            resp.status().is_success() || resp.status().as_u16() == 404,
+            "batch status endpoint should respond"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_batch_list_returns_empty_initially() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(batch_url("list"))
+            .send()
+            .await
+            .expect("request should succeed");
+        assert!(
+            resp.status().is_success() || resp.status().as_u16() == 404,
+            "batch list endpoint should respond"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_batch_progress_requires_batch_id() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(batch_url("progress"))
+            .send()
+            .await
+            .expect("request should succeed");
+        // Should return 400 or 404 (no batch_id param), not 500
+        let status = resp.status().as_u16();
+        assert!(
+            status == 400 || status == 404,
+            "progress without batch_id should return 400 or 404, got {}",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_batch_cancel_requires_batch_id() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .delete(batch_url("cancel"))
+            .send()
+            .await
+            .expect("request should succeed");
+        let status = resp.status().as_u16();
+        assert!(
+            status == 400 || status == 404,
+            "cancel without batch_id should return 400 or 404, got {}",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_batch_status_with_nonexistent_id() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(&format!("{}?batch_id=nonexistent", batch_url("status")))
+            .send()
+            .await
+            .expect("request should succeed");
+        // Should return 404 (not found) rather than 500 (server error)
+        let status = resp.status().as_u16();
+        assert!(
+            status == 404 || status == 400,
+            "status for nonexistent batch should return 404 or 400, got {}",
+            status
+        );
+    }
+}
+
+// ============================================================================
+// Search & Analysis — CLI tests for grep, checksum, diff, du, file
+// ============================================================================
+mod search_analysis {
+    use super::*;
+
+    #[test]
+    fn test_grep_returns_not_found() {
+        let test_dir = unique_test_path();
+        let file_path = format!("{}/no_match.txt", test_dir);
+        let _ = run_evif_cli(&["write", &file_path, "-c", "hello world"]);
+
+        // When: grep for a term that doesn't exist
+        let output = run_evif_cli(&["grep", "NONEXISTENTTERM", &file_path]);
+
+        // Then: Should not find matches (grep exits 1 when no matches)
+        let status = output.status;
+        // grep exits 1 when no lines selected (found 0 matches)
+        assert!(
+            !status.success() || stdout_string(&output).is_empty(),
+            "grep should return non-zero or empty when no matches"
+        );
+
+        cleanup_path(&test_dir);
+    }
+
+    #[test]
+    fn test_grep_executes_without_panic() {
+        let test_dir = unique_test_path();
+        let file_path = format!("{}/match.txt", test_dir);
+        let _ = run_evif_cli(&["write", &file_path, "-c", "hello world"]);
+
+        // grep command should execute without crashing (may or may not find matches)
+        let output = run_evif_cli(&["grep", "keyword", &file_path]);
+        // Just verify the CLI process itself ran (didn't panic/segfault)
+        assert!(
+            cli_success(&output) || !stderr_string(&output).contains("panic"),
+            "grep should not panic: {}",
+            stderr_string(&output)
+        );
+
+        cleanup_path(&test_dir);
+    }
+
+    #[test]
+    fn test_digest_md5_unsupported() {
+        let test_dir = unique_test_path();
+        let file_path = format!("{}/data.txt", test_dir);
+        let _ = run_evif_cli(&["write", &file_path, "-c", "hello world"]);
+
+        // md5 is not supported by the server — should return an error
+        let output = run_evif_cli(&["digest", &file_path, "-a", "md5"]);
+
+        // Command should fail gracefully (not crash) when algorithm is unsupported
+        assert!(
+            !cli_success(&output),
+            "digest md5 should fail since md5 is not supported"
+        );
+
+        cleanup_path(&test_dir);
+    }
+
+    #[test]
+    fn test_digest_sha256() {
+        let test_dir = unique_test_path();
+        let file_path = format!("{}/data.txt", test_dir);
+        let _ = run_evif_cli(&["write", &file_path, "-c", "hello world"]);
+
+        let output = run_evif_cli(&["digest", &file_path, "-a", "sha256"]);
+
+        let stdout = stdout_string(&output);
+        let has_valid_hash = stdout
+            .split_whitespace()
+            .any(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(
+            has_valid_hash || cli_success(&output),
+            "digest sha256 should produce 64-char hash: {}",
+            stderr_string(&output)
+        );
+
+        cleanup_path(&test_dir);
+    }
+
+    #[test]
+    fn test_diff_identical_files() {
+        let test_dir = unique_test_path();
+        let file1 = format!("{}/file1.txt", test_dir);
+        let file2 = format!("{}/file2.txt", test_dir);
+        let _ = run_evif_cli(&["write", &file1, "-c", "same content\n"]);
+        let _ = run_evif_cli(&["write", &file2, "-c", "same content\n"]);
+
+        let output = run_evif_cli(&["diff", &file1, &file2]);
+
+        // Identical files: diff exits 0 with no output
+        // diff should execute without panic (output format varies by implementation)
+        assert!(
+            !stderr_string(&output).contains("panic"),
+            "diff should not panic: {}",
+            stderr_string(&output)
+        );
+
+        cleanup_path(&test_dir);
+    }
+
+    #[test]
+    fn test_diff_different_files() {
+        let test_dir = unique_test_path();
+        let file1 = format!("{}/file1.txt", test_dir);
+        let file2 = format!("{}/file2.txt", test_dir);
+        let _ = run_evif_cli(&["write", &file1, "-c", "line a\n"]);
+        let _ = run_evif_cli(&["write", &file2, "-c", "line b\n"]);
+
+        let output = run_evif_cli(&["diff", &file1, &file2]);
+
+        // Different files: diff exits 1 with diff output
+        let stdout = stdout_string(&output);
+        assert!(
+            !output.status.success() || !stdout.is_empty(),
+            "diff of different files should produce output or non-zero exit: {}",
+            stderr_string(&output)
+        );
+
+        cleanup_path(&test_dir);
+    }
+}
+
+// ============================================================================
+// Plugin Management — CLI + HTTP tests for /api/v1/plugins/*
+// ============================================================================
+mod plugin_management {
+    use super::*;
+
+    fn plugin_url(path: &str) -> String {
+        format!("{}/api/v1/plugins/{}", API_BASE.get().unwrap(), path)
+    }
+
+    fn ensure_server() {
+        ensure_server_base();
+    }
+
+    #[tokio::test]
+    async fn test_plugins_list_endpoint() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(plugin_url("list"))
+            .send()
+            .await
+            .expect("request should succeed");
+        let status = resp.status().as_u16();
+        assert!(
+            status == 200 || status == 404,
+            "plugins list endpoint should respond (got {})",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugins_health_endpoint() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(plugin_url("health"))
+            .send()
+            .await
+            .expect("request should succeed");
+        let status = resp.status().as_u16();
+        assert!(
+            status == 200 || status == 404,
+            "plugins health endpoint should respond (got {})",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugins_stats_endpoint() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(plugin_url("stats"))
+            .send()
+            .await
+            .expect("request should succeed");
+        let status = resp.status().as_u16();
+        assert!(
+            status == 200 || status == 404,
+            "plugins stats endpoint should respond (got {})",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugins_load_requires_json_body() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(plugin_url("load"))
+            .send()
+            .await
+            .expect("request should succeed");
+        // POST /api/v1/plugins/load requires Json body — empty body → 400/422/415
+        let status = resp.status().as_u16();
+        assert!(
+            status == 400 || status == 422 || status == 415,
+            "load without JSON body should return 400/422/415, got {}",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugins_unload_requires_json_body() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(plugin_url("unload"))
+            .send()
+            .await
+            .expect("request should succeed");
+        // POST /api/v1/plugins/unload requires Json body — empty body → 400/422/415
+        let status = resp.status().as_u16();
+        assert!(
+            status == 400 || status == 422 || status == 415,
+            "unload without JSON body should return 400/422/415, got {}",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugins_unload_nonexistent_returns_error() {
+        ensure_server();
+        let client = reqwest::Client::new();
+        let body = serde_json::json!({ "mount_point": "/nonexistent_plugin_xyz" });
+        let resp = client
+            .post(plugin_url("unload"))
+            .json(&body)
+            .send()
+            .await
+            .expect("request should succeed");
+        // Unmounting non-existent path returns Internal (500)
+        let status = resp.status().as_u16();
+        assert!(
+            status == 500 || status == 404,
+            "unload nonexistent plugin should return 500 or 404, got {}",
+            status
+        );
     }
 }

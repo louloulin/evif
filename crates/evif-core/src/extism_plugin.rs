@@ -165,13 +165,7 @@ impl ExtismPlugin {
 
         // 配置允许的主机列表（HTTP 访问控制）
         let manifest = if !config.security.allowed_hosts.is_empty() {
-            manifest.with_allowed_hosts(
-                config
-                    .security
-                    .allowed_hosts
-                    .iter()
-                    .map(|s| s.clone()),
-            )
+            manifest.with_allowed_hosts(config.security.allowed_hosts.iter().map(|s| s.clone()))
         } else {
             manifest
         };

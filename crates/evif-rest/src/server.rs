@@ -4,8 +4,14 @@
 // Phase 7.3: 支持动态 .so 插件加载（对标 AGFS PluginFactory）
 
 use crate::{
-    create_memory_state_from_env, validate_memory_for_production, LoggingMiddleware,
-    RestAuthState, RestError, RestResult,
+    create_memory_state_from_env, validate_memory_for_production, RestAuthState, RestError,
+    RestResult,
+};
+use crate::{
+    middleware::{
+        concurrency_limit_middleware, panic_catcher, timeout_middleware, LoggingMiddleware,
+    },
+    routes::mark_server_ready,
 };
 use axum::middleware;
 use evif_core::{
@@ -45,48 +51,47 @@ pub(crate) async fn create_plugin_from_config(
     config: Option<&serde_json::Value>,
 ) -> Result<Arc<dyn EvifPlugin>, EvifError> {
     let normalized = normalize_plugin_id(plugin);
-    let plugin_instance: Arc<dyn EvifPlugin> = if let Some(plugin_instance) =
-        create_builtin_plugin_from_config(&normalized, config)?
-    {
-        plugin_instance
-    } else {
-        info!(
-            "Attempting to load plugin '{}' from dynamic library",
-            plugin
-        );
+    let plugin_instance: Arc<dyn EvifPlugin> =
+        if let Some(plugin_instance) = create_builtin_plugin_from_config(&normalized, config)? {
+            plugin_instance
+        } else {
+            info!(
+                "Attempting to load plugin '{}' from dynamic library",
+                plugin
+            );
 
-        let loader = DYNAMIC_LOADER.get_or_init(|| {
-            info!("Initializing dynamic plugin loader");
-            Arc::new(DynamicPluginLoader::new())
-        });
+            let loader = DYNAMIC_LOADER.get_or_init(|| {
+                info!("Initializing dynamic plugin loader");
+                Arc::new(DynamicPluginLoader::new())
+            });
 
-        match loader.load_plugin(&normalized) {
-            Ok(info) => {
-                info!("Loaded dynamic plugin: {} v{}", info.name(), info.version());
-                match loader.create_plugin(&normalized) {
-                    Ok(plugin) => {
-                        info!(
-                            "Successfully created dynamic plugin instance: {}",
-                            plugin.name()
-                        );
-                        plugin
-                    }
-                    Err(e) => {
-                        return Err(EvifError::PluginLoadError(format!(
-                            "Failed to create dynamic plugin instance '{}': {}",
-                            plugin, e
-                        )));
+            match loader.load_plugin(&normalized) {
+                Ok(info) => {
+                    info!("Loaded dynamic plugin: {} v{}", info.name(), info.version());
+                    match loader.create_plugin(&normalized) {
+                        Ok(plugin) => {
+                            info!(
+                                "Successfully created dynamic plugin instance: {}",
+                                plugin.name()
+                            );
+                            plugin
+                        }
+                        Err(e) => {
+                            return Err(EvifError::PluginLoadError(format!(
+                                "Failed to create dynamic plugin instance '{}': {}",
+                                plugin, e
+                            )));
+                        }
                     }
                 }
+                Err(e) => {
+                    return Err(EvifError::PluginLoadError(format!(
+                        "Failed to load dynamic plugin '{}': {}",
+                        plugin, e
+                    )));
+                }
             }
-            Err(e) => {
-                return Err(EvifError::PluginLoadError(format!(
-                    "Failed to load dynamic plugin '{}': {}",
-                    plugin, e
-                )));
-            }
-        }
-    };
+        };
 
     validate_and_initialize_plugin(plugin_instance.as_ref(), config).await?;
     Ok(plugin_instance)
@@ -366,6 +371,15 @@ fn parse_mounts_from_string(content: &str) -> Result<Vec<MountConfigEntry>, Stri
     Err("Failed to parse config: unsupported format (tried JSON, YAML, TOML)".to_string())
 }
 
+/// N0: TLS configuration for HTTPS server
+#[derive(Debug, Clone)]
+pub struct TlsConfig {
+    /// Path to TLS certificate file (PEM format)
+    pub cert_path: String,
+    /// Path to TLS private key file (PEM format)
+    pub key_path: String,
+}
+
 /// 服务器配置
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -383,6 +397,9 @@ pub struct ServerConfig {
 
     /// Production mode: strict config checks
     pub production_mode: bool,
+
+    /// TLS configuration (when EVIF_TLS_CERT_FILE + EVIF_TLS_KEY_FILE are set)
+    pub tls: Option<TlsConfig>,
 }
 
 impl Default for ServerConfig {
@@ -391,17 +408,139 @@ impl Default for ServerConfig {
             .map(|v| v.trim().eq_ignore_ascii_case("true") || v == "1")
             .unwrap_or(false);
 
+        // N0: TLS — read from env vars if both cert and key are provided
+        let tls = Self::tls_from_env();
+
         Self {
-            bind_addr: "0.0.0.0".to_string(),
-            port: 8081,
+            // CLI args take precedence; fall back to EVIF_REST_PORT / EVIF_REST_HOST
+            bind_addr: std::env::var("EVIF_REST_HOST")
+                .or_else(|_| std::env::var("EVIF_HOST"))
+                .unwrap_or_else(|_| "0.0.0.0".to_string()),
+            port: std::env::var("EVIF_REST_PORT")
+                .or_else(|_| std::env::var("EVIF_PORT"))
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8081),
             enable_cors: std::env::var("EVIF_CORS_ENABLED")
                 .map(|v| !v.trim().eq_ignore_ascii_case("false") && v != "0")
                 .unwrap_or(true),
             cors_origins: std::env::var("EVIF_CORS_ORIGINS")
-                .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+                .map(|v| {
+                    v.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
                 .unwrap_or_default(),
             production_mode,
+            tls,
         }
+    }
+}
+
+impl ServerConfig {
+    /// N0: Load TLS configuration from environment variables.
+    /// Requires both EVIF_TLS_CERT_FILE and EVIF_TLS_KEY_FILE.
+    fn tls_from_env() -> Option<TlsConfig> {
+        let cert_path = std::env::var("EVIF_TLS_CERT_FILE").ok()?;
+        let key_path = std::env::var("EVIF_TLS_KEY_FILE").ok()?;
+        if cert_path.is_empty() || key_path.is_empty() {
+            return None;
+        }
+        Some(TlsConfig {
+            cert_path,
+            key_path,
+        })
+    }
+
+    /// Returns true if TLS is configured and HTTPS server should be used.
+    pub fn is_tls_enabled(&self) -> bool {
+        self.tls.is_some()
+    }
+
+    /// N0: Build a rustls ServerConfig from this ServerConfig's TLS settings.
+    /// Panics if TLS is not configured — check is_tls_enabled() first.
+    pub fn build_rustls_config(&self) -> std::io::Result<rustls::ServerConfig> {
+        use rustls_pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
+
+        let tls = self
+            .tls
+            .as_ref()
+            .expect("TLS not configured — call is_tls_enabled() first");
+
+        let cert_bytes = std::fs::read(&tls.cert_path).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("TLS cert not found at '{}': {}", tls.cert_path, e),
+            )
+        })?;
+        let key_bytes = std::fs::read(&tls.key_path).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("TLS key not found at '{}': {}", tls.key_path, e),
+            )
+        })?;
+
+        let cert = CertificateDer::from(cert_bytes);
+        let key_pem = PrivateKeyDer::<'static>::from_pem_slice(&key_bytes).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid TLS private key (must be PEM): {}", e),
+            )
+        })?;
+
+        let mut config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert], key_pem)
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("TLS certificate/key mismatch: {}", e),
+                )
+            })?;
+
+        // Advertise HTTP/1.1 via ALPN
+        config.alpn_protocols = vec![b"http/1.1".to_vec()];
+
+        Ok(config)
+    }
+
+    /// Create a config from CLI args, falling back to env vars and defaults.
+    /// CLI args take highest precedence, then env vars, then hardcoded defaults.
+    pub fn from_cli(
+        host: Option<String>,
+        port: Option<u16>,
+        production: bool,
+        tls_cert: Option<String>,
+        tls_key: Option<String>,
+    ) -> Self {
+        let mut base = Self::default();
+        if let Some(h) = host {
+            base.bind_addr = h;
+        }
+        if let Some(p) = port {
+            base.port = p;
+        }
+        if production {
+            base.production_mode = true;
+        }
+        if let (Some(cert), Some(key)) = (tls_cert, tls_key) {
+            if !cert.is_empty() && !key.is_empty() {
+                base.tls = Some(TlsConfig {
+                    cert_path: cert,
+                    key_path: key,
+                });
+            }
+        }
+        base
+    }
+
+    /// Returns the TLS/HTTPS port. Defaults to 8443, or EVIF_TLS_PORT env var.
+    pub fn tls_port(&self) -> u16 {
+        std::env::var("EVIF_TLS_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8443)
     }
 }
 
@@ -420,8 +559,8 @@ impl EvifServer {
     pub async fn run(self) -> RestResult<()> {
         let mount_table = Arc::new(RadixMountTable::new());
         let mounts = load_mount_config();
-        let memory_config = crate::memory_handlers::MemoryBackendConfig::from_env()
-            .map_err(RestError::Internal)?;
+        let memory_config =
+            crate::memory_handlers::MemoryBackendConfig::from_env().map_err(RestError::Internal)?;
 
         // Validate memory backend for production mode
         if let Err(e) = validate_memory_for_production(&memory_config) {
@@ -431,7 +570,9 @@ impl EvifServer {
             return Err(RestError::Internal(e));
         }
 
-        let memory_state = create_memory_state_from_env().map_err(RestError::Internal)?;
+        let memory_state = create_memory_state_from_env()
+            .await
+            .map_err(RestError::Internal)?;
 
         info!("Loading plugins ({} mount(s))...", mounts.len());
         for entry in mounts {
@@ -445,7 +586,10 @@ impl EvifServer {
                 })?;
             let path = entry.path.clone();
             let plugin_name = entry.plugin.clone();
-            let instance_name = entry.instance_name.clone().unwrap_or_else(|| plugin_name.clone());
+            let instance_name = entry
+                .instance_name
+                .clone()
+                .unwrap_or_else(|| plugin_name.clone());
             mount_table
                 .mount_with_metadata(path.clone(), plugin, plugin_name.clone(), instance_name)
                 .await
@@ -460,20 +604,29 @@ impl EvifServer {
         info!("All plugins loaded successfully");
         info!(
             "Configured REST memory backend: {}",
-            memory_state.backend_name()
+            memory_state.backend_description()
         );
 
+        // N5 + N8 + N10: Middleware chain — outermost (panic catcher) to innermost (logging)
         let mut app = crate::routes::create_routes_with_auth_and_memory_state(
             mount_table,
             Arc::new(RestAuthState::from_env()),
             memory_state,
         )
-        .layer(middleware::from_fn(crate::middleware::PathValidationMiddleware))
-        .layer(middleware::from_fn(LoggingMiddleware));
+        // N8: Panic catcher — outermost, catches panics from all inner handlers
+        .layer(middleware::from_fn(panic_catcher))
+        // N5: Concurrency limit — max 256 concurrent requests
+        .layer(middleware::from_fn(concurrency_limit_middleware))
+        // N8: Request timeout — 30s per request
+        .layer(middleware::from_fn(timeout_middleware))
+        // N10: Structured request logging
+        .layer(middleware::from_fn(LoggingMiddleware))
+        // TraceLayer for HTTP observability
+        .layer(TraceLayer::new_for_http());
 
         // Apply CORS configuration
         if self.config.enable_cors {
-            use tower_http::cors::{CorsLayer, Any};
+            use tower_http::cors::{Any, CorsLayer};
             let cors = if self.config.cors_origins.is_empty() {
                 // No specific origins configured: allow all
                 if self.config.production_mode {
@@ -481,53 +634,269 @@ impl EvifServer {
                 }
                 CorsLayer::new()
                     .allow_origin(Any)
-                    .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::PUT, axum::http::Method::DELETE, axum::http::Method::PATCH])
-                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key"), axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
-                    .expose_headers([axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
+                    .allow_methods([
+                        axum::http::Method::GET,
+                        axum::http::Method::POST,
+                        axum::http::Method::PUT,
+                        axum::http::Method::DELETE,
+                        axum::http::Method::PATCH,
+                    ])
+                    .allow_headers([
+                        axum::http::header::CONTENT_TYPE,
+                        axum::http::header::AUTHORIZATION,
+                        axum::http::HeaderName::from_static("x-api-key"),
+                        axum::http::HeaderName::from_static("x-evif-api-key"),
+                        axum::http::HeaderName::from_static("x-request-id"),
+                        axum::http::HeaderName::from_static("x-correlation-id"),
+                    ])
+                    .expose_headers([
+                        axum::http::HeaderName::from_static("x-request-id"),
+                        axum::http::HeaderName::from_static("x-correlation-id"),
+                    ])
                     .max_age(std::time::Duration::from_secs(3600))
             } else {
                 // Specific origins configured
-                let origins: Vec<_> = self.config.cors_origins.iter()
+                let origins: Vec<_> = self
+                    .config
+                    .cors_origins
+                    .iter()
                     .filter_map(|o| o.parse().ok())
                     .collect();
                 CorsLayer::new()
                     .allow_origin(origins)
-                    .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::PUT, axum::http::Method::DELETE, axum::http::Method::PATCH])
-                    .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION, axum::http::HeaderName::from_static("x-api-key"), axum::http::HeaderName::from_static("x-evif-api-key"), axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
-                    .expose_headers([axum::http::HeaderName::from_static("x-request-id"), axum::http::HeaderName::from_static("x-correlation-id")])
+                    .allow_methods([
+                        axum::http::Method::GET,
+                        axum::http::Method::POST,
+                        axum::http::Method::PUT,
+                        axum::http::Method::DELETE,
+                        axum::http::Method::PATCH,
+                    ])
+                    .allow_headers([
+                        axum::http::header::CONTENT_TYPE,
+                        axum::http::header::AUTHORIZATION,
+                        axum::http::HeaderName::from_static("x-api-key"),
+                        axum::http::HeaderName::from_static("x-evif-api-key"),
+                        axum::http::HeaderName::from_static("x-request-id"),
+                        axum::http::HeaderName::from_static("x-correlation-id"),
+                    ])
+                    .expose_headers([
+                        axum::http::HeaderName::from_static("x-request-id"),
+                        axum::http::HeaderName::from_static("x-correlation-id"),
+                    ])
                     .max_age(std::time::Duration::from_secs(3600))
             };
             app = app.layer(cors);
-            info!("CORS enabled (origins: {})", if self.config.cors_origins.is_empty() { "any".to_string() } else { self.config.cors_origins.join(", ") });
+            info!(
+                "CORS enabled (origins: {})",
+                if self.config.cors_origins.is_empty() {
+                    "any".to_string()
+                } else {
+                    self.config.cors_origins.join(", ")
+                }
+            );
         } else {
             info!("CORS disabled");
         }
 
         let addr = format!("{}:{}", self.config.bind_addr, self.config.port);
-        let listener = TcpListener::bind(&addr).await?;
 
-        info!("EVIF REST API listening on http://{}", addr);
-
-        let _graceful_timeout = std::env::var("EVIF_SHUTDOWN_TIMEOUT")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(30u64);
-
-        // Build the graceful shutdown signal
+        // N9: Build graceful shutdown signal — handles SIGTERM (K8s/Docker/systemd) and SIGINT
+        // Use a broadcast channel so both HTTP and HTTPS can share the same shutdown signal
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
         let shutdown_signal = async {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("failed to install Ctrl+C handler");
-            info!("Received SIGINT/Ctrl+C, shutting down gracefully...");
+            #[cfg(unix)]
+            {
+                use tokio::signal::unix::{signal, SignalKind};
+                let mut sigterm =
+                    signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+                let mut sigint =
+                    signal(SignalKind::interrupt()).expect("failed to install SIGINT handler");
+                tokio::select! {
+                    _ = sigterm.recv() => {
+                        info!("Received SIGTERM, shutting down gracefully...");
+                    }
+                    _ = sigint.recv() => {
+                        info!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("failed to install Ctrl+C handler");
+                info!("Received Ctrl+C, shutting down gracefully...");
+            }
         };
 
-        // Run with graceful shutdown
-        axum::serve(listener, app.layer(TraceLayer::new_for_http()))
-            .with_graceful_shutdown(shutdown_signal)
-            .await?;
+        // Spawn shutdown signal receiver — sends () to shutdown_tx on SIGTERM/SIGINT
+        let shutdown_sender = shutdown_tx.clone();
+        tokio::spawn(async move {
+            shutdown_signal.await;
+            let _ = shutdown_sender.send(());
+        });
+
+        if self.config.is_tls_enabled() {
+            // N0: TLS mode — serve HTTPS alongside HTTP
+            use hyper_util::rt::TokioExecutor;
+            use hyper_util::server::conn::auto::Builder as ConnBuilder;
+            use hyper_util::service::TowerToHyperService;
+            use tokio_rustls::TlsAcceptor;
+
+            let tls_server_config = self
+                .config
+                .build_rustls_config()
+                .map_err(|e| RestError::Internal(format!("TLS config error: {}", e)))?;
+            let tls_config_arc = Arc::new(tls_server_config);
+
+            let tls_port = self.config.tls_port();
+            let tls_addr = format!("{}:{}", self.config.bind_addr, tls_port);
+            let tls_listener = TcpListener::bind(&tls_addr).await?;
+
+            // Bind HTTP separately
+            let http_listener = TcpListener::bind(&addr).await?;
+            info!(
+                "EVIF REST API listening on http://{} and https://{} (TLS enabled)",
+                addr, tls_addr
+            );
+
+            // Spawn TLS server task
+            let tls_app = app.clone();
+            let tls_shutdown_sender = shutdown_tx.clone();
+            tokio::spawn(async move {
+                tracing::info!("HTTPS server task started on :{}", tls_port);
+                let mut shutdown_rx = tls_shutdown_sender.subscribe();
+                loop {
+                    tokio::select! {
+                        _ = shutdown_rx.recv() => {
+                            tracing::info!("HTTPS server: shutdown signal received");
+                            break;
+                        }
+                        result = tls_listener.accept() => {
+                            match result {
+                                Ok((stream, _remote_addr)) => {
+                                    let acceptor = TlsAcceptor::from(Arc::clone(&tls_config_arc));
+                                    let app = tls_app.clone();
+                                    tokio::spawn(async move {
+                                        match acceptor.accept(stream).await {
+                                            Ok(tls_stream) => {
+                                                use hyper_util::rt::TokioIo;
+                                                let io = TokioIo::new(tls_stream);
+                                                let hyper_service = TowerToHyperService::new(app);
+                                                let mut builder = ConnBuilder::new(TokioExecutor::new());
+                                                let http1_builder = builder.http1();
+                                                let conn = http1_builder
+                                                    .serve_connection(io, hyper_service);
+                                                if let Err(e) = conn.await {
+                                                    tracing::error!(error = %e, "TLS connection error");
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "TLS accept error");
+                                            }
+                                        }
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::warn!(error = %e, "TLS listener error");
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Run HTTP server with graceful shutdown
+            let (http_shutdown_tx, http_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+            tokio::spawn(async move {
+                let _ = shutdown_tx.subscribe().recv().await;
+                let _ = http_shutdown_tx.send(());
+            });
+            axum::serve(http_listener, app)
+                .with_graceful_shutdown(async move {
+                    http_shutdown_rx.await.ok();
+                })
+                .await?;
+        } else {
+            info!("EVIF REST API listening on http://{}", addr);
+
+            // N9: Run with graceful shutdown — subscribe to broadcast and forward to oneshot
+            let (http_shutdown_tx, http_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+            let mut broadcast_receiver = shutdown_tx.subscribe();
+            tokio::spawn(async move {
+                let _ = broadcast_receiver.recv().await;
+                let _ = http_shutdown_tx.send(());
+            });
+
+            let listener = TcpListener::bind(&addr).await?;
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    http_shutdown_rx.await.ok();
+                })
+                .await?;
+        }
+
+        // N12: Config hot-reload — watch config file for changes and log reload signal.
+        // Full hot-reload requires Router rebuild; this provides the file-watching foundation.
+        // Enable by setting EVIF_CONFIG_FILE=/path/to/evif.toml
+        let config_file_path = std::env::var("EVIF_CONFIG_FILE").ok();
+        if let Some(ref path) = config_file_path {
+            let path_for_spawn = path.clone();
+            tokio::spawn(async move {
+                use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
+                use std::path::PathBuf;
+
+                let watched_path = PathBuf::from(path_for_spawn.as_str());
+                if !watched_path.exists() {
+                    tracing::warn!(path = %watched_path.display(), "EVIF_CONFIG_FILE does not exist, hot-reload disabled");
+                    return;
+                }
+
+                // Clone before the closure so we can still use the original in watcher.watch()
+                let watched_for_closure = watched_path.clone();
+
+                let mut watcher = match RecommendedWatcher::new(
+                    move |res: Result<notify::Event, notify::Error>| {
+                        if let Ok(event) = res {
+                            if event.kind.is_modify() {
+                                tracing::info!(
+                                    path = %watched_for_closure.display(),
+                                    "Config file changed — EVIF_REST_RELOAD=1 triggers graceful restart"
+                                );
+                            }
+                        }
+                    },
+                    NotifyConfig::default(),
+                ) {
+                    Ok(w) => w,
+                    Err(e) => {
+                        tracing::warn!("Failed to create config watcher: {}", e);
+                        return;
+                    }
+                };
+
+                if let Err(e) = watcher.watch(&watched_path, RecursiveMode::NonRecursive) {
+                    tracing::warn!("Failed to watch config file: {}", e);
+                    return;
+                }
+
+                tracing::info!(path = %watched_path.display(), "Config file hot-reload watcher started");
+                // Watcher runs until dropped — keep alive by sleeping
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                }
+            });
+            info!(
+                "N12: Config hot-reload enabled via EVIF_CONFIG_FILE={}",
+                path
+            );
+        }
+
+        // N9: Mark server as ready — all routes registered, listener bound, ready to accept traffic
+        mark_server_ready();
+        info!("Server marked as ready (GET /api/v1/ready → 200)");
 
         info!("EVIF REST API shutdown complete");
-
         Ok(())
     }
 }
@@ -558,10 +927,16 @@ mod tests {
         std::env::remove_var("EVIF_REST_ENCRYPTION_STATE_PATH");
 
         let result = validate_runtime_state_for_production(false);
-        assert!(result.is_ok(), "non-production mode should allow in-memory runtime state");
+        assert!(
+            result.is_ok(),
+            "non-production mode should allow in-memory runtime state"
+        );
 
         let result = validate_runtime_state_for_production(true);
-        assert!(result.is_err(), "production mode should require persistent runtime state");
+        assert!(
+            result.is_err(),
+            "production mode should require persistent runtime state"
+        );
         let error = result.expect_err("missing state paths should fail");
         assert!(error.contains("EVIF_REST_TENANT_STATE_PATH"));
         assert!(error.contains("EVIF_REST_SYNC_STATE_PATH"));
@@ -575,7 +950,10 @@ mod tests {
         );
 
         let result = validate_runtime_state_for_production(true);
-        assert!(result.is_ok(), "production mode should accept persistent runtime state paths");
+        assert!(
+            result.is_ok(),
+            "production mode should accept persistent runtime state paths"
+        );
 
         std::env::remove_var("EVIF_REST_TENANT_STATE_PATH");
         std::env::remove_var("EVIF_REST_SYNC_STATE_PATH");
@@ -679,9 +1057,18 @@ config = { root = "/tmp/test" }
         let mounts = load_mount_config();
         let paths: Vec<&str> = mounts.iter().map(|m| m.path.as_str()).collect();
 
-        assert!(paths.contains(&"/context"), "Default mounts should include /context");
-        assert!(paths.contains(&"/skills"), "Default mounts should include /skills");
-        assert!(paths.contains(&"/pipes"), "Default mounts should include /pipes");
+        assert!(
+            paths.contains(&"/context"),
+            "Default mounts should include /context"
+        );
+        assert!(
+            paths.contains(&"/skills"),
+            "Default mounts should include /skills"
+        );
+        assert!(
+            paths.contains(&"/pipes"),
+            "Default mounts should include /pipes"
+        );
 
         // 验证插件名称
         let context_mount = mounts.iter().find(|m| m.path == "/context").unwrap();

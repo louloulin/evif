@@ -5,7 +5,10 @@ use evif_plugins::ServerInfoFsPlugin;
 async fn serverinfofs_rejects_unknown_paths_and_non_root_readdir() {
     let plugin = ServerInfoFsPlugin::new("2.0.0");
 
-    let err = plugin.stat("/missing").await.expect_err("unknown file should fail");
+    let err = plugin
+        .stat("/missing")
+        .await
+        .expect_err("unknown file should fail");
     assert!(matches!(err, evif_core::EvifError::NotFound(_)));
 
     let err = plugin

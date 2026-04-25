@@ -101,9 +101,12 @@ impl EvifClient {
     /// 列出文件
     pub async fn ls(&self, path: &str) -> ClientResult<Vec<FileInfo>> {
         let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
-        let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(e.to_string())
-        })?;
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
 
         let status = response.status();
         let json: Value = response
@@ -148,9 +151,12 @@ impl EvifClient {
     /// 读取文件字节
     pub async fn cat_bytes(&self, path: &str) -> ClientResult<Vec<u8>> {
         let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
-        let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(e.to_string())
-        })?;
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         let status = response.status();
 
         let json: Value = response
@@ -190,9 +196,17 @@ impl EvifClient {
 
         let create_url = format!("{}/api/v1/files", self.config.base_url);
         let create_body = serde_json::json!({ "path": path });
-        let _ = self.http_client.post(&create_url).json(&create_body).send().await;
+        let _ = self
+            .http_client
+            .post(&create_url)
+            .json(&create_body)
+            .send()
+            .await;
 
-        let url = format!("{}/api/v1/files?path={}&offset=0", self.config.base_url, path);
+        let url = format!(
+            "{}/api/v1/files?path={}&offset=0",
+            self.config.base_url, path
+        );
         let body = serde_json::json!({ "data": encoded, "encoding": "base64" });
 
         let response = self
@@ -279,9 +293,12 @@ impl EvifClient {
     /// 获取文件信息
     pub async fn stat(&self, path: &str) -> ClientResult<FileInfo> {
         let url = format!("{}/api/v1/stat?path={}", self.config.base_url, path);
-        let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(e.to_string())
-        })?;
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
         let status = response.status();
 
         let json: Value = response
@@ -309,9 +326,12 @@ impl EvifClient {
     /// 健康检查
     pub async fn health(&self) -> ClientResult<HealthInfo> {
         let url = format!("{}/api/v1/health", self.config.base_url);
-        let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(e.to_string())
-        })?;
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
 
         let json: Value = response
             .json()
@@ -358,9 +378,12 @@ impl EvifClient {
     /// 列出挂载点
     pub async fn mounts(&self) -> ClientResult<Vec<MountInfo>> {
         let url = format!("{}/api/v1/mounts", self.config.base_url);
-        let response = self.http_client.get(&url).send().await.map_err(|e| {
-            ClientError::Transport(e.to_string())
-        })?;
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
 
         let status = response.status();
         let json: Value = response

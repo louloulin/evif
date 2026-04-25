@@ -115,12 +115,18 @@ impl InodeManager {
 
         // 更新映射
         {
-            let mut path_map = self.path_to_inode.write().unwrap_or_else(|e| e.into_inner());
+            let mut path_map = self
+                .path_to_inode
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             path_map.insert(path.to_string(), inode);
         }
 
         {
-            let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
+            let mut info_map = self
+                .inode_to_info
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             info_map.insert(inode, InodeInfo::new(inode, path.to_string(), is_dir));
         }
 
@@ -169,7 +175,10 @@ impl InodeManager {
     /// # 参数
     /// - `inode`: inode 编号
     pub fn incref(&self, inode: Inode) {
-        let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
+        let mut info_map = self
+            .inode_to_info
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(info) = info_map.get_mut(&inode) {
             info.ref_count += 1;
             trace!("Incref inode {} -> ref_count: {}", inode, info.ref_count);
@@ -184,7 +193,10 @@ impl InodeManager {
     /// # 返回
     /// true 如果引用计数归零，false 否则
     pub fn decref(&self, inode: Inode) -> bool {
-        let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
+        let mut info_map = self
+            .inode_to_info
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(info) = info_map.get_mut(&inode) {
             if info.ref_count > 0 {
                 info.ref_count -= 1;
@@ -209,13 +221,19 @@ impl InodeManager {
         if let Some(info) = info {
             // 从路径映射中删除
             {
-                let mut path_map = self.path_to_inode.write().unwrap_or_else(|e| e.into_inner());
+                let mut path_map = self
+                    .path_to_inode
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 path_map.remove(&info.path);
             }
 
             // 从信息映射中删除
             {
-                let mut info_map = self.inode_to_info.write().unwrap_or_else(|e| e.into_inner());
+                let mut info_map = self
+                    .inode_to_info
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 info_map.remove(&inode);
             }
 

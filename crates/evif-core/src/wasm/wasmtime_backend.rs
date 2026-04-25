@@ -12,9 +12,9 @@ use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use wasmtime::*;
 use wasmtime::component::ResourceTable;
-use wasmtime_wasi::{WasiCtx, WasiView, WasiCtxBuilder};
+use wasmtime::*;
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 
 use base64::{engine::general_purpose, Engine as _};
 
@@ -85,7 +85,10 @@ impl WasmtimePlugin {
     /// # Arguments
     /// - `config`: WASM plugin configuration
     /// - `profile`: Engine profile determining compiler and allocation strategy
-    pub async fn with_profile(config: WasmPluginConfig, profile: EngineProfile) -> EvifResult<Self> {
+    pub async fn with_profile(
+        config: WasmPluginConfig,
+        profile: EngineProfile,
+    ) -> EvifResult<Self> {
         // Check WASM file exists
         let wasm_path = Path::new(&config.wasm_path);
         if !wasm_path.exists() {
@@ -98,9 +101,7 @@ impl WasmtimePlugin {
         let engine = Self::build_engine(profile)?;
 
         // Create WASI context with security restrictions
-        let wasi = WasiCtxBuilder::new()
-            .inherit_stdio()
-            .build();
+        let wasi = WasiCtxBuilder::new().inherit_stdio().build();
 
         let state = PluginState {
             wasi,
@@ -168,9 +169,8 @@ impl WasmtimePlugin {
 
     /// Load and instantiate the WASM module
     pub async fn load(&self) -> EvifResult<()> {
-        let component_bytes = std::fs::read(&self.config.wasm_path).map_err(|e| {
-            EvifError::Internal(format!("Failed to read WASM file: {}", e))
-        })?;
+        let component_bytes = std::fs::read(&self.config.wasm_path)
+            .map_err(|e| EvifError::Internal(format!("Failed to read WASM file: {}", e)))?;
 
         let component = wasmtime::component::Component::new(&self.engine, &component_bytes)
             .map_err(|e| EvifError::Internal(format!("Failed to compile component: {}", e)))?;
@@ -178,9 +178,9 @@ impl WasmtimePlugin {
         let linker = wasmtime::component::Linker::<PluginState>::new(&self.engine);
 
         let mut store = self.store.lock().await;
-        let store = store.as_mut().ok_or_else(|| {
-            EvifError::Internal("Store not initialized".to_string())
-        })?;
+        let store = store
+            .as_mut()
+            .ok_or_else(|| EvifError::Internal("Store not initialized".to_string()))?;
 
         let instance = linker
             .instantiate(store, &component)
@@ -191,7 +191,8 @@ impl WasmtimePlugin {
 
         tracing::info!(
             "Loaded Wasmtime plugin: {} (profile: {:?})",
-            self.name, self.profile
+            self.name,
+            self.profile
         );
         Ok(())
     }
@@ -219,18 +220,14 @@ impl WasmtimePlugin {
     }
 
     /// Call a WASM function with JSON input
-    async fn call_function<T>(
-        &self,
-        func_name: &str,
-        input: serde_json::Value,
-    ) -> EvifResult<T>
+    async fn call_function<T>(&self, func_name: &str, input: serde_json::Value) -> EvifResult<T>
     where
         T: for<'de> Deserialize<'de>,
     {
         let mut store_guard = self.store.lock().await;
-        let store = store_guard.as_mut().ok_or_else(|| {
-            EvifError::Internal("Store not initialized".to_string())
-        })?;
+        let store = store_guard
+            .as_mut()
+            .ok_or_else(|| EvifError::Internal("Store not initialized".to_string()))?;
 
         let instance_guard = self.instance.lock().await;
         let instance = instance_guard.as_ref().ok_or_else(|| {
@@ -240,9 +237,7 @@ impl WasmtimePlugin {
         // Get exported function
         let func = instance
             .get_typed_func::<(String,), (String,)>(&mut *store, func_name)
-            .map_err(|e| {
-                EvifError::Internal(format!("Function {} not found: {}", func_name, e))
-            })?;
+            .map_err(|e| EvifError::Internal(format!("Function {} not found: {}", func_name, e)))?;
 
         let input_json = input.to_string();
 

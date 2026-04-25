@@ -1,10 +1,7 @@
 // Context API Handlers - Semantic search and summarization endpoints
 
 use crate::{RestError, RestResult};
-use axum::{
-    extract::State,
-    Json,
-};
+use axum::{extract::State, Json};
 use evif_plugins::{ContextManager, SemanticResult};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -79,10 +76,8 @@ pub async fn semantic_search(
         .await
         .map_err(|e| RestError::Internal(e.to_string()))?;
 
-    let json_results: Vec<SemanticResultJson> = results
-        .into_iter()
-        .map(SemanticResultJson::from)
-        .collect();
+    let json_results: Vec<SemanticResultJson> =
+        results.into_iter().map(SemanticResultJson::from).collect();
 
     Ok(Json(SemanticSearchResponse {
         count: json_results.len(),

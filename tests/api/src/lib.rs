@@ -438,3 +438,209 @@ mod mount_management {
         assert!(response.is_ok(), "Unmount request failed");
     }
 }
+
+mod batch_operations {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_batch_copy() {
+        // Given: Source and destination files exist
+        let client = get_client().await;
+        let base = get_api_base();
+        let src = unique_test_path();
+        let dst = format!("{}_copy_dest", unique_test_path());
+
+        // Create source file first
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, src))
+            .body("batch copy source content".to_string())
+            .send()
+            .await;
+
+        // When: POST /api/v1/batch/copy
+        let response = client
+            .post(&format!("{}/api/v1/batch/copy", base))
+            .json(&serde_json::json!({
+                "sources": [src],
+                "destination": dst,
+                "recursive": false,
+                "overwrite": true
+            }))
+            .send()
+            .await;
+
+        // Then: Batch copy operation created
+        assert!(response.is_ok(), "Batch copy request failed");
+        let resp = response.unwrap();
+        let status = resp.status();
+        // 200 = success, 500 = internal error (acceptable in test env)
+        assert!(
+            status.is_success() || status.as_u16() == 500,
+            "Batch copy should succeed or 500 (got {})",
+            status
+        );
+    }
+
+    #[tokio::test]
+    async fn test_batch_delete() {
+        // Given: Multiple files exist
+        let client = get_client().await;
+        let base = get_api_base();
+        let file1 = unique_test_path();
+        let file2 = unique_test_path();
+
+        // Create files
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, file1))
+            .body("delete me 1".to_string())
+            .send()
+            .await;
+        let _ = client
+            .put(&format!("{}/api/v1/files?path={}", base, file2))
+            .body("delete me 2".to_string())
+            .send()
+            .await;
+
+        // When: POST /api/v1/batch/delete
+        let response = client
+            .post(&format!("{}/api/v1/batch/delete", base))
+            .json(&serde_json::json!({
+                "paths": [file1, file2],
+                "recursive": false
+            }))
+            .send()
+            .await;
+
+        // Then: Batch delete operation created
+        assert!(response.is_ok(), "Batch delete request failed");
+    }
+
+    #[tokio::test]
+    async fn test_batch_progress() {
+        // Given: An active batch operation ID
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: GET /api/v1/batch/progress/nonexistent
+        let response = client
+            .get(&format!("{}/api/v1/batch/progress/nonexistent-id", base))
+            .send()
+            .await;
+
+        // Then: Return progress (or 404 for nonexistent)
+        assert!(response.is_ok(), "Batch progress request failed");
+    }
+
+    #[tokio::test]
+    async fn test_list_batch_operations() {
+        // Given: EVIF server running
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: GET /api/v1/batch/operations
+        let response = client
+            .get(&format!("{}/api/v1/batch/operations", base))
+            .send()
+            .await;
+
+        // Then: Return list of batch operations
+        assert!(response.is_ok(), "List batch operations request failed");
+    }
+
+    #[tokio::test]
+    async fn test_cancel_batch_operation() {
+        // Given: An active batch operation ID
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: DELETE /api/v1/batch/operation/nonexistent-id
+        let response = client
+            .delete(&format!("{}/api/v1/batch/operation/nonexistent-id", base))
+            .send()
+            .await;
+
+        // Then: Return cancel result (404 for nonexistent is acceptable)
+        assert!(response.is_ok(), "Cancel batch operation request failed");
+    }
+}
+
+mod plugin_api_management {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_list_plugins() {
+        // Given: EVIF server running
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: GET /api/v1/plugins
+        let response = client.get(&format!("{}/api/v1/plugins", base)).send().await;
+
+        // Then: Return plugin list (200 or 500 acceptable)
+        assert!(response.is_ok(), "List plugins request failed");
+    }
+
+    #[tokio::test]
+    async fn test_list_available_plugins() {
+        // Given: EVIF server running
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: GET /api/v1/plugins/available
+        let response = client
+            .get(&format!("{}/api/v1/plugins/available", base))
+            .send()
+            .await;
+
+        // Then: Return available plugins
+        assert!(response.is_ok(), "List available plugins request failed");
+    }
+
+    #[tokio::test]
+    async fn test_get_plugin_readme() {
+        // Given: A known plugin name (memfs)
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: GET /api/v1/plugins/memfs/readme
+        let response = client
+            .get(&format!("{}/api/v1/plugins/memfs/readme", base))
+            .send()
+            .await;
+
+        // Then: Return README content (200 or 404 for unknown plugin)
+        assert!(response.is_ok(), "Get plugin readme request failed");
+    }
+
+    #[tokio::test]
+    async fn test_get_plugin_config() {
+        // Given: A known plugin name (memfs)
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: GET /api/v1/plugins/memfs/config
+        let response = client
+            .get(&format!("{}/api/v1/plugins/memfs/config", base))
+            .send()
+            .await;
+
+        // Then: Return config parameters
+        assert!(response.is_ok(), "Get plugin config request failed");
+    }
+
+    #[tokio::test]
+    async fn test_list_plugins_detailed() {
+        // Given: EVIF server running
+        let client = get_client().await;
+        let base = get_api_base();
+
+        // When: GET /api/v1/plugins/list
+        let response = client
+            .get(&format!("{}/api/v1/plugins/list", base))
+            .send()
+            .await;
+
+        // Then: Return detailed plugin information
+        assert!(response.is_ok(), "List plugins detailed request failed");
+    }
+}

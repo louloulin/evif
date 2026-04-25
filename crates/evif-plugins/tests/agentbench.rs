@@ -26,11 +26,7 @@ async fn agentbench_tool_use_success_rate() {
     }
 
     let rate = success as f64 / total as f64;
-    assert!(
-        rate >= 0.95,
-        "Tool success rate {:.1}% < 95%",
-        rate * 100.0
-    );
+    assert!(rate >= 0.95, "Tool success rate {:.1}% < 95%", rate * 100.0);
 }
 
 /// AB-02: Multi-Step Task
@@ -40,10 +36,16 @@ async fn agentbench_multi_step_task() {
     let plugin = ContextFsPlugin::new();
 
     // 步骤 1: 创建项目目录
-    plugin.mkdir("/test_agentbench", 0o755).await.expect("mkdir project");
+    plugin
+        .mkdir("/test_agentbench", 0o755)
+        .await
+        .expect("mkdir project");
 
     // 步骤 2: 创建源文件
-    plugin.create("/test_agentbench/main.rs", 0o644).await.expect("create main.rs");
+    plugin
+        .create("/test_agentbench/main.rs", 0o644)
+        .await
+        .expect("create main.rs");
     plugin
         .write(
             "/test_agentbench/main.rs",
@@ -55,7 +57,10 @@ async fn agentbench_multi_step_task() {
         .expect("write main.rs");
 
     // 步骤 3: 创建配置文件
-    plugin.create("/test_agentbench/Cargo.toml", 0o644).await.expect("create Cargo.toml");
+    plugin
+        .create("/test_agentbench/Cargo.toml", 0o644)
+        .await
+        .expect("create Cargo.toml");
     plugin
         .write(
             "/test_agentbench/Cargo.toml",
@@ -72,12 +77,18 @@ async fn agentbench_multi_step_task() {
         .await
         .expect("read main.rs");
     let content_str = String::from_utf8_lossy(&content);
-    assert!(content_str.contains("fn main"), "Content should contain 'fn main'");
+    assert!(
+        content_str.contains("fn main"),
+        "Content should contain 'fn main'"
+    );
 
     // 步骤 5: 列出目录验证结构
     let entries = plugin.readdir("/test_agentbench").await.expect("list dir");
     let names: Vec<String> = entries.into_iter().map(|e| e.name).collect();
-    assert!(names.contains(&"main.rs".to_string()), "Should have main.rs");
+    assert!(
+        names.contains(&"main.rs".to_string()),
+        "Should have main.rs"
+    );
     assert!(
         names.contains(&"Cargo.toml".to_string()),
         "Should have Cargo.toml"
@@ -129,7 +140,10 @@ async fn agentbench_context_switching() {
     let plugin = ContextFsPlugin::new();
 
     // 上下文 A: 项目 A
-    plugin.mkdir("/context_a", 0o755).await.expect("mkdir context_a");
+    plugin
+        .mkdir("/context_a", 0o755)
+        .await
+        .expect("mkdir context_a");
     plugin
         .create("/context_a/file_a.txt", 0o644)
         .await
@@ -145,7 +159,10 @@ async fn agentbench_context_switching() {
         .expect("write file_a");
 
     // 上下文 B: 项目 B
-    plugin.mkdir("/context_b", 0o755).await.expect("mkdir context_b");
+    plugin
+        .mkdir("/context_b", 0o755)
+        .await
+        .expect("mkdir context_b");
     plugin
         .create("/context_b/file_b.txt", 0o644)
         .await
@@ -237,9 +254,7 @@ async fn agentbench_resource_cleanup() {
 
     // 验证清理成功
     for i in 0..10u32 {
-        let stat = plugin
-            .stat(&format!("/tmp/cleanup_{}.txt", i))
-            .await;
+        let stat = plugin.stat(&format!("/tmp/cleanup_{}.txt", i)).await;
         assert!(stat.is_err(), "File {} should be deleted", i);
     }
 }
@@ -313,15 +328,36 @@ async fn agentbench_environment_verification() {
 async fn agentbench_long_running_task() {
     let plugin = ContextFsPlugin::new();
 
-    plugin.mkdir("/long_running", 0o755).await.expect("mkdir /long_running");
+    plugin
+        .mkdir("/long_running", 0o755)
+        .await
+        .expect("mkdir /long_running");
     // 创建顶层目录
-    plugin.mkdir("/long_running/src", 0o755).await.expect("mkdir src");
-    plugin.mkdir("/long_running/tests", 0o755).await.expect("mkdir tests");
-    plugin.mkdir("/long_running/docs", 0o755).await.expect("mkdir docs");
+    plugin
+        .mkdir("/long_running/src", 0o755)
+        .await
+        .expect("mkdir src");
+    plugin
+        .mkdir("/long_running/tests", 0o755)
+        .await
+        .expect("mkdir tests");
+    plugin
+        .mkdir("/long_running/docs", 0o755)
+        .await
+        .expect("mkdir docs");
     // 创建二级目录
-    plugin.mkdir("/long_running/src/handlers", 0o755).await.expect("mkdir handlers");
-    plugin.mkdir("/long_running/src/models", 0o755).await.expect("mkdir models");
-    plugin.mkdir("/long_running/src/utils", 0o755).await.expect("mkdir utils");
+    plugin
+        .mkdir("/long_running/src/handlers", 0o755)
+        .await
+        .expect("mkdir handlers");
+    plugin
+        .mkdir("/long_running/src/models", 0o755)
+        .await
+        .expect("mkdir models");
+    plugin
+        .mkdir("/long_running/src/utils", 0o755)
+        .await
+        .expect("mkdir utils");
 
     // 在每个目录创建文件
     let file_dirs = vec![
@@ -349,16 +385,37 @@ async fn agentbench_long_running_task() {
 
     // 验证所有文件和目录
     // 检查子目录有文件
-    let src_entries = plugin.readdir("/long_running/src").await.expect("readdir /long_running/src");
-    assert!(!src_entries.is_empty(), "/long_running/src should have files");
+    let src_entries = plugin
+        .readdir("/long_running/src")
+        .await
+        .expect("readdir /long_running/src");
+    assert!(
+        !src_entries.is_empty(),
+        "/long_running/src should have files"
+    );
 
-    let tests_entries = plugin.readdir("/long_running/tests").await.expect("readdir /long_running/tests");
-    assert!(!tests_entries.is_empty(), "/long_running/tests should have files");
+    let tests_entries = plugin
+        .readdir("/long_running/tests")
+        .await
+        .expect("readdir /long_running/tests");
+    assert!(
+        !tests_entries.is_empty(),
+        "/long_running/tests should have files"
+    );
 
     // 检查顶层目录结构
-    let root_entries = plugin.readdir("/long_running").await.expect("readdir /long_running");
+    let root_entries = plugin
+        .readdir("/long_running")
+        .await
+        .expect("readdir /long_running");
     let root_names: Vec<String> = root_entries.into_iter().map(|e| e.name).collect();
     assert!(root_names.contains(&"src".to_string()), "Should have src/");
-    assert!(root_names.contains(&"tests".to_string()), "Should have tests/");
-    assert!(root_names.contains(&"docs".to_string()), "Should have docs/");
+    assert!(
+        root_names.contains(&"tests".to_string()),
+        "Should have tests/"
+    );
+    assert!(
+        root_names.contains(&"docs".to_string()),
+        "Should have docs/"
+    );
 }

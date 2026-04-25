@@ -12,11 +12,7 @@ use evif_core::EvifPlugin;
 fn workspace_root() -> String {
     std::env::var("CARGO_MANIFEST_DIR")
         .map(|d| {
-            let parent = std::path::Path::new(&d)
-                .parent()
-                .unwrap()
-                .parent()
-                .unwrap();
+            let parent = std::path::Path::new(&d).parent().unwrap().parent().unwrap();
             parent.to_string_lossy().to_string()
         })
         .unwrap_or_else(|_| ".".to_string())

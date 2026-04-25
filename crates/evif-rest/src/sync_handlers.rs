@@ -3,11 +3,7 @@
 // 提供增量同步功能 - delta sync, version tracking, watch events
 
 use crate::{RestError, RestResult};
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, response::IntoResponse, Json};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -54,6 +50,47 @@ pub struct DeltaResponse {
     pub conflicts: Vec<String>,
 }
 
+/// Request to resolve sync conflicts
+#[derive(Debug, Deserialize)]
+pub struct ResolveConflictRequest {
+    /// List of conflict resolutions
+    pub resolutions: Vec<SingleConflictResolution>,
+}
+
+/// Single conflict resolution
+#[derive(Debug, Deserialize)]
+pub struct SingleConflictResolution {
+    /// Path with the conflict
+    pub path: String,
+    /// Strategy: "accept_local" | "accept_remote" | "last_write_wins"
+    pub strategy: String,
+    /// Remote version (for "accept_remote" and "last_write_wins")
+    #[serde(default)]
+    pub remote_version: Option<u64>,
+}
+
+/// A recorded sync conflict entry
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ConflictRecord {
+    /// Path that had the conflict
+    pub path: String,
+    /// Local version at time of conflict
+    pub local_version: u64,
+    /// Remote version that conflicted
+    pub remote_version: u64,
+    /// Base version the client was syncing from
+    pub base_version: u64,
+    /// When the conflict was recorded (ISO 8601)
+    pub timestamp: String,
+}
+
+/// Response listing conflict history
+#[derive(Debug, Serialize)]
+pub struct ConflictHistoryResponse {
+    pub conflicts: Vec<ConflictRecord>,
+    pub total: usize,
+}
+
 /// Watch event
 #[derive(Clone, Debug, Serialize)]
 pub struct WatchEvent {
@@ -74,13 +111,19 @@ struct SyncInner {
     version: u64,
     pending_changes: Vec<DeltaChange>,
     tracked_paths: HashMap<String, u64>, // path -> last_synced_version
+    /// Conflict history (capped at MAX_CONFLICT_HISTORY records)
+    conflict_history: Vec<ConflictRecord>,
 }
+
+const MAX_CONFLICT_HISTORY: usize = 1000;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SyncSnapshot {
     version: u64,
     pending_changes: Vec<DeltaChange>,
     tracked_paths: HashMap<String, u64>,
+    #[serde(default)]
+    conflict_history: Vec<ConflictRecord>,
 }
 
 impl Default for SyncState {
@@ -96,6 +139,7 @@ impl SyncState {
                 version: 0,
                 pending_changes: Vec::new(),
                 tracked_paths: HashMap::new(),
+                conflict_history: Vec::new(),
             })),
             persistence_path: Arc::new(None),
         }
@@ -123,6 +167,7 @@ impl SyncState {
                 version: snapshot.version,
                 pending_changes: snapshot.pending_changes,
                 tracked_paths: snapshot.tracked_paths,
+                conflict_history: snapshot.conflict_history,
             })),
             persistence_path: Arc::new(Some(path)),
         })
@@ -133,6 +178,7 @@ impl SyncState {
             version: 0,
             pending_changes: Vec::new(),
             tracked_paths: HashMap::new(),
+            conflict_history: Vec::new(),
         }
     }
 
@@ -165,6 +211,7 @@ impl SyncState {
                 version: inner.version,
                 pending_changes: inner.pending_changes.clone(),
                 tracked_paths: inner.tracked_paths.clone(),
+                conflict_history: inner.conflict_history.clone(),
             };
             Self::save_snapshot(path, &snapshot)?;
         }
@@ -190,8 +237,19 @@ impl SyncState {
         for change in &req.changes {
             // Check for conflicts
             if let Some(&current_version) = inner.tracked_paths.get(&change.path) {
-                // Path is tracked and current version is higher than base_version
-                if current_version > change.version && change.version < req.base_version {
+                // Path is tracked and incoming version is behind current version
+                if current_version > change.version {
+                    // Record the conflict in history (capped at MAX_CONFLICT_HISTORY)
+                    if inner.conflict_history.len() >= MAX_CONFLICT_HISTORY {
+                        inner.conflict_history.remove(0);
+                    }
+                    inner.conflict_history.push(ConflictRecord {
+                        path: change.path.clone(),
+                        local_version: current_version,
+                        remote_version: change.version,
+                        base_version: req.base_version,
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                    });
                     conflicts.push(change.path.clone());
                     continue;
                 }
@@ -200,7 +258,9 @@ impl SyncState {
             // Apply the change
             match change.op.as_str() {
                 "created" | "modified" => {
-                    inner.tracked_paths.insert(change.path.clone(), change.version);
+                    inner
+                        .tracked_paths
+                        .insert(change.path.clone(), change.version);
                     accepted += 1;
                     applied_changes.push(change.clone());
                 }
@@ -243,6 +303,41 @@ impl SyncState {
     pub fn get_version(&self) -> u64 {
         self.inner.read().version
     }
+
+    /// Get conflict history (newest first)
+    pub fn get_conflicts(&self) -> ConflictHistoryResponse {
+        let inner = self.inner.read();
+        let total = inner.conflict_history.len();
+        let mut conflicts: Vec<ConflictRecord> = inner.conflict_history.clone();
+        conflicts.reverse(); // Newest first
+        ConflictHistoryResponse { conflicts, total }
+    }
+
+    /// Resolve sync conflicts with given strategy.
+    /// Returns the number of resolved paths.
+    pub fn resolve_conflicts(&self, path: &str, strategy: &str, remote_version: Option<u64>) {
+        let mut inner = self.inner.write();
+        match strategy {
+            "accept_local" => {
+                // Keep current version, do nothing
+            }
+            "accept_remote" | "last_write_wins" => {
+                let new_ver = remote_version.unwrap_or(inner.version.saturating_add(1));
+                inner.tracked_paths.insert(path.to_string(), new_ver);
+            }
+            _ => {}
+        }
+    }
+
+    /// Get tracked version for a specific path
+    pub fn get_tracked_path_version(&self, path: &str) -> u64 {
+        self.inner
+            .read()
+            .tracked_paths
+            .get(path)
+            .copied()
+            .unwrap_or(0)
+    }
 }
 
 /// Sync handlers
@@ -250,9 +345,7 @@ pub struct SyncHandlers;
 
 impl SyncHandlers {
     /// GET /api/v1/sync/status - Get sync status
-    pub async fn get_status(
-        State(state): State<SyncState>,
-    ) -> RestResult<impl IntoResponse> {
+    pub async fn get_status(State(state): State<SyncState>) -> RestResult<impl IntoResponse> {
         Ok(Json(state.get_status()))
     }
 
@@ -262,9 +355,7 @@ impl SyncHandlers {
         Json(req): Json<DeltaRequest>,
     ) -> RestResult<impl IntoResponse> {
         if req.changes.is_empty() {
-            return Err(RestError::BadRequest(
-                "No changes provided".into(),
-            ));
+            return Err(RestError::BadRequest("No changes provided".into()));
         }
 
         let response = state.apply_delta(req).await;
@@ -272,9 +363,7 @@ impl SyncHandlers {
     }
 
     /// GET /api/v1/sync/version - Get current version
-    pub async fn get_version(
-        State(state): State<SyncState>,
-    ) -> RestResult<impl IntoResponse> {
+    pub async fn get_version(State(state): State<SyncState>) -> RestResult<impl IntoResponse> {
         let version = state.get_version();
         Ok(Json(serde_json::json!({ "version": version })))
     }
@@ -284,11 +373,52 @@ impl SyncHandlers {
         State(state): State<SyncState>,
         path: axum::extract::Path<String>,
     ) -> RestResult<impl IntoResponse> {
-        let inner = state.inner.read();
-        let version = inner.tracked_paths.get(&path.0).copied().unwrap_or(0);
+        let version = state.get_tracked_path_version(&path.0);
         Ok(Json(serde_json::json!({
             "path": path.0,
             "version": version
         })))
+    }
+
+    /// POST /api/v1/sync/resolve - Resolve sync conflicts
+    pub async fn resolve(
+        State(state): State<SyncState>,
+        Json(req): Json<ResolveConflictRequest>,
+    ) -> RestResult<impl IntoResponse> {
+        if req.resolutions.is_empty() {
+            return Err(RestError::BadRequest(
+                "No conflict resolutions provided".into(),
+            ));
+        }
+
+        for resolution in &req.resolutions {
+            if resolution.path.is_empty() {
+                return Err(RestError::BadRequest(
+                    "Conflict resolution path cannot be empty".into(),
+                ));
+            }
+            let valid_strategies = ["accept_local", "accept_remote", "last_write_wins"];
+            if !valid_strategies.contains(&resolution.strategy.as_str()) {
+                return Err(RestError::BadRequest(format!(
+                    "Invalid strategy '{}'. Must be one of: accept_local, accept_remote, last_write_wins",
+                    resolution.strategy
+                )));
+            }
+            state.resolve_conflicts(
+                &resolution.path,
+                &resolution.strategy,
+                resolution.remote_version,
+            );
+        }
+
+        Ok(Json(serde_json::json!({
+            "resolved": req.resolutions.len(),
+            "status": state.get_status()
+        })))
+    }
+
+    /// GET /api/v1/sync/conflicts - Get conflict history
+    pub async fn get_conflicts(State(state): State<SyncState>) -> RestResult<impl IntoResponse> {
+        Ok(Json(state.get_conflicts()))
     }
 }

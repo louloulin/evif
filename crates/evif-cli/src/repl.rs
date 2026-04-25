@@ -119,7 +119,10 @@ impl Repl {
         let cmd = parts.first().copied().unwrap_or("");
 
         let output = match cmd {
-            "echo" => Some(self.command.echo_output(parts.get(1..).unwrap_or(&[]).join(" "))),
+            "echo" => Some(
+                self.command
+                    .echo_output(parts.get(1..).unwrap_or(&[]).join(" ")),
+            ),
             "pwd" => Some(self.command.pwd_output()),
             "cat" => {
                 let path = parts
@@ -128,7 +131,10 @@ impl Repl {
                 Some(self.command.cat_output((*path).to_string()).await?)
             }
             "ls" => {
-                let path = parts.get(1).map(|s| s.to_string()).or_else(|| Some("/".to_string()));
+                let path = parts
+                    .get(1)
+                    .map(|s| s.to_string())
+                    .or_else(|| Some("/".to_string()));
                 Some(self.command.ls_output(path, false).await?)
             }
             _ => None,
@@ -261,7 +267,11 @@ impl Repl {
             }
         } else {
             self.command
-                .write(target.to_string(), output.trim_end_matches('\n').to_string(), append)
+                .write(
+                    target.to_string(),
+                    output.trim_end_matches('\n').to_string(),
+                    append,
+                )
                 .await?;
         }
 

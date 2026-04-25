@@ -156,6 +156,18 @@ impl EvifPlugin for MemFsPlugin {
     }
 
     async fn create(&self, path: &str, perm: u32) -> EvifResult<()> {
+        // 自动递归创建父目录（如果不存在）
+        let clean_path = path.trim_start_matches('/');
+        let parts: Vec<&str> = clean_path.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.len() > 1 {
+            for i in 1..parts.len() {
+                let parent_path = format!("/{}", parts[..i].join("/"));
+                if let Err(EvifError::NotFound(_)) = self.find_node(&parent_path).await {
+                    self.mkdir(&parent_path, 0o755).await.ok();
+                }
+            }
+        }
+
         let (parent, basename) = self.find_parent(path).await?;
 
         let mut parent_node = parent.write().await;
@@ -219,6 +231,10 @@ impl EvifPlugin for MemFsPlugin {
     async fn write(&self, path: &str, data: Vec<u8>, _offset: i64, _flags: WriteFlags)
         -> EvifResult<u64>
     {
+        // 自动创建父目录和文件（如果不存在）
+        if let Err(EvifError::NotFound(_)) = self.find_node(path).await {
+            self.create(path, 0o644).await.ok();
+        }
         let node = self.find_node(path).await?;
         let mut node_ref = node.write().await;
 

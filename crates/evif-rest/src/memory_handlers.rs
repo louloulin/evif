@@ -3,6 +3,7 @@
 // Memory management HTTP interfaces
 // Implements mem.md API design
 
+use async_trait::async_trait;
 use axum::{
     extract::{Path, State},
     Json,
@@ -16,66 +17,108 @@ use std::{
 };
 
 use evif_mem::models::{MemoryCategory, MemoryItem, MemoryType};
-use evif_mem::storage::{MemoryStorage, SQLiteStorage};
+use evif_mem::storage::{MemoryStorage, PostgresStorage, SQLiteStorage};
 
+#[async_trait]
 trait MemoryStore: Send + Sync {
-    fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()>;
-    fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem>;
-    fn get_all_items(&self) -> Vec<MemoryItem>;
-    fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory>;
-    fn get_all_categories(&self) -> Vec<MemoryCategory>;
-    fn get_items_in_category(&self, category_id: &str) -> Vec<MemoryItem>;
+    async fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()>;
+    async fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem>;
+    async fn get_all_items(&self) -> evif_mem::error::MemResult<Vec<MemoryItem>>;
+    async fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory>;
+    async fn get_all_categories(&self) -> evif_mem::error::MemResult<Vec<MemoryCategory>>;
+    async fn get_items_in_category(
+        &self,
+        category_id: &str,
+    ) -> evif_mem::error::MemResult<Vec<MemoryItem>>;
 }
 
+#[async_trait]
 impl MemoryStore for MemoryStorage {
-    fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()> {
+    async fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()> {
         MemoryStorage::put_item(self, item)
     }
 
-    fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem> {
+    async fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem> {
         MemoryStorage::get_item(self, id)
     }
 
-    fn get_all_items(&self) -> Vec<MemoryItem> {
-        MemoryStorage::get_all_items(self)
+    async fn get_all_items(&self) -> evif_mem::error::MemResult<Vec<MemoryItem>> {
+        Ok(MemoryStorage::get_all_items(self))
     }
 
-    fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory> {
+    async fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory> {
         MemoryStorage::get_category(self, id)
     }
 
-    fn get_all_categories(&self) -> Vec<MemoryCategory> {
-        MemoryStorage::get_all_categories(self)
+    async fn get_all_categories(&self) -> evif_mem::error::MemResult<Vec<MemoryCategory>> {
+        Ok(MemoryStorage::get_all_categories(self))
     }
 
-    fn get_items_in_category(&self, category_id: &str) -> Vec<MemoryItem> {
-        MemoryStorage::get_items_in_category(self, category_id)
+    async fn get_items_in_category(
+        &self,
+        category_id: &str,
+    ) -> evif_mem::error::MemResult<Vec<MemoryItem>> {
+        Ok(MemoryStorage::get_items_in_category(self, category_id))
     }
 }
 
+#[async_trait]
 impl MemoryStore for SQLiteStorage {
-    fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()> {
+    async fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()> {
         SQLiteStorage::put_item(self, item)
     }
 
-    fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem> {
+    async fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem> {
         SQLiteStorage::get_item(self, id)
     }
 
-    fn get_all_items(&self) -> Vec<MemoryItem> {
-        SQLiteStorage::get_all_items(self)
+    async fn get_all_items(&self) -> evif_mem::error::MemResult<Vec<MemoryItem>> {
+        Ok(SQLiteStorage::get_all_items(self))
     }
 
-    fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory> {
+    async fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory> {
         SQLiteStorage::get_category(self, id)
     }
 
-    fn get_all_categories(&self) -> Vec<MemoryCategory> {
-        SQLiteStorage::get_all_categories(self)
+    async fn get_all_categories(&self) -> evif_mem::error::MemResult<Vec<MemoryCategory>> {
+        Ok(SQLiteStorage::get_all_categories(self))
     }
 
-    fn get_items_in_category(&self, category_id: &str) -> Vec<MemoryItem> {
-        SQLiteStorage::get_items_in_category(self, category_id)
+    async fn get_items_in_category(
+        &self,
+        category_id: &str,
+    ) -> evif_mem::error::MemResult<Vec<MemoryItem>> {
+        Ok(SQLiteStorage::get_items_in_category(self, category_id))
+    }
+}
+
+#[async_trait]
+impl MemoryStore for PostgresStorage {
+    async fn put_item(&self, item: MemoryItem) -> evif_mem::error::MemResult<()> {
+        PostgresStorage::put_item(self, item).await
+    }
+
+    async fn get_item(&self, id: &str) -> evif_mem::error::MemResult<MemoryItem> {
+        PostgresStorage::get_item(self, id).await
+    }
+
+    async fn get_all_items(&self) -> evif_mem::error::MemResult<Vec<MemoryItem>> {
+        PostgresStorage::get_all_items(self).await
+    }
+
+    async fn get_category(&self, id: &str) -> evif_mem::error::MemResult<MemoryCategory> {
+        PostgresStorage::get_category(self, id).await
+    }
+
+    async fn get_all_categories(&self) -> evif_mem::error::MemResult<Vec<MemoryCategory>> {
+        PostgresStorage::get_all_categories(self).await
+    }
+
+    async fn get_items_in_category(
+        &self,
+        category_id: &str,
+    ) -> evif_mem::error::MemResult<Vec<MemoryItem>> {
+        PostgresStorage::get_items_in_category(self, category_id).await
     }
 }
 
@@ -83,6 +126,7 @@ impl MemoryStore for SQLiteStorage {
 pub enum MemoryBackendKind {
     InMemory,
     SQLite,
+    Postgres,
 }
 
 impl MemoryBackendKind {
@@ -90,6 +134,7 @@ impl MemoryBackendKind {
         match self {
             Self::InMemory => "memory",
             Self::SQLite => "sqlite",
+            Self::Postgres => "postgres",
         }
     }
 }
@@ -98,6 +143,9 @@ impl MemoryBackendKind {
 pub struct MemoryBackendConfig {
     backend: MemoryBackendKind,
     sqlite_path: Option<PathBuf>,
+    postgres_url: Option<String>,
+    postgres_max_connections: Option<u32>,
+    postgres_min_connections: Option<u32>,
 }
 
 impl MemoryBackendConfig {
@@ -105,6 +153,9 @@ impl MemoryBackendConfig {
         Self {
             backend: MemoryBackendKind::InMemory,
             sqlite_path: None,
+            postgres_url: None,
+            postgres_max_connections: None,
+            postgres_min_connections: None,
         }
     }
 
@@ -112,6 +163,27 @@ impl MemoryBackendConfig {
         Self {
             backend: MemoryBackendKind::SQLite,
             sqlite_path: Some(path.into()),
+            postgres_url: None,
+            postgres_max_connections: None,
+            postgres_min_connections: None,
+        }
+    }
+
+    pub fn postgres<S: Into<String>>(url: S) -> Self {
+        Self::postgres_with_options(url, 10, 0)
+    }
+
+    pub fn postgres_with_options<S: Into<String>>(
+        url: S,
+        max_connections: u32,
+        min_connections: u32,
+    ) -> Self {
+        Self {
+            backend: MemoryBackendKind::Postgres,
+            sqlite_path: None,
+            postgres_url: Some(url.into()),
+            postgres_max_connections: Some(max_connections),
+            postgres_min_connections: Some(min_connections),
         }
     }
 
@@ -121,6 +193,18 @@ impl MemoryBackendConfig {
 
     pub fn sqlite_path(&self) -> Option<&FsPath> {
         self.sqlite_path.as_deref()
+    }
+
+    pub fn postgres_url(&self) -> Option<&str> {
+        self.postgres_url.as_deref()
+    }
+
+    pub fn postgres_max_connections(&self) -> Option<u32> {
+        self.postgres_max_connections
+    }
+
+    pub fn postgres_min_connections(&self) -> Option<u32> {
+        self.postgres_min_connections
     }
 
     pub fn from_env() -> Result<Self, String> {
@@ -145,8 +229,64 @@ impl MemoryBackendConfig {
                 }
                 Ok(Self::sqlite(trimmed))
             }
+            "postgres" | "postgresql" => {
+                let url = env::var("EVIF_REST_MEMORY_POSTGRES_URL").map_err(|_| {
+                    "EVIF_REST_MEMORY_POSTGRES_URL is required when EVIF_REST_MEMORY_BACKEND=postgres"
+                        .to_string()
+                })?;
+                let trimmed = url.trim();
+                if trimmed.is_empty() {
+                    return Err(
+                        "EVIF_REST_MEMORY_POSTGRES_URL cannot be empty when PostgreSQL backend is enabled"
+                            .to_string(),
+                    );
+                }
+                let max_connections = env::var("EVIF_REST_MEMORY_POSTGRES_MAX_CONNECTIONS")
+                    .ok()
+                    .map(|value| {
+                        value
+                            .trim()
+                            .parse::<u32>()
+                            .map_err(|err| {
+                                format!(
+                                    "EVIF_REST_MEMORY_POSTGRES_MAX_CONNECTIONS must be a positive integer: {}",
+                                    err
+                                )
+                            })
+                    })
+                    .transpose()?
+                    .unwrap_or(10);
+                let min_connections = env::var("EVIF_REST_MEMORY_POSTGRES_MIN_CONNECTIONS")
+                    .ok()
+                    .map(|value| {
+                        value
+                            .trim()
+                            .parse::<u32>()
+                            .map_err(|err| {
+                                format!(
+                                    "EVIF_REST_MEMORY_POSTGRES_MIN_CONNECTIONS must be a non-negative integer: {}",
+                                    err
+                                )
+                            })
+                    })
+                    .transpose()?
+                    .unwrap_or(0);
+
+                if min_connections > max_connections {
+                    return Err(
+                        "EVIF_REST_MEMORY_POSTGRES_MIN_CONNECTIONS cannot exceed EVIF_REST_MEMORY_POSTGRES_MAX_CONNECTIONS"
+                            .to_string(),
+                    );
+                }
+
+                Ok(Self::postgres_with_options(
+                    trimmed,
+                    max_connections,
+                    min_connections,
+                ))
+            }
             other => Err(format!(
-                "Unsupported EVIF_REST_MEMORY_BACKEND '{}'. Expected one of: memory, sqlite",
+                "Unsupported EVIF_REST_MEMORY_BACKEND '{}'. Expected one of: memory, sqlite, postgres",
                 other
             )),
         }
@@ -170,12 +310,15 @@ pub fn validate_memory_for_production(config: &MemoryBackendConfig) -> Result<()
     match config.backend() {
         MemoryBackendKind::InMemory => Err(
             "EVIF_REST_PRODUCTION_MODE requires persistent memory backend. \
-             Set EVIF_REST_MEMORY_BACKEND=sqlite and EVIF_REST_MEMORY_SQLITE_PATH=/path/to/db".to_string()
+             Set EVIF_REST_MEMORY_BACKEND=sqlite and EVIF_REST_MEMORY_SQLITE_PATH=/path/to/db \
+             or EVIF_REST_MEMORY_BACKEND=postgres and EVIF_REST_MEMORY_POSTGRES_URL=postgres://..."
+                .to_string(),
         ),
         MemoryBackendKind::SQLite => {
             // SQLite for is acceptable production
             Ok(())
         }
+        MemoryBackendKind::Postgres => Ok(()),
     }
 }
 
@@ -186,7 +329,10 @@ impl Default for MemoryBackendConfig {
 }
 
 fn ensure_sqlite_parent(path: &FsPath) -> Result<(), String> {
-    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
                 "Failed to create SQLite parent directory '{}': {}",
@@ -205,6 +351,7 @@ pub struct MemoryState {
     /// Storage for memory items
     storage: Arc<dyn MemoryStore>,
     backend: MemoryBackendKind,
+    postgres_pool_bounds: Option<(u32, u32)>,
 }
 
 impl MemoryState {
@@ -217,10 +364,11 @@ impl MemoryState {
         Self {
             storage: Arc::new(MemoryStorage::new()),
             backend: MemoryBackendKind::InMemory,
+            postgres_pool_bounds: None,
         }
     }
 
-    pub fn from_config(config: &MemoryBackendConfig) -> Result<Self, String> {
+    pub async fn from_config(config: &MemoryBackendConfig) -> Result<Self, String> {
         match config.backend() {
             MemoryBackendKind::InMemory => Ok(Self::in_memory()),
             MemoryBackendKind::SQLite => {
@@ -238,6 +386,24 @@ impl MemoryState {
                 Ok(Self {
                     storage: Arc::new(storage),
                     backend: MemoryBackendKind::SQLite,
+                    postgres_pool_bounds: None,
+                })
+            }
+            MemoryBackendKind::Postgres => {
+                let url = config.postgres_url().ok_or_else(|| {
+                    "PostgreSQL backend requires a configured connection string".to_string()
+                })?;
+                let max_connections = config.postgres_max_connections().unwrap_or(10);
+                let min_connections = config.postgres_min_connections().unwrap_or(0);
+                let storage = PostgresStorage::with_options(url, max_connections, min_connections)
+                    .await
+                    .map_err(|err| {
+                        format!("Failed to initialize PostgreSQL memory backend: {}", err)
+                    })?;
+                Ok(Self {
+                    storage: Arc::new(storage),
+                    backend: MemoryBackendKind::Postgres,
+                    postgres_pool_bounds: Some((max_connections, min_connections)),
                 })
             }
         }
@@ -245,6 +411,16 @@ impl MemoryState {
 
     pub fn backend_name(&self) -> &'static str {
         self.backend.as_str()
+    }
+
+    pub fn backend_description(&self) -> String {
+        match (self.backend_name(), self.postgres_pool_bounds) {
+            ("postgres", Some((max_connections, min_connections))) => format!(
+                "postgres(max_connections={},min_connections={})",
+                max_connections, min_connections
+            ),
+            (backend, _) => backend.to_string(),
+        }
     }
 }
 
@@ -260,14 +436,16 @@ pub fn create_memory_state() -> MemoryState {
 }
 
 /// Initialize memory state from explicit backend config
-pub fn create_memory_state_from_config(config: &MemoryBackendConfig) -> Result<MemoryState, String> {
-    MemoryState::from_config(config)
+pub async fn create_memory_state_from_config(
+    config: &MemoryBackendConfig,
+) -> Result<MemoryState, String> {
+    MemoryState::from_config(config).await
 }
 
 /// Initialize memory state from environment variables
-pub fn create_memory_state_from_env() -> Result<MemoryState, String> {
+pub async fn create_memory_state_from_env() -> Result<MemoryState, String> {
     let config = MemoryBackendConfig::from_env()?;
-    create_memory_state_from_config(&config)
+    create_memory_state_from_config(&config).await
 }
 
 /// Initialize memory pipelines (to be called on startup with proper dependencies)
@@ -406,7 +584,7 @@ impl MemoryHandlers {
         );
 
         // Store in memory
-        if let Err(e) = state.storage.put_item(memory_item.clone()) {
+        if let Err(e) = state.storage.put_item(memory_item.clone()).await {
             return Err(MemoryError::Internal(e.to_string()));
         }
 
@@ -433,7 +611,11 @@ impl MemoryHandlers {
         Json(req): Json<SearchMemoryRequest>,
     ) -> Result<Json<SearchMemoryResponse>, MemoryError> {
         // Get all items and do simple text matching
-        let all_items = state.storage.get_all_items();
+        let all_items = state
+            .storage
+            .get_all_items()
+            .await
+            .map_err(|e| MemoryError::Internal(e.to_string()))?;
 
         // Simple search - filter by content containing query
         let query_lower = req.query.to_lowercase();
@@ -472,7 +654,7 @@ impl MemoryHandlers {
         Path(id): Path<String>,
     ) -> Result<Json<MemoryItemResponse>, MemoryError> {
         // Try to get the memory from storage
-        match state.storage.get_item(&id) {
+        match state.storage.get_item(&id).await {
             Ok(item) => Ok(Json(MemoryItemResponse {
                 id: item.id,
                 memory_type: format!("{:?}", item.memory_type),
@@ -495,7 +677,11 @@ impl MemoryHandlers {
         State(state): State<MemoryState>,
     ) -> Result<Json<Vec<MemoryItemResponse>>, MemoryError> {
         // Get all items from storage
-        let items = state.storage.get_all_items();
+        let items = state
+            .storage
+            .get_all_items()
+            .await
+            .map_err(|e| MemoryError::Internal(e.to_string()))?;
 
         let responses: Vec<MemoryItemResponse> = items
             .into_iter()
@@ -518,7 +704,11 @@ impl MemoryHandlers {
     pub async fn list_categories(
         State(state): State<MemoryState>,
     ) -> Result<Json<Vec<CategoryResponse>>, MemoryError> {
-        let categories = state.storage.get_all_categories();
+        let categories = state
+            .storage
+            .get_all_categories()
+            .await
+            .map_err(|e| MemoryError::Internal(e.to_string()))?;
 
         let responses: Vec<CategoryResponse> = categories
             .into_iter()
@@ -542,7 +732,7 @@ impl MemoryHandlers {
         State(state): State<MemoryState>,
         Path(id): Path<String>,
     ) -> Result<Json<CategoryResponse>, MemoryError> {
-        match state.storage.get_category(&id) {
+        match state.storage.get_category(&id).await {
             Ok(cat) => Ok(Json(CategoryResponse {
                 id: cat.id,
                 name: cat.name,
@@ -566,13 +756,17 @@ impl MemoryHandlers {
         Path(id): Path<String>,
     ) -> Result<Json<CategoryWithMemoriesResponse>, MemoryError> {
         // Get category
-        let category = state
-            .storage
-            .get_category(&id)
-            .map_err(|_| MemoryError::NotFound(format!("Category with id '{}' not found", id)))?;
+        let category =
+            state.storage.get_category(&id).await.map_err(|_| {
+                MemoryError::NotFound(format!("Category with id '{}' not found", id))
+            })?;
 
         // Get memories in category
-        let items = state.storage.get_items_in_category(&id);
+        let items = state
+            .storage
+            .get_items_in_category(&id)
+            .await
+            .map_err(|e| MemoryError::Internal(e.to_string()))?;
 
         let memories: Vec<MemoryItemResponse> = items
             .into_iter()
@@ -666,7 +860,7 @@ fn parse_memory_query_time(
         .transpose()
 }
 
-fn filtered_memory_query_memories(
+async fn filtered_memory_query_memories(
     state: &MemoryState,
     req: &MemoryQueryRequest,
 ) -> Result<Vec<MemoryItem>, MemoryError> {
@@ -686,6 +880,8 @@ fn filtered_memory_query_memories(
     let mut items: Vec<MemoryItem> = state
         .storage
         .get_all_items()
+        .await
+        .map_err(|e| MemoryError::Internal(e.to_string()))?
         .into_iter()
         .filter(|item| {
             let timestamp = memory_query_timestamp(item);
@@ -777,7 +973,7 @@ impl MemoryHandlers {
                 let start_node = req.start_node.as_deref().ok_or_else(|| {
                     MemoryError::BadRequest("start_node required for causal_chain query".to_string())
                 })?;
-                let items = filtered_memory_query_memories(&state, &req)?;
+                let items = filtered_memory_query_memories(&state, &req).await?;
                 let start_index = find_memory_query_node_index(&items, start_node)?;
                 let chain_start = start_index.saturating_sub(req.max_depth);
                 let nodes = items[chain_start..=start_index]
@@ -796,7 +992,7 @@ impl MemoryHandlers {
             }
 
             "timeline" => {
-                let mut items = filtered_memory_query_memories(&state, &req)?;
+                let mut items = filtered_memory_query_memories(&state, &req).await?;
 
                 if let Some(start_node) = req.start_node.as_deref() {
                     let start_index = find_memory_query_node_index(&items, start_node)?;
@@ -828,7 +1024,7 @@ impl MemoryHandlers {
                 let start_node = req.start_node.as_deref().ok_or_else(|| {
                     MemoryError::BadRequest("start_node required for temporal_bfs query".to_string())
                 })?;
-                let items = filtered_memory_query_memories(&state, &req)?;
+                let items = filtered_memory_query_memories(&state, &req).await?;
                 let start_index = find_memory_query_node_index(&items, start_node)?;
                 let end_index = std::cmp::min(items.len(), start_index + req.max_depth + 1);
                 let nodes = items[start_index..end_index]
@@ -853,7 +1049,7 @@ impl MemoryHandlers {
                 let end_node = req.end_node.as_deref().ok_or_else(|| {
                     MemoryError::BadRequest("end_node required for temporal_path query".to_string())
                 })?;
-                let items = filtered_memory_query_memories(&state, &req)?;
+                let items = filtered_memory_query_memories(&state, &req).await?;
                 let start_index = find_memory_query_node_index(&items, start_node)?;
                 let end_index = find_memory_query_node_index(&items, end_node)?;
 
@@ -947,6 +1143,87 @@ impl axum::response::IntoResponse for MemoryError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
+    use std::process::Command;
+
+    struct TestPostgresInstance {
+        data_dir: tempfile::TempDir,
+        port: u16,
+    }
+
+    impl TestPostgresInstance {
+        fn start() -> Result<Self, String> {
+            let data_dir = tempfile::tempdir()
+                .map_err(|err| format!("failed to create temp postgres dir: {err}"))?;
+            let cluster_dir = data_dir.path().join("cluster");
+            let socket_dir = data_dir.path().join("socket");
+            std::fs::create_dir_all(&cluster_dir)
+                .map_err(|err| format!("failed to create postgres cluster dir: {err}"))?;
+            std::fs::create_dir_all(&socket_dir)
+                .map_err(|err| format!("failed to create postgres socket dir: {err}"))?;
+            let cluster_dir_str = cluster_dir.to_string_lossy().into_owned();
+
+            let init_output = Command::new("initdb")
+                .args(["-D", &cluster_dir_str, "-A", "trust", "-U", "postgres"])
+                .output()
+                .map_err(|err| format!("failed to spawn initdb: {err}"))?;
+            if !init_output.status.success() {
+                return Err(format!(
+                    "initdb failed: {}",
+                    String::from_utf8_lossy(&init_output.stderr)
+                ));
+            }
+
+            let port = TcpListener::bind("127.0.0.1:0")
+                .map_err(|err| format!("failed to allocate postgres port: {err}"))?
+                .local_addr()
+                .map_err(|err| format!("failed to read allocated port: {err}"))?
+                .port();
+
+            let log_path = data_dir.path().join("postgres.log");
+            let start_output = Command::new("pg_ctl")
+                .args([
+                    "-D",
+                    &cluster_dir_str,
+                    "-l",
+                    log_path.to_string_lossy().as_ref(),
+                    "-o",
+                    &format!("-F -p {port} -k {}", socket_dir.display()),
+                    "-w",
+                    "start",
+                ])
+                .output()
+                .map_err(|err| format!("failed to spawn pg_ctl start: {err}"))?;
+            if !start_output.status.success() {
+                return Err(format!(
+                    "pg_ctl start failed: {}",
+                    String::from_utf8_lossy(&start_output.stderr)
+                ));
+            }
+
+            Ok(Self { data_dir, port })
+        }
+
+        fn connection_string(&self) -> String {
+            format!("postgres://postgres@127.0.0.1:{}/postgres", self.port)
+        }
+    }
+
+    impl Drop for TestPostgresInstance {
+        fn drop(&mut self) {
+            let cluster_dir = self.data_dir.path().join("cluster");
+            let _ = Command::new("pg_ctl")
+                .args([
+                    "-D",
+                    cluster_dir.to_string_lossy().as_ref(),
+                    "-m",
+                    "fast",
+                    "-w",
+                    "stop",
+                ])
+                .output();
+        }
+    }
 
     #[test]
     fn test_create_memory_request_accepts_legacy_text_alias() {
@@ -1124,9 +1401,68 @@ mod tests {
         let result = validate_memory_for_production(&config);
         assert!(result.is_ok());
 
+        // Production mode accepts PostgreSQL backend
+        std::env::set_var(
+            "EVIF_REST_MEMORY_POSTGRES_URL",
+            "postgres://postgres@127.0.0.1:55432/evif_test",
+        );
+        std::env::set_var("EVIF_REST_MEMORY_BACKEND", "postgres");
+        let config = MemoryBackendConfig::from_env().unwrap();
+        assert_eq!(config.backend(), &MemoryBackendKind::Postgres);
+        assert_eq!(
+            config.postgres_url(),
+            Some("postgres://postgres@127.0.0.1:55432/evif_test")
+        );
+        let result = validate_memory_for_production(&config);
+        assert!(result.is_ok());
+
         // Clean up
         std::env::remove_var("EVIF_REST_PRODUCTION_MODE");
         std::env::remove_var("EVIF_REST_MEMORY_SQLITE_PATH");
+        std::env::remove_var("EVIF_REST_MEMORY_POSTGRES_URL");
         std::env::remove_var("EVIF_REST_MEMORY_BACKEND");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_postgres_memory_backend_round_trips_real_requests() {
+        let postgres = TestPostgresInstance::start().unwrap();
+        let config = MemoryBackendConfig::postgres(postgres.connection_string());
+        let state = create_memory_state_from_config(&config).await.unwrap();
+
+        assert_eq!(state.backend_name(), "postgres");
+
+        let Json(created) = MemoryHandlers::create_memory(
+            State(state.clone()),
+            Json(CreateMemoryRequest {
+                content: "postgres-backed memory".to_string(),
+                modality: "text".to_string(),
+                metadata: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let Json(found) =
+            MemoryHandlers::get_memory(State(state.clone()), Path(created.memory_id.clone()))
+                .await
+                .unwrap();
+        assert_eq!(found.content, "postgres-backed memory");
+
+        let Json(items) = MemoryHandlers::list_memories(State(state)).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, created.memory_id);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_postgres_memory_backend_description_includes_pool_bounds() {
+        let postgres = TestPostgresInstance::start().unwrap();
+        let config = MemoryBackendConfig::postgres_with_options(postgres.connection_string(), 3, 1);
+        let state = create_memory_state_from_config(&config).await.unwrap();
+
+        assert_eq!(state.backend_name(), "postgres");
+        assert_eq!(
+            state.backend_description(),
+            "postgres(max_connections=3,min_connections=1)"
+        );
     }
 }

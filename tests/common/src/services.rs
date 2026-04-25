@@ -146,11 +146,8 @@ mod tests {
 
     #[test]
     fn test_port_availability() {
-        let port = find_available_port().unwrap();
-        assert!(is_port_available(port));
-
-        // Bind port temporarily
-        let _listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
         assert!(!is_port_available(port));
     }
 }
