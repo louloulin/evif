@@ -15,14 +15,31 @@ from evif.exceptions import (
 
 
 def _run_async(coro):
-    """Run async coroutine in sync context."""
-    return asyncio.run(coro)
+    """Run async coroutine in sync context using a persistent event loop."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # If there's already a running loop (e.g., in Jupyter), create a new thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, coro)
+            return future.result()
+    else:
+        # Use a persistent loop to avoid httpx connection pool issues
+        if not hasattr(_run_async, '_loop') or _run_async._loop is None or _run_async._loop.is_closed():
+            _run_async._loop = asyncio.new_event_loop()
+        return _run_async._loop.run_until_complete(coro)
+
+_run_async._loop = None
 
 
 def Client(
     base_url: str = "http://localhost:8081",
     api_key: Optional[str] = None,
-) -> SyncEvifClient:
+) -> "SyncEvifClient":
     """Create a synchronous EVIF client.
 
     This is the main entry point for the Python SDK. It provides a
@@ -49,7 +66,7 @@ class SyncEvifClient:
     """Synchronous wrapper for EvifClient.
 
     Provides the same API as EvifClient but with synchronous methods.
-    Internally uses asyncio.run() to bridge async/sync boundaries.
+    Uses a persistent event loop to avoid httpx connection pool issues.
 
     Example:
         from evif import Client
@@ -137,6 +154,10 @@ class SyncEvifClient:
     def mounts(self) -> list:
         """List all mount points."""
         return _run_async(self._client.mounts())
+
+    def plugins(self) -> list:
+        """List available plugins."""
+        return _run_async(self._client.plugins())
 
     def grep(self, path: str, pattern: str, recursive: bool = False) -> list:
         """Search for pattern in files."""

@@ -307,30 +307,47 @@ python3 -c "from evif import Client; print(Client().health())"
 | 15 | Demo 端到端 | ✅ | `start_demo.sh` 全部通过 |
 | 16 | Task Queue Demo | ✅ | 5 个任务全部处理完成 |
 | 17 | Pipe Demo | ✅ | pipefs 触发 agent 正常 |
+| 18 | Python SDK plugins() | ✅ | `client.plugins()` 返回 6 个插件 |
+| 19 | Sync wrapper 稳定版 | ✅ | 持久化 event loop 避免连接池问题 |
+
+### mem19.md 完整实现
+
+| Phase | 功能 | 状态 |
+|---|---|---|
+| Phase A | Python SDK（10 个 API 方法） | ✅ 10/10 |
+| Phase B | Agent Workflow Demo | ✅ 3 个脚本 |
+| Phase C | REPL History 修复 | ✅ 3 测试通过 |
+| Phase D | 测试环境诊断 | ⚠️ 第三方问题 |
 
 ### CLI 修复
 
 **system-configuration panic 修复**（`crates/evif-client/src/client.rs`）：
 - `reqwest::Client::new()` → `reqwest::Client::builder().no_proxy().build().unwrap()`
 - 原因：reqwest 在 macOS 上尝试读取系统代理设置，触发 `system-configuration` crate panic
-- 影响范围：CLI 和所有使用 evif-client 的命令
 
 ### Python SDK 修复
 
 1. **端点映射修正**（`crates/evif-python/evif/client.py`）：
-   - `ls` → `GET /api/v1/directories`（之前用 `POST /api/v1/fs/ls`，已废弃）
+   - `ls` → `GET /api/v1/directories`
    - `cat` → `GET /api/v1/files`
    - `write` → `PUT /api/v1/files`
    - `mkdir` → `POST /api/v1/directories`
    - `rm` → `DELETE /api/v1/files`
-   - `mounts` → `GET /api/v1/mounts`（之前用 `/api/v1/mount/list`）
+   - `mounts` → `GET /api/v1/mounts`
+   - `plugins` → `GET /api/v1/plugins`（新增）
 
-2. **自动连接**（`crates/evif-python/evif/sync.py`）：
-   - `SyncEvifClient.__init__` 添加 `auto_connect=True`
-   - 同步客户端自动连接到服务器
+2. **Sync wrapper 稳定版**（`crates/evif-python/evif/sync.py`）：
+   - 使用持久化 event loop 替代 `asyncio.run()`
+   - 解决 httpx 连接池跨调用问题
+   - `auto_connect=True` 自动连接
 
-3. **简化 `_run_async`**：
-   - 移除嵌套 `asyncio.run()` 检测逻辑
+3. **Python API 完整覆盖**：
+   - health(), ls(), cat(), write(), mkdir(), rm()
+   - stat(), mv(), cp(), grep()
+   - mounts(), plugins()
+   - memory_store(), memory_search(), memory_list()
+   - queue_push(), queue_pop(), queue_size()
+   - pipe_write(), pipe_read(), pipe_status()
 
 ### 已知限制
 

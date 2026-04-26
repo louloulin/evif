@@ -339,6 +339,15 @@ class EvifClient(ContextApi, SkillApi, MemoryApi, QueueApi):
         data = await self._request("GET", "/api/v1/mounts")
         return [MountInfo.from_dict(m) for m in data.get("mounts", [])]
 
+    async def plugins(self) -> list[dict]:
+        """List available plugins.
+
+        Returns:
+            List of plugin info dicts with name, version, description
+        """
+        data = await self._request("GET", "/api/v1/plugins")
+        return data if isinstance(data, list) else data.get("plugins", [])
+
     # ===== Advanced Operations =====
 
     async def health(self) -> HealthStatus:
