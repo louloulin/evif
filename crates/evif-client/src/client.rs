@@ -79,7 +79,7 @@ impl EvifClient {
     pub async fn new(config: ClientConfig) -> ClientResult<Self> {
         Ok(Self {
             config,
-            http_client: HttpClient::new(),
+            http_client: HttpClient::builder().no_proxy().build().unwrap(),
         })
     }
 
@@ -87,7 +87,7 @@ impl EvifClient {
     pub fn new_sync(config: ClientConfig) -> Self {
         Self {
             config: config.clone(),
-            http_client: HttpClient::new(),
+            http_client: HttpClient::builder().no_proxy().build().unwrap(),
         }
     }
 

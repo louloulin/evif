@@ -303,6 +303,17 @@ python3 -c "from evif import Client; print(Client().health())"
 | 11 | Clippy evif-rest | ✅ | `cargo clippy -p evif-rest -- -D warnings` 通过 |
 | 12 | Clippy evif-cli | ✅ | `cargo clippy -p evif-cli -- -D warnings` 通过 |
 | 13 | README 文档 | ✅ | 已有完整 README.md |
+| 14 | CLI ls / | ✅ | `cargo run -p evif-cli -- ls /` 正常 |
+| 15 | Demo 端到端 | ✅ | `start_demo.sh` 全部通过 |
+| 16 | Task Queue Demo | ✅ | 5 个任务全部处理完成 |
+| 17 | Pipe Demo | ✅ | pipefs 触发 agent 正常 |
+
+### CLI 修复
+
+**system-configuration panic 修复**（`crates/evif-client/src/client.rs`）：
+- `reqwest::Client::new()` → `reqwest::Client::builder().no_proxy().build().unwrap()`
+- 原因：reqwest 在 macOS 上尝试读取系统代理设置，触发 `system-configuration` crate panic
+- 影响范围：CLI 和所有使用 evif-client 的命令
 
 ### Python SDK 修复
 
@@ -327,16 +338,29 @@ python3 -c "from evif import Client; print(Client().health())"
 |---|---|---|
 | 日志文件写入受限 | 沙箱权限限制 | 使用 stderr 输出，文件日志可选 |
 | 需要 `EVIF_REST_AUTH_MODE=disabled` | 默认认证开启 | 开发时设置环境变量 |
-| CLI `ls /` panic | system-configuration 0.5.1 macOS 兼容问题 | 第三方 crate，非代码 bug |
-| Demo 脚本未端到端验证 | 需要服务运行 | 可后续验证 |
+| Demo output 为空 | pipefs 需要外部 worker 消费 | 需要 agent workflow 集成 |
 
-### 未完成项
+### 验证命令
 
-| 功能 | 说明 | 优先级 |
-|---|---|---|
-| CLI 实际运行验证 | `cargo run -p evif-cli -- ls /` 因 system-configuration panic | 低（第三方 bug） |
-| Demo 端到端运行 | `start_demo.sh` 需要完整服务环境 | 中 |
-| 释放构建 | `cargo build --release` 未测试 | 低 |
+```bash
+# 1. 启动服务
+EVIF_REST_AUTH_MODE=disabled ./target/debug/evif-rest --port 8081 &
+
+# 2. CLI 测试
+cargo run -p evif-cli -- ls /
+cargo run -p evif-cli -- health
+
+# 3. Python SDK
+PYTHONPATH=crates/evif-python python3 -c "
+from evif import Client
+c = Client('http://localhost:8081')
+print(c.health())
+print(c.mounts())
+"
+
+# 4. Demo
+./demos/agent_workflow/start_demo.sh
+```
 
 ### 运行命令
 
@@ -367,3 +391,5 @@ print(client.ls('/mem'))
 | `crates/evif-python/evif/client.py` | 端点映射修正 |
 | `crates/evif-python/evif/sync.py` | 自动连接 + 简化 async 运行 |
 | `crates/evif-rest/src/main.rs` | 移除必需的文件日志（沙箱兼容） |
+| `crates/evif-client/src/client.rs` | reqwest no_proxy() 修复 CLI panic |
+| `demos/agent_workflow/*.py` | 重写为 memfs/pipefs 兼容 |
