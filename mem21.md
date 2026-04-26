@@ -298,6 +298,11 @@ python3 -c "from evif import Client; print(Client().health())"
 | 6 | Python SDK 能调用 | ✅ | `Client().health()` 返回 `HealthStatus` |
 | 7 | Python SDK 文件操作 | ✅ | `client.ls()`, `client.write()`, `client.cat()` 全部工作 |
 | 8 | 认证模式控制 | ✅ | `EVIF_REST_AUTH_MODE=disabled` 可关闭认证 |
+| 9 | Python SDK mounts() | ✅ | `client.mounts()` 返回 6 个插件 |
+| 10 | CLI --help | ✅ | `cargo run -p evif-cli -- --help` 正常 |
+| 11 | Clippy evif-rest | ✅ | `cargo clippy -p evif-rest -- -D warnings` 通过 |
+| 12 | Clippy evif-cli | ✅ | `cargo clippy -p evif-cli -- -D warnings` 通过 |
+| 13 | README 文档 | ✅ | 已有完整 README.md |
 
 ### Python SDK 修复
 
@@ -307,6 +312,7 @@ python3 -c "from evif import Client; print(Client().health())"
    - `write` → `PUT /api/v1/files`
    - `mkdir` → `POST /api/v1/directories`
    - `rm` → `DELETE /api/v1/files`
+   - `mounts` → `GET /api/v1/mounts`（之前用 `/api/v1/mount/list`）
 
 2. **自动连接**（`crates/evif-python/evif/sync.py`）：
    - `SyncEvifClient.__init__` 添加 `auto_connect=True`
@@ -321,7 +327,16 @@ python3 -c "from evif import Client; print(Client().health())"
 |---|---|---|
 | 日志文件写入受限 | 沙箱权限限制 | 使用 stderr 输出，文件日志可选 |
 | 需要 `EVIF_REST_AUTH_MODE=disabled` | 默认认证开启 | 开发时设置环境变量 |
-| CLI 未验证 | 时间原因 | 可后续验证 |
+| CLI `ls /` panic | system-configuration 0.5.1 macOS 兼容问题 | 第三方 crate，非代码 bug |
+| Demo 脚本未端到端验证 | 需要服务运行 | 可后续验证 |
+
+### 未完成项
+
+| 功能 | 说明 | 优先级 |
+|---|---|---|
+| CLI 实际运行验证 | `cargo run -p evif-cli -- ls /` 因 system-configuration panic | 低（第三方 bug） |
+| Demo 端到端运行 | `start_demo.sh` 需要完整服务环境 | 中 |
+| 释放构建 | `cargo build --release` 未测试 | 低 |
 
 ### 运行命令
 

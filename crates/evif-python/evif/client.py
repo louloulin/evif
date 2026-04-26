@@ -336,7 +336,7 @@ class EvifClient(ContextApi, SkillApi, MemoryApi, QueueApi):
         Returns:
             List of MountInfo objects
         """
-        data = await self._request("GET", "/api/v1/mount/list")
+        data = await self._request("GET", "/api/v1/mounts")
         return [MountInfo.from_dict(m) for m in data.get("mounts", [])]
 
     # ===== Advanced Operations =====
