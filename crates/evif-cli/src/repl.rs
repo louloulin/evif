@@ -18,18 +18,23 @@ impl Repl {
     pub fn new(server: String, verbose: bool) -> Self {
         // 配置历史记录文件
         let history_path = Self::history_file_path();
-        let history = Box::new(
-            FileBackedHistory::with_file(1000, history_path)
-                .expect("Failed to create history file"),
-        );
 
-        // 创建自动完成器
-        let completer = Box::new(EvifCompleter::new(server.clone()));
-
-        // 创建 Reedline 编辑器，启用历史和自动完成
-        let editor = Reedline::create()
-            .with_history(history)
-            .with_completer(completer);
+        // 创建历史记录，如果失败则优雅降级到无历史模式
+        let editor = match FileBackedHistory::with_file(1000, history_path.clone()) {
+            Ok(history) => {
+                eprintln!("History enabled at {:?}", history_path);
+                Reedline::create()
+                    .with_history(Box::new(history))
+                    .with_completer(Box::new(EvifCompleter::new(server.clone())))
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: history file unavailable ({e}), running without history"
+                );
+                Reedline::create()
+                    .with_completer(Box::new(EvifCompleter::new(server.clone())))
+            }
+        };
 
         let prompt = DefaultPrompt::new(
             DefaultPromptSegment::Basic("evif".to_string()),

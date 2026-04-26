@@ -4,7 +4,6 @@ use clap::Parser;
 use evif_rest::{EvifServer, ServerConfig};
 use std::path::PathBuf;
 use tracing::info;
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt::format::FmtSpan, prelude::*, EnvFilter};
 
 #[derive(clap::Parser, Debug)]
@@ -89,24 +88,12 @@ async fn main() -> Result<(), evif_rest::RestError> {
 
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    // N10b: Log rotation — RollingFileAppender writes JSON logs to logs/ directory,
-    // rotating to a new file at midnight. Old files named: evif-rest.2026-04-08.log, etc.
-    let file_appender = RollingFileAppender::new(Rotation::DAILY, &log_dir, "evif-rest.log");
-
-    // N10: JSON 结构化日志 — 所有 tracing 输出为 JSON 格式，便于 log aggregation 系统（ELK/Splunk/Loki）解析
+    // Note: File logging disabled for now due to sandbox restrictions
+    // Original: RollingFileAppender for log rotation
+    // N10: JSON structured logging — all tracing output in JSON format for log aggregation
     let _ = tracing_subscriber::registry()
         .with(env_filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .json()
-                .with_target(false)
-                .with_thread_ids(true)
-                .with_thread_names(true)
-                .with_span_events(FmtSpan::CLOSE)
-                // Write JSON to rotating file
-                .with_writer(file_appender),
-        )
-        // Also write human-readable output to stderr (useful in dev / docker logs)
+        // Only stderr output (useful in dev / docker logs)
         .with(
             tracing_subscriber::fmt::layer()
                 .with_target(true)

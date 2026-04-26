@@ -22,14 +22,16 @@ from evif.exceptions import (
 from evif.models import FileInfo, MountInfo, HealthStatus, HandleInfo
 from evif.context import ContextApi
 from evif.skill import SkillApi
+from evif.memory import MemoryApi
+from evif.queue import QueueApi
 
 
-class EvifClient(ContextApi, SkillApi):
+class EvifClient(ContextApi, SkillApi, MemoryApi, QueueApi):
     """Async EVIF client with retry and error handling."""
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8080",
+        base_url: str = "http://localhost:8081",
         timeout: float = 30.0,
         max_retries: int = 3,
         api_key: Optional[str] = None,
@@ -146,7 +148,7 @@ class EvifClient(ContextApi, SkillApi):
         if limit:
             params["limit"] = limit
 
-        data = await self._request("POST", "/api/v1/fs/ls", json=params)
+        data = await self._request("GET", "/api/v1/directories", params=params)
         return [FileInfo.from_dict(f) for f in data.get("files", [])]
 
     async def cat(
@@ -165,9 +167,8 @@ class EvifClient(ContextApi, SkillApi):
         Returns:
             File contents as bytes
         """
-        params = {"path": path, "offset": offset, "size": size}
-        data = await self._request("POST", "/api/v1/fs/read", json=params)
-        content = data.get("data", "")
+        data = await self._request("GET", "/api/v1/files", params={"path": path})
+        content = data.get("content", data.get("data", ""))
         if isinstance(content, str):
             return content.encode("utf-8")
         return content
@@ -191,12 +192,12 @@ class EvifClient(ContextApi, SkillApi):
         if isinstance(content, str):
             content = content.encode("utf-8")
 
-        params = {
-            "path": path,
-            "data": content.decode("utf-8", errors="ignore"),
-            "offset": offset,
-        }
-        data = await self._request("POST", "/api/v1/fs/write", json=params)
+        data = await self._request(
+            "PUT",
+            "/api/v1/files",
+            params={"path": path},
+            json={"data": content.decode("utf-8", errors="ignore")},
+        )
         return data.get("bytes_written", 0)
 
     async def mkdir(
@@ -213,8 +214,11 @@ class EvifClient(ContextApi, SkillApi):
         Returns:
             True if successful
         """
-        params = {"path": path, "perm": mode}
-        await self._request("POST", "/api/v1/fs/mkdir", json=params)
+        await self._request(
+            "POST",
+            "/api/v1/directories",
+            json={"path": path},
+        )
         return True
 
     async def rm(
@@ -231,11 +235,7 @@ class EvifClient(ContextApi, SkillApi):
         Returns:
             True if successful
         """
-        params = {"path": path}
-        if recursive:
-            params["recursive"] = True
-
-        await self._request("POST", "/api/v1/fs/remove", json=params)
+        await self._request("DELETE", "/api/v1/files", params={"path": path})
         return True
 
     async def stat(self, path: str) -> FileInfo:
@@ -347,7 +347,7 @@ class EvifClient(ContextApi, SkillApi):
         Returns:
             HealthStatus object
         """
-        data = await self._request("GET", "/health")
+        data = await self._request("GET", "/api/v1/health")
         return HealthStatus.from_dict(data)
 
     async def grep(

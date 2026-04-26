@@ -10,6 +10,9 @@ from evif.client import EvifClient
 from evif.file_handle import FileHandle
 from evif.context import ContextApi
 from evif.skill import SkillApi
+from evif.memory import MemoryApi
+from evif.queue import QueueApi
+from evif.sync import Client, SyncEvifClient
 from evif.exceptions import (
     EvifError,
     ClientError,
@@ -20,10 +23,17 @@ from evif.exceptions import (
 )
 
 __all__ = [
+    # Main entry point
+    "Client",
+    # Classes
     "EvifClient",
+    "SyncEvifClient",
     "FileHandle",
     "ContextApi",
     "SkillApi",
+    "MemoryApi",
+    "QueueApi",
+    # Exceptions
     "EvifError",
     "ClientError",
     "AuthenticationError",
