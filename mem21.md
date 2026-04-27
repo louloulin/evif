@@ -407,6 +407,271 @@ print(client.ls('/mem'))
 |---|---|
 | `crates/evif-python/evif/client.py` | 端点映射修正 |
 | `crates/evif-python/evif/sync.py` | 自动连接 + 简化 async 运行 |
+
+---
+
+## 12. EVIF 为 AI Agent 带来的核心价值
+
+### 12.1 核心价值主张
+
+**EVIF (Everything Is a File)** 为 AI Agent 提供了一个统一的、基于文件系统的接口，解决三个根本问题：
+
+| 问题 | EVIF 解决方案 |
+|---|---|
+| Agent 需要跨会话持久化状态 | ContextFS (L0/L1/L2 分层) |
+| Agent 需要发现和复用工作流 | SkillFS (SKILL.md 标准) |
+| 多 Agent 之间需要协调通信 | PipeFS (任务队列 + 状态机) |
+
+**核心洞察**：Agent 天生理解文件系统操作（`ls`, `cat`, `write`, `grep`），通过 VFS 抽象暴露所有能力，交互变得直观且可组合。
+
+### 12.2 核心抽象详解
+
+#### 12.2.1 ContextFS — 三层上下文管理
+
+```
+/context/
+├── L0/                    # 即时上下文（当前工作状态）
+│   ├── current            # 当前任务描述
+│   ├── recent_ops         # 最近操作记录
+│   └── budget_status     # Token 预算状态
+├── L1/                    # 会话上下文（决策记录）
+│   ├── decisions.md       # 会话决策
+│   └── scratch/          # 临时工作区
+└── L2/                    # 项目知识（长期记忆）
+    ├── architecture.md    # 架构文档
+    ├── patterns.md        # 模式库
+    └── history/           # 历史会话归档
+```
+
+**Agent 使用示例**：
+```bash
+cat /context/L0/current      # "我现在在做什么？"
+cat /context/L1/decisions.md # "本会话做了哪些决策？"
+ls /context/L2               # "项目结构是什么？"
+cat /context/L2/architecture.md  # "我应该遵循什么架构？"
+```
+
+#### 12.2.2 SkillFS — 可发现的工作流复用
+
+**SKILL.md 标准格式**：
+```yaml
+---
+name: code-review
+description: "Review code for bugs, security issues"
+triggers:
+  - "review"
+  - "code review"
+---
+# Code Review Skill
+
+读取目标代码，识别风险，生成简洁的审查报告。
+```
+
+**Agent 使用示例**：
+```bash
+ls /skills                    # 发现可用技能
+cat /skills/code-review/SKILL.md  # 查看技能详情
+# 技能调用：写入 input，读取 output
+echo "Review auth module" > /skills/code-review/input
+cat /skills/code-review/output
+```
+
+#### 12.2.3 PipeFS — 多 Agent 协调
+
+**每个 Pipe 是一个目录，带状态机**：
+```
+/pipes/<name>/
+├── input      # 任务输入
+├── output     # 任务结果
+├── status     # pending → running → complete
+├── assignee   # 认领 Agent ID
+└── timeout    # TTL 秒数
+```
+
+**Agent 使用示例**：
+```bash
+# 创建任务 Pipe
+mkdir /pipes/review-task
+# Producer 发送任务
+echo "Review auth module" > /pipes/review-task/input
+# Consumer 处理任务
+cat /pipes/review-task/status  # running
+echo "Found 2 issues" > /pipes/review-task/output
+```
+
+#### 12.2.4 Memory — 多模态记忆存储
+
+**存储后端**：
+- In-Memory（默认，测试用）
+- SQLite（本地持久化）
+- PostgreSQL（生产分布式）
+- RocksDB（高性能）
+
+**记忆类型**：
+- Profile（用户偏好）
+- Event（重要事件）
+- Knowledge（习得知识）
+- Behavior（行为模式）
+- Skill（技能）
+
+### 12.3 为 Claude Code / OpenClaw / Codex 带来的价值
+
+| 平台 | EVIF 价值 |
+|---|---|
+| **Claude Code** | 持久化上下文、Sessions 间共享、Skills 复用 |
+| **OpenClaw** | 多 Agent 协调、任务分发、结果聚合 |
+| **Codex** | Context 管理、工作流自动化、代码审查管道 |
+
+**集成方式**：
+
+```python
+# Python SDK - 最简单集成
+from evif import Client
+client = Client("http://localhost:8081")
+
+# 1. 读取当前上下文
+context = client.cat("/context/L0/current")
+
+# 2. 发现技能
+skills = client.ls("/skills")
+skill = client.cat("/skills/code-review/SKILL.md")
+
+# 3. 发送任务给另一个 Agent
+client.write("/pipes/review-task/input", "Review auth.py")
+result = client.cat("/pipes/review-task/output")
+```
+
+```bash
+# CLI - 快速调试
+evif ls /context
+evif cat /context/L1/decisions.md
+evif mount --list
+```
+
+### 12.4 当前实现状态
+
+| 组件 | 状态 | 说明 |
+|---|---|---|
+| evif-core | ✅ Production | 30+ 插件，radix 路由 |
+| ContextFS | ✅ Production | L0/L1/L2 分层，会话生命周期 |
+| SkillFS | ✅ Production | SKILL.md 验证，内置技能 |
+| PipeFS | ✅ Production | 状态机，广播，TTL |
+| Memory | ✅ Production | 多后端，向量搜索 |
+| REST API | ✅ Production | CRUD，流式，批量操作 |
+| Python SDK | ✅ Production | Async/Sync，流支持 |
+| CLI | ✅ Production | 60+ 命令，REPL |
+| Auth | ✅ Production | Capability-based，审计日志 |
+
+### 12.5 生产 MVP 差距分析
+
+#### 必须有（生产就绪）
+
+| 功能 | 当前状态 | 差距 |
+|---|---|---|
+| JWT/OAuth | API Key only | 需要 Bearer Token 认证 |
+| 多租户隔离 | TenantMiddleware 存在 | 未完全集成到所有端点 |
+| 分布式一致性 | Handle leases 存在 | N4 选主未实现 |
+| 供应链安全 | 22 个漏洞 | 需要清理 CVE |
+| 监控/可观测性 | 基本 metrics | 需要 OpenTelemetry |
+
+#### 应该有（提升体验）
+
+| 功能 | 当前状态 | 差距 |
+|---|---|---|
+| 技能执行沙箱 | SKILL.md 存在 | WASM/Docker 执行未实现 |
+| 向量检索优化 | Phase roadmap | 需要向量索引 |
+| 文档完整性 | 基础文档 | 需要 API 文档站点 |
+| 端到端测试 | 部分覆盖 | 需要 CI/CD 集成测试 |
+
+#### 可以有（增强功能）
+
+| 功能 | 当前状态 | 差距 |
+|---|---|---|
+| FUSE 挂载 | 存在但不稳定 | macOS 兼容问题 |
+| GraphQL API | REST 已够用 | 后续优化 |
+| 云存储插件 | S3/OSS 存在 | 需要完整测试 |
+
+### 12.6 生产 MVP 优先路径
+
+```
+生产 MVP 最低要求：
+├── 认证强化
+│   ├── JWT Token 支持
+│   └── Capability 细粒度控制
+├── 稳定性
+│   ├── FUSE macOS 兼容
+│   └── 内存泄漏修复
+├── 安全
+│   ├── 供应链漏洞清理
+│   └── 安全审计日志
+└── 可观测性
+    ├── Prometheus metrics
+    └── OpenTelemetry traces
+```
+
+### 12.7 验证命令
+
+```bash
+# 1. Agent 读取上下文
+curl "http://localhost:8081/api/v1/files?path=/context/L0/current"
+
+# 2. Agent 发现技能
+curl "http://localhost:8081/api/v1/directories?path=/skills"
+
+# 3. Agent 间通信
+curl -X PUT "http://localhost:8081/api/v1/files?path=/pipes/test/input" \
+  -d '{"data": "task for worker"}'
+curl "http://localhost:8081/api/v1/files?path=/pipes/test/status"
+
+# 4. Python SDK Agent 集成
+PYTHONPATH=crates/evif-python python3 -c "
+from evif import Client
+c = Client('http://localhost:8081')
+# 读取上下文
+print(c.cat('/context/L0/current'))
+# 发现技能
+print(c.ls('/skills'))
+# 任务协调
+c.write('/pipes/agent-task/input', 'Analyze codebase')
+"
+```
+
+---
+
+## 13. 结论
+
+### 13.1 EVIF 的核心差异化
+
+| 传统 Agent 框架 | EVIF |
+|---|---|
+| 硬编码的 API | 文件系统抽象 |
+| Session 内存丢失 | 持久化 Context |
+| 不可发现的工具 | SKILL.md 标准 |
+| 单 Agent | PipeFS 多 Agent 协调 |
+| 专有协议 | REST/Python/CLI/FUSE |
+
+### 13.2 下一步行动
+
+**立即可行**（本周）：
+1. 清理供应链漏洞
+2. 完善端到端测试
+3. 补充 API 文档
+
+**短期目标**（1-2 周）：
+1. JWT 认证支持
+2. FUSE 稳定性
+3. 监控埋点
+
+**中期目标**（1 个月）：
+1. 技能执行沙箱
+2. 向量检索优化
+3. 多租户隔离
+
+### 13.3 一句话总结
+
+**EVIF = 文件系统的 Agent 原语化 + Context/Skill/Pipe 的标准化 + 多后端的插件化**
+
+Agent 不再需要学习专有框架，只需要用 `ls/cat/write/grep`，EVIF 处理其余一切。
 | `crates/evif-rest/src/main.rs` | 移除必需的文件日志（沙箱兼容） |
 | `crates/evif-client/src/client.rs` | reqwest no_proxy() 修复 CLI panic |
 | `demos/agent_workflow/*.py` | 重写为 memfs/pipefs 兼容 |
