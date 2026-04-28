@@ -1,0 +1,1 @@
+{"timestamp":"2026-04-13T00:36:23.264740Z","level":"WARN","fields":{"message":"invalid credentials for POST /api/v1/files"},"threadName":"tokio-runtime-worker","threadId":"ThreadId(5)"}

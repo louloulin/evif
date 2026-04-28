@@ -1,58 +1,79 @@
 #![cfg(test)]
 #![allow(clippy::needless_borrows_for_generic_args)]
 
-// EVIF REST API Tests - Health and File Operations (P0)
-// Real integration tests for core REST API endpoints
+// EVIF REST API Tests
+// Integration tests for core REST API endpoints.
+// Uses Mutex-based lazy init to avoid OnceLock poisoning issues.
 
 use evif_core::{EvifPlugin, RadixMountTable};
 use evif_plugins::MemFsPlugin;
 use evif_rest::create_routes;
 use reqwest::Client;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-static API_BASE: OnceLock<String> = OnceLock::new();
+// Lazy init server using Mutex (avoids OnceLock poisoning)
+static SERVER_STATE: Mutex<Option<Arc<TestServerState>>> = Mutex::new(None);
 
-fn ensure_api_base() -> String {
-    API_BASE
-        .get_or_init(|| {
-            let (tx, rx) = std::sync::mpsc::channel();
+struct TestServerState {
+    base_url: String,
+    #[allow(dead_code)]
+    shutdown_tx: tokio::sync::oneshot::Sender<()>,
+}
 
-            std::thread::spawn(move || {
-                let runtime = tokio::runtime::Runtime::new().expect("runtime");
-                runtime.block_on(async move {
-                    let mount_table = Arc::new(RadixMountTable::new());
-                    let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-                    mount_table
-                        .mount("/".to_string(), mem)
-                        .await
-                        .expect("mount root memfs");
+impl TestServerState {
+    async fn start() -> Self {
+        let mount_table = Arc::new(RadixMountTable::new());
+        let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
+        mount_table
+            .mount("/".to_string(), mem)
+            .await
+            .expect("mount root memfs");
 
-                    let app = create_routes(mount_table);
-                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-                        .await
-                        .expect("bind");
-                    let address = listener.local_addr().expect("local addr");
-                    tx.send(format!("http://{}", address))
-                        .expect("send base url");
-                    axum::serve(listener, app.into_make_service())
-                        .await
-                        .expect("serve");
-                });
-            });
+        let app = create_routes(mount_table);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("local addr");
+        let base_url = format!("http://{}", addr);
 
-            let base = rx.recv().expect("receive base url");
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            base
-        })
-        .clone()
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+
+        // Spawn server in background
+        tokio::spawn(async move {
+            axum::serve(listener, app.into_make_service())
+                .await
+                .expect("server error");
+            let _ = shutdown_rx;
+        });
+
+        // Give server time to start
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        Self { base_url, shutdown_tx }
+    }
+
+    fn base_url(&self) -> &str {
+        &self.base_url
+    }
+}
+
+fn ensure_server() -> Arc<TestServerState> {
+    let mut guard = SERVER_STATE.lock().unwrap();
+    if let Some(ref state) = *guard {
+        return Arc::clone(state);
+    }
+
+    // Create new runtime for spawning the server
+    let runtime = tokio::runtime::Runtime::new().expect("create runtime");
+    let state = runtime.block_on(TestServerState::start());
+    let arc_state = Arc::new(state);
+    *guard = Some(Arc::clone(&arc_state));
+    arc_state
 }
 
 fn get_api_base() -> String {
-    std::env::var("EVIF_TEST_PORT")
-        .ok()
-        .map(|p| format!("http://localhost:{}", p))
-        .unwrap_or_else(ensure_api_base)
+    ensure_server().base_url.clone()
 }
 
 fn unique_test_path() -> String {
@@ -75,14 +96,11 @@ mod health_checks {
 
     #[tokio::test]
     async fn test_health_basic() {
-        // Given: EVIF REST server running
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /health
         let response = client.get(&format!("{}/health", base)).send().await;
 
-        // Then: Return { status: "ok" }
         assert!(response.is_ok(), "Health check request failed");
         let status = response.unwrap().status();
         assert!(
@@ -94,14 +112,11 @@ mod health_checks {
 
     #[tokio::test]
     async fn test_health_v1() {
-        // Given: EVIF REST server running
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/health
         let response = client.get(&format!("{}/api/v1/health", base)).send().await;
 
-        // Then: Return status, version, uptime
         assert!(response.is_ok(), "Health v1 request failed");
         let status = response.unwrap().status();
         assert!(
@@ -117,63 +132,51 @@ mod file_operations {
 
     #[tokio::test]
     async fn test_read_file() {
-        // Given: A file exists at path
         let client = get_client().await;
         let base = get_api_base();
         let test_file = unique_test_path();
 
-        // First create a file
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("test content".to_string())
             .send()
             .await;
 
-        // When: GET /api/v1/files?path=/test.txt
         let response = client
             .get(&format!("{}/api/v1/files?path={}", base, test_file))
             .send()
             .await;
 
-        // Then: Return file content
         assert!(response.is_ok(), "Read file request failed");
-        // Note: May return 404 if file doesn't exist or other errors
     }
 
     #[tokio::test]
     async fn test_write_file() {
-        // Given: File path specified
         let client = get_client().await;
         let base = get_api_base();
         let test_file = unique_test_path();
 
-        // When: PUT /api/v1/files with content
         let response = client
             .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("new content".to_string())
             .send()
             .await;
 
-        // Then: File content overwritten
         assert!(response.is_ok(), "Write file request failed");
     }
 
     #[tokio::test]
     async fn test_create_file() {
-        // Given: New file path
         let client = get_client().await;
         let base = get_api_base();
         let test_file = unique_test_path();
 
-        // When: POST /api/v1/files
         let response = client
             .post(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("created content".to_string())
             .send()
             .await;
 
-        // Then: New file created
-        // Note: Implementation may use PUT for create, not POST
         assert!(
             response.is_ok() || response.unwrap().status() == 405,
             "Create file request should succeed or method not allowed"
@@ -182,25 +185,21 @@ mod file_operations {
 
     #[tokio::test]
     async fn test_delete_file() {
-        // Given: A file exists
         let client = get_client().await;
         let base = get_api_base();
         let test_file = unique_test_path();
 
-        // First create a file
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("to be deleted".to_string())
             .send()
             .await;
 
-        // When: DELETE /api/v1/files?path=/test.txt
         let response = client
             .delete(&format!("{}/api/v1/files?path={}", base, test_file))
             .send()
             .await;
 
-        // Then: File deleted
         assert!(response.is_ok(), "Delete file request failed");
     }
 }
@@ -210,57 +209,47 @@ mod directory_operations {
 
     #[tokio::test]
     async fn test_list_directory() {
-        // Given: A directory with files
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/directories?path=/
         let response = client
             .get(&format!("{}/api/v1/directories?path=/", base))
             .send()
             .await;
 
-        // Then: Return directory contents
         assert!(response.is_ok(), "List directory request failed");
     }
 
     #[tokio::test]
     async fn test_create_directory() {
-        // Given: Parent directory exists
         let client = get_client().await;
         let base = get_api_base();
         let test_dir = unique_test_path();
 
-        // When: POST /api/v1/directories
         let response = client
             .post(&format!("{}/api/v1/directories?path={}", base, test_dir))
             .send()
             .await;
 
-        // Then: New directory created
         assert!(response.is_ok(), "Create directory request failed");
     }
 
     #[tokio::test]
     async fn test_delete_directory() {
-        // Given: An empty directory exists
         let client = get_client().await;
         let base = get_api_base();
         let test_dir = unique_test_path();
 
-        // First create a directory
         let _ = client
             .post(&format!("{}/api/v1/directories?path={}", base, test_dir))
             .send()
             .await;
 
-        // When: DELETE /api/v1/directories?path=/testdir
         let response = client
             .delete(&format!("{}/api/v1/directories?path={}", base, test_dir))
             .send()
             .await;
 
-        // Then: Directory deleted
         assert!(response.is_ok(), "Delete directory request failed");
     }
 }
@@ -270,67 +259,56 @@ mod metadata_operations {
 
     #[tokio::test]
     async fn test_stat_file() {
-        // Given: A file exists
         let client = get_client().await;
         let base = get_api_base();
         let test_file = unique_test_path();
 
-        // First create a file
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("stat test".to_string())
             .send()
             .await;
 
-        // When: GET /api/v1/stat?path=/test.txt
         let response = client
             .get(&format!("{}/api/v1/stat?path={}", base, test_file))
             .send()
             .await;
 
-        // Then: Return file metadata (type, size, mtime, permissions)
         assert!(response.is_ok(), "Stat request failed");
     }
 
     #[tokio::test]
     async fn test_touch_file() {
-        // Given: A file exists
         let client = get_client().await;
         let base = get_api_base();
         let test_file = unique_test_path();
 
-        // First create a file
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("touch test".to_string())
             .send()
             .await;
 
-        // When: POST /api/v1/touch?path=/test.txt
         let response = client
             .post(&format!("{}/api/v1/touch?path={}", base, test_file))
             .send()
             .await;
 
-        // Then: File mtime updated
         assert!(response.is_ok(), "Touch request failed");
     }
 
     #[tokio::test]
     async fn test_digest_file() {
-        // Given: A file exists
         let client = get_client().await;
         let base = get_api_base();
         let test_file = unique_test_path();
 
-        // First create a file
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, test_file))
             .body("digest test".to_string())
             .send()
             .await;
 
-        // When: POST /api/v1/digest?path=/test.txt&algo=sha256
         let response = client
             .post(&format!(
                 "{}/api/v1/digest?path={}&algo=sha256",
@@ -339,26 +317,22 @@ mod metadata_operations {
             .send()
             .await;
 
-        // Then: Return file checksum
         assert!(response.is_ok(), "Digest request failed");
     }
 
     #[tokio::test]
     async fn test_rename_file() {
-        // Given: A file exists at source
         let client = get_client().await;
         let base = get_api_base();
         let src_file = unique_test_path();
         let dst_file = format!("{}_renamed", src_file);
 
-        // First create a file
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, src_file))
             .body("rename test".to_string())
             .send()
             .await;
 
-        // When: POST /api/v1/rename with src and dst
         let response = client
             .post(&format!(
                 "{}/api/v1/rename?src={}&dst={}",
@@ -367,7 +341,6 @@ mod metadata_operations {
             .send()
             .await;
 
-        // Then: File moved/renamed
         assert!(response.is_ok(), "Rename request failed");
     }
 }
@@ -377,25 +350,20 @@ mod mount_management {
 
     #[tokio::test]
     async fn test_list_mounts() {
-        // Given: Multiple plugins mounted (or none)
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/mounts
         let response = client.get(&format!("{}/api/v1/mounts", base)).send().await;
 
-        // Then: Return all mount points
         assert!(response.is_ok(), "List mounts request failed");
     }
 
     #[tokio::test]
     async fn test_mount_plugin() {
-        // Given: EVIF server running
         let client = get_client().await;
         let base = get_api_base();
         let mount_path = unique_test_path();
 
-        // When: POST /api/v1/mount with plugin and path
         let response = client
             .post(&format!(
                 "{}/api/v1/mount?plugin=memfs&path={}",
@@ -404,8 +372,6 @@ mod mount_management {
             .send()
             .await;
 
-        // Then: Plugin mounted successfully
-        // Note: May return error if plugin not available
         assert!(
             response.is_ok() || response.unwrap().status() == 500,
             "Mount request should succeed or return server error"
@@ -414,12 +380,10 @@ mod mount_management {
 
     #[tokio::test]
     async fn test_unmount_plugin() {
-        // Given: A plugin is mounted (or none)
         let client = get_client().await;
         let base = get_api_base();
         let mount_path = unique_test_path();
 
-        // First mount a plugin
         let _ = client
             .post(&format!(
                 "{}/api/v1/mount?plugin=memfs&path={}",
@@ -428,13 +392,11 @@ mod mount_management {
             .send()
             .await;
 
-        // When: POST /api/v1/unmount with path
         let response = client
             .post(&format!("{}/api/v1/unmount?path={}", base, mount_path))
             .send()
             .await;
 
-        // Then: Plugin unmounted
         assert!(response.is_ok(), "Unmount request failed");
     }
 }
@@ -444,20 +406,17 @@ mod batch_operations {
 
     #[tokio::test]
     async fn test_batch_copy() {
-        // Given: Source and destination files exist
         let client = get_client().await;
         let base = get_api_base();
         let src = unique_test_path();
         let dst = format!("{}_copy_dest", unique_test_path());
 
-        // Create source file first
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, src))
             .body("batch copy source content".to_string())
             .send()
             .await;
 
-        // When: POST /api/v1/batch/copy
         let response = client
             .post(&format!("{}/api/v1/batch/copy", base))
             .json(&serde_json::json!({
@@ -469,11 +428,9 @@ mod batch_operations {
             .send()
             .await;
 
-        // Then: Batch copy operation created
         assert!(response.is_ok(), "Batch copy request failed");
         let resp = response.unwrap();
         let status = resp.status();
-        // 200 = success, 500 = internal error (acceptable in test env)
         assert!(
             status.is_success() || status.as_u16() == 500,
             "Batch copy should succeed or 500 (got {})",
@@ -483,13 +440,11 @@ mod batch_operations {
 
     #[tokio::test]
     async fn test_batch_delete() {
-        // Given: Multiple files exist
         let client = get_client().await;
         let base = get_api_base();
         let file1 = unique_test_path();
         let file2 = unique_test_path();
 
-        // Create files
         let _ = client
             .put(&format!("{}/api/v1/files?path={}", base, file1))
             .body("delete me 1".to_string())
@@ -501,7 +456,6 @@ mod batch_operations {
             .send()
             .await;
 
-        // When: POST /api/v1/batch/delete
         let response = client
             .post(&format!("{}/api/v1/batch/delete", base))
             .json(&serde_json::json!({
@@ -511,55 +465,45 @@ mod batch_operations {
             .send()
             .await;
 
-        // Then: Batch delete operation created
         assert!(response.is_ok(), "Batch delete request failed");
     }
 
     #[tokio::test]
     async fn test_batch_progress() {
-        // Given: An active batch operation ID
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/batch/progress/nonexistent
         let response = client
             .get(&format!("{}/api/v1/batch/progress/nonexistent-id", base))
             .send()
             .await;
 
-        // Then: Return progress (or 404 for nonexistent)
         assert!(response.is_ok(), "Batch progress request failed");
     }
 
     #[tokio::test]
     async fn test_list_batch_operations() {
-        // Given: EVIF server running
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/batch/operations
         let response = client
             .get(&format!("{}/api/v1/batch/operations", base))
             .send()
             .await;
 
-        // Then: Return list of batch operations
         assert!(response.is_ok(), "List batch operations request failed");
     }
 
     #[tokio::test]
     async fn test_cancel_batch_operation() {
-        // Given: An active batch operation ID
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: DELETE /api/v1/batch/operation/nonexistent-id
         let response = client
             .delete(&format!("{}/api/v1/batch/operation/nonexistent-id", base))
             .send()
             .await;
 
-        // Then: Return cancel result (404 for nonexistent is acceptable)
         assert!(response.is_ok(), "Cancel batch operation request failed");
     }
 }
@@ -569,78 +513,63 @@ mod plugin_api_management {
 
     #[tokio::test]
     async fn test_list_plugins() {
-        // Given: EVIF server running
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/plugins
         let response = client.get(&format!("{}/api/v1/plugins", base)).send().await;
 
-        // Then: Return plugin list (200 or 500 acceptable)
         assert!(response.is_ok(), "List plugins request failed");
     }
 
     #[tokio::test]
     async fn test_list_available_plugins() {
-        // Given: EVIF server running
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/plugins/available
         let response = client
             .get(&format!("{}/api/v1/plugins/available", base))
             .send()
             .await;
 
-        // Then: Return available plugins
         assert!(response.is_ok(), "List available plugins request failed");
     }
 
     #[tokio::test]
     async fn test_get_plugin_readme() {
-        // Given: A known plugin name (memfs)
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/plugins/memfs/readme
         let response = client
             .get(&format!("{}/api/v1/plugins/memfs/readme", base))
             .send()
             .await;
 
-        // Then: Return README content (200 or 404 for unknown plugin)
         assert!(response.is_ok(), "Get plugin readme request failed");
     }
 
     #[tokio::test]
     async fn test_get_plugin_config() {
-        // Given: A known plugin name (memfs)
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/plugins/memfs/config
         let response = client
             .get(&format!("{}/api/v1/plugins/memfs/config", base))
             .send()
             .await;
 
-        // Then: Return config parameters
         assert!(response.is_ok(), "Get plugin config request failed");
     }
 
     #[tokio::test]
     async fn test_list_plugins_detailed() {
-        // Given: EVIF server running
         let client = get_client().await;
         let base = get_api_base();
 
-        // When: GET /api/v1/plugins/list
         let response = client
             .get(&format!("{}/api/v1/plugins/list", base))
             .send()
             .await;
 
-        // Then: Return detailed plugin information
         assert!(response.is_ok(), "List plugins detailed request failed");
     }
 }

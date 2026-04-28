@@ -2861,7 +2861,6 @@ dependencies = [
 name = "evif-test-helpers"
 version = "0.1.0"
 dependencies = [
- "evif-cli",
  "evif-rest",
  "once_cell",
  "reqwest 0.11.27",

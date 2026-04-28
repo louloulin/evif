@@ -1,0 +1,2 @@
+{"timestamp":"2026-04-14T03:28:41.655961Z","level":"WARN","fields":{"message":"rate limit exceeded for POST /api/v1/memories"},"threadName":"tokio-runtime-worker","threadId":"ThreadId(14)"}
+{"timestamp":"2026-04-14T03:29:40.009048Z","level":"WARN","fields":{"message":"rate limit exceeded for POST /api/v1/memories"},"threadName":"tokio-runtime-worker","threadId":"ThreadId(12)"}

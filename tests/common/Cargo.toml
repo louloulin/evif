@@ -20,6 +20,5 @@ tokio = { workspace = true }
 once_cell = "1.19"
 
 [dev-dependencies]
-# Internal crates
-evif-cli = { path = "../../crates/evif-cli" }
+# Internal crates (only if they have lib targets)
 evif-rest = { path = "../../crates/evif-rest" }

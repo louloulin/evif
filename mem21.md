@@ -638,7 +638,167 @@ c.write('/pipes/agent-task/input', 'Analyze codebase')
 
 ---
 
-## 13. 结论
+## 13. Claude Code + EVIF 集成
+
+### 13.1 核心价值
+
+EVIF 为 Claude Code 提供：
+
+| 能力 | EVIF 机制 | Claude Code 收益 |
+|------|-----------|------------------|
+| **持久化上下文** | ContextFS (L0/L1/L2) | Session 结束后不丢失状态 |
+| **工作流复用** | SkillFS (SKILL.md) | 发现和执行标准工作流 |
+| **多 Agent 协调** | PipeFS (Task Queue) | 与其他 Agent 协作 |
+| **记忆搜索** | Memory (Vector Store) | 语义搜索历史知识 |
+
+### 13.2 集成架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       Claude Code                                │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  .claude/skills/*.SKILL.md                              │   │
+│  │  ├── evif-context.SKILL.md  (上下文读写)                 │   │
+│  │  ├── evif-workflows.SKILL.md (工作流发现)               │   │
+│  │  ├── evif-pipes.SKILL.md    (多 Agent 协调)             │   │
+│  │  ├── evif-memory.SKILL.md   (记忆存储)                 │   │
+│  │  └── evif-quickref.SKILL.md (快速参考)                 │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                              │                                  │
+│                              │ EVIF CLI / Python SDK           │
+│                              ▼                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  CLAUDE.md                                             │   │
+│  │  - 读取 /context/L0/current                           │   │
+│  │  - 执行 /skills/{name}/input → output                 │   │
+│  │  - 通过 /pipes/ 协调                                   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ REST API
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     EVIF Server (evif-rest)                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌────────┐ │
+│  │ ContextFS   │  │ SkillFS     │  │ PipeFS      │  │ MemFS  │ │
+│  │ /context    │  │ /skills     │  │ /pipes      │  │ /mem   │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 13.3 Claude Code Skills
+
+创建在 `.claude/skills/` 目录：
+
+| Skill | 触发词 | 功能 |
+|-------|--------|------|
+| `evif-context.SKILL.md` | "read context", "remember this" | L0/L1/L2 读写 |
+| `evif-workflows.SKILL.md` | "run skill", "code review" | 技能发现执行 |
+| `evif-pipes.SKILL.md` | "task queue", "coordinate" | 多 Agent 协调 |
+| `evif-memory.SKILL.md` | "search memories" | 向量记忆搜索 |
+| `evif-quickref.SKILL.md` | "evif help", "cheatsheet" | 命令参考 |
+
+### 13.4 使用示例
+
+**Session 开始**：
+```bash
+# 1. 检查上次在哪里
+evif cat /context/L0/current
+# 输出: "Review PR #456 - fix auth bug"
+
+# 2. 查看决策历史
+evif cat /context/L1/decisions.md
+# 输出:
+# - 2026-04-27: Chose JWT over sessions for stateless auth
+# - 2026-04-27: Will use argon2 for password hashing
+
+# 3. 审查项目架构
+evif cat /context/L2/architecture.md
+```
+
+**执行工作流**：
+```bash
+# 1. 发现技能
+evif ls /skills
+# 输出: code-review, test-gen, doc-gen, refactor, ...
+
+# 2. 使用代码审查
+evif write -c "Review src/auth/login.rs for security" /skills/code-review/input
+sleep 1
+evif cat /skills/code-review/output
+
+# 3. 更新上下文
+evif write -c "Completed code review, found 2 issues" /context/L0/current
+evif write -c "- Found SQL injection in login query" -a /context/L1/decisions.md
+```
+
+**多 Agent 协调**：
+```bash
+# Agent A: 创建任务
+evif mkdir /pipes/review-pr-456
+evif write -c "Review PR #456" /pipes/review-pr-456/input
+
+# Agent B: 拾取任务
+evif cat /pipes/review-pr-456/input
+# 执行审查...
+evif write -c "Found issues, needs changes" /pipes/review-pr-456/output
+```
+
+### 13.5 Python SDK 集成
+
+```python
+from evif import Client
+c = Client("http://localhost:8081")
+
+# 上下文
+current = c.context_current()
+c.context_update_current("Implementing feature X")
+c.context_add_decision("Chose PostgreSQL for scalability")
+
+# 技能
+c.write("/skills/code-review/input", "Review auth module")
+result = c.cat("/skills/code-review/output")
+
+# 记忆
+c.memory_store("User prefers dark mode", modality="profile")
+memories = c.memory_search("editor preferences")
+```
+
+### 13.6 OpenClaw 集成
+
+OpenClaw 可以通过 Python SDK 集成 EVIF：
+
+```python
+# openclaw_agent.py
+from evif import Client
+
+class EVIFSkill(Skill):
+    def __init__(self):
+        self.evif = Client("http://localhost:8081")
+
+    async def execute(self, task: str, context: dict):
+        # 1. 读取上下文
+        current = self.evif.context_current()
+
+        # 2. 发现相关技能
+        skills = self.evif.ls("/skills")
+
+        # 3. 执行技能
+        self.evif.write(f"/skills/{task}/input", context.get("input"))
+        result = self.evif.cat(f"/skills/{task}/output")
+
+        # 4. 存储记忆
+        self.evif.memory_store(
+            f"Executed {task} with result: {result[:100]}",
+            modality="event"
+        )
+
+        return result
+```
+
+---
+
+## 14. 结论
 
 ### 13.1 EVIF 的核心差异化
 
