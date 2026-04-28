@@ -5,7 +5,20 @@
 
 > A context-oriented, extensible virtual file system built in Rust, following the Plan 9 "Everything Is a File" philosophy.
 
-[中文文档](README-CN.md)
+**Documentation**: [English](docs/README.md) | [中文](docs/zh/README.md)
+
+## Documentation
+
+| Chapter | English | 中文 |
+|---------|---------|------|
+| Architecture Overview | [docs/00-overview.md](docs/00-overview.md) | [docs/zh/00-overview.md](docs/zh/00-overview.md) |
+| Core Modules | [docs/01-core-modules.md](docs/01-core-modules.md) | [docs/zh/01-core-modules.md](docs/zh/01-core-modules.md) |
+| Plugin System | [docs/02-plugin-system.md](docs/02-plugin-system.md) | [docs/zh/02-plugin-system.md](docs/zh/02-plugin-system.md) |
+| REST API Reference | [docs/03-rest-api.md](docs/03-rest-api.md) | [docs/zh/03-rest-api.md](docs/zh/03-rest-api.md) |
+| SDK Integration | [docs/04-sdk-integration.md](docs/04-sdk-integration.md) | [docs/zh/04-sdk-integration.md](docs/zh/04-sdk-integration.md) |
+| Agent Integration | [docs/05-agent-integration.md](docs/05-agent-integration.md) | [docs/zh/05-agent-integration.md](docs/zh/05-agent-integration.md) |
+| Deployment & Ops | [docs/06-deployment.md](docs/06-deployment.md) | [docs/zh/06-deployment.md](docs/zh/06-deployment.md) |
+| Developer Guide | [docs/07-developer-guide.md](docs/07-developer-guide.md) | [docs/zh/07-developer-guide.md](docs/zh/07-developer-guide.md) |
 
 ## Overview
 
@@ -514,4 +527,4 @@ at your option.
 
 ---
 
-**Documentation**: [docs/](docs/) | **API Reference**: [docs/API.md](docs/API.md) | **Getting Started**: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
+**Documentation**: [English](docs/README.md) | [中文](docs/zh/README.md) | **API Reference**: [docs/API.md](docs/API.md) | **Getting Started**: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
