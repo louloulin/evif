@@ -3,528 +3,301 @@
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](https://opensource.org/licenses/)
 
-> A context-oriented, extensible virtual file system built in Rust, following the Plan 9 "Everything Is a File" philosophy.
+> 基于 Rust 构建的上下文导向虚拟文件系统，遵循 Plan 9 "一切皆文件"理念，为 AI Agent 提供持久化上下文、可复用技能和多智能体协同。
 
 **Documentation**: [English](docs/README.md) | [中文](docs/zh/README.md)
 
-## Documentation
+## 文档章节
 
-| Chapter | English | 中文 |
-|---------|---------|------|
-| Architecture Overview | [docs/00-overview.md](docs/00-overview.md) | [docs/zh/00-overview.md](docs/zh/00-overview.md) |
-| Core Modules | [docs/01-core-modules.md](docs/01-core-modules.md) | [docs/zh/01-core-modules.md](docs/zh/01-core-modules.md) |
-| Plugin System | [docs/02-plugin-system.md](docs/02-plugin-system.md) | [docs/zh/02-plugin-system.md](docs/zh/02-plugin-system.md) |
-| REST API Reference | [docs/03-rest-api.md](docs/03-rest-api.md) | [docs/zh/03-rest-api.md](docs/zh/03-rest-api.md) |
-| SDK Integration | [docs/04-sdk-integration.md](docs/04-sdk-integration.md) | [docs/zh/04-sdk-integration.md](docs/zh/04-sdk-integration.md) |
-| Agent Integration | [docs/05-agent-integration.md](docs/05-agent-integration.md) | [docs/zh/05-agent-integration.md](docs/zh/05-agent-integration.md) |
-| Deployment & Ops | [docs/06-deployment.md](docs/06-deployment.md) | [docs/zh/06-deployment.md](docs/zh/06-deployment.md) |
-| Developer Guide | [docs/07-developer-guide.md](docs/07-developer-guide.md) | [docs/zh/07-developer-guide.md](docs/zh/07-developer-guide.md) |
+| 章节 | English | 中文 |
+|------|---------|------|
+| 架构概览 | [docs/00-overview.md](docs/00-overview.md) | [docs/zh/00-overview.md](docs/zh/00-overview.md) |
+| 核心模块 | [docs/01-core-modules.md](docs/01-core-modules.md) | [docs/zh/01-core-modules.md](docs/zh/01-core-modules.md) |
+| 插件系统 | [docs/02-plugin-system.md](docs/02-plugin-system.md) | [docs/zh/02-plugin-system.md](docs/zh/02-plugin-system.md) |
+| REST API | [docs/03-rest-api.md](docs/03-rest-api.md) | [docs/zh/03-rest-api.md](docs/zh/03-rest-api.md) |
+| SDK 集成 | [docs/04-sdk-integration.md](docs/04-sdk-integration.md) | [docs/zh/04-sdk-integration.md](docs/zh/04-sdk-integration.md) |
+| Agent 集成 | [docs/05-agent-integration.md](docs/05-agent-integration.md) | [docs/zh/05-agent-integration.md](docs/zh/05-agent-integration.md) |
+| 部署运维 | [docs/06-deployment.md](docs/06-deployment.md) | [docs/zh/06-deployment.md](docs/zh/06-deployment.md) |
+| 开发者指南 | [docs/07-developer-guide.md](docs/07-developer-guide.md) | [docs/zh/07-developer-guide.md](docs/zh/07-developer-guide.md) |
+
+### 专项文档
+
+| 文档 | 用途 |
+|------|------|
+| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | 快速入门 |
+| [docs/cli-mode.md](docs/cli-mode.md) | CLI 使用说明 |
+| [docs/mcp-server.md](docs/mcp-server.md) | MCP Server 配置 |
+| [docs/metrics.md](docs/metrics.md) | 监控指标 |
+| [docs/plugin-development.md](docs/plugin-development.md) | 插件开发 |
+| [docs/fuse.md](docs/fuse.md) | FUSE 使用 |
+
+### Agent 集成
+
+| 文档 | 用途 |
+|------|------|
+| [docs/claude-code-workflow.md](docs/claude-code-workflow.md) | Claude Code 集成 |
+| [docs/codex-workflow.md](docs/codex-workflow.md) | Codex 集成 |
+| [docs/context-directory-best-practices.md](docs/context-directory-best-practices.md) | 上下文最佳实践 |
+| [docs/multi-agent-coordination-example.md](docs/multi-agent-coordination-example.md) | 多 Agent 协作 |
+
+### 生产环境
+
+| 文档 | 用途 |
+|------|------|
+| [docs/production-env-vars.md](docs/production-env-vars.md) | 环境变量 |
+| [docs/production-incident-response.md](docs/production-incident-response.md) | 故障响应 |
+| [docs/production-rollback-guide.md](docs/production-rollback-guide.md) | 回滚指南 |
+| [docs/slo.md](docs/slo.md) | SLO 定义 |
 
 ## Overview
 
-EVIF is evolving from "Everything Is a File" toward "Context Is a File" for AI agents. The current repository now includes:
+EVIF 从 "Everything Is a File" 演进为 AI Agent 的 "Context Is a File"：
 
-- `ContextFS` for layered `L0/L1/L2` working context
-- `SkillFS` for standard `SKILL.md` discovery and invocation
-- `PipeFS` for lightweight multi-agent coordination
-- Traditional EVIF plugin infrastructure for storage, routing, REST, CLI, and FUSE
+- `ContextFS` - 分层 `L0/L1/L2` 工作上下文
+- `SkillFS` - 标准 `SKILL.md` 技能发现和调用
+- `PipeFS` - 轻量级多 Agent 协同
+- 传统 EVIF 插件基础设施
 
-### Agent Positioning
+### Agent 定位
 
-EVIF gives agents one file-oriented surface for:
+EVIF 为 Agent 提供统一的文件接口：
 
-- active context in `/context`
-- reusable workflows in `/skills`
-- task coordination in `/pipes`
+- `/context` - 活跃上下文
+- `/skills` - 可复用工作流
+- `/pipes` - 任务协同
 
-This keeps agent interaction compatible with simple primitives such as `ls`, `cat`, `grep`, and `write`.
+### 关键特性
 
-EVIF is a modular plugin filesystem platform that exposes multiple backends through one mount table, one plugin lifecycle, and one file-oriented surface. The supported product path is centered on mount routing, plugin lifecycle management, file and directory operations, handle management, and access surfaces such as REST, CLI, and FUSE.
+- **插件架构**: 30+ 内置存储插件
+- **Radix Tree 路由**: O(k) 路径解析
+- **多访问方式**: REST API, CLI, FUSE, WebSocket
+- **云存储**: S3, Azure, GCS, OSS, COS, OBS
+- **AI Agent 原语**: ContextFS, SkillFS, PipeFS, QueueFS, VectorFS
+- **WASM 插件**: Extism 多语言插件支持
 
-### Key Features
-
-- **Plugin Architecture**: 30+ built-in plugins for various storage backends
-- **Plugin Kernel**: Mountable plugin filesystem with radix-tree routing and handle management
-- **Multiple Access Methods**: REST API, CLI, FUSE mount, and WebSocket
-- **Storage Backends**: Memory, Local FS, S3, Azure Blob, GCS, Aliyun OSS, and more
-- **Advanced Features**: Batch operations, streaming, encryption, tiering, and monitoring
-- **Dynamic Plugin Loading**: Runtime loading of `.so`/`.dylib`/`.dll` plugins
-- **WASM Plugin Support**: WebAssembly-based plugin extensions
-
-## Architecture
-
-### Agent-Centered Layers
+## 架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Agent Access Layer                                          │
-│  /context      /skills      /pipes      REST / CLI / FUSE  │
+│                      访问层                                   │
+│  CLI (60+ 命令) │ REST API (106 端点) │ FUSE │ WebSocket     │
 ├─────────────────────────────────────────────────────────────┤
-│ EVIF Core                                                   │
-│  Mount Table   Plugin Lifecycle   Handles   Metrics         │
+│                      核心层                                  │
+│  Mount Table (Radix Tree) │ Plugin Lifecycle │ Handles       │
 ├─────────────────────────────────────────────────────────────┤
-│ Plugin Layer                                                │
-│  ContextFS    SkillFS    PipeFS    Storage / Queue / Vector │
+│                    插件层                                    │
+│  ContextFS │ SkillFS │ PipeFS │ QueueFS │ VectorFS │ Storage  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Access Layer                           │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │ REST API │  │   CLI    │  │   FUSE   │  │WebSocket │   │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
-├───────┴────────────┴─────────┴─────────┴─────────┴─────────┤
-│                      Core Layer                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │ Mount Table  │  │ Plugin System│  │ Handle Mgr   │     │
-│  │ (Radix Tree) │  │              │  │              │     │
-│  └──────────────┘  └──────────────┘  └──────────────┘     │
-├─────────────────────────────────────────────────────────────┤
-│                    Storage Layer (Plugins)                  │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐  │
-│  │Memory  │ │ Local  │ │   S3   │ │ Azure  │ │  SQL   │  │
-│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+## 快速开始
 
-## Quick Start
-
-### Installation
+### 安装
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/evif.git
+git clone https://github.com/evif/evif.git
 cd evif
-
-# Build all components
 cargo build --release
-
-# Install CLI tool
 cargo install --path crates/evif-cli
 ```
 
-### Start the Server
+### 启动服务器
 
 ```bash
-# Start REST API server (default port 8081)
-evif-rest
-
-# Or specify a custom port
-evif-rest --port 3000
+evif-rest --port 8081
 ```
 
-### Basic Usage
+### 基本使用
 
 ```bash
-# Check server health
-evif health
-
-# List root directory
-evif ls /
-
-# Create a file in memory filesystem
-evif write /mem/hello.txt --content "Hello, EVIF!"
-
-# Read file contents
-evif cat /mem/hello.txt
-
-# Create a directory
-evif mkdir /mem/mydir
-
-# Mount a local filesystem
-evif mount-plugin local /local --config root=/tmp
-
-# List mounted plugins
-evif list-mounts
+evif health                          # 健康检查
+evif ls /                            # 列出根目录
+evif mkdir /mem/demo                 # 创建目录
+evif write /mem/hello.txt -c "Hi"   # 写入文件
+evif cat /mem/hello.txt              # 读取文件
+evif mounts                          # 列出挂载
 ```
 
-### 30-Second Agent Demo
+### 30 秒 Agent 演示
 
 ```bash
 cat /context/L0/current
 cat /context/L1/decisions.md
 ls /skills
-cat /skills/code-review/SKILL.md
 mkdir /pipes/task-001
-echo "review changed handlers" > /pipes/task-001/input
-cat /pipes/task-001/status
+echo "review code" > /pipes/task-001/input
 ```
 
-### 3-Minute Claude Code Setup
+### Python SDK
 
 ```bash
-cargo build --release -p evif-rest -p evif-fuse
-cp CLAUDE.md /path/to/your/project/CLAUDE.md
-./target/release/evif-rest --port 8081
-./target/release/evif-fuse-mount /tmp/evif --readwrite
-cat /tmp/evif/context/L0/current
-ls /tmp/evif/skills
+pip install -e crates/evif-python
 ```
 
-## Core Components
+```python
+from evif import Client
 
-| Crate | Description |
-|-------|-------------|
-| **evif-core** | Core abstractions, plugin system, mount table, handle manager |
-| **evif-rest** | HTTP/JSON REST API server |
-| **evif-cli** | Command-line interface (60+ commands) |
-| **evif-client** | Rust client SDK |
-| **evif-fuse** | FUSE filesystem integration (Linux/macOS) |
-| **evif-auth** | Authentication and authorization layer |
-| **evif-macros** | Procedural macros (`#[node]`, `#[builder]`, `#[error_macro]`) |
-| **evif-metrics** | Prometheus metrics collection and export |
-| **evif-mem** | Optional memory subsystem with timeline and relation queries |
+client = Client("http://localhost:8081")
+client.mkdir("/mem/demo")
+client.write("/mem/demo/data.txt", "Hello!")
+print(client.cat("/mem/demo/data.txt"))
 
-## Available Plugins
+# Agent 上下文
+client.write("/context/L0/current", "Implementing auth")
+client.memory_store("JWT token usage", modality="knowledge")
 
-### Core Supported Plugins
-| Plugin | Description | Default Mount |
-|--------|-------------|---------------|
-| `memfs` | In-memory filesystem | `/mem` |
-| `contextfs` | Layered agent context filesystem | `/context` |
-| `skillfs` | Standard `SKILL.md` skill surface | `/skills` |
-| `pipefs` | Agent coordination pipes | `/pipes` |
-| `localfs` | Local filesystem access | - |
-| `hellofs` | Hello world example plugin | `/hello` |
-| `serverinfofs` | Server status and metrics | `/serverinfo` |
-| `kvfs` | Key-value store interface | `/kv` |
-| `queuefs` | Message queue interface | `/queue` |
-| `sqlfs2` | SQLite-backed structured data filesystem | `/sqlfs2` |
-| `proxyfs` | Proxy to other paths | - |
-| `streamfs` | Streaming data interface | - |
-| `heartbeatfs` | Health and lease heartbeat interface | - |
+# 任务队列
+import json
+client.write("/queue/tasks/enqueue", json.dumps({"type": "review"}))
+```
 
-### Cloud Storage Plugins
-| Plugin | Description | Feature Flag |
-|--------|-------------|--------------|
-| `s3fs` | Amazon S3 | `s3fs` |
-| `azureblobfs` | Azure Blob Storage | `azureblobfs` |
-| `gcsfs` | Google Cloud Storage | `gcsfs` |
-| `aliyunossfs` | Aliyun OSS | `aliyunossfs` |
-| `tencentcosfs` | Tencent COS | `tencentcosfs` |
-| `huaweiobsfs` | Huawei OBS | `huaweiobsfs` |
-| `miniofs` | MinIO | `miniofs` |
+## 核心组件
 
-### OpenDAL Plugins (EVIF 2.1)
-Based on OpenDAL 0.50.x for unified storage interface. See `evif-plugins/src/opendal.rs` for available services.
+| Crate | 描述 |
+|-------|------|
+| **evif-core** | 核心抽象，插件系统，Mount Table，Handle 管理 |
+| **evif-rest** | HTTP/JSON REST API 服务器 |
+| **evif-cli** | 命令行工具 (60+ 命令) |
+| **evif-plugins** | 30+ 存储插件 |
+| **evif-mem** | 记忆平台，向量搜索 |
+| **evif-mcp** | MCP (Model Context Protocol) 服务器 |
+| **evif-fuse** | FUSE 文件系统集成 |
+| **evif-auth** | 认证和授权 |
+| **evif-metrics** | Prometheus 指标 |
 
-### Experimental Plugins
-| Plugin | Description | Feature Flag |
-|--------|-------------|--------------|
-| `httpfs` | HTTP-based filesystem | - |
-| `devfs` | Device and pseudo-file examples | - |
-| `encryptedfs` | Encrypted filesystem layer | - |
-| `tieredfs` | Tiered storage (hot/warm/cold) | - |
-| `handlefs` | File handle management | - |
-| `gptfs` | GPT/AI model interface | `gptfs` |
-| `vectorfs` | Vector database interface | `vectorfs` |
-| `streamrotatefs` | Stream rotation | `streamrotatefs` |
+## 插件目录
 
-## REST API
+### Agent 原语
 
-### Base URL
-Default: `http://localhost:8081` (configurable via `EVIF_PORT`)
+| 插件 | 路径 | 功能 |
+|------|------|------|
+| `memfs` | `/mem` | 内存文件系统 |
+| `contextfs` | `/context` | 分层上下文 (L0/L1/L2) |
+| `skillfs` | `/skills` | SKILL.md 技能 |
+| `pipefs` | `/pipes` | 多 Agent 协同 |
+| `queuefs` | `/queue` | 任务队列 |
+| `vectorfs` | `/memories` | 向量内存 |
 
-### File Operations
+### 云存储
+
+| 插件 | 服务 |
+|------|------|
+| `s3fs` | Amazon S3 |
+| `gcsfs` | Google Cloud Storage |
+| `azureblobfs` | Azure Blob |
+| `aliyunossfs` | 阿里云 OSS |
+| `tencentcosfs` | 腾讯 COS |
+| `huaweiobsfs` | 华为 OBS |
+| `miniofs` | MinIO |
+
+### 数据库
+
+| 插件 | 类型 |
+|------|------|
+| `sqlfs2` | SQLite |
+| `postgresqlfs` | PostgreSQL |
+
+## SDK
+
+### Python
 
 ```bash
-# Read file (returns content + base64 data)
-GET /api/v1/files?path=/mem/hello.txt&offset=0&size=0
-
-# Write file
-PUT /api/v1/files?path=/mem/hello.txt
-Body: { "content": "base64-encoded-data", "encoding": "base64" }
-
-# Delete file
-DELETE /api/v1/files?path=/mem/hello.txt
-
-# List directory
-GET /api/v1/directories?path=/mem
-
-# Create directory
-POST /api/v1/directories
-Body: { "path": "/mem/newdir", "parents": true }
-
-# File metadata
-GET /api/v1/stat?path=/mem/hello.txt
+pip install -e crates/evif-python
 ```
 
-### Mount Management
+### TypeScript
 
 ```bash
-# List mounts
-GET /api/v1/mounts
-
-# Mount plugin
-POST /api/v1/mount
-Body: { "plugin": "localfs", "path": "/local", "config": {"root": "/tmp"} }
-
-# Unmount
-POST /api/v1/unmount
-Body: { "path": "/local" }
+npm install @evif/sdk
 ```
 
-### Batch Operations
+### Go
 
 ```bash
-# Batch copy
-POST /api/v1/batch/copy
-Body: { "sources": ["/mem/a"], "destination": "/mem/dest", "concurrency": 4 }
-
-# Batch delete
-POST /api/v1/batch/delete
-Body: { "paths": ["/mem/a", "/mem/b"] }
-
-# Check progress
-GET /api/v1/batch/progress/:operation_id
+go get github.com/evif/evif-go
 ```
 
-### WebSocket
+### MCP Server (Claude Code)
 
 ```bash
-# Connect to WebSocket
-ws://localhost:8081/ws
+claude mcp add @evif/mcp-server
 ```
 
-For complete API documentation, see [docs/API.md](docs/API.md).
+## 配置
 
-## CLI Commands
+### 环境变量
 
-EVIF CLI provides 60+ commands:
+| 变量 | 默认值 | 描述 |
+|------|--------|------|
+| `EVIF_REST_PORT` | 8081 | REST 端口 |
+| `EVIF_REST_HOST` | 0.0.0.0 | 绑定地址 |
+| `EVIF_REST_AUTH_MODE` | api-key | 认证模式 |
+| `EVIF_API_KEY` | - | API 密钥 |
+| `EVIF_LOG_DIR` | logs | 日志目录 |
+| `EVIF_METRICS_ENABLED` | false | 启用 Prometheus |
 
-### File Operations
-- `ls`, `cat`, `write`, `mkdir`, `rm`, `mv`, `cp`, `stat`, `touch`, `tree`
-- `head`, `tail`, `grep`, `digest`, `wc`, `sort`, `uniq`, `cut`, `tr`, `base`
-
-### Mount Management
-- `mount`, `umount`, `list-mounts`, `mount-plugin`, `unmount-plugin`
-
-### Advanced Operations
-- `upload`, `download`, `find`, `locate`, `diff`, `du`, `file`
-- `ln`, `readlink`, `realpath`, `basename`, `dirname`, `truncate`, `split`
-- `rev`, `tac`
-
-### REPL Mode
-```bash
-evif repl
-```
-
-### Environment
-- `env`, `export`, `unset`, `pwd`, `cd`, `echo`, `date`, `sleep`, `true`, `false`
-
-## Plugin Development
-
-### Creating a Basic Plugin
-
-```rust
-use evif_core::{EvifPlugin, FileInfo, WriteFlags, EvifResult};
-use async_trait::async_trait;
-
-pub struct MyPlugin {
-    // Plugin state
-}
-
-#[async_trait]
-impl EvifPlugin for MyPlugin {
-    async fn create(&self, path: &str, mode: u32) -> EvifResult<()> {
-        // Implementation
-        Ok(())
-    }
-
-    async fn read(&self, path: &str, offset: u64, size: u64) -> EvifResult<Vec<u8>> {
-        // Implementation
-        Ok(Vec::new())
-    }
-
-    async fn write(&self, path: &str, data: Vec<u8>, offset: i64, flags: WriteFlags) -> EvifResult<i32> {
-        // Implementation
-        Ok(data.len() as i32)
-    }
-
-    // Implement other required methods...
-}
-```
-
-### Creating a Dynamic Plugin
-
-```rust
-use evif_core::EvifPlugin;
-
-#[no_mangle]
-pub static evif_plugin_abi_version: u32 = 1;
-
-#[no_mangle]
-pub extern "C" fn evif_plugin_info() -> *const u8 {
-    // Return plugin info JSON
-}
-
-#[no_mangle]
-pub extern "C" fn evif_plugin_create() -> *mut std::os::raw::c_void {
-    // Create and return plugin instance
-}
-```
-
-For detailed plugin development guide, see [docs/plugin-development.md](docs/plugin-development.md).
-
-## FUSE Integration
-
-Mount EVIF as a userspace filesystem:
-
-```bash
-# Mount (read-only by default)
-evif mount /mnt/evif
-
-# Mount with write support
-evif mount /mnt/evif --write
-
-# Custom cache settings
-evif mount /mnt/evif --write --cache-size 5000 --cache-timeout 120
-
-# Unmount
-evif umount /mnt/evif
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EVIF_PORT` / `EVIF_REST_PORT` | 8081 | REST API server port |
-| `EVIF_HOST` / `EVIF_REST_HOST` | 0.0.0.0 | Server bind address |
-| `EVIF_LOG_LEVEL` | info | Logging level |
-| `EVIF_CACHE_SIZE` | 10000 | Inode cache size |
-| `EVIF_CACHE_TIMEOUT` | 60 | Cache timeout (seconds) |
-| `EVIF_CORS_ENABLED` | true | Enable CORS |
-| `EVIF_CORS_ORIGINS` | (any) | CORS allowed origins (comma-separated) |
-| `EVIF_REST_PRODUCTION_MODE` | false | Enable production mode (strict config checks) |
-
-### CLI Flags
-
-```bash
-# REST API server
-evif-rest --help
-evif-rest --port 3000       # or -p 3000
-evif-rest --host 127.0.0.1
-evif-rest --production
-
-# MCP server
-evif-mcp --help
-evif-mcp --url http://localhost:3000
-evif-mcp --server-name evif-mcp
-```
-
-### Configuration File
-
-EVIF supports configuration via `evif.toml`:
+### 配置文件
 
 ```toml
+# evif.toml
 [server]
 port = 8081
 host = "0.0.0.0"
 
-[cache]
-size = 10000
-timeout = 60
+[auth]
+mode = "capability"
 
-[logging]
-level = "info"
+[[mounts]]
+path = "/mem"
+plugin = "memfs"
+
+[[mounts]]
+path = "/context"
+plugin = "contextfs"
 ```
 
-## Project Structure
+## 项目结构
 
 ```
 evif/
 ├── crates/
-│   ├── evif-core/        # Core abstractions and plugin system
-│   ├── evif-rest/        # REST API server
-│   ├── evif-cli/         # CLI tool
-│   ├── evif-client/      # Client SDK
-│   ├── evif-fuse/        # FUSE integration
-│   ├── evif-auth/        # Authentication layer
-│   ├── evif-macros/      # Procedural macros
-│   ├── evif-metrics/     # Metrics collection
-│   ├── evif-mem/         # Optional memory subsystem
-│   └── evif-plugins/     # Plugin implementations and catalog
-├── docs/                  # Documentation
-├── benches/               # Benchmarks
-├── tests/                 # Integration tests
-├── examples/              # Example code
-└── skills/                # Cangjie skills system
+│   ├── evif-core/         # 核心引擎 (26 模块)
+│   ├── evif-plugins/      # 40+ 插件实现
+│   ├── evif-rest/         # REST API 服务器
+│   ├── evif-cli/          # CLI 工具
+│   ├── evif-python/       # Python SDK
+│   ├── evif-sdk-ts/        # TypeScript SDK
+│   ├── evif-sdk-go/        # Go SDK
+│   ├── evif-mcp/          # MCP 服务器
+│   ├── evif-mem/          # 记忆平台
+│   ├── evif-fuse/         # FUSE 集成
+│   └── evif-auth/         # 认证
+├── tests/                  # 测试
+├── demos/                  # 演示
+├── examples/               # 示例
+└── docs/                   # 文档 (含 zh/)
 ```
 
-## Performance
+## 性能
 
-EVIF uses a Radix tree-based mount table for O(k) path lookup, where k is the path length.
+- **O(k) 路径解析**: Radix Tree Mount Table
+- **Handle 租约**: 资源管理
+- **多级缓存**: inode + 目录
+- **批量操作**: 并发复制/删除
+- **流式处理**: 大文件
 
-### Key Optimizations
-- Inode caching for fast attribute lookups
-- Directory caching for readdir operations
-- Streaming for large file operations
-- Concurrent batch operations
-- Handle management for efficient file access
-
-## Roadmap
-
-### Completed ✅
-- [x] Core plugin system with 30+ plugins
-- [x] REST API with full CRUD operations
-- [x] CLI tool with 60+ commands
-- [x] FUSE integration (Linux/macOS)
-- [x] WebSocket support
-- [x] Batch operations (copy, delete)
-- [x] File monitoring
-- [x] ACL support
-- [x] Dynamic plugin loading
-- [x] Metrics collection (Prometheus)
-- [x] WASM plugin support
-
-### In Progress 🚧
-- [ ] Two-layer caching system
-- [ ] Configurable mount system
-- [ ] Vector retrieval optimization
-- [ ] Enhanced MCP integration
-
-## Testing
+## 测试
 
 ```bash
-# Run all tests
 cargo test --workspace
-
-# Run specific crate tests
-cargo test -p evif-plugins core_supported_plugins
+cargo test -p evif-core
 cargo test -p evif-rest
-
-# Run with all features
-cargo test --workspace --all-features
 ```
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## License
 
-Licensed under either of:
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
-
-## Acknowledgments
-
-- Inspired by [Plan 9 from Bell Labs](https://9p.io/) and its "Everything Is a File" philosophy
-- Inspired by [AGFS](https://github.com/c4pt0r/agfs) - Agent File System by Dongxu Huang (PingCAP co-founder)
-- Built with [Rust](https://www.rust-lang.org/)
-- Uses [OpenDAL](https://github.com/apache/opendal) for unified storage access
+Apache 2.0 或 MIT
 
 ---
 
-**Documentation**: [English](docs/README.md) | [中文](docs/zh/README.md) | **API Reference**: [docs/API.md](docs/API.md) | **Getting Started**: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
+**Docs**: [English](docs/README.md) | [中文](docs/zh/README.md)

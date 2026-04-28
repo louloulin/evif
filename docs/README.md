@@ -246,11 +246,12 @@ evif_pipe_send(name, data)
 
 ## Related Documents
 
-- [Getting Started](GETTING_STARTED.md)
-- [CLI Reference](cli-mode.md)
-- [MCP Server Setup](mcp-server.md)
-- [Metrics Guide](metrics.md)
-- [Production Deployment](production-deployment.md)
+- [Getting Started](GETTING_STARTED.md) - Quick start guide
+- [CLI Reference](cli-mode.md) - CLI usage
+- [MCP Server](mcp-server.md) - MCP Server configuration
+- [Metrics](metrics.md) - Prometheus metrics
+- [Plugin Development](plugin-development.md) - Plugin authoring
+- [FUSE](fuse.md) - FUSE filesystem
 
 ## Project Info
 

@@ -11,7 +11,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::{OnceCell, RwLock};
 
-use crate::MemFsPlugin;
+use crate::{skill_runtime, MemFsPlugin};
+pub use skill_runtime::{SkillExecutor, SkillExecutionContext, SkillExecutionResult};
 
 // ---------------------------------------------------------------------------
 // SKILL.md validation types (Phase 9.1 SkillFS – inline agent-skills compat)
@@ -246,6 +247,8 @@ pub struct SkillFsPlugin {
     inner: MemFsPlugin,
     initialized: OnceCell<()>,
     definitions: RwLock<HashMap<String, SkillDefinition>>,
+    executor: SkillExecutor,
+    execution_context: SkillExecutionContext,
 }
 
 impl SkillFsPlugin {
@@ -254,7 +257,20 @@ impl SkillFsPlugin {
             inner: MemFsPlugin::new(),
             initialized: OnceCell::const_new(),
             definitions: RwLock::new(HashMap::new()),
+            executor: SkillExecutor::Native,
+            execution_context: SkillExecutionContext::new(),
         }
+    }
+
+    pub fn with_executor(mut self, executor: SkillExecutor) -> Self {
+        self.executor = executor;
+        self
+    }
+
+    /// Execute a skill using the configured executor.
+    /// Returns the raw JSON string result from the skill runtime.
+    pub async fn execute_skill_raw(&self, name: &str, input: &str) -> Result<String, skill_runtime::SkillRuntimeError> {
+        skill_runtime::execute_skill(name, input, self.executor, &self.execution_context).await
     }
 
     pub async fn match_skill(&self, query: &str) -> EvifResult<Option<String>> {
@@ -618,22 +634,6 @@ Identify safe refactor opportunities and describe the intended structural change
             .filter(|segment| !segment.is_empty())
             .collect()
     }
-
-    async fn render_output(&self, skill_name: &str, input: &[u8]) -> EvifResult<String> {
-        let definitions = self.definitions.read().await;
-        let definition = definitions
-            .get(skill_name)
-            .ok_or_else(|| EvifError::NotFound(skill_name.to_string()))?;
-
-        let input_text = String::from_utf8_lossy(input);
-        Ok(format!(
-            "skill: {}\nstatus: completed\nmode: native-simulated\ndescription: {}\ninput: {}\nbody: {}\n",
-            definition.name,
-            definition.description,
-            input_text.trim(),
-            definition.body.lines().next().unwrap_or_default()
-        ))
-    }
 }
 
 impl Default for SkillFsPlugin {
@@ -700,9 +700,33 @@ impl EvifPlugin for SkillFsPlugin {
             let skill_name = parts[0];
             self.ensure_skill_channels(skill_name).await?;
             let bytes = self.inner.write(path, data.clone(), offset, flags).await?;
-            let output = self.render_output(skill_name, &data).await?;
-            self.overwrite_file(&format!("/{}/output", skill_name), output.as_bytes())
-                .await?;
+
+            // Execute the skill using the configured executor
+            let input_str = String::from_utf8_lossy(&data).to_string();
+            match self.execute_skill_raw(skill_name, &input_str).await {
+                Ok(result_json) => {
+                    // execute_skill_raw returns JSON string directly
+                    self.overwrite_file(
+                        &format!("/{}/output", skill_name),
+                        result_json.as_bytes(),
+                    )
+                    .await?;
+                }
+                Err(e) => {
+                    // On error, store error in output
+                    let error_output = serde_json::json!({
+                        "skill": skill_name,
+                        "status": "error",
+                        "error": e.to_string(),
+                        "mode": self.executor.to_string()
+                    });
+                    self.overwrite_file(
+                        &format!("/{}/output", skill_name),
+                        error_output.to_string().as_bytes(),
+                    )
+                    .await?;
+                }
+            }
             return Ok(bytes);
         }
 

@@ -18,15 +18,31 @@ class FileInfo(BaseModel):
 
     @classmethod
     def from_dict(cls, data: dict) -> "FileInfo":
-        """Create FileInfo from API response."""
+        """Create FileInfo from API response.
+
+        Handles both list (ls) and stat response formats.
+        ls: {name, path, size, is_dir, modified, created}
+        stat: {path, size, is_dir, modified, created}
+        """
+        import datetime
+        name = data.get("name", "")
+        if not name:
+            name = data.get("path", "").rstrip("/").split("/")[-1]
+        mtime_val = data.get("mtime", 0)
+        if not mtime_val and data.get("modified"):
+            try:
+                dt = datetime.datetime.fromisoformat(data["modified"])
+                mtime_val = dt.timestamp()
+            except (ValueError, TypeError):
+                mtime_val = 0
         return cls(
-            name=data.get("name", ""),
+            name=name,
             path=data.get("path", ""),
             size=data.get("size", 0),
-            mode=data.get("mode", 0),
-            mtime=data.get("mtime", 0),
+            mode=data.get("mode", 0o644),
+            mtime=mtime_val,
             is_dir=data.get("is_dir", False),
-            is_file=not data.get("is_dir", False),
+            is_file=not data.get("is_dir", True),
         )
 
 

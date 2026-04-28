@@ -134,12 +134,15 @@ class MemoryApi:
         Returns:
             List of memory entries with metadata
         """
-        # Try REST API first
+        # Try REST API first - note: API returns array directly, not wrapped object
         try:
             params = {"limit": limit}
             if modality:
                 params["modality"] = modality
             result = await self._request("GET", "/api/v1/memories", params=params)
+            # API returns array directly, not {"memories": [...]}
+            if isinstance(result, list):
+                return result[:limit]
             return result.get("memories", [])
         except Exception:
             pass

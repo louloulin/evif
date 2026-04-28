@@ -1,37 +1,98 @@
 # EVIF Claude Code Template
 
-## Mission
+> EVIF (Everything Is a File) provides persistent context, reusable skills, and multi-agent coordination for AI agents.
 
-Treat EVIF as a context filesystem for AI agents. Prefer file primitives first:
+## EVIF Skills
 
-1. Read `/context/L0/current` for the active task.
-2. Review `/context/L1/decisions.md` before making changes.
-3. Search `/context/L2/` for architecture or pattern guidance.
-4. Discover reusable workflows under `/skills/`.
-5. Coordinate with other agents through `/pipes/` when collaboration is needed.
+Claude Code can discover and use these EVIF skills:
+
+| Skill | Purpose | Trigger |
+|-------|---------|---------|
+| `evif-context` | Persistent memory across sessions | "read context", "remember this" |
+| `evif-workflows` | Reusable task workflows | "run a skill", "code review" |
+| `evif-pipes` | Multi-agent coordination | "send to another agent", "task queue" |
+| `evif-memory` | Vector memory search | "search memories", "what do you know" |
+| `evif-quickref` | Command quick reference | "evif help", "how do I use" |
+
+Skills are stored in `.claude/skills/*.SKILL.md`.
+
+## Context Layers
+
+EVIF maintains three layers of context:
+
+```
+/context/
+├── L0/current       # Current task (ephemeral)
+├── L1/decisions.md # Session decisions (durable)
+└── L2/             # Project knowledge (persistent)
+    ├── architecture.md
+    └── patterns.md
+```
 
 ## Workflow
 
-- Keep new task state in `/context/L0/current`.
-- Record durable decisions in `/context/L1/decisions.md`.
-- Promote reusable knowledge into `/context/L2/architecture.md` or `/context/L2/patterns.md`.
-- Prefer `ls`, `cat`, `grep`, and `write` over bespoke tools when EVIF exposes the same surface.
+1. **Start of session**: Read context layers
+   ```bash
+   cat /context/L0/current           # What was I doing?
+   cat /context/L1/decisions.md      # What decisions?
+   ls /context/L2/                   # Project knowledge?
+   ```
+
+2. **During work**: Update context
+   ```bash
+   echo "Implementing feature X" > /context/L0/current
+   echo "- $(date): Chose approach Y" >> /context/L1/decisions.md
+   ```
+
+3. **Skills**: Use built-in workflows
+   ```bash
+   evif ls /skills                   # Discover skills
+   evif cat /skills/code-review/SKILL.md  # Read skill
+   ```
+
+4. **Coordination**: Multi-agent via pipes
+   ```bash
+   evif mkdir /pipes/my-task
+   evif write -c "task description" /pipes/my-task/input
+   ```
+
+## CLI Reference
+
+```bash
+evif health              # Check server status
+evif ls <path>           # List directory
+evif cat <path>          # Read file
+evif write -c <content> <path>  # Write file
+evif mkdir <path>        # Create directory
+evif rm <path>           # Remove
+```
 
 ## Example Session
 
 ```bash
+# 1. Check where I left off
 cat /context/L0/current
 cat /context/L1/decisions.md
-grep "mount" /context/L2/patterns.md
-ls /skills
-cat /skills/code-review/SKILL.md
-mkdir /pipes/task-001
-echo "review changed files" > /pipes/task-001/input
+
+# 2. Review project patterns
+cat /context/L2/architecture.md
+
+# 3. Use a skill for code review
+evif write -c "Review src/auth/" /skills/code-review/input
+sleep 1 && cat /skills/code-review/output
+
+# 4. Coordinate with another agent
+evif mkdir /pipes/review-task
+evif write -c "Review PR #123" /pipes/review-task/input
+
+# 5. Update context when done
+echo "Completed code review for PR #123" > /context/L0/current
 ```
 
 ## Guardrails
 
-- Keep `/context/L0` short and task-focused.
-- Use `/context/L1` for session notes, not long-term docs.
-- Store stable project knowledge under `/context/L2`.
-- Use `/pipes/broadcast` only for information that should fan out to multiple subscribers.
+- **L0**: One line, current task only
+- **L1**: Session notes, decisions with reasons
+- **L2**: Stable docs (architecture, patterns, runbooks)
+- **Skills**: Read SKILL.md before executing
+- **Pipes**: Use descriptive names (`/pipes/review-pr-123` not `/pipes/task1`)

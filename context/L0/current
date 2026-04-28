@@ -1,1 +1,7 @@
-当前目标：基于真实仓库对比完成 EVIF 对标 AGFS 的全量差距分析并沉淀到 `mem18.md`。本轮结论是：EVIF 在核心插件面与接入面（REST/CLI/FUSE/MCP/Web/UI）已基本追平甚至局部超过 AGFS，真正剩余差距主要落在专用 shell/脚本运行时、多语言 SDK、agent workflow demos、安装分发与插件产品化可信度；这不改变 `mem17.md` 对生产化基线约 73% 的判断。若继续对标 AGFS，应优先补 shell/sdk/demo/quick-start；若继续对标生产平台，则仍优先 N4 选主/协调与安全治理。
+当前目标：执行 mem19.md 核心功能实现计划。优先级：Phase A（Python SDK）> Phase B（Agent Workflow Demo）> Phase C（REPL History Fix）> Phase D（测试环境诊断）。目标是在 1-2 周内让 EVIF 具备 Python SDK 和可演示的 agent workflow demo，形成"5 分钟上手"的外部可用产品闭环。
+
+mem18 判断：EVIF 在核心插件面与接入面已基本追平甚至局部超过 AGFS，真实剩余差距已转为专用 shell/脚本运行时、多语言 SDK、agent workflow demos、安装分发与插件产品化可信度。
+
+mem17 判断：综合生产就绪度约 73%，核心剩余风险集中在 N4 选主/协调、JWT/OAuth、trusted proxy 与供应链安全。暂不作为本轮优先项。
+
+本轮额外发现：system-configuration v0.5.1 在 macOS 上触发 panic，导致 ~200 个测试失败（非代码 bug，是第三方依赖兼容问题）；clippy 全 workspace 通过；核心包测试全部正常。

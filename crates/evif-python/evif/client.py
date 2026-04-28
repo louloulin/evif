@@ -71,6 +71,7 @@ class EvifClient(ContextApi, SkillApi, MemoryApi, QueueApi):
                 base_url=self.base_url,
                 headers=headers,
                 timeout=self.timeout,
+                trust_env=False,  # Disable proxy detection for localhost connections
             )
 
     async def close(self):
@@ -247,8 +248,7 @@ class EvifClient(ContextApi, SkillApi, MemoryApi, QueueApi):
         Returns:
             FileInfo object
         """
-        params = {"path": path}
-        data = await self._request("POST", "/api/v1/fs/stat", json=params)
+        data = await self._request("GET", "/api/v1/stat", params={"path": path})
         return FileInfo.from_dict(data)
 
     async def mv(
@@ -266,7 +266,7 @@ class EvifClient(ContextApi, SkillApi, MemoryApi, QueueApi):
             True if successful
         """
         params = {"old_path": old_path, "new_path": new_path}
-        await self._request("POST", "/api/v1/fs/rename", json=params)
+        await self._request("POST", "/api/v1/rename", json=params)
         return True
 
     async def cp(
@@ -380,7 +380,7 @@ class EvifClient(ContextApi, SkillApi, MemoryApi, QueueApi):
             "pattern": pattern,
             "recursive": recursive,
         }
-        data = await self._request("POST", "/api/v1/fs/grep", json=params)
+        data = await self._request("POST", "/api/v1/grep", json=params)
         return data.get("matches", [])
 
     # ===== Handle Operations =====
