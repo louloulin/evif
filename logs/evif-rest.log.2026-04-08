@@ -1,2 +1,0 @@
-{"timestamp":"2026-04-08T15:13:23.176611Z","level":"WARN","fields":{"message":"missing credentials for POST /api/v1/memories"},"threadName":"tokio-runtime-worker","threadId":"ThreadId(2)"}
-{"timestamp":"2026-04-08T15:13:51.329370Z","level":"WARN","fields":{"message":"missing credentials for POST /api/v1/memories"},"threadName":"tokio-runtime-worker","threadId":"ThreadId(3)"}
