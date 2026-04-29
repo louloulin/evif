@@ -319,30 +319,30 @@ impl OpendalPlugin {
 
 //             OpendalService::Webdav => {
 //                 use opendal::services::Webdav;
-// 
+//
 //                 // 获取 endpoint (必需)
 //                 let endpoint = config.endpoint.as_ref().ok_or_else(|| {
 //                     EvifError::Other("Webdav service requires 'endpoint' in config".to_string())
 //                 })?;
-// 
+//
 //                 // 构建 Webdav builder
 //                 let builder = Webdav::default()
 //                     .endpoint(endpoint);
-// 
+//
 //                 // 添加访问密钥（如果需要认证）
 //                 let builder = if let (Some(access_key), Some(secret_key)) = (&config.access_key, &config.secret_key) {
 //                     builder.username(access_key).password(secret_key)
 //                 } else {
 //                     builder
 //                 };
-// 
+//
 //                 // 添加根路径
 //                 let builder = if let Some(root) = &config.root {
 //                     builder.root(root)
 //                 } else {
 //                     builder
 //                 };
-// 
+//
 //                 Ok(Operator::new(builder).map_err(|e| {
 //                     EvifError::Other(format!("Failed to create Webdav operator: {}", e))
 //                 })?.finish())
@@ -350,30 +350,30 @@ impl OpendalPlugin {
 //
 //             OpendalService::Ftp => {
 //                 use opendal::services::Ftp;
-// 
+//
 //                 // 获取 endpoint (必需)
 //                 let endpoint = config.endpoint.as_ref().ok_or_else(|| {
 //                     EvifError::Other("Ftp service requires 'endpoint' in config".to_string())
 //                 })?;
-// 
+//
 //                 // 构建 Ftp builder
 //                 let builder = Ftp::default()
 //                     .endpoint(endpoint);
-// 
+//
 //                 // 添加访问密钥（如果需要认证）
 //                 let builder = if let (Some(access_key), Some(secret_key)) = (&config.access_key, &config.secret_key) {
 //                     builder.username(access_key).password(secret_key)
 //                 } else {
 //                     builder
 //                 };
-// 
+//
 //                 // 添加根路径
 //                 let builder = if let Some(root) = &config.root {
 //                     builder.root(root)
 //                 } else {
 //                     builder
 //                 };
-// 
+//
 //                 Ok(Operator::new(builder).map_err(|e| {
 //                     EvifError::Other(format!("Failed to create Ftp operator: {}", e))
 //                 })?.finish())

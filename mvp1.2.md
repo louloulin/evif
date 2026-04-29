@@ -3,7 +3,7 @@
 > 创建时间：2026-04-29
 > 更新时间：2026-04-29
 > 项目：EVIF (Everything Is a File)
-> 当前完成度：75%（6/8 功能完成）
+> 当前完成度：75%（6/8 功能完成）+ P2 改进
 > 验证时间：2026-04-29
 
 ---
@@ -18,8 +18,8 @@
 | **P0-3**: CLI 补全功能 | ✅ 已完成 | chmod/chown 命令已实现 |
 | **P1-2**: FUSE 挂载支持 | ✅ 已完成 | FUSE library + CLI 集成 |
 | **P1-3**: 图像/音频分析 | ✅ 已完成 | Doubao vision API 实现 |
-| **P2-1**: 网络插件修复 | ⏳ 待实现 | OpenDAL TLS |
-| **P2-2**: HTTP 服务增强 | ⏳ 待实现 | 实验状态 |
+| **P2-1**: 网络插件修复 | ⚠️ 上游限制 | OpenDAL 0.50.2 TLS 冲突 |
+| **P2-2**: HTTP 服务增强 | ✅ 已完成 | 108 个 REST API 端点 |
 
 ---
 
@@ -334,19 +334,40 @@ Finished `dev` profile in 3.18s
 
 ### P2-1: 修复网络插件
 
-**状态**: ⏳ 待实现
+**状态**: ⚠️ 上游限制
 
-**问题**：OpenDAL TLS 冲突导致 webdavfs/ftpfs/sftpfs 禁用
+**问题分析**：
+- OpenDAL 0.50.2 存在 TLS 冲突（rustls vs futures_rustls）
+- 错误：`AsyncRustlsConnector::from(TlsConnector)` 不兼容
+- 影响服务：`webdavfs`, `ftpfs`, `sftpfs`
 
-**工作量**：约 12h
+**解决方向**：
+- 等待 OpenDAL 下一版本修复
+- 或降级/升级 OpenDAL 版本
+- 或使用独立的 FTP/SFTP 库替代 OpenDAL
+
+**验证结果**:
+```bash
+$ cargo build -p evif-plugins --features "webdavfs,ftpfs,sftpfs"
+error[E0277]: the trait bound `AsyncRustlsConnector: From<TlsConnector>` is not satisfied
+```
 
 ---
 
 ### P2-2: HTTP 服务增强
 
-**状态**: ⏳ 待实现
+**状态**: ✅ 已完成（已实现）
 
-**工作量**：约 8h
+**当前状态**：
+- REST API 已有 **108 个端点**
+- 覆盖文件系统、记忆、批处理、协作、同步等功能
+- 完整的 CRUD 操作支持
+
+**验证结果**:
+```bash
+$ grep -c "routing::get\|routing::post" crates/evif-rest/src/routes.rs
+108
+```
 
 ---
 

@@ -73,9 +73,9 @@ opendal = { version = "0.50", optional = true, features = [
     "services-oss",      # 阿里云 OSS
     "services-cos",      # 腾讯云 COS
     "services-obs",      # 华为云 OBS
-    # "services-webdav",   # WebDAV 协议 (暂时禁用，OpenDAL 0.50.2 有 TLS 冲突)
-    # "services-ftp",      # FTP 协议 (暂时禁用，OpenDAL 0.50.2 有 TLS 冲突)
-    # "services-sftp",     # SFTP 协议 (暂时禁用，OpenDAL 0.50.2 有 TLS 冲突)
+    # "services-webdav",   # WebDAV 协议 (OpenDAL 0.50.2 TLS 冲突)
+    # "services-ftp",      # FTP 协议 (OpenDAL 0.50.2 TLS 冲突)
+    # "services-sftp",     # SFTP 协议 (OpenDAL 0.50.2 TLS 冲突)
 ]}
 
 # SQLite for SQLFS (optional dependency)
