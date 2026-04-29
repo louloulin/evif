@@ -31,6 +31,7 @@ pub mod proactive;
 pub mod security;
 pub mod storage;
 pub mod telemetry;
+pub mod token;
 pub mod vector;
 pub mod workflow;
 

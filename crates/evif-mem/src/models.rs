@@ -168,6 +168,10 @@ pub struct MemoryItem {
     pub last_reinforced_at: Option<DateTime<Utc>>,
     pub ref_id: Option<String>,
     pub category_id: Option<String>,
+    /// Tags for categorization and filtering
+    pub tags: Vec<String>,
+    /// References to other memory items (cross-references)
+    pub references: Vec<String>,
     // User and tenant for multi-tenant support
     pub user_id: Option<String>,
     pub tenant_id: Option<String>,
@@ -191,11 +195,39 @@ impl MemoryItem {
             last_reinforced_at: None,
             ref_id: None,
             category_id: None,
+            tags: Vec::new(),
+            references: Vec::new(),
             user_id: None,
             tenant_id: None,
             created_at: now,
             updated_at: now,
         }
+    }
+
+    /// Add a tag to this memory item
+    pub fn add_tag(&mut self, tag: impl Into<String>) {
+        let tag = tag.into();
+        if !self.tags.contains(&tag) {
+            self.tags.push(tag);
+        }
+    }
+
+    /// Remove a tag from this memory item
+    pub fn remove_tag(&mut self, tag: &str) {
+        self.tags.retain(|t| t != tag);
+    }
+
+    /// Add a reference to another memory item
+    pub fn add_reference(&mut self, ref_id: impl Into<String>) {
+        let ref_id = ref_id.into();
+        if !self.references.contains(&ref_id) {
+            self.references.push(ref_id);
+        }
+    }
+
+    /// Remove a reference
+    pub fn remove_reference(&mut self, ref_id: &str) {
+        self.references.retain(|r| r != ref_id);
     }
 
     /// Create a memory item with user context
@@ -314,7 +346,27 @@ pub struct MdFrontmatter {
 }
 
 impl MdFrontmatter {
-    pub fn from_memory_item(item: &MemoryItem, tags: Vec<String>, references: Vec<String>) -> Self {
+    /// Create frontmatter from memory item
+    /// Uses the item's tags and references if available
+    pub fn from_memory_item(item: &MemoryItem) -> Self {
+        Self {
+            id: item.id.clone(),
+            memory_type: item.memory_type.to_string(),
+            created: item.created_at.to_rfc3339(),
+            updated: item.updated_at.to_rfc3339(),
+            happened_at: item.happened_at.map(|dt| dt.to_rfc3339()),
+            tags: item.tags.clone(),
+            embedding_id: item.embedding_id.clone(),
+            category_id: item.category_id.clone(),
+            content_hash: item.content_hash.clone(),
+            reinforcement_count: item.reinforcement_count,
+            ref_id: item.ref_id.clone(),
+            references: item.references.clone(),
+        }
+    }
+
+    /// Create frontmatter with custom tags and references (for backward compatibility)
+    pub fn with_extras(item: &MemoryItem, tags: Vec<String>, references: Vec<String>) -> Self {
         Self {
             id: item.id.clone(),
             memory_type: item.memory_type.to_string(),

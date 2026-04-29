@@ -2720,6 +2720,7 @@ dependencies = [
 name = "evif-mem"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "ahash",
  "anyhow",
  "async-trait",
@@ -2734,6 +2735,7 @@ dependencies = [
  "opentelemetry 0.22.0",
  "opentelemetry-otlp",
  "opentelemetry_sdk 0.22.1",
+ "pbkdf2",
  "prometheus",
  "qdrant-client",
  "rand 0.8.5",

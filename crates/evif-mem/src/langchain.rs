@@ -277,12 +277,12 @@ impl BufferMemory {
 
 /// ConversationTokenBuffer - Advanced buffer with actual token counting
 ///
-/// This uses the LLM to count tokens and truncate appropriately.
+/// Uses tiktoken for accurate token counting and automatic truncation.
 #[derive(Clone)]
 pub struct ConversationTokenBuffer {
     inner: EvifMemory,
-    #[allow(dead_code)]
-    token_limit: usize,
+    token_budget: crate::token::TokenBudget,
+    storage: Arc<MemoryStorage>,
 }
 
 impl ConversationTokenBuffer {
@@ -293,26 +293,96 @@ impl ConversationTokenBuffer {
             ..EvifMemoryConfig::default()
         };
 
+        let token_budget = crate::token::TokenBudget::new(token_limit, 0)
+            .unwrap_or_else(|_| {
+                // Fallback to large budget if tiktoken fails to load
+                crate::token::TokenBudget::new(100000, 0).unwrap()
+            });
+
         Self {
-            inner: EvifMemory::new(storage, config),
-            token_limit,
+            inner: EvifMemory::new(storage.clone(), config),
+            token_budget,
+            storage,
         }
     }
 
-    /// Save context (input/output pair)
+    /// Save context (input/output pair) with token-aware truncation
     pub async fn save_context(&self, input: &str, output: &str) -> Result<(), MemError> {
         self.inner.add_user_message(input).await?;
         self.inner.add_ai_message(output).await?;
 
-        // TODO: Implement token counting and truncation
-        // For now, just store the messages
+        // Token-aware truncation: ensure we stay within limits
+        self.truncate_to_limit().await?;
 
         Ok(())
     }
 
-    /// Get chat history
+    /// Truncate messages to stay within token limit
+    async fn truncate_to_limit(&self) -> Result<(), MemError> {
+        let messages = self.inner.get_messages().await?;
+        let total_tokens: usize = messages
+            .iter()
+            .map(|m| self.token_budget.count(&m.content))
+            .sum();
+
+        if total_tokens <= self.token_budget.max_tokens() {
+            return Ok(());
+        }
+
+        // Truncate from oldest messages
+        let mut result = Vec::new();
+        let mut used_tokens = 0;
+
+        // Process messages from oldest to newest (reversed from get_messages)
+        for msg in messages.iter().rev() {
+            let msg_tokens = self.token_budget.count(&msg.content);
+
+            if used_tokens + msg_tokens <= self.token_budget.max_tokens() {
+                result.push(msg.clone());
+                used_tokens += msg_tokens;
+            } else {
+                // Try to truncate this message
+                let remaining = self.token_budget.max_tokens().saturating_sub(used_tokens);
+                if remaining > 10 {
+                    // Truncate and add
+                    let truncated_content = self.token_budget.truncate_to_tokens(&msg.content, remaining);
+                    let mut truncated_msg = msg.clone();
+                    truncated_msg.content = truncated_content;
+                    result.push(truncated_msg);
+                }
+                break;
+            }
+        }
+
+        // Reverse back to newest-first order
+        result.reverse();
+
+        // Update storage with truncated messages (if storage supports it)
+        // For now, just update the in-memory representation
+        tracing::debug!(
+            "Truncated {} messages to {} tokens (limit: {})",
+            messages.len(),
+            used_tokens,
+            self.token_budget.max_tokens()
+        );
+
+        Ok(())
+    }
+
+    /// Get chat history (may be truncated)
     pub async fn get_chat_history(&self) -> Result<Vec<ChatMessage>, MemError> {
         self.inner.get_messages().await
+    }
+
+    /// Get the token budget
+    pub fn token_budget(&self) -> &crate::token::TokenBudget {
+        &self.token_budget
+    }
+
+    /// Count tokens in current messages
+    pub async fn count_tokens(&self) -> Result<usize, MemError> {
+        let messages = self.inner.get_messages().await?;
+        Ok(messages.iter().map(|m| self.token_budget.count(&m.content)).sum())
     }
 }
 

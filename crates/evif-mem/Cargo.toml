@@ -30,6 +30,8 @@ hex = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
 regex-lite = "0.1"
 base64 = "0.22"
+# tiktoken requires network to download vocab files - use estimation fallback
+# tiktoken = "0.7"
 
 # Optional dependencies
 rusqlite = { version = "0.32", optional = true }
@@ -47,6 +49,8 @@ opentelemetry_sdk = { version = "0.22", optional = true }
 
 # Security dependencies
 rand = "0.8"
+aes-gcm = "0.10"
+pbkdf2 = "0.12"
 
 # EVIF core for plugin integration
 evif-core = { path = "../evif-core", optional = true }

@@ -4,6 +4,7 @@
 > 更新时间：2026-04-29
 > 项目：EVIF (Everything Is a File)
 > 当前完成度：~95%
+> 验证时间：2026-04-29
 
 ---
 
@@ -12,9 +13,9 @@
 | 项 | 状态 | 验证结果 |
 |--------|------|----------|
 | **P0-1**: 依赖漏洞 | ⚠️ 部分修复 | bytes/quinn-proto 已修复 |
-| **P0-2**: JWT 认证 | ✅ 已完成 | 6 个测试通过 |
+| **P0-2**: JWT 认证 | ✅ 已完成 | 9 个测试通过 |
 | **P0-3**: 认证覆盖 | ✅ 已完成 | 所有 /api/v1/* 受保护 |
-| **P0-4**: 系统指标 | ✅ 已完成 | 2 个测试通过 |
+| **P0-4**: 系统指标 | ✅ 已完成 | 3 个测试通过 |
 | **P1-1**: 跨插件重命名 | ✅ 已完成 | 3 个测试通过 |
 | **P1-2**: 插件热重载 | ✅ 已完成 | 13 个测试通过 |
 | **P1-3**: 挂载持久化 | ✅ 已完成 | build 成功 |
@@ -93,16 +94,18 @@ cargo audit --no-fetch
 
 **验证结果**:
 ```
-running 6 tests from evif-auth/src/auth.rs
-test test_jwt_generate_and_validate ... ok
-test test_jwt_with_wrong_secret ... ok
-test test_extract_jwt_from_bearer ... ok
+running 9 tests from evif-auth/src/auth.rs
 test test_extract_jwt_not_bearer ... ok
+test test_auth_check_open ... ok
 test test_auth_manager_with_jwt ... ok
 test test_auth_manager_grant ... ok
+test test_auth_check_strict ... ok
 test test_auth_manager_revoke ... ok
+test test_jwt_with_wrong_secret ... ok
+test test_extract_jwt_from_bearer ... ok
+test test_jwt_generate_and_validate ... ok
 
-6 passed, 0 failed
+9 passed, 0 failed
 ```
 
 **关键文件**:
@@ -192,11 +195,8 @@ impl SystemCollector {
 
 **验证结果**:
 ```
-running 2 tests from monitoring.rs
-test test_system_collector_cpu ... ok
-test test_system_collector_memory ... ok
-
-2 passed, 0 failed
+running 3 tests from monitoring.rs
+test result: ok. 3 passed, 0 failed
 ```
 
 **依赖**: `sysinfo = "0.30"` (在 `crates/evif-core/Cargo.toml`)
@@ -240,11 +240,7 @@ pub async fn rename(&self, old_path: &str, new_path: &str) -> EvifResult<()> {
 **验证结果**:
 ```
 running 3 tests from server.rs
-test test_server_plugin_registration ... ok
-test test_server_route ... ok
-test test_server_cross_plugin_rename ... ok
-
-3 passed, 0 failed
+test result: ok. 3 passed, 0 failed
 ```
 
 **关键文件**:
@@ -476,13 +472,22 @@ Week 4: 测试和部署
 
 ### MVP 1.1 完成条件
 
-- [x] JWT Bearer Token 认证工作 (✅ P0-2 完成)
-- [x] `/metrics` 返回真实系统指标 (✅ P0-4 完成)
+- [x] JWT Bearer Token 认证工作 (✅ P0-2 完成，9 测试通过)
+- [x] `/metrics` 返回真实系统指标 (✅ P0-4 完成，3 测试通过)
 - [x] 所有 API 端点认证覆盖 (✅ P0-3 完成)
 - [ ] `cargo audit` 无高危漏洞 (⚠️ P0-1 阻塞，需网络)
-- [ ] 跨插件重命名工作 (P1-1)
+- [x] 跨插件重命名工作 (✅ P1-1 完成，3 测试通过)
 - [ ] 单元测试覆盖率 > 80%
 - [ ] 集成测试全部通过
+
+### 验证记录 (2026-04-29)
+
+| 测试项 | 命令 | 结果 |
+|--------|------|------|
+| JWT 认证 | `cargo test -p evif-auth auth::tests` | ✅ 9 passed |
+| 系统指标 | `cargo test -p evif-core monitoring` | ✅ 3 passed |
+| 跨插件重命名 | `cargo test -p evif-core server::tests` | ✅ 3 passed |
+| HTTP 连接池 | `cargo build -p evif-mem` | ✅ build 成功 |
 
 ### 性能目标
 
@@ -497,14 +502,14 @@ Week 4: 测试和部署
 
 ## 相关文件
 
-| 文件 | 优先级 | 说明 |
+| 文件 | 优先级 | 状态 |
 |------|--------|------|
-| `crates/evif-auth/src/auth.rs` | P0-2 | 需添加 JWT 支持 |
-| `crates/evif-core/src/monitoring.rs` | P0-4 | 需集成 sysinfo |
-| `crates/evif-rest/src/handlers.rs` | P1-1 | 跨插件 rename |
-| `crates/evif-core/src/server.rs` | P1-1 | rename 实现 |
-| `crates/evif-plugins/src/` | P1-2 | 插件热重载 |
-| `crates/evif-mem/src/llm.rs` | P1-4 | HTTP 连接池 |
+| `crates/evif-auth/src/auth.rs` | P0-2 | ✅ 已完成 |
+| `crates/evif-core/src/monitoring.rs` | P0-4 | ✅ 已完成 |
+| `crates/evif-rest/src/handlers.rs` | P1-1 | ✅ 已完成 |
+| `crates/evif-core/src/server.rs` | P1-1 | ✅ 已完成 |
+| `crates/evif-plugins/src/` | P1-2 | ✅ 已完成 |
+| `crates/evif-mem/src/llm.rs` | P1-4 | ✅ 已完成 |
 
 ---
 
@@ -515,4 +520,5 @@ Week 4: 测试和部署
 | 1.0 | 2026-04-29 | 基础版本 |
 | 1.1 | 2026-04-29 | P0-2/3/4 完成 |
 | 1.2 | 2026-04-29 | P1-1/2/3/4 完成 |
-| 1.3 | TBD | P0-1 依赖漏洞修复（需网络访问） |
+| 1.3 | 2026-04-29 | 功能验证通过，文档更新 |
+| 1.4 | TBD | P0-1 依赖漏洞修复（需网络访问） |

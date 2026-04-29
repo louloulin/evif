@@ -146,11 +146,8 @@ impl MemPlugin {
 
     /// Convert memory item to MD file format
     fn item_to_md(&self, item: &MemoryItem) -> String {
-        let frontmatter = MdFrontmatter::from_memory_item(
-            item,
-            vec![], // TODO: tags
-            vec![], // TODO: references
-        );
+        // Use item's tags and references
+        let frontmatter = MdFrontmatter::from_memory_item(item);
 
         let yaml = serde_yaml::to_string(&frontmatter).unwrap_or_default();
         format!("---\n{}---\n\n{}", yaml, item.content)
@@ -177,6 +174,8 @@ impl MemPlugin {
                     item.reinforcement_count = frontmatter.reinforcement_count;
                     item.ref_id = frontmatter.ref_id;
                     item.category_id = frontmatter.category_id;
+                    item.tags = frontmatter.tags;
+                    item.references = frontmatter.references;
 
                     return Ok(item);
                 }
