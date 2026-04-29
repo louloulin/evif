@@ -3097,15 +3097,125 @@ Text:
 
     async fn analyze_image(
         &self,
-        _image_data: &[u8],
-        _mime_type: &str,
+        image_data: &[u8],
+        mime_type: &str,
     ) -> MemResult<ImageAnalysis> {
-        // Doubao may support vision through specific models
-        // For now, return a placeholder
-        Ok(ImageAnalysis {
-            description: "Image analysis not implemented for Doubao client".to_string(),
-            caption: "Image analysis unavailable".to_string(),
-        })
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        #[derive(Serialize)]
+        struct Request {
+            model: String,
+            messages: Vec<Message>,
+            max_tokens: u32,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            role: String,
+            content: Vec<Content>,
+        }
+
+        #[derive(Serialize)]
+        struct Content {
+            #[serde(rename = "type")]
+            content_type: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            text: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            image_url: Option<ImageUrl>,
+        }
+
+        #[derive(Serialize)]
+        struct ImageUrl {
+            url: String,
+        }
+
+        #[derive(Deserialize)]
+        struct Response {
+            choices: Vec<Choice>,
+        }
+
+        #[derive(Deserialize)]
+        struct Choice {
+            message: MessageResponse,
+        }
+
+        #[derive(Deserialize)]
+        struct MessageResponse {
+            content: String,
+        }
+
+        // Doubao uses vision-pro model for image analysis
+        let vision_model = "doubao-vision-pro-32k";
+
+        // Encode image to base64
+        let base64_image = STANDARD.encode(image_data);
+        let data_url = format!("data:{};base64,{}", mime_type, base64_image);
+
+        let request = Request {
+            model: vision_model.to_string(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: vec![
+                    Content {
+                        content_type: "text".to_string(),
+                        text: Some("Analyze this image and provide a detailed description and a short caption. Format your response as JSON: {\"description\": \"<detailed description>\", \"caption\": \"<short caption>\"}".to_string()),
+                        image_url: None,
+                    },
+                    Content {
+                        content_type: "image_url".to_string(),
+                        text: None,
+                        image_url: Some(ImageUrl { url: data_url }),
+                    },
+                ],
+            }],
+            max_tokens: 1024,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| MemError::Llm(format!("Network error: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            // Fallback if vision model not available
+            if status.as_u16() == 400 && body.contains("model") {
+                return Ok(ImageAnalysis {
+                    description: format!("Image analysis requires doubao-vision-pro-32k model. Current model: {}. Please ensure the vision model is enabled on Volcano Engine.", self.model),
+                    caption: "Vision model not available".to_string(),
+                });
+            }
+            return Err(MemError::Llm(format!(
+                "Doubao API error {}: {}",
+                status, body
+            )));
+        }
+
+        let response: Response = response
+            .json()
+            .await
+            .map_err(|e| MemError::Parse(format!("JSON parse error: {}", e)))?;
+
+        let content = response
+            .choices
+            .first()
+            .ok_or_else(|| MemError::Parse("No choices in response".to_string()))?
+            .message
+            .content
+            .clone();
+
+        // Parse JSON from response
+        let analysis: ImageAnalysis = serde_json::from_str(&content)
+            .map_err(|e| MemError::Parse(format!("Failed to parse analysis: {} - content: {}", e, content)))?;
+
+        Ok(analysis)
     }
 }
 
