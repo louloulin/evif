@@ -185,11 +185,11 @@ pub enum Commands {
         write: bool,
 
         /// Cache size (number of inodes)
-        #[arg(short, long, default_value = "10000")]
+        #[arg(long, default_value = "10000")]
         cache_size: usize,
 
         /// Cache timeout in seconds
-        #[arg(short, long, default_value = "60")]
+        #[arg(long, default_value = "60")]
         cache_timeout: u64,
     },
 
@@ -581,16 +581,17 @@ impl EvifCli {
                 cache_size,
                 cache_timeout,
             } => {
-                let config = Some(format!(
-                    "write={},cache_size={},cache_timeout={}",
-                    write, cache_size, cache_timeout
-                ));
                 command
-                    .mount("fuse".to_string(), mount_point.clone(), config)
+                    .fuse_mount(
+                        mount_point.clone(),
+                        *write,
+                        *cache_size,
+                        *cache_timeout,
+                    )
                     .await?;
             }
             Commands::Umount { mount_point } => {
-                command.unmount(mount_point.clone()).await?;
+                command.fuse_unmount(mount_point.clone()).await?;
             }
             Commands::ListMounts => {
                 command.mounts().await?;

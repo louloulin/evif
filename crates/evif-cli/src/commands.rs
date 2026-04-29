@@ -309,6 +309,90 @@ impl EvifCommand {
         Ok(())
     }
 
+    /// FUSE 挂载 EVIF 文件系统
+    ///
+    /// 注意: 需要 FUSE 支持 (Linux: fuse, macOS: macfuse)
+    pub async fn fuse_mount(
+        &self,
+        mount_point: String,
+        write: bool,
+        cache_size: usize,
+        cache_timeout: u64,
+    ) -> Result<()> {
+        use std::process::Command;
+
+        // 获取当前可执行文件路径
+        let exe_path = std::env::current_exe()
+            .map_err(|e| anyhow::anyhow!("Failed to get current executable: {}", e))?;
+        let exe_dir = exe_path.parent().ok_or_else(|| anyhow::anyhow!("Invalid executable path"))?;
+
+        // 尝试多个可能的 FUSE 二进制路径
+        let fuse_bin = if exe_dir.join("evif-fuse-mount").exists() {
+            exe_dir.join("evif-fuse-mount")
+        } else if exe_dir.join("..").join("evif-fuse-mount").exists() {
+            exe_dir.join("..").join("evif-fuse-mount")
+        } else {
+            // 默认使用 target/debug 下的二进制
+            std::path::PathBuf::from("target/debug/evif-fuse-mount")
+        };
+
+        if !fuse_bin.exists() {
+            return Err(anyhow::anyhow!(
+                "FUSE binary not found at {}. Please build with: cargo build --bin evif-fuse-mount",
+                fuse_bin.display()
+            ));
+        }
+
+        let mut cmd = Command::new(&fuse_bin);
+        cmd.arg(&mount_point);
+        if write {
+            cmd.arg("--readwrite");
+        } else {
+            cmd.arg("--readonly");
+        }
+        cmd.arg("--allow-other");
+        cmd.arg(format!("--cache-size={}", cache_size));
+        cmd.arg(format!("--cache-timeout={}", cache_timeout));
+
+        println!("Mounting EVIF FUSE filesystem at {}...", mount_point);
+
+        // 等待 FUSE 挂载完成（按 Ctrl+C 停止）
+        let status = cmd.spawn()?.wait()?;
+
+        if !status.success() {
+            return Err(anyhow::anyhow!("FUSE mount failed with status: {}", status));
+        }
+
+        Ok(())
+    }
+
+    /// 卸载 FUSE 文件系统
+    pub async fn fuse_unmount(&self, mount_point: String) -> Result<()> {
+        use std::process::Command;
+
+        println!("Unmounting {}...", mount_point);
+
+        // 尝试 fusermount (Linux) 或 umount (macOS)
+        let output = Command::new("umount")
+            .arg(&mount_point)
+            .output()
+            .or_else(|_| {
+                Command::new("fusermount")
+                    .arg("-u")
+                    .arg(&mount_point)
+                    .output()
+            })
+            .map_err(|e| anyhow::anyhow!("Failed to unmount: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!("Unmount failed: {}", stderr));
+        }
+
+        println!("Unmounted {}", mount_point);
+        Ok(())
+    }
+
     /// 上传文件到EVIF
     pub async fn upload(&self, local_path: String, remote_path: String) -> Result<()> {
         // 读取本地文件

@@ -3,7 +3,7 @@
 > 创建时间：2026-04-29
 > 更新时间：2026-04-29
 > 项目：EVIF (Everything Is a File)
-> 当前完成度：50%（4/8 功能完成）
+> 当前完成度：62.5%（5/8 功能完成）
 > 验证时间：2026-04-29
 
 ---
@@ -16,7 +16,7 @@
 | **P0-2**: Token 计数截断 | ✅ 已完成 | 10 个测试通过 |
 | **P1-1**: 插件元数据增强 | ✅ 已完成 | 7 个 langchain 测试通过 |
 | **P0-3**: CLI 补全功能 | ✅ 已完成 | chmod/chown 命令已实现 |
-| **P1-2**: FUSE 挂载支持 | ⏳ 待实现 | - |
+| **P1-2**: FUSE 挂载支持 | ✅ 已完成 | FUSE library + CLI 集成 |
 | **P1-3**: 图像/音频分析 | ⏳ 待实现 | 占位符 |
 | **P2-1**: 网络插件修复 | ⏳ 待实现 | OpenDAL TLS |
 | **P2-2**: HTTP 服务增强 | ⏳ 待实现 | 实验状态 |
@@ -257,9 +257,46 @@ Usage: evif chown [OPTIONS] <PATH> <OWNER>
 
 ### P1-2: FUSE 挂载支持
 
-**状态**: ⏳ 待实现
+**状态**: ✅ 已完成
 
-**工作量**：约 12h
+**实现** (`crates/evif-fuse/src/lib.rs`, `crates/evif-cli/src/commands.rs`):
+
+```rust
+// CLI FUSE 挂载命令
+Commands::Mount {
+    /// Mount point path
+    mount_point: String,
+    /// Allow write operations
+    #[arg(short, long)]
+    write: bool,
+    /// Cache size (number of inodes)
+    #[arg(long, default_value = "10000")]
+    cache_size: usize,
+    /// Cache timeout in seconds
+    #[arg(long, default_value = "60")]
+    cache_timeout: u64,
+}
+```
+
+**关键文件**:
+- `crates/evif-fuse/src/lib.rs` - FUSE 文件系统实现 (Filesystem trait)
+- `crates/evif-fuse/src/bin/evif-fuse-mount.rs` - FUSE 挂载二进制
+- `crates/evif-cli/src/commands.rs` - fuse_mount/fuse_unmount 方法
+- `crates/evif-cli/src/cli.rs` - Mount/Umount 命令定义
+
+**验证结果**:
+```
+$ cargo test -p evif-fuse
+15 tests passed, 0 failed
+
+$ evif mount --help
+Mount EVIF as a FUSE filesystem
+Usage: evif mount [OPTIONS] <MOUNT_POINT>
+
+$ evif umount --help
+Unmount a FUSE filesystem
+Usage: evif umount [OPTIONS] <MOUNT_POINT>
+```
 
 ---
 
@@ -304,6 +341,9 @@ Usage: evif chown [OPTIONS] <PATH> <OWNER>
 | LangChain 集成 | `cargo test -p evif-mem -- langchain` | ✅ 7 passed |
 | chmod CLI 命令 | `evif chmod --help` | ✅ 正常显示 |
 | chown CLI 命令 | `evif chown --help` | ✅ 正常显示 |
+| FUSE 库测试 | `cargo test -p evif-fuse` | ✅ 15 passed |
+| mount CLI 命令 | `evif mount --help` | ✅ 正常显示 |
+| umount CLI 命令 | `evif umount --help` | ✅ 正常显示 |
 
 ---
 
@@ -315,9 +355,11 @@ Usage: evif chown [OPTIONS] <PATH> <OWNER>
 | `crates/evif-mem/src/token.rs` | Token 计数模块 |
 | `crates/evif-mem/src/models.rs` | MemoryItem tags/references |
 | `crates/evif-mem/Cargo.toml` | aes-gcm, pbkdf2 依赖 |
-| `crates/evif-cli/src/cli.rs` | CLI chmod/chown 命令定义 |
-| `crates/evif-cli/src/commands.rs` | chmod/chown 实现 |
+| `crates/evif-cli/src/cli.rs` | CLI chmod/chown/mount 命令定义 |
+| `crates/evif-cli/src/commands.rs` | chmod/chown/fuse_mount 实现 |
 | `crates/evif-client/src/client.rs` | REST API chmod/chown |
 | `crates/evif-rest/src/handlers.rs` | HTTP 处理器 |
 | `crates/evif-rest/src/routes.rs` | 路由注册 |
 | `crates/evif-core/src/plugin.rs` | 插件 chown trait |
+| `crates/evif-fuse/src/lib.rs` | FUSE 文件系统实现 |
+| `crates/evif-fuse/src/bin/evif-fuse-mount.rs` | FUSE 挂载二进制 |
