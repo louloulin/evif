@@ -1,28 +1,58 @@
-# EVIF 1.8 使用示例
+# EVIF Examples
 
-本目录包含EVIF 1.8的完整使用示例。
+This directory contains working examples demonstrating EVIF core functionality.
 
-## 快速开始
+## Directory Structure
 
-### 基础文件操作
+| Path | Description |
+|------|-------------|
+| `wasm-plugin/` | WASM plugin using Extism PDK |
+| `python-sdk/` | Python SDK usage examples |
+| `agent-workflow/` | Multi-agent coordination demos |
+
+## Quick Examples
+
+### In-Memory Filesystem
+
 ```bash
-evif ls /
-evif cat /memfs/test.txt
-evif write /memfs/hello.txt "Hello, EVIF!"
+evif mkdir /mem/demo
+evif write /mem/demo/data.txt -c "Hello EVIF"
+evif cat /mem/demo/data.txt
 ```
 
-### S3存储操作
+### Cloud Storage
+
 ```bash
-evif mount s3fs /s3fs
-evif upload local.txt /s3fs/bucket/
-evif download /s3fs/bucket/data.txt ./
+# Mount S3 bucket
+evif mount s3fs /s3fs --bucket my-bucket
+
+# Upload file
+evif write /s3fs/data.json -c '{"key": "value"}'
 ```
 
-### 消息队列
+### Agent Context
+
 ```bash
-evif mkdir /queuefs/tasks
-echo "Task data" | evif write /queuefs/tasks/enqueue -
-evif cat /queuefs/tasks/dequeue
+# Set current task
+evif write /context/L0/current -c "Implement JWT authentication"
+
+# Add decisions
+evif write /context/L1/decisions.md -c "- Use HS256 signing\n- Validate expiry"
+
+# List skills
+evif ls /skills
 ```
 
-更多示例请查看后续文档...
+### Task Queue
+
+```bash
+evif mkdir /queue/tasks
+echo '{"type": "review", "data": "PR #42"}' | evif write /queue/tasks/enqueue -
+evif cat /queue/tasks/dequeue
+```
+
+## See Also
+
+- [docs/GETTING_STARTED.md](../docs/GETTING_STARTED.md) - Quick start guide
+- [docs/05-agent-integration.md](../docs/05-agent-integration.md) - Agent integration
+- [crates/evif-python/README.md](../crates/evif-python/README.md) - Python SDK
