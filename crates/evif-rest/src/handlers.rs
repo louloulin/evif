@@ -36,7 +36,7 @@ pub struct AppState {
     /// Phase 14.2: 文件锁管理器
     pub lock_manager: Arc<FileLockManager>,
     /// Phase 14.1: 跨文件系统复制管理器
-    pub cross_fs_copy_manager: Arc<CrossFsCopyManager>,
+    pub cross_fs_copy_manager: Arc<CrossFsCopyManager<RadixMountTable>>,
     /// Phase F 深化：租户存储配额管理
     pub tenant_state: TenantState,
     /// N9: 就绪探针标志 — 由 server.rs 在所有初始化完成后设置为 true
@@ -649,6 +649,11 @@ evif_request_duration_seconds_count {}
         State(state): State<AppState>,
         Query(params): Query<FileQueryParams>,
     ) -> RestResult<Json<FileReadResponse>> {
+        // 验证路径安全性，防止路径遍历攻击
+        if params.path.contains("..") {
+            return Err(RestError::BadRequest("Path traversal not allowed".to_string()));
+        }
+
         // 使用 lookup_with_path() 进行路径翻译，获取插件和相对路径
         let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&params.path).await;
         let plugin = plugin_opt
@@ -698,6 +703,11 @@ evif_request_duration_seconds_count {}
         let query_string = parts.uri.query().unwrap_or("");
         let params: FileWriteParams = serde_qs::from_str(query_string)
             .map_err(|e| RestError::BadRequest(format!("Invalid query params: {}", e)))?;
+
+        // 验证路径安全性，防止路径遍历攻击
+        if params.path.contains("..") {
+            return Err(RestError::BadRequest("Path traversal not allowed".to_string()));
+        }
 
         let bytes = axum::body::to_bytes(body, 5 * 1024 * 1024)
             .await

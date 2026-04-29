@@ -296,6 +296,15 @@ pub trait EvifPlugin: Send + Sync {
         Ok(())
     }
 
+    /// 热重载插件（Phase 16.1）
+    ///
+    /// 重新初始化插件，可能加载新的配置或更新内部状态。
+    /// 默认实现调用 shutdown 然后 initialize。
+    async fn reload(&self, _config: Option<&serde_json::Value>) -> EvifResult<()> {
+        self.shutdown().await?;
+        self.initialize(_config).await
+    }
+
     /// 返回插件 README 文档（Phase 8.2，对标 AGFS GetReadme）
     fn get_readme(&self) -> String {
         String::new()

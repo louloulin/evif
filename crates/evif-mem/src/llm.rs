@@ -75,6 +75,19 @@ pub struct ImageAnalysis {
     pub caption: String,
 }
 
+/// 创建优化的 HTTP 客户端（Phase P1-4）
+///
+/// 配置连接池以复用连接，减少 HTTP 请求开销。
+fn create_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .pool_max_idle_per_host(10)  // 每个 host 保持最多 10 个空闲连接
+        .pool_idle_timeout(std::time::Duration::from_secs(30))  // 空闲连接 30s 后关闭
+        .tcp_keepalive(std::time::Duration::from_secs(60))  // TCP keep-alive 60s
+        .tcp_nodelay(true)  // 禁用 Nagle 算法，减少延迟
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
 /// OpenAI Client
 ///
 /// LLM client implementation using OpenAI API.
@@ -170,7 +183,7 @@ impl OpenAIClient {
             api_key,
             model: "gpt-4o".to_string(),
             embedding_model: "text-embedding-3-small".to_string(),
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: "https://api.openai.com/v1".to_string(),
         }
     }
@@ -186,7 +199,7 @@ impl OpenAIClient {
             api_key,
             model,
             embedding_model,
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
         }
     }
@@ -643,7 +656,7 @@ impl AnthropicClient {
         Self {
             api_key,
             model: "claude-3-5-sonnet-20241022".to_string(),
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: "https://api.anthropic.com/v1".to_string(),
         }
     }
@@ -653,7 +666,7 @@ impl AnthropicClient {
         Self {
             api_key,
             model,
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: base_url.unwrap_or_else(|| "https://api.anthropic.com/v1".to_string()),
         }
     }
@@ -1068,7 +1081,7 @@ impl OllamaClient {
         Self {
             model,
             embedding_model,
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: base_url.unwrap_or_else(|| "http://localhost:11434".to_string()),
         }
     }
@@ -1089,7 +1102,7 @@ impl Default for OllamaClient {
         Self {
             model: "llama2".to_string(),
             embedding_model: "nomic-embed-text".to_string(),
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: "http://localhost:11434".to_string(),
         }
     }
@@ -1120,7 +1133,7 @@ impl OpenRouterClient {
             api_key,
             model,
             embedding_model,
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: base_url.unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string()),
         }
     }
@@ -1177,7 +1190,7 @@ impl Default for OpenRouterClient {
             api_key: String::new(),
             model: "openai/gpt-4o-mini".to_string(),
             embedding_model: "intfloat/e5-base-v2".to_string(),
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: "https://openrouter.ai/api/v1".to_string(),
         }
     }
@@ -1923,7 +1936,7 @@ impl GrokClient {
         Self {
             api_key,
             model,
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: base_url.unwrap_or_else(|| "https://api.x.ai".to_string()),
         }
     }
@@ -1939,7 +1952,7 @@ impl Default for GrokClient {
         Self {
             api_key: String::new(),
             model: "grok-2-1212".to_string(),
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: "https://api.x.ai".to_string(),
         }
     }
@@ -2343,7 +2356,7 @@ impl LazyLLMClient {
         Self {
             model,
             embedding_model,
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: base_url.unwrap_or_else(|| "http://localhost:1234".to_string()),
             api_key,
         }
@@ -2427,7 +2440,7 @@ impl Default for LazyLLMClient {
         Self {
             model: "llama2".to_string(),
             embedding_model: "nomic-embed-text".to_string(),
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: "http://localhost:1234".to_string(),
             api_key: None,
         }
@@ -2787,7 +2800,7 @@ impl DoubaoClient {
         Self {
             api_key,
             model,
-            client: reqwest::Client::new(),
+            client: create_http_client(),
             base_url: base_url
                 .unwrap_or_else(|| "https://ark.cn-beijing.volces.com/api/v3".to_string()),
         }

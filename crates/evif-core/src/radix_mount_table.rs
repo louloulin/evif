@@ -19,14 +19,28 @@ use radix_trie::{Trie, TrieCommon};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use serde::{Deserialize, Serialize};
 
-/// 挂载点元数据
-#[derive(Debug, Clone)]
+/// 挂载点元数据（可序列化，用于持久化）
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MountMetadata {
     /// 插件类型名称 (e.g. "s3fs", "memfs")
     pub plugin_name: String,
     /// 官方实例名称 (e.g. "aws", "minio")
     pub instance_name: String,
+}
+
+/// 挂载点导出格式（用于持久化和恢复）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MountExport {
+    /// 挂载路径 (e.g. "/mem", "/s3")
+    pub path: String,
+    /// 插件名称 (e.g. "memfs", "s3fs")
+    pub plugin: String,
+    /// 实例名称 (e.g. "default", "aws")
+    pub instance: String,
+    /// 插件配置（可选）
+    pub config: Option<serde_json::Value>,
 }
 
 /// 使用Radix Tree的插件挂载表
@@ -474,6 +488,29 @@ impl RadixMountTable {
         }
         result.sort_by(|a, b| a.0.cmp(&b.0));
         result
+    }
+
+    /// 导出所有挂载点配置（用于持久化）
+    ///
+    /// 返回可序列化的挂载点列表，可用于恢复挂载状态。
+    pub async fn export_mounts(&self) -> Vec<MountExport> {
+        let mounts = self.mounts.read().await;
+        let metadata = self.metadata.read().await;
+        let mut exports = Vec::new();
+
+        for (key, _) in mounts.iter() {
+            if let Some(meta) = metadata.get(key) {
+                exports.push(MountExport {
+                    path: format!("/{}", key),
+                    plugin: meta.plugin_name.clone(),
+                    instance: meta.instance_name.clone(),
+                    config: None, // 配置需要由调用者提供
+                });
+            }
+        }
+
+        exports.sort_by(|a, b| a.path.cmp(&b.path));
+        exports
     }
 
     /// 获取挂载点数量

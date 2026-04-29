@@ -3,6 +3,7 @@
 // 提供 EvifPlugin trait 和 EvifServer 实现
 // 对标 AGFS 服务器架构
 
+use crate::cross_fs_copy::{CrossFsCopyManager, MountTableLookup};
 use crate::error::{EvifError, EvifResult};
 use crate::mount_table::MountTable;
 use crate::plugin::{EvifPlugin, FileInfo, WriteFlags};
@@ -14,13 +15,16 @@ use std::sync::Arc;
 /// 负责路由文件操作到对应的插件
 pub struct EvifServer {
     mount_table: Arc<MountTable>,
+    cross_fs_copy_manager: Arc<CrossFsCopyManager<MountTable>>,
 }
 
 impl EvifServer {
     /// 创建新的 EVIF 服务器
     pub fn new() -> Self {
+        let mount_table = Arc::new(MountTable::new());
         Self {
-            mount_table: Arc::new(MountTable::new()),
+            mount_table: mount_table.clone(),
+            cross_fs_copy_manager: Arc::new(CrossFsCopyManager::new(mount_table)),
         }
     }
 
@@ -103,17 +107,28 @@ impl EvifServer {
         plugin.remove(path).await
     }
 
-    /// 重命名文件
+    /// 重命名/移动文件
+    ///
+    /// 支持同插件内移动和跨插件复制+删除
     pub async fn rename(&self, old_path: &str, new_path: &str) -> EvifResult<()> {
         let old_plugin = self.route(old_path).await?;
         let new_plugin = self.route(new_path).await?;
 
-        // 如果源和目标在不同插件，暂不支持跨插件移动
-        if old_plugin.name() != new_plugin.name() {
-            return Err(EvifError::NotSupportedGeneric);
+        // 同插件内移动：直接调用 rename
+        if old_plugin.name() == new_plugin.name() {
+            return old_plugin.rename(old_path, new_path).await;
         }
 
-        old_plugin.rename(old_path, new_path).await
+        // 跨插件移动：使用 CrossFsCopyManager 复制后删除源
+        // 注意：这是移动操作，不是复制操作，所以需要删除源文件
+        self.cross_fs_copy_manager
+            .copy(old_path, new_path, false)
+            .await?;
+
+        // 删除源文件（移动完成）
+        old_plugin.remove(old_path).await?;
+
+        Ok(())
     }
 
     /// 递归删除文件或目录
@@ -184,8 +199,8 @@ mod tests {
             .await
             .unwrap();
 
-        // 跨插件重命名应该失败
-        let result = server.rename("/test1/file.txt", "/test2/file.txt").await;
-        assert!(result.is_err());
+        // 同插件内重命名应该成功
+        let result = server.rename("/test1/a.txt", "/test1/b.txt").await;
+        assert!(result.is_ok(), "Same-plugin rename should succeed");
     }
 }

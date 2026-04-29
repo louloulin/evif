@@ -250,6 +250,20 @@ impl MountTable {
     /// # 返回
     /// 匹配的插件实例（如果存在）
     pub async fn lookup(&self, path: &str) -> Option<Arc<dyn EvifPlugin>> {
+        self.lookup_with_path(path).await.0
+    }
+
+    /// 查找插件并返回相对路径（最长前缀匹配）
+    ///
+    /// # 参数
+    /// - `path`: 文件路径
+    ///
+    /// # 返回
+    /// (匹配的插件实例, 相对于挂载点的路径)（如果存在）
+    pub async fn lookup_with_path(
+        &self,
+        path: &str,
+    ) -> (Option<Arc<dyn EvifPlugin>>, String) {
         let mounts = self.mounts.read().await;
         let normalized_path = Self::normalize_path(path);
 
@@ -271,7 +285,17 @@ impl MountTable {
             }
         }
 
-        best_match.map(|(_, plugin)| plugin)
+        match best_match {
+            Some((mount_point, plugin)) => {
+                let rel_path = if normalized_path == *mount_point {
+                    "/".to_string()
+                } else {
+                    normalized_path[mount_point.len()..].to_string()
+                };
+                (Some(plugin), rel_path)
+            }
+            None => (None, path.to_string()),
+        }
     }
 
     /// 列出所有挂载点

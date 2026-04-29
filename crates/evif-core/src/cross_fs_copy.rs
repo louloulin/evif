@@ -6,15 +6,21 @@ use crate::error::{EvifError, EvifResult};
 use crate::EvifPlugin;
 use std::sync::Arc;
 
-/// 跨文件系统复制管理器 (Phase 14.1)
-pub struct CrossFsCopyManager {
-    /// Radix 挂载表，用于查找源和目标的插件
-    mount_table: Arc<crate::RadixMountTable>,
+/// 挂载表 trait，用于跨文件系统操作
+pub trait MountTableLookup: Send + Sync {
+    /// 查找插件并返回相对路径
+    async fn lookup_with_path(&self, path: &str) -> (Option<Arc<dyn EvifPlugin>>, String);
 }
 
-impl CrossFsCopyManager {
+/// 跨文件系统复制管理器 (Phase 14.1)
+pub struct CrossFsCopyManager<T: MountTableLookup> {
+    /// 挂载表，用于查找源和目标的插件
+    mount_table: Arc<T>,
+}
+
+impl<T: MountTableLookup> CrossFsCopyManager<T> {
     /// 创建新的跨文件系统复制管理器
-    pub fn new(mount_table: Arc<crate::RadixMountTable>) -> Self {
+    pub fn new(mount_table: Arc<T>) -> Self {
         Self { mount_table }
     }
 
@@ -140,5 +146,19 @@ impl CrossFsCopyManager {
         }
 
         Ok(())
+    }
+}
+
+// 为 MountTable 实现 MountTableLookup
+impl MountTableLookup for crate::MountTable {
+    async fn lookup_with_path(&self, path: &str) -> (Option<Arc<dyn EvifPlugin>>, String) {
+        crate::MountTable::lookup_with_path(self, path).await
+    }
+}
+
+// 为 RadixMountTable 实现 MountTableLookup
+impl MountTableLookup for crate::RadixMountTable {
+    async fn lookup_with_path(&self, path: &str) -> (Option<Arc<dyn EvifPlugin>>, String) {
+        crate::RadixMountTable::lookup_with_path(self, path).await
     }
 }

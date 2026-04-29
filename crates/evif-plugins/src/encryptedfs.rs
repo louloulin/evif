@@ -230,7 +230,7 @@ impl EncryptedFsPlugin {
         let nonce = aes_gcm::aead::Nonce::<Aes256Gcm>::from_slice(&nonce_bytes);
 
         let plaintext = self.cipher.decrypt(nonce, ciphertext_with_tag.as_ref())
-            .map_err(|e| EvifError::InvalidInput(format!("Decryption failed: {}. This may indicate data corruption or wrong password.", e)))?;
+            .map_err(|_| EvifError::InvalidInput("Decryption failed. Please check your credentials and try again.".to_string()))?;
 
         Ok(plaintext)
     }

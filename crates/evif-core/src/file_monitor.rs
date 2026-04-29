@@ -191,20 +191,20 @@ impl EventManager {
     /// 订阅事件
     pub fn subscribe(&self, filter: EventFilter) -> SubscriberId {
         let id = uuid::Uuid::new_v4().to_string();
-        let mut subs = self.subscribers.lock().unwrap();
+        let mut subs = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         subs.insert(id.clone(), filter);
         id
     }
 
     /// 取消订阅
     pub fn unsubscribe(&self, subscriber_id: &str) -> bool {
-        let mut subs = self.subscribers.lock().unwrap();
+        let mut subs = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         subs.remove(subscriber_id).is_some()
     }
 
     /// 发布事件
     pub fn publish(&self, event: FileEvent) {
-        let subs = self.subscribers.lock().unwrap();
+        let subs = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         for (_id, filter) in subs.iter() {
             if self.matches_filter(&event, filter) {
                 let _ = self.event_tx.send(event.clone());
@@ -288,7 +288,7 @@ impl SimpleFileMonitor {
 impl FileMonitor for SimpleFileMonitor {
     async fn watch(&self, path: &str, recursive: bool) -> Result<(), MonitorError> {
         println!("Starting monitor: {} (recursive: {})", path, recursive);
-        *self.running.lock().unwrap() = true;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = true;
 
         // 这里应该实现实际的文件监控逻辑
         // 对于生产环境，需要使用平台特定的实现
@@ -298,12 +298,12 @@ impl FileMonitor for SimpleFileMonitor {
 
     async fn stop(&self) -> Result<(), MonitorError> {
         println!("Stopping monitor: {}", self.name);
-        *self.running.lock().unwrap() = false;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
         Ok(())
     }
 
     fn is_running(&self) -> bool {
-        *self.running.lock().unwrap()
+        *self.running.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn name(&self) -> &str {

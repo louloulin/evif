@@ -57,6 +57,9 @@ libloading = "0.8"
 # Lock types that don't poison on panic
 parking_lot = "0.12"
 
+# System information (CPU, memory, disk)
+sysinfo = "0.30"
+
 [features]
 default = []
 # Extism WASM plugin backend (independent, multi-language PDK)

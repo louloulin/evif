@@ -2400,7 +2400,7 @@ mod tests {
                 assert_eq!(vector_k, 10);
                 assert_eq!(llm_top_n, 5);
             }
-            _ => panic!("Expected Hybrid mode"),
+            _ => unreachable!("Expected Hybrid mode"),
         }
     }
 
@@ -2422,7 +2422,7 @@ mod tests {
                 assert_eq!(vector_k, 10);
                 assert_eq!(llm_top_n, 5);
             }
-            _ => panic!("Expected Hybrid mode"),
+            _ => unreachable!("Expected Hybrid mode"),
         }
     }
 
@@ -2443,7 +2443,7 @@ mod tests {
                 assert_eq!(category_id, "test-category-id");
                 assert_eq!(max_items, 20);
             }
-            _ => panic!("Expected LLMRead mode"),
+            _ => unreachable!("Expected LLMRead mode"),
         }
     }
 
@@ -2466,7 +2466,7 @@ mod tests {
                 assert_eq!(category_id, "category-123");
                 assert_eq!(max_items, 15);
             }
-            _ => panic!("Expected LLMRead mode"),
+            _ => unreachable!("Expected LLMRead mode"),
         }
     }
 
@@ -2787,7 +2787,7 @@ mod tests {
                 assert!(!include_resources);
                 assert_eq!(max_results, 10);
             }
-            _ => panic!("Expected RAG mode"),
+            _ => unreachable!("Expected RAG mode"),
         }
     }
 
@@ -2822,7 +2822,7 @@ mod tests {
                 assert!(include_resources);
                 assert_eq!(max_results, 20);
             }
-            _ => panic!("Expected RAG mode"),
+            _ => unreachable!("Expected RAG mode"),
         }
     }
 
@@ -3264,7 +3264,7 @@ Respond ONLY with valid JSON, no additional text."#,
                 assert_eq!(k, 10);
                 assert_eq!(threshold, 0.5);
             }
-            _ => panic!("Expected VectorSearch mode"),
+            _ => unreachable!("Expected VectorSearch mode"),
         }
     }
 

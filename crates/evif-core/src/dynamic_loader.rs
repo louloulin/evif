@@ -293,6 +293,9 @@ impl DynamicPluginLoader {
         info!("Loading plugin from: {:?}", library_path);
 
         // 加载动态库
+        // SAFETY: Library::new loads a shared library from the filesystem.
+        // The path has been validated to exist and be a valid .so/.dylib/.dll file.
+        // System dlopen/dlsym is inherently safe as it just loads code.
         let library = unsafe {
             Library::new(&library_path).map_err(|e| {
                 EvifError::PluginLoadError(format!(
@@ -339,6 +342,9 @@ impl DynamicPluginLoader {
 
     /// 获取插件 ABI 版本
     fn get_abi_version(&self, library: &Library) -> EvifResult<u32> {
+        // SAFETY: dlsym looks up symbols in the already-loaded library.
+        // The symbol name "evif_plugin_abi_version" is a known ABI entry point.
+        // We trust the library was compiled with the correct calling convention.
         unsafe {
             let get_abi_version: Symbol<PluginAbiVersionFn> =
                 library.get(b"evif_plugin_abi_version").map_err(|_| {
@@ -353,6 +359,9 @@ impl DynamicPluginLoader {
 
     /// 获取插件信息
     fn get_plugin_info(&self, library: &Library) -> EvifResult<PluginInfo> {
+        // SAFETY: dlsym looks up symbols in the already-loaded library.
+        // The symbol name "evif_plugin_info" is a known ABI entry point.
+        // We trust the library was compiled with the correct calling convention.
         unsafe {
             let get_info: Symbol<PluginInfoFn> =
                 library.get(b"evif_plugin_info").map_err(|_| {
@@ -399,41 +408,48 @@ impl DynamicPluginLoader {
             ))
         })?;
 
-        unsafe {
+        // SAFETY: dlsym looks up the plugin creation symbol.
+        // The create function returns a PluginPtr which is validated below.
+        let plugin_ptr = unsafe {
             let create_fn: Symbol<PluginCreateFn> =
                 loaded.library.get(b"evif_plugin_create").map_err(|_| {
                     EvifError::PluginLoadError("Missing 'evif_plugin_create' symbol".to_string())
                 })?;
 
-            let plugin_ptr = create_fn();
-            if plugin_ptr.data.is_null() {
-                return Err(EvifError::PluginLoadError(
-                    "Plugin creation returned null data pointer".to_string(),
-                ));
-            }
+            create_fn()
+        };
+        if plugin_ptr.data.is_null() {
+            return Err(EvifError::PluginLoadError(
+                "Plugin creation returned null data pointer".to_string(),
+            ));
+        }
 
-            debug!(
-                "Received plugin pointer: data={:p}, vtable={:p}",
-                plugin_ptr.data, plugin_ptr.vtable
-            );
+        debug!(
+            "Received plugin pointer: data={:p}, vtable={:p}",
+            plugin_ptr.data, plugin_ptr.vtable
+        );
 
-            // 从 PluginPtr 重建 fat pointer
-            // fat pointer 布局: [data_ptr, vtable_ptr]
+        // 从 PluginPtr 重建 fat pointer
+        // fat pointer 布局: [data_ptr, vtable_ptr]
+        // SAFETY: plugin_ptr 是从 C 库返回的有效指针，
+        // fat_ptr 正确编码了 trait object 的数据指针和 vtable
+        // Arc::from_raw 需要指针保持有效且未被部分消费
+        let plugin = unsafe {
             let fat_ptr: [usize; 2] = [plugin_ptr.data as usize, plugin_ptr.vtable as usize];
             let typed_ptr: *const dyn EvifPlugin = std::mem::transmute(fat_ptr);
+            Arc::from_raw(typed_ptr)
+        };
 
-            // 将裸指针转换回 Arc<dyn EvifPlugin>
-            let plugin = Arc::from_raw(typed_ptr);
+        // 克隆以获得新的引用
+        let cloned = plugin.clone();
 
-            // 克隆以获得新的引用
-            let cloned = plugin.clone();
+        // 不使用 mem::forget:
+        // Arc::from_raw 创建 ref count=1 的 Arc
+        // clone() 增加到 ref count=2
+        // 当 plugin 超出作用域时 ref count 回到 1
+        // cloned Arc 仍然有效，当它被 drop 时对象会被正确释放
 
-            // 防止原始 Arc 被释放（泄漏指针）
-            // 注意：这会导致内存泄漏，除非有相应的清理机制
-            std::mem::forget(plugin);
-
-            Ok(cloned)
-        }
+        Ok(cloned)
     }
 
     /// 卸载插件库

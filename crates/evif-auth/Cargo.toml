@@ -21,6 +21,10 @@ blake3 = { workspace = true }
 ed25519-dalek = { workspace = true }
 tracing = { workspace = true }
 
+# JWT support
+jsonwebtoken = "9"
+serde_json = "1"
+
 # Additional dependencies
 parking_lot = "0.12.1"
 dashmap = { workspace = true }

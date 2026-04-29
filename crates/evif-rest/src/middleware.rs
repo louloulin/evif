@@ -12,7 +12,7 @@ use axum::{
 };
 use evif_auth::{
     AuditEvent, AuditEventType, AuditFilter, AuditLogManager, AuthManager, AuthPolicy, Capability,
-    Permission, Permissions, Principal,
+    JwtValidator, Permission, Permissions, Principal,
 };
 use parking_lot::Mutex;
 use serde_json::json;
@@ -62,6 +62,7 @@ struct RestAuthInner {
     enforce: bool,
     api_key_max_concurrent_requests: Option<usize>,
     api_key_limiters: Mutex<HashMap<Uuid, Arc<Semaphore>>>,
+    jwt_validator: Option<JwtValidator>,
 }
 
 /// REST 认证共享状态
@@ -142,6 +143,9 @@ impl RestAuthState {
     /// - `EVIF_REST_WRITE_API_KEYS=key1,key2`
     /// - `EVIF_REST_ADMIN_API_KEYS=key3,key4`
     /// - `EVIF_REST_AUTH_AUDIT_LOG=/path/to/evif-audit.log`
+    /// - `EVIF_REST_JWT_SECRET=<secret>` - JWT 签名密钥
+    /// - `EVIF_REST_JWT_ISSUER=<issuer>` - JWT issuer（可选）
+    /// - `EVIF_REST_JWT_AUDIENCE=<audience>` - JWT audience（可选）
     pub fn from_env() -> Self {
         let enforce = std::env::var("EVIF_REST_AUTH_MODE")
             .map(|value| {
@@ -160,6 +164,9 @@ impl RestAuthState {
         let api_key_max_concurrent_requests =
             parse_optional_usize_env("EVIF_REST_API_KEY_MAX_CONCURRENT_REQUESTS");
 
+        // 尝试加载 JWT 配置
+        let jwt_validator = jwt_validator_from_env();
+
         Self::new(
             write_keys,
             admin_keys,
@@ -168,6 +175,7 @@ impl RestAuthState {
             audit_log,
             enforce,
             api_key_max_concurrent_requests,
+            jwt_validator,
         )
     }
 
@@ -179,6 +187,7 @@ impl RestAuthState {
             vec![],
             Arc::new(AuditLogManager::from_memory()),
             false,
+            None,
             None,
         )
     }
@@ -203,6 +212,25 @@ impl RestAuthState {
             Arc::new(AuditLogManager::from_memory()),
             true,
             normalize_rate_limit(max_concurrent_requests),
+            None,
+        )
+    }
+
+    /// 从 API Keys 和 JWT 验证器创建
+    pub fn from_api_keys_with_jwt(
+        write_keys: impl IntoIterator<Item = String>,
+        admin_keys: impl IntoIterator<Item = String>,
+        jwt_validator: JwtValidator,
+    ) -> Self {
+        Self::new(
+            write_keys.into_iter().collect(),
+            admin_keys.into_iter().collect(),
+            vec![],
+            vec![],
+            Arc::new(AuditLogManager::from_memory()),
+            true,
+            None,
+            Some(jwt_validator),
         )
     }
 
@@ -221,8 +249,9 @@ impl RestAuthState {
         audit_log: Arc<AuditLogManager>,
         enforce: bool,
         api_key_max_concurrent_requests: Option<usize>,
+        jwt_validator: Option<JwtValidator>,
     ) -> Self {
-        let manager = AuthManager::with_policy(AuthPolicy::Strict);
+        let mut manager = AuthManager::with_policy(AuthPolicy::Strict);
         let mut api_keys = HashMap::new();
         let mut hashed_api_keys = HashMap::new();
 
@@ -244,6 +273,11 @@ impl RestAuthState {
             }
         }
 
+        // 如果提供了 JWT 验证器，配置到 manager
+        if let Some(validator) = jwt_validator.clone() {
+            manager.set_jwt_validator(validator);
+        }
+
         Self {
             inner: Arc::new(RestAuthInner {
                 manager,
@@ -253,6 +287,7 @@ impl RestAuthState {
                 enforce,
                 api_key_max_concurrent_requests,
                 api_key_limiters: Mutex::new(HashMap::new()),
+                jwt_validator,
             }),
         }
     }
@@ -288,6 +323,28 @@ impl RestAuthState {
     }
 
     fn authorize(&self, headers: &HeaderMap, requirement: RouteRequirement) -> AuthDecision {
+        // 尝试 JWT 认证（如果配置了）
+        if let Some(auth_value) = header_value(headers, AUTHORIZATION) {
+            if let Some(jwt_validator) = self.inner.manager.jwt_validator() {
+                match jwt_validator.validate(auth_value) {
+                    Ok(claims) => {
+                        // JWT 验证成功，创建用户身份
+                        let user_id = Uuid::parse_str(&claims.sub)
+                            .unwrap_or_else(|_| Uuid::new_v4());
+                        let identity = ApiKeyIdentity {
+                            principal: Principal::User(user_id),
+                            principal_id: user_id,
+                        };
+                        return AuthDecision::Granted(identity);
+                    }
+                    Err(_) => {
+                        // JWT 验证失败，继续尝试 API Key
+                    }
+                }
+            }
+        }
+
+        // 尝试 API Key 认证
         let Some(api_key) = extract_api_key(headers) else {
             return AuthDecision::MissingCredentials;
         };
@@ -778,6 +835,23 @@ fn sha256_hex(value: &str) -> String {
         .collect()
 }
 
+/// 从环境变量加载 JWT 验证器配置
+fn jwt_validator_from_env() -> Option<JwtValidator> {
+    let secret = std::env::var("EVIF_REST_JWT_SECRET").ok()?;
+
+    let mut validator = JwtValidator::with_secret(&secret);
+
+    if let Some(issuer) = std::env::var("EVIF_REST_JWT_ISSUER").ok() {
+        validator = validator.with_issuer(&issuer);
+    }
+
+    if let Some(audience) = std::env::var("EVIF_REST_JWT_AUDIENCE").ok() {
+        validator = validator.with_audience(&audience);
+    }
+
+    Some(validator)
+}
+
 fn header_value(headers: &HeaderMap, name: impl axum::http::header::AsHeaderName) -> Option<&str> {
     headers.get(name).and_then(|value| value.to_str().ok())
 }
@@ -1092,7 +1166,8 @@ mod tests {
     }
 
     async fn spawn_server(app: Router) -> (String, reqwest::Client) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await
+            .expect("Failed to bind TCP port - check macOS sandbox restrictions");
         let port = listener.local_addr().unwrap().port();
 
         tokio::spawn(async move {

@@ -12,6 +12,6 @@ pub use audit::{
     AuditConfig, AuditEvent, AuditEventType, AuditFilter, AuditLogManager, AuditLogger,
     FileAuditLogger, MemoryAuditLogger,
 };
-pub use auth::{AuthManager, AuthPolicy, Permission};
+pub use auth::{AuthManager, AuthPolicy, JwtError, JwtValidator, Permission};
 pub use capability::{CapId, Capability, Permissions, Principal, PrincipalId};
 pub use error::{AuthError, AuthResult};

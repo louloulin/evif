@@ -284,11 +284,33 @@ impl SqlfsPlugin {
             let conn = Connection::open(&db_path)
                 .map_err(|e| EvifError::Storage(format!("failed to open database: {}", e)))?;
 
-            // Only allow SELECT statements (basic safety check)
+            // Only allow SELECT statements with enhanced safety checks
             let trimmed = query.trim().to_uppercase();
+
+            // Basic check: must start with SELECT
             if !trimmed.starts_with("SELECT") {
                 return Err(EvifError::InvalidPath(
                     "Only SELECT queries are allowed".to_string()
+                ));
+            }
+
+            // Enhanced checks: prevent SQL injection via multiple statements or comments
+            let lower_query = query.to_lowercase();
+
+            // Check for multiple statements (semicolon followed by more SQL)
+            if let Some(semicolon_pos) = lower_query.find(';') {
+                let after_semicolon = lower_query[semicolon_pos + 1..].trim();
+                if !after_semicolon.is_empty() {
+                    return Err(EvifError::InvalidPath(
+                        "Multiple SQL statements not allowed".to_string()
+                    ));
+                }
+            }
+
+            // Check for SQL comments that could hide malicious code
+            if lower_query.contains("--") || lower_query.contains("/*") {
+                return Err(EvifError::InvalidPath(
+                    "SQL comments not allowed".to_string()
                 ));
             }
 

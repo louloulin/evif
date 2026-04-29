@@ -2,10 +2,53 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
+use sysinfo::System;
 use tokio::sync::RwLock;
+
+/// 系统信息采集器（延迟初始化以避免性能开销）
+struct SystemCollector {
+    sys: System,
+}
+
+impl SystemCollector {
+    fn new() -> Self {
+        let mut sys = System::new_all();
+        // 初始刷新
+        sys.refresh_all();
+        Self { sys }
+    }
+
+    fn refresh(&mut self) {
+        // 刷新所有系统信息
+        self.sys.refresh_cpu_usage();
+        self.sys.refresh_memory();
+    }
+
+    /// 获取内存使用量（字节）
+    fn memory_used(&self) -> u64 {
+        self.sys.used_memory() as u64
+    }
+
+    /// 获取总内存（字节）
+    fn memory_total(&self) -> u64 {
+        self.sys.total_memory() as u64
+    }
+
+    /// 获取 CPU 使用率（百分比）
+    fn cpu_usage(&self) -> f64 {
+        // sysinfo 0.30 使用 CPUs 的平均值
+        let cpus = self.sys.cpus();
+        if cpus.is_empty() {
+            return 0.0;
+        }
+        let sum: f32 = cpus.iter().map(|cpu| cpu.cpu_usage()).sum();
+        sum as f64 / cpus.len() as f64
+    }
+}
 
 /// 监控指标类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +98,8 @@ pub struct MetricsCollector {
     start_time: Instant,
     counters: Arc<RwLock<HashMap<String, u64>>>,
     gauges: Arc<RwLock<HashMap<String, f64>>>,
+    /// 系统信息采集器（使用 RefCell 实现内部可变性）
+    system_collector: RefCell<SystemCollector>,
 }
 
 impl MetricsCollector {
@@ -64,6 +109,7 @@ impl MetricsCollector {
             start_time: Instant::now(),
             counters: Arc::new(RwLock::new(HashMap::new())),
             gauges: Arc::new(RwLock::new(HashMap::new())),
+            system_collector: RefCell::new(SystemCollector::new()),
         }
     }
 
@@ -107,6 +153,16 @@ impl MetricsCollector {
     pub async fn get_system_stats(&self) -> SystemStats {
         let uptime = self.start_time.elapsed().as_secs();
 
+        // 刷新系统信息并获取数据
+        let (memory_bytes, cpu_usage) = {
+            let mut collector = self.system_collector.borrow_mut();
+            collector.refresh();
+            (collector.memory_used(), collector.cpu_usage())
+        };
+
+        // 将字节转换为 MB
+        let memory_usage_mb = memory_bytes / (1024 * 1024);
+
         SystemStats {
             uptime_secs: uptime,
             total_requests: self
@@ -122,8 +178,8 @@ impl MetricsCollector {
                 .await
                 .get("active_connections")
                 .unwrap_or(&0.0) as u64,
-            memory_usage_mb: Self::get_memory_usage(),
-            cpu_usage_percent: Self::get_cpu_usage(),
+            memory_usage_mb,
+            cpu_usage_percent: cpu_usage,
             disk_io_mb: *self.gauges.read().await.get("disk_io_mb").unwrap_or(&0.0) as u64,
             network_io_mb: *self
                 .gauges
@@ -132,26 +188,6 @@ impl MetricsCollector {
                 .get("network_io_mb")
                 .unwrap_or(&0.0) as u64,
         }
-    }
-
-    /// 获取内存使用量 (平台相关)
-    fn get_memory_usage() -> u64 {
-        // 简化实现，实际应该使用sysinfo或其他平台相关库
-        #[cfg(target_os = "linux")]
-        {
-            // Linux实现可以读取 /proc/self/status
-            0
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            0
-        }
-    }
-
-    /// 获取CPU使用率 (平台相关)
-    fn get_cpu_usage() -> f64 {
-        // 简化实现，实际应该使用平台相关API
-        0.0
     }
 
     /// 导出Prometheus格式的指标

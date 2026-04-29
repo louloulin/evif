@@ -287,7 +287,10 @@ pub struct EmbeddingManager {
 impl EmbeddingManager {
     /// Create new embedding manager with configuration
     pub fn new(client: Arc<dyn EmbeddingClient>, config: CacheConfig) -> MemResult<Self> {
-        let l1_cache = LruCache::new(NonZeroUsize::new(config.l1_size).unwrap());
+        // Provide a safe default if l1_size is 0
+        let l1_size = NonZeroUsize::new(config.l1_size.max(1))
+            .unwrap_or(NonZeroUsize::new(1).unwrap());
+        let l1_cache = LruCache::new(l1_size);
 
         let l2_cache = if let Some(ref l2_dir) = config.l2_dir {
             Some(L2Cache::new(l2_dir.clone(), config.l2_max_entries)?)

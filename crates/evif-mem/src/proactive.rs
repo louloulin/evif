@@ -425,9 +425,12 @@ impl ProactiveAgent {
 
             loop {
                 tokio::select! {
+                    // Note: timers will always tick, so loop exits via shutdown checks
+                    // This is a fire-and-forget background task
                     _ = monitor_timer.tick() => {
                         // Check shutdown signal
                         if *shutdown.read().await {
+                            tracing::info!("Proactive agent shutting down");
                             break;
                         }
 

@@ -102,23 +102,42 @@ pub enum RestError {
 // From EvifError to RestError conversion
 impl From<evif_core::EvifError> for RestError {
     fn from(err: evif_core::EvifError) -> Self {
-        match err {
-            evif_core::EvifError::NotFound(_) => RestError::NotFound(err.to_string()),
-            evif_core::EvifError::InvalidPath(_) => RestError::BadRequest(err.to_string()),
-            evif_core::EvifError::InvalidArgument(_) => RestError::BadRequest(err.to_string()),
-            evif_core::EvifError::InvalidInput(_) => RestError::BadRequest(err.to_string()),
-            evif_core::EvifError::PermissionDenied(_) => RestError::BadRequest(err.to_string()),
-            evif_core::EvifError::AlreadyExists(_) => RestError::BadRequest(err.to_string()),
-            evif_core::EvifError::NotMounted(_) => RestError::NotFound(err.to_string()),
-            evif_core::EvifError::Conflict(_) => RestError::Conflict(err.to_string()),
-            evif_core::EvifError::Io(io_err) => match io_err.kind() {
-                std::io::ErrorKind::NotFound => RestError::NotFound(io_err.to_string()),
-                std::io::ErrorKind::PermissionDenied => RestError::BadRequest(io_err.to_string()),
-                std::io::ErrorKind::AlreadyExists => RestError::BadRequest(io_err.to_string()),
-                std::io::ErrorKind::InvalidInput => RestError::BadRequest(io_err.to_string()),
-                _ => RestError::Internal(io_err.to_string()),
-            },
-            _ => RestError::Internal(err.to_string()),
+        match &err {
+            evif_core::EvifError::NotFound(msg) => {
+                RestError::NotFound(format!("Resource not found: {}", msg))
+            }
+            evif_core::EvifError::InvalidPath(msg) => {
+                RestError::BadRequest(format!("Invalid path: {}", msg))
+            }
+            evif_core::EvifError::InvalidArgument(msg) => {
+                RestError::BadRequest(format!("Invalid argument: {}", msg))
+            }
+            evif_core::EvifError::InvalidInput(msg) => {
+                RestError::BadRequest(format!("Invalid input: {}", msg))
+            }
+            evif_core::EvifError::PermissionDenied(msg) => {
+                RestError::BadRequest(format!("Permission denied: {}", msg))
+            }
+            evif_core::EvifError::AlreadyExists(msg) => {
+                RestError::BadRequest(format!("Already exists: {}", msg))
+            }
+            evif_core::EvifError::NotMounted(msg) => {
+                RestError::NotFound(format!("Not mounted: {}", msg))
+            }
+            evif_core::EvifError::Conflict(msg) => {
+                RestError::Conflict(format!("Conflict: {}", msg))
+            }
+            evif_core::EvifError::Io(io_err) => {
+                let msg = io_err.to_string();
+                match io_err.kind() {
+                    std::io::ErrorKind::NotFound => RestError::NotFound(format!("IO not found: {}", msg)),
+                    std::io::ErrorKind::PermissionDenied => RestError::BadRequest(format!("IO permission denied: {}", msg)),
+                    std::io::ErrorKind::AlreadyExists => RestError::BadRequest(format!("IO already exists: {}", msg)),
+                    std::io::ErrorKind::InvalidInput => RestError::BadRequest(format!("IO invalid input: {}", msg)),
+                    _ => RestError::Internal(format!("IO error: {}", msg)),
+                }
+            }
+            _ => RestError::Internal(format!("Internal error: {}", err)),
         }
     }
 }
