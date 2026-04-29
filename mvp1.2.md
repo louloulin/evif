@@ -3,7 +3,7 @@
 > 创建时间：2026-04-29
 > 更新时间：2026-04-29
 > 项目：EVIF (Everything Is a File)
-> 当前完成度：75%（6/8 功能完成）+ P2 改进
+> 当前完成度：87.5%（7/8 功能完成）+ P2 改进
 > 验证时间：2026-04-29
 
 ---
@@ -19,7 +19,7 @@
 | **P1-2**: FUSE 挂载支持 | ✅ 已完成 | FUSE library + CLI 集成 |
 | **P1-3**: 图像/音频分析 | ✅ 已完成 | Doubao vision API 实现 |
 | **P2-1**: 网络插件修复 | ⚠️ 上游限制 | OpenDAL 0.50.2 TLS 冲突 |
-| **P2-2**: HTTP 服务增强 | ✅ 已完成 | 108 个 REST API 端点 |
+| **P2-2**: HTTP 服务增强 | ✅ 已完成 | 107 个 REST API 端点 |
 
 ---
 
@@ -346,6 +346,15 @@ Finished `dev` profile in 3.18s
 - 或降级/升级 OpenDAL 版本
 - 或使用独立的 FTP/SFTP 库替代 OpenDAL
 
+**网络恢复后操作**：
+```bash
+# 检查 OpenDAL 更新
+cargo update -p opendal
+
+# 如果有新版本，尝试编译
+cargo build -p evif-plugins --features "webdavfs,ftpfs,sftpfs"
+```
+
 **验证结果**:
 ```bash
 $ cargo build -p evif-plugins --features "webdavfs,ftpfs,sftpfs"
@@ -385,6 +394,7 @@ $ grep -c "routing::get\|routing::post" crates/evif-rest/src/routes.rs
 | umount CLI 命令 | `evif umount --help` | ✅ 正常显示 |
 | Doubao 图像分析 | `cargo build -p evif-mem` | ✅ 构建成功 |
 | Token 计数测试 | `cargo test -p evif-mem -- token` | ✅ 10 passed |
+| REST API 端点 | `grep -c routing:: routes.rs` | ✅ 107 端点 |
 
 ---
 
