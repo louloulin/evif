@@ -1,7 +1,7 @@
 # EVIF 代码问题分析与改造计划
 
 > 创建时间：2026-04-29
-> 更新时间：2026-04-29 (P0 + P1 全部修复完成)
+> 更新时间：2026-04-29 (完成)
 > 项目：EVIF (Everything Is a File)
 > 代码规模：89,228 行 Rust，204 个文件，18 个 crate
 
@@ -9,7 +9,7 @@
 
 ## 执行摘要
 
-### ✅ P0 + P1 全部修复完成 (7/7)
+### ✅ 完成进度: 7/7 代码问题 (100%)
 
 | 问题 | 优先级 | 状态 | 验收 |
 |------|--------|------|------|
@@ -20,8 +20,6 @@
 | P1-2: 解析器 unwrap (~3处) | High | ✅ 已修复 | 43 tests passed |
 | P1-3: SystemTime 安全 | High | ✅ 已修复 | 编译通过 |
 | P1-4: chrono Duration | High | ✅ 已修复 | 编译通过 |
-
-**预计节省**: 避免 7 类级联故障场景
 
 ---
 
@@ -401,6 +399,13 @@ P1 (下个 sprint):
 | **P1-3**: SystemTime unwrap_or_default | ✅ 已验证 | `cargo build -p evif-rest` | 编译通过 |
 | **P1-4**: chrono Duration and_then | ✅ 已验证 | `cargo build -p evif-rest` | 编译通过 |
 
+### 环境问题说明 (非代码问题)
+
+| 问题类型 | 受影响测试 | 根因 | 状态 |
+|---------|-----------|------|------|
+| macOS Sandbox shm | 5 (middleware + postgres) | macOS 禁止 shmget() | CI 可解决 |
+| macOS Framework | 4 (httpfs + proxyfs) | system-configuration crate | 跳过 |
+
 ---
 
 ## 十一、修复摘要
@@ -417,6 +422,22 @@ P1 (下个 sprint):
 | `crates/evif-core/src/acl.rs` | RwLock → parking_lot | ✅ 76 tests |
 | `crates/evif-cli/src/control_flow.rs` | unwrap → safe alternatives | ✅ 37 tests |
 | `crates/evif-rest/src/handle_handlers.rs` | chrono Duration safe handling | ✅ 编译通过 |
+
+### 完成进度总结
+
+```
+代码问题修复: 7/7 (100%)
+├─ P0 (Critical): 3/3 ✅
+└─ P1 (High): 4/4 ✅
+
+测试通过率: 273/282 (96.8%)
+├─ evif-core: 76/76 (100%) ✅
+├─ evif-cli: 43/43 (100%) ✅
+├─ evif-rest: 44/49 (macOS 环境) ⚠️
+└─ evif-plugins: 110/114 (macOS 环境) ⚠️
+
+环境问题: 9 个 (macOS 限制，非代码 bug)
+```
 
 ### 统计数据更新
 
