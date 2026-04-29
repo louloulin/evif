@@ -176,7 +176,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfuse3-dev libssl-dev pkg-config
+          sudo apt-get install -y libfuse3-dev libssl-dev pkg-config postgresql
 
       # Run workspace tests (excluding integration test crates with known issues)
       # api-tests: OnceLock poisoning in multi-threaded test runner
@@ -190,6 +190,9 @@ jobs:
 
       - name: Run tests with s3fs feature
         run: cargo test --lib -p evif-plugins --features s3fs
+
+      - name: Run PostgreSQL integration tests
+        run: cargo test --lib -p evif-rest memory_handlers::tests::test_postgres
 
   # Create GitHub release (only on manual trigger or weekly)
   release:

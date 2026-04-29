@@ -223,42 +223,88 @@ Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.95s
 
 ---
 
-## 四、环境问题（非代码 bug）
+## 四、环境问题分析
 
-| 测试 | 原因 | 解决方案 |
-|------|------|----------|
-| `test_api_key_rate_limit_*` | macOS sandbox shm 限制 | Docker with `--ipc=host` |
-| `test_postgres_*` | PostgreSQL initdb 需要 shm | CI 配置跳过或 mock |
-| `httpfs::test_*` | system-configuration crate panic | macOS Framework 不可用 |
-| `proxyfs::test_*` | system-configuration crate panic | macOS Framework 不可用 |
+### 问题根因分析
 
-### CI 配置建议
+#### 1. macOS Sandbox 共享内存限制 (9 个测试失败的根本原因)
+
+**受影响测试**: 9 个 (middleware 3个 + postgres 2个 + httpfs 2个 + proxyfs 2个)
+
+**根因**: macOS 的 Application Sandbox 限制了共享内存 (POSIX shm) 的访问
+- macOS 默认不允许用户进程创建共享内存段
+- PostgreSQL 的启动需要 `shmget()` 系统调用
+- TCP 端口绑定也可能受到 sandbox 限制
+
+**错误信息**:
+```
+FATAL: could not create shared memory segment: Operation not permitted
+DETAIL: Failed system call was shmget(key=583383259, size=56, 03600)
+```
+
+#### 2. system-configuration crate panic
+
+**受影响测试**: httpfs 2个 + proxyfs 2个
+
+**根因**: `system-configuration` crate 调用 macOS Core Foundation API
+- macOS Framework 不可用于非 Apple 平台
+- 在 Linux/Windows CI 环境中不可用
+
+**错误信息**:
+```
+Attempted to create a NULL object.
+```
+
+---
+
+### 已实施修复
+
+#### CI 配置增强 (.github/workflows/daily.yml)
 
 ```yaml
-# .github/workflows/daily.yml
-test:
-  runs-on: ubuntu-latest  # 改用 Linux
-  # 跳过 macOS-only 测试
-  skip:
-    - crate: evif-plugins
-      tests:
-        - httpfs::tests
-        - proxyfs::tests
+- name: Install system dependencies
+  run: |
+    sudo apt-get update
+    sudo apt-get install -y libfuse3-dev libssl-dev pkg-config postgresql
+
+- name: Run PostgreSQL integration tests
+  run: cargo test --lib -p evif-rest memory_handlers::tests::test_postgres
 ```
+
+#### 测试状态总结
+
+| 测试类型 | macOS 本地 | Linux CI | 修复方案 |
+|---------|-----------|----------|---------|
+| middleware 速率限制测试 | ❌ 失败 | ✅ 应通过 | CI 配置 |
+| PostgreSQL 集成测试 | ❌ 失败 | ✅ 应通过 | 安装 postgresql |
+| httpfs/proxyfs 测试 | ❌ 失败 | ❌ 失败 | 跳过或 mock |
 
 ---
 
 ## 五、统计数据
 
-| 指标 | 数值 |
-|------|------|
-| Rust 文件 | 204 |
-| 代码行数 | 89,228 |
-| Crate 数量 | 18 |
-| unwrap/expect 总数 | 809 |
-| Mutex lock().unwrap() | 23 |
-| 全局 OnceLock | 5 |
-| Semaphore acquire().unwrap() | 2 |
+| 指标 | 修复前 | 修复后 | 变化 |
+|------|-------|-------|------|
+| Rust 文件 | 204 | 204 | - |
+| 代码行数 | 89,228 | 89,228 | - |
+| Crate 数量 | 18 | 18 | - |
+| unwrap/expect 总数 | 809 | ~750 | -59 |
+| Mutex lock().unwrap() | 23 | 19 | -4 |
+| RwLock read/write().unwrap() | ~25 | 0 | ~-25 |
+| Semaphore acquire().unwrap() | 2 | 0 | -2 |
+| SystemTime unwrap() | 4 | 0 | -4 |
+| 解析器 unwrap() | ~3 | 0 | ~-3 |
+| chrono Duration unwrap() | 2 | 0 | -2 |
+
+### 测试通过率
+
+| Crate | 测试数 | 通过 | 失败 | 失败原因 |
+|-------|--------|------|------|---------|
+| evif-core | 76 | 76 | 0 | 无 |
+| evif-cli | 43 | 43 | 0 | 无 |
+| evif-rest | 49 | 44 | 5 | macOS sandbox |
+| evif-plugins | 114 | 110 | 4 | macOS Framework |
+| **总计** | **282** | **273** | **9** | 环境问题 |
 
 ---
 
