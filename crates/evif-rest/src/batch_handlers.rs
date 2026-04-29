@@ -19,7 +19,8 @@ use evif_core::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use tokio::sync::broadcast;
 
 /// 批量操作 ID 类型
@@ -101,13 +102,13 @@ impl BatchOperationManager {
             error: None,
             start_time: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_millis() as u64,
             end_time: None,
         };
 
         {
-            let mut ops = self.operations.lock().unwrap();
+            let mut ops = self.operations.lock();
             ops.insert(id.clone(), info.clone());
         }
 
@@ -132,7 +133,7 @@ impl BatchOperationManager {
             info.end_time = Some(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_millis() as u64,
             );
             self.set_operation(id, info.clone());
@@ -148,7 +149,7 @@ impl BatchOperationManager {
             info.end_time = Some(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_millis() as u64,
             );
             self.set_operation(id, info.clone());
@@ -163,7 +164,7 @@ impl BatchOperationManager {
             info.end_time = Some(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_millis() as u64,
             );
             self.set_operation(id, info.clone());
@@ -175,18 +176,18 @@ impl BatchOperationManager {
     }
 
     fn get_operation(&self, id: &str) -> Option<BatchOperationInfo> {
-        let ops = self.operations.lock().unwrap();
+        let ops = self.operations.lock();
         ops.get(id).cloned()
     }
 
     fn set_operation(&self, id: &str, info: BatchOperationInfo) {
-        let mut ops = self.operations.lock().unwrap();
+        let mut ops = self.operations.lock();
         ops.insert(id.to_string(), info);
     }
 
     /// 获取所有操作
     pub fn list_operations(&self) -> Vec<BatchOperationInfo> {
-        let ops = self.operations.lock().unwrap();
+        let ops = self.operations.lock();
         ops.values().cloned().collect()
     }
 }

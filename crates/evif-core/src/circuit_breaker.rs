@@ -278,32 +278,90 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
-/// Global registry of circuit breakers — one per downstream service.
+/// Registry of circuit breakers — one per downstream service.
 use std::sync::Mutex;
-use std::sync::OnceLock;
 
-static CIRCUIT_BREAKERS: OnceLock<Mutex<std::collections::HashMap<String, Arc<CircuitBreaker>>>> =
-    OnceLock::new();
-
-fn get_registry() -> &'static Mutex<std::collections::HashMap<String, Arc<CircuitBreaker>>> {
-    CIRCUIT_BREAKERS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+/// Thread-safe registry of named circuit breakers.
+/// Uses std::sync::Mutex with poisoning, but provides explicit error handling.
+pub struct CircuitBreakerRegistry {
+    breakers: Mutex<std::collections::HashMap<String, Arc<CircuitBreaker>>>,
 }
 
-/// Get or create a named circuit breaker.
-pub fn get_circuit_breaker(name: &str) -> Arc<CircuitBreaker> {
-    let registry = get_registry();
-    let mut guard = registry.lock().unwrap();
-    guard
-        .entry(name.to_string())
-        .or_insert_with(|| Arc::new(CircuitBreaker::new(name, CircuitBreakerConfig::default())))
+impl CircuitBreakerRegistry {
+    /// Create a new empty registry.
+    pub fn new() -> Self {
+        Self {
+            breakers: Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+
+    /// Get or create a named circuit breaker.
+    /// Note: Uses unwrap_or_else to recover from mutex poisoning.
+    pub fn get_or_create(&self, name: &str) -> Arc<CircuitBreaker> {
+        let mut breakers = self.breakers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        breakers
+            .entry(name.to_string())
+            .or_insert_with(|| Arc::new(CircuitBreaker::new(name, CircuitBreakerConfig::default())))
+            .clone()
+    }
+
+    /// Get or create with custom config.
+    pub fn get_or_create_with_config(&self, name: &str, config: CircuitBreakerConfig) -> Arc<CircuitBreaker> {
+        let mut breakers = self.breakers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        breakers
+            .entry(name.to_string())
+            .or_insert_with(|| Arc::new(CircuitBreaker::new(name, config)))
+            .clone()
+    }
+
+    /// Returns snapshots of all registered circuit breakers.
+    pub fn all_snapshots(&self) -> Vec<CircuitBreakerSnapshot> {
+        let breakers = self.breakers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        breakers.values().map(|cb| cb.snapshot()).collect()
+    }
+
+    /// Clear all circuit breakers (for testing).
+    #[cfg(test)]
+    pub fn clear(&self) {
+        let mut breakers = self.breakers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        breakers.clear();
+    }
+}
+
+impl Default for CircuitBreakerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// Global registry instance for backward compatibility
+use std::sync::OnceLock;
+
+static GLOBAL_REGISTRY: OnceLock<Arc<CircuitBreakerRegistry>> = OnceLock::new();
+
+fn get_global_registry() -> Arc<CircuitBreakerRegistry> {
+    GLOBAL_REGISTRY
+        .get_or_init(|| Arc::new(CircuitBreakerRegistry::new()))
         .clone()
 }
 
-/// Returns snapshots of all registered circuit breakers.
+/// Get or create a named circuit breaker (global registry).
+/// NOTE: Prefer injecting CircuitBreakerRegistry for testability.
+pub fn get_circuit_breaker(name: &str) -> Arc<CircuitBreaker> {
+    get_global_registry().get_or_create(name)
+}
+
+/// Returns snapshots of all registered circuit breakers (global registry).
 pub fn all_circuit_breakers() -> Vec<CircuitBreakerSnapshot> {
-    let registry = get_registry();
-    let guard = registry.lock().unwrap();
-    guard.values().map(|cb| cb.snapshot()).collect()
+    get_global_registry().all_snapshots()
 }
 
 #[cfg(test)]

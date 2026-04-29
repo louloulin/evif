@@ -203,7 +203,10 @@ impl BatchExecutor {
             let source = source.clone();
 
             join_set.spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
+                // Handle semaphore closure gracefully - return error tuple
+                if semaphore.acquire().await.is_err() {
+                    return Err((source.clone(), "Concurrency limit unavailable".to_string()));
+                }
 
                 let target_path = if recursive {
                     // 递归复制：保持目录结构
@@ -300,7 +303,10 @@ impl BatchExecutor {
             let recursive = _request.recursive;
 
             join_set.spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
+                // Handle semaphore closure gracefully - return error tuple
+                if semaphore.acquire().await.is_err() {
+                    return Err((path.clone(), "Concurrency limit unavailable".to_string()));
+                }
 
                 if recursive {
                     plugin.clone().remove_all(&path).await
