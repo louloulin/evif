@@ -12,7 +12,8 @@ use crate::error::EvifResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 // 权限位定义
 bitflags::bitflags! {
@@ -214,43 +215,43 @@ impl AclManager {
 
     /// 启用/禁用 ACL
     pub fn set_enabled(&self, enabled: bool) {
-        *self.enabled.write().unwrap() = enabled;
+        *self.enabled.write() = enabled;
     }
 
     /// 检查 ACL 是否启用
     pub fn is_enabled(&self) -> bool {
-        *self.enabled.read().unwrap()
+        *self.enabled.read()
     }
 
     /// 设置文件 ACL
     pub async fn set_acl(&self, path: String, entries: Vec<AclEntry>) -> EvifResult<()> {
-        let mut acls = self.acls.write().unwrap();
+        let mut acls = self.acls.write();
         acls.insert(path, entries);
         Ok(())
     }
 
     /// 获取文件 ACL
     pub async fn get_acl(&self, path: &str) -> Option<Vec<AclEntry>> {
-        let acls = self.acls.read().unwrap();
+        let acls = self.acls.read();
         acls.get(path).cloned()
     }
 
     /// 删除文件 ACL
     pub async fn remove_acl(&self, path: &str) -> EvifResult<()> {
-        let mut acls = self.acls.write().unwrap();
+        let mut acls = self.acls.write();
         acls.remove(path);
         Ok(())
     }
 
     /// 添加用户上下文
     pub fn add_user(&self, user: UserContext) {
-        let mut cache = self.user_cache.write().unwrap();
+        let mut cache = self.user_cache.write();
         cache.insert(user.username.clone(), user);
     }
 
     /// 获取用户上下文
     pub fn get_user(&self, username: &str) -> Option<UserContext> {
-        let cache = self.user_cache.read().unwrap();
+        let cache = self.user_cache.read();
         cache.get(username).cloned()
     }
 
@@ -400,7 +401,7 @@ impl AclManager {
 
     /// 批量设置 ACL
     pub async fn set_acl_batch(&self, acl_map: HashMap<String, Vec<AclEntry>>) -> EvifResult<()> {
-        let mut acls = self.acls.write().unwrap();
+        let mut acls = self.acls.write();
         for (path, entries) in acl_map {
             acls.insert(path, entries);
         }
@@ -409,19 +410,19 @@ impl AclManager {
 
     /// 获取所有 ACL
     pub async fn get_all_acls(&self) -> HashMap<String, Vec<AclEntry>> {
-        let acls = self.acls.read().unwrap();
+        let acls = self.acls.read();
         acls.clone()
     }
 
     /// 清除所有 ACL
     pub async fn clear_all(&self) {
-        let mut acls = self.acls.write().unwrap();
+        let mut acls = self.acls.write();
         acls.clear();
     }
 
     /// 清除用户缓存
     pub fn clear_user_cache(&self) {
-        let mut cache = self.user_cache.write().unwrap();
+        let mut cache = self.user_cache.write();
         cache.clear();
     }
 }

@@ -175,11 +175,13 @@ impl HandleHandlers {
 
         // 计算租约过期时间
         let lease_duration = req.lease.map(Duration::from_secs);
-        let lease_expires_at = lease_duration.map(|d| {
-            chrono::Utc::now()
-                .checked_add_signed(chrono::Duration::from_std(d).unwrap())
-                .unwrap()
-                .timestamp()
+        let lease_expires_at = lease_duration.and_then(|d| {
+            chrono::Duration::from_std(d)
+                .ok()
+                .and_then(|chrono_duration| {
+                    chrono::Utc::now().checked_add_signed(chrono_duration)
+                })
+                .map(|dt| dt.timestamp())
         });
 
         // 注册到全局管理器

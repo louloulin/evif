@@ -7,7 +7,8 @@ use crate::dynamic_loader::PluginInfo;
 use crate::error::{EvifError, EvifResult};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use tracing::{info, warn};
 
 /// 插件生命周期状态
@@ -129,7 +130,7 @@ impl PluginRegistry {
 
     /// 注册新插件
     pub fn register(&self, name: String, info: PluginInfo, library_path: String) {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write();
         let plugin = RegisteredPlugin::new(name.clone(), info, library_path);
         info!("Registering plugin: {} (state: {:?})", name, plugin.state);
         plugins.insert(name, plugin);
@@ -137,7 +138,7 @@ impl PluginRegistry {
 
     /// 卸载插件
     pub fn unregister(&self, name: &str) -> EvifResult<()> {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write();
         if plugins.remove(name).is_some() {
             info!("Unregistered plugin: {}", name);
             Ok(())
@@ -149,19 +150,19 @@ impl PluginRegistry {
 
     /// 获取插件信息
     pub fn get(&self, name: &str) -> Option<RegisteredPlugin> {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins.get(name).cloned()
     }
 
     /// 获取所有插件
     pub fn list_all(&self) -> Vec<RegisteredPlugin> {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins.values().cloned().collect()
     }
 
     /// 获取指定状态的插件
     pub fn list_by_state(&self, state: &PluginState) -> Vec<RegisteredPlugin> {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins
             .values()
             .filter(|p| &p.state == state)
@@ -176,7 +177,7 @@ impl PluginRegistry {
 
     /// 激活插件
     pub fn activate(&self, name: &str, mount_path: String) -> EvifResult<()> {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write();
         if let Some(plugin) = plugins.get_mut(name) {
             plugin.activate(mount_path);
             info!("Activated plugin: {}", name);
@@ -188,7 +189,7 @@ impl PluginRegistry {
 
     /// 停用插件
     pub fn deactivate(&self, name: &str) -> EvifResult<()> {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write();
         if let Some(plugin) = plugins.get_mut(name) {
             plugin.deactivate();
             info!("Deactivated plugin: {}", name);
@@ -200,7 +201,7 @@ impl PluginRegistry {
 
     /// 记录插件失败
     pub fn record_failure(&self, name: &str, error: String) -> EvifResult<()> {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write();
         if let Some(plugin) = plugins.get_mut(name) {
             plugin.record_failure(error.clone());
             warn!("Plugin {} failed: {}", name, error);
@@ -212,19 +213,19 @@ impl PluginRegistry {
 
     /// 检查插件是否存在
     pub fn exists(&self, name: &str) -> bool {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins.contains_key(name)
     }
 
     /// 检查插件是否活跃
     pub fn is_active(&self, name: &str) -> bool {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         matches!(plugins.get(name), Some(p) if p.state == PluginState::Active)
     }
 
     /// 获取活跃插件数量
     pub fn active_count(&self) -> usize {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins
             .values()
             .filter(|p| p.state == PluginState::Active)
@@ -233,19 +234,19 @@ impl PluginRegistry {
 
     /// 获取总插件数量
     pub fn total_count(&self) -> usize {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins.len()
     }
 
     /// 添加搜索路径
     pub fn add_search_path(&self, path: String) {
-        let mut paths = self.search_paths.write().unwrap();
+        let mut paths = self.search_paths.write();
         paths.push(path);
     }
 
     /// 获取搜索路径
     pub fn search_paths(&self) -> Vec<String> {
-        let paths = self.search_paths.read().unwrap();
+        let paths = self.search_paths.read();
         paths.clone()
     }
 }

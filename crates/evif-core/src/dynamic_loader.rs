@@ -14,7 +14,8 @@ use crate::plugin::EvifPlugin;
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use tracing::{debug, info};
 
 /// 插件 ABI 版本
@@ -274,7 +275,7 @@ impl DynamicPluginLoader {
     pub fn load_plugin(&self, name: &str) -> EvifResult<PluginInfo> {
         // 检查是否已加载
         {
-            let libraries = self.libraries.read().unwrap();
+            let libraries = self.libraries.read();
             if let Some(loaded) = libraries.get(name) {
                 info!("Plugin '{}' already loaded", name);
                 return Ok(loaded.info.clone());
@@ -315,7 +316,7 @@ impl DynamicPluginLoader {
 
         // 存储已加载的库
         {
-            let mut libraries = self.libraries.write().unwrap();
+            let mut libraries = self.libraries.write();
             libraries.insert(
                 name.to_string(),
                 LoadedLibrary {
@@ -390,7 +391,7 @@ impl DynamicPluginLoader {
     /// }
     /// ```
     pub fn create_plugin(&self, name: &str) -> EvifResult<Arc<dyn EvifPlugin>> {
-        let libraries = self.libraries.read().unwrap();
+        let libraries = self.libraries.read();
         let loaded = libraries.get(name).ok_or_else(|| {
             EvifError::PluginLoadError(format!(
                 "Plugin '{}' not loaded. Call load_plugin() first.",
@@ -440,7 +441,7 @@ impl DynamicPluginLoader {
     /// # 注意
     /// 卸载前必须确保所有插件实例已释放
     pub fn unload_plugin(&self, name: &str) -> EvifResult<()> {
-        let mut libraries = self.libraries.write().unwrap();
+        let mut libraries = self.libraries.write();
         libraries
             .remove(name)
             .ok_or_else(|| EvifError::PluginLoadError(format!("Plugin '{}' not loaded", name)))?;
@@ -451,13 +452,13 @@ impl DynamicPluginLoader {
 
     /// 列出已加载的插件
     pub fn loaded_plugins(&self) -> Vec<String> {
-        let libraries = self.libraries.read().unwrap();
+        let libraries = self.libraries.read();
         libraries.keys().cloned().collect()
     }
 
     /// 获取插件信息
     pub fn plugin_info(&self, name: &str) -> Option<PluginInfo> {
-        let libraries = self.libraries.read().unwrap();
+        let libraries = self.libraries.read();
         libraries.get(name).map(|loaded| loaded.info.clone())
     }
 }

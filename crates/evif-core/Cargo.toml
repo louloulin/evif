@@ -54,6 +54,9 @@ base64 = "0.22"
 # Dynamic library loading for plugin system
 libloading = "0.8"
 
+# Lock types that don't poison on panic
+parking_lot = "0.12"
+
 [features]
 default = []
 # Extism WASM plugin backend (independent, multi-language PDK)

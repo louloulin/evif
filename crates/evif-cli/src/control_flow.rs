@@ -522,8 +522,9 @@ impl ControlFlowExecutor {
                             let l = lines[*i].trim();
                             *i += 1;
                             if l.contains('}') {
-                                let pos = l.find('}').unwrap();
-                                else_content.push_str(&l[..pos]);
+                                if let Some(pos) = l.find('}') {
+                                    else_content.push_str(&l[..pos]);
+                                }
                                 break;
                             } else {
                                 else_content.push_str(l);
@@ -629,7 +630,8 @@ impl ControlFlowExecutor {
 
         // 检查是否有花括号
         if first_line.contains('{') {
-            let open_brace = first_line.find('{').unwrap();
+            let open_brace = first_line.find('{')
+                .expect("first_line should contain '{' per guard check");
             // For "fn", the condition/params are before the {
             let kw_end = if start_kw == "fn" {
                 // fn name(params) { — everything before { is the signature, not condition
@@ -646,8 +648,9 @@ impl ControlFlowExecutor {
 
             if let Some(rest) = first_line.get(open_brace + 1..) {
                 if rest.contains('}') {
-                    let close_brace = rest.find('}').unwrap();
-                    block_content.push_str(rest[..close_brace].trim());
+                    if let Some(close_brace) = rest.find('}') {
+                        block_content.push_str(rest[..close_brace].trim());
+                    }
                     brace_count = 0;
                 } else {
                     block_content.push_str(rest.trim());

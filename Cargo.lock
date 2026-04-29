@@ -2630,6 +2630,7 @@ dependencies = [
  "extism",
  "libloading",
  "moka",
+ "parking_lot",
  "radix_trie",
  "serde",
  "serde_json",
