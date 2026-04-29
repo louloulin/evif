@@ -324,6 +324,8 @@ impl PostgresStorage {
             reinforcement_count: row.get::<i32, _>("reinforcement_count") as u32,
             last_reinforced_at: row.get("last_reinforced_at"),
             category_id: row.get("category_id"),
+            tags: row.get("tags"),
+            references: row.get("references"),
             user_id: row.get("user_id"),
             tenant_id: row.get("tenant_id"),
             created_at: row.get("created_at"),
@@ -359,8 +361,10 @@ impl PostgresStorage {
                 happened_at: row.get("happened_at"),
                 content_hash: row.get("content_hash"),
                 reinforcement_count: row.get::<i32, _>("reinforcement_count") as u32,
-                last_reinforced_at: row.get("last_reinforced_at"),
+last_reinforced_at: row.get("last_reinforced_at"),
                 category_id: row.get("category_id"),
+                tags: row.get("tags"),
+                references: row.get("references"),
                 user_id: row.get("user_id"),
                 tenant_id: row.get("tenant_id"),
                 created_at: row.get("created_at"),
@@ -374,7 +378,7 @@ impl PostgresStorage {
     pub async fn get_all_items(&self) -> MemResult<Vec<MemoryItem>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, user_id, tenant_id, created_at, updated_at
+            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at
             FROM memory_items
             "#
         )
@@ -400,6 +404,8 @@ impl PostgresStorage {
                 reinforcement_count: row.get::<i32, _>("reinforcement_count") as u32,
                 last_reinforced_at: row.get("last_reinforced_at"),
                 category_id: row.get("category_id"),
+                tags: row.get("tags"),
+                references: row.get("references"),
                 user_id: row.get("user_id"),
                 tenant_id: row.get("tenant_id"),
                 created_at: row.get("created_at"),
@@ -413,7 +419,7 @@ impl PostgresStorage {
     pub async fn get_items_by_user(&self, user_id: &str) -> MemResult<Vec<MemoryItem>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, user_id, tenant_id, created_at, updated_at
+            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at
             FROM memory_items WHERE user_id = $1
             "#
         )
@@ -440,6 +446,8 @@ impl PostgresStorage {
                 reinforcement_count: row.get::<i32, _>("reinforcement_count") as u32,
                 last_reinforced_at: row.get("last_reinforced_at"),
                 category_id: row.get("category_id"),
+                tags: row.get("tags"),
+                references: row.get("references"),
                 user_id: row.get("user_id"),
                 tenant_id: row.get("tenant_id"),
                 created_at: row.get("created_at"),
@@ -480,6 +488,8 @@ impl PostgresStorage {
                 reinforcement_count: row.get::<i32, _>("reinforcement_count") as u32,
                 last_reinforced_at: row.get("last_reinforced_at"),
                 category_id: row.get("category_id"),
+                tags: row.get("tags"),
+                references: row.get("references"),
                 user_id: row.get("user_id"),
                 tenant_id: row.get("tenant_id"),
                 created_at: row.get("created_at"),
@@ -715,6 +725,8 @@ impl PostgresStorage {
                 reinforcement_count: row.get::<i32, _>("reinforcement_count") as u32,
                 last_reinforced_at: row.get("last_reinforced_at"),
                 category_id: row.get("category_id"),
+                tags: row.get("tags"),
+                references: row.get("references"),
                 user_id: row.get("user_id"),
                 tenant_id: row.get("tenant_id"),
                 created_at: row.get("created_at"),

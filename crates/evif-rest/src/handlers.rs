@@ -1,5 +1,6 @@
 // REST API 处理器
 
+use crate::fs_handlers::{ChmodRequest, ChownRequest};
 use crate::metrics_handlers::TrafficStats;
 use crate::tenant_handlers::TenantState;
 use crate::{json, RestError, RestResult};
@@ -1053,6 +1054,49 @@ evif_request_duration_seconds_count {}
         Ok(Json(serde_json::json!({
             "message": "File touched",
             "path": payload.path
+        })))
+    }
+
+    /// 修改文件权限
+    /// POST /api/v1/fs/chmod
+    pub async fn chmod(
+        State(state): State<AppState>,
+        Json(payload): Json<ChmodRequest>,
+    ) -> RestResult<Json<serde_json::Value>> {
+        let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&payload.path).await;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
+
+        plugin
+            .chmod(&relative_path, payload.mode)
+            .await
+            .map_err(|e| RestError::Internal(e.to_string()))?;
+
+        Ok(Json(serde_json::json!({
+            "path": payload.path,
+            "mode": payload.mode,
+        })))
+    }
+
+    /// 修改文件所有者
+    /// POST /api/v1/fs/chown
+    pub async fn chown(
+        State(state): State<AppState>,
+        Json(payload): Json<ChownRequest>,
+    ) -> RestResult<Json<serde_json::Value>> {
+        let (plugin_opt, relative_path) = state.mount_table.lookup_with_path(&payload.path).await;
+        let plugin = plugin_opt
+            .ok_or_else(|| RestError::NotFound(format!("Path not found: {}", payload.path)))?;
+
+        plugin
+            .chown(&relative_path, &payload.owner, payload.group.as_deref())
+            .await
+            .map_err(|e| RestError::Internal(e.to_string()))?;
+
+        Ok(Json(serde_json::json!({
+            "path": payload.path,
+            "owner": payload.owner,
+            "group": payload.group,
         })))
     }
 

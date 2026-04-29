@@ -62,6 +62,14 @@ pub struct ChmodRequest {
     pub mode: u32,
 }
 
+/// 所有者修改请求
+#[derive(Debug, Deserialize)]
+pub struct ChownRequest {
+    pub path: String,
+    pub owner: String,
+    pub group: Option<String>,
+}
+
 /// 截断请求
 #[derive(Debug, Deserialize)]
 pub struct TruncateRequest {
@@ -416,6 +424,30 @@ impl FsHandlers {
         Ok(Json(serde_json::json!({
             "path": req.path,
             "mode": req.mode,
+        })))
+    }
+
+    /// 修改文件所有者
+    /// POST /api/v1/fs/chown
+    pub async fn chown(
+        State(state): State<FsState>,
+        Json(req): Json<ChownRequest>,
+    ) -> Result<Json<serde_json::Value>, FsError> {
+        let plugin = state
+            .mount_table
+            .lookup(&req.path)
+            .await
+            .ok_or_else(|| FsError::NotFound(req.path.clone()))?;
+
+        plugin
+            .chown(&req.path, &req.owner, req.group.as_deref())
+            .await
+            .map_err(|e| FsError::Internal(e.to_string()))?;
+
+        Ok(Json(serde_json::json!({
+            "path": req.path,
+            "owner": req.owner,
+            "group": req.group,
         })))
     }
 

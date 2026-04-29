@@ -257,6 +257,16 @@ pub trait EvifPlugin: Send + Sync {
         Err(EvifError::NotSupportedGeneric)
     }
 
+    /// 修改文件所有者
+    ///
+    /// # 参数
+    /// - `path`: 文件路径
+    /// - `owner`: 新的所有者用户 ID
+    /// - `group`: 新的所有者组 ID（可选）
+    async fn chown(&self, _path: &str, _owner: &str, _group: Option<&str>) -> EvifResult<()> {
+        Err(EvifError::NotSupportedGeneric)
+    }
+
     /// 截断文件到指定大小
     ///
     /// # 参数

@@ -1,10 +1,10 @@
 // REST API 路由 - 增强版，完全对标AGFS
 
 use crate::{
-    batch_handlers, collab_handlers, context_handlers, encryption_handlers, graphql_handlers,
-    handle_handlers, handlers, memory_handlers, metrics_handlers, sync_handlers, tenant_handlers,
-    wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState,
-    GraphqlAppContext, HandleState, RestAuthState, SyncState, TenantState,
+    batch_handlers, collab_handlers, context_handlers, encryption_handlers, fs_handlers,
+    graphql_handlers, handle_handlers, handlers, memory_handlers, metrics_handlers, sync_handlers,
+    tenant_handlers, wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState,
+    EncryptionState, GraphqlAppContext, HandleState, RestAuthState, SyncState, TenantState,
 };
 use axum::extract::DefaultBodyLimit;
 use axum::{middleware, routing, Router};
@@ -352,6 +352,17 @@ fn build_routes(
         .route(
             "/api/v1/touch",
             axum::routing::post(handlers::EvifHandlers::touch),
+        )
+        // ============== 权限管理 ==============
+        // 修改文件权限
+        .route(
+            "/api/v1/fs/chmod",
+            axum::routing::post(handlers::EvifHandlers::chmod),
+        )
+        // 修改文件所有者
+        .route(
+            "/api/v1/fs/chown",
+            axum::routing::post(handlers::EvifHandlers::chown),
         )
         // ============== 高级操作 ==============
         // 正则搜索

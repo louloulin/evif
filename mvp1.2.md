@@ -3,7 +3,7 @@
 > 创建时间：2026-04-29
 > 更新时间：2026-04-29
 > 项目：EVIF (Everything Is a File)
-> 当前完成度：37.5%（3/8 功能完成）
+> 当前完成度：50%（4/8 功能完成）
 > 验证时间：2026-04-29
 
 ---
@@ -15,7 +15,7 @@
 | **P0-1**: AES-256-GCM 加密 | ✅ 已完成 | 6 个测试通过 |
 | **P0-2**: Token 计数截断 | ✅ 已完成 | 10 个测试通过 |
 | **P1-1**: 插件元数据增强 | ✅ 已完成 | 7 个 langchain 测试通过 |
-| **P0-3**: CLI 补全功能 | ⏳ 待实现 | chmod/chown |
+| **P0-3**: CLI 补全功能 | ✅ 已完成 | chmod/chown 命令已实现 |
 | **P1-2**: FUSE 挂载支持 | ⏳ 待实现 | - |
 | **P1-3**: 图像/音频分析 | ⏳ 待实现 | 占位符 |
 | **P2-1**: 网络插件修复 | ⏳ 待实现 | OpenDAL TLS |
@@ -204,11 +204,54 @@ test test_load_memory_variables ... ok
 
 ### P0-3: CLI 补全功能
 
-**状态**: ⏳ 待实现
+**状态**: ✅ 已完成
 
-**当前问题**：`evif-cli/commands.rs:289,297` - chmod/chown 返回 "not yet supported"
+**实现** (`crates/evif-cli/src/cli.rs`, `crates/evif-cli/src/commands.rs`):
 
-**工作量**：约 8h
+```rust
+// CLI 命令定义
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    /// Change file permissions
+    Chmod {
+        /// File path
+        path: String,
+        /// Permission mode (e.g., 0o755 or 755)
+        mode: String,
+    },
+
+    /// Change file owner and group
+    Chown {
+        /// File path
+        path: String,
+        /// New owner username
+        owner: String,
+        /// New group name (optional)
+        #[arg(short, long)]
+        group: Option<String>,
+    },
+}
+```
+
+**关键文件**:
+- `crates/evif-cli/src/cli.rs` - CLI 命令定义
+- `crates/evif-cli/src/commands.rs` - chmod/chown 实现
+- `crates/evif-client/src/client.rs` - REST API 客户端
+- `crates/evif-rest/src/handlers.rs` - HTTP 处理器
+- `crates/evif-rest/src/routes.rs` - 路由注册
+- `crates/evif-rest/src/fs_handlers.rs` - 请求结构体
+- `crates/evif-core/src/plugin.rs` - 插件 trait 扩展
+
+**验证结果**:
+```bash
+$ evif chmod --help
+Change file permissions
+Usage: evif chmod [OPTIONS] <PATH> <MODE>
+
+$ evif chown --help
+Change file owner and group
+Usage: evif chown [OPTIONS] <PATH> <OWNER>
+```
 
 ---
 
@@ -259,6 +302,8 @@ test test_load_memory_variables ... ok
 | AES-256-GCM 加密 | `cargo test -p evif-mem --features security -- encryption` | ✅ 6 passed |
 | Token 计数 | `cargo test -p evif-mem -- token` | ✅ 10 passed |
 | LangChain 集成 | `cargo test -p evif-mem -- langchain` | ✅ 7 passed |
+| chmod CLI 命令 | `evif chmod --help` | ✅ 正常显示 |
+| chown CLI 命令 | `evif chown --help` | ✅ 正常显示 |
 
 ---
 
@@ -270,3 +315,9 @@ test test_load_memory_variables ... ok
 | `crates/evif-mem/src/token.rs` | Token 计数模块 |
 | `crates/evif-mem/src/models.rs` | MemoryItem tags/references |
 | `crates/evif-mem/Cargo.toml` | aes-gcm, pbkdf2 依赖 |
+| `crates/evif-cli/src/cli.rs` | CLI chmod/chown 命令定义 |
+| `crates/evif-cli/src/commands.rs` | chmod/chown 实现 |
+| `crates/evif-client/src/client.rs` | REST API chmod/chown |
+| `crates/evif-rest/src/handlers.rs` | HTTP 处理器 |
+| `crates/evif-rest/src/routes.rs` | 路由注册 |
+| `crates/evif-core/src/plugin.rs` | 插件 chown trait |

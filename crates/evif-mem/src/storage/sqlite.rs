@@ -623,6 +623,8 @@ impl SQLiteStorage {
             reinforcement_count: row.get(9)?,
             last_reinforced_at,
             category_id: row.get(11)?,
+            tags: Vec::new(),
+            references: Vec::new(),
             user_id: None,
             tenant_id: None,
             created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(12)?)

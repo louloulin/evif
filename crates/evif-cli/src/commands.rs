@@ -286,21 +286,26 @@ impl EvifCommand {
     // ============== 高级命令 ==============
 
     /// 修改文件权限
-    /// NOTE: chmod requires backend support (not yet implemented in REST API)
-    pub async fn chmod(&self, _path: String, _mode: String) -> Result<()> {
-        println!("Error: chmod not yet supported by backend");
-        println!("Use write permissions when creating files/directories instead.");
+    pub async fn chmod(&self, path: String, mode: String) -> Result<()> {
+        // 解析 mode 字符串为 u32 (支持八进制如 "755" 或十进制如 "493")
+        let mode_val = if mode.starts_with("0") {
+            u32::from_str_radix(&mode[1..], 8)
+                .map_err(|e| anyhow::anyhow!("Invalid octal mode: {}", e))?
+        } else {
+            mode.parse::<u32>()
+                .map_err(|e| anyhow::anyhow!("Invalid mode: {}", e))?
+        };
+
+        self.client.chmod(&path, mode_val).await?;
+        println!("Changed mode of {} to {:o}", path, mode_val);
         Ok(())
     }
 
     /// 修改文件所有者
-    /// NOTE: chown requires backend support (not yet implemented in REST API)
-    pub async fn chown(&self, _path: String, _owner: String, group: Option<String>) -> Result<()> {
-        let _group_info = group
-            .as_ref()
-            .map(|g| format!(":{}", g))
-            .unwrap_or_default();
-        println!("Error: chown not yet supported by backend");
+    pub async fn chown(&self, path: String, owner: String, group: Option<String>) -> Result<()> {
+        self.client.chown(&path, &owner, group.as_deref()).await?;
+        let group_info = group.map(|g| format!(":{}", g)).unwrap_or_default();
+        println!("Changed owner of {} to {}{}", path, owner, group_info);
         Ok(())
     }
 

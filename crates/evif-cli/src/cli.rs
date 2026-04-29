@@ -85,6 +85,25 @@ pub enum Commands {
         path: String,
     },
 
+    /// Change file permissions
+    Chmod {
+        /// File path
+        path: String,
+        /// Permission mode (e.g., 0o755 or 755)
+        mode: String,
+    },
+
+    /// Change file owner and group
+    Chown {
+        /// File path
+        path: String,
+        /// New owner username
+        owner: String,
+        /// New group name (optional)
+        #[arg(short, long)]
+        group: Option<String>,
+    },
+
     /// Check server health
     Health,
 
@@ -513,6 +532,12 @@ impl EvifCli {
             }
             Commands::Touch { path } => {
                 command.touch(path.clone()).await?;
+            }
+            Commands::Chmod { path, mode } => {
+                command.chmod(path.clone(), mode.clone()).await?;
+            }
+            Commands::Chown { path, owner, group } => {
+                command.chown(path.clone(), owner.clone(), group.clone()).await?;
             }
             Commands::Health => {
                 command.health().await?;

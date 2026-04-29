@@ -448,6 +448,60 @@ impl EvifClient {
         Ok((algo, hash))
     }
 
+    /// 修改文件权限（POST /api/v1/fs/chmod）
+    pub async fn chmod(&self, path: &str, mode: u32) -> ClientResult<()> {
+        let url = format!("{}/api/v1/fs/chmod", self.config.base_url);
+        let body = serde_json::json!({ "path": path, "mode": mode });
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let json: Value = response
+                .json()
+                .await
+                .map_err(|e| ClientError::Protocol(e.to_string()))?;
+            let msg = json.get("message").and_then(|v| v.as_str()).unwrap_or("chmod failed");
+            return Err(ClientError::Protocol(msg.to_string()));
+        }
+        Ok(())
+    }
+
+    /// 修改文件所有者（POST /api/v1/fs/chown）
+    pub async fn chown(
+        &self,
+        path: &str,
+        owner: &str,
+        group: Option<&str>,
+    ) -> ClientResult<()> {
+        let url = format!("{}/api/v1/fs/chown", self.config.base_url);
+        let mut body = serde_json::json!({ "path": path, "owner": owner });
+        if let Some(g) = group {
+            body["group"] = serde_json::json!(g);
+        }
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ClientError::Transport(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let json: Value = response
+                .json()
+                .await
+                .map_err(|e| ClientError::Protocol(e.to_string()))?;
+            let msg = json.get("message").and_then(|v| v.as_str()).unwrap_or("chown failed");
+            return Err(ClientError::Protocol(msg.to_string()));
+        }
+        Ok(())
+    }
+
     /// 正则搜索（Phase 10.1：POST /api/v1/grep）
     pub async fn grep(
         &self,
