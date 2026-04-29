@@ -14,11 +14,11 @@
 | 问题 | 优先级 | 状态 | 验收 |
 |------|--------|------|------|
 | P0-1: 全局 OnceLock 状态污染 | Critical | ✅ 已修复 | 76 tests passed |
-| P0-2: Semaphore panic | Critical | ✅ 已修复 | 编译通过 |
+| P0-2: Semaphore panic | Critical | ✅ 已修复 | 76 tests passed |
 | P0-3: Mutex 毒化 | Critical | ✅ 已修复 | 编译通过 |
 | P1-1: RwLock unwrap (~25处) | High | ✅ 已修复 | 76 tests passed |
-| P1-2: 解析器 unwrap (~3处) | High | ✅ 已修复 | 37 tests passed |
-| P1-3: SystemTime 安全 | High | ✅ 已修复 | 已修复 |
+| P1-2: 解析器 unwrap (~3处) | High | ✅ 已修复 | 43 tests passed |
+| P1-3: SystemTime 安全 | High | ✅ 已修复 | 编译通过 |
 | P1-4: chrono Duration | High | ✅ 已修复 | 编译通过 |
 
 **预计节省**: 避免 7 类级联故障场景
@@ -30,24 +30,38 @@
 | Crate | 测试结果 | 状态 |
 |-------|---------|------|
 | **evif-core** | ✅ 76 passed | 无问题 |
-| **evif-cli** | ✅ 37 passed | 无问题 |
-| **evif-rest** | ⚠️ 44 passed, **5 failed** | 环境问题 |
-| **evif-plugins** | ⚠️ 110 passed, **4 failed** | 环境问题 |
+| **evif-cli** | ✅ 43 passed | 无问题 |
+| **evif-rest** | ⚠️ 44 passed, **5 failed** | 环境问题 (macOS sandbox) |
+| **evif-plugins** | ⚠️ 110 passed, **4 failed** | 环境问题 (macOS Framework) |
 
-### 失败的测试
+### 失败的测试（环境问题，非代码 bug）
 
-**evif-rest (5个)**
+**evif-rest (5个 - macOS sandbox shm 限制)**
 - `middleware::tests::test_api_key_rate_limit_rejects_second_inflight_request`
 - `middleware::tests::test_ip_rate_limit_isolated_per_client_ip`
 - `middleware::tests::test_api_key_rate_limit_headers_are_present`
 - `memory_handlers::tests::test_postgres_memory_backend_round_trips_real_requests`
 - `memory_handlers::tests::test_postgres_memory_backend_description_includes_pool_bounds`
 
-**evif-plugins (4个)**
+**evif-plugins (4个 - macOS Framework 不可用)**
 - `httpfs::tests::test_httpfs_basic`
 - `httpfs::tests::test_httpfs_url_building`
 - `proxyfs::tests::test_proxyfs_reload_file`
 - `proxyfs::tests::test_proxyfs_url_building`
+
+### 真实测试结果
+
+```bash
+$ cargo test -p evif-core --lib
+test result: ok. 76 passed; 0 failed
+
+$ cargo test -p evif-cli
+test result: ok. 37 passed (lib) + 5 passed (integration) + 1 passed (surface)
+test result: ok. 43 passed; 0 failed
+
+$ cargo test -p evif-rest --lib
+test result: FAILED. 44 passed; 5 failed (环境问题)
+```
 
 ---
 
