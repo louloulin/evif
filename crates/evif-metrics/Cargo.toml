@@ -18,5 +18,8 @@ async-trait = "0.1"
 prometheus = { version = "0.13", optional = true }
 lazy_static = { version = "1.4", optional = true }
 
+# For fast mutex and parking lot
+parking_lot = "0.12"
+
 [dev-dependencies]
 tokio = { version = "1.35", features = ["full"] }

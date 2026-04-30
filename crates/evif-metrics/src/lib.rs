@@ -5,9 +5,11 @@
 
 pub mod error;
 pub mod prometheus;
+pub mod traffic;
 pub mod types;
 
 pub use error::{MetricsError, MetricsResult};
+pub use traffic::{TrafficMonitor, TrafficStats};
 pub use types::*;
 
 #[cfg(feature = "prometheus")]
