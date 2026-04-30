@@ -4,6 +4,7 @@
 //! EVIF 认证和授权层
 
 pub mod audit;
+pub mod audit_query;
 pub mod auth;
 pub mod capability;
 pub mod error;
@@ -11,6 +12,9 @@ pub mod error;
 pub use audit::{
     AuditConfig, AuditEvent, AuditEventType, AuditFilter, AuditLogManager, AuditLogger,
     FileAuditLogger, MemoryAuditLogger,
+};
+pub use audit_query::{
+    AuditQuery, AuditQueryBuilder, AuditStats, ExportFormat, SortField, SortOrder,
 };
 pub use auth::{AuthManager, AuthPolicy, JwtError, JwtValidator, Permission};
 pub use capability::{CapId, Capability, Permissions, Principal, PrincipalId};

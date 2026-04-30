@@ -33,6 +33,10 @@ pub mod wasm;
 #[cfg(feature = "extism-backend")]
 pub mod extism_plugin;
 
+// Extism WASM plugin pool (requires "extism-backend" feature)
+#[cfg(feature = "extism-backend")]
+pub mod plugin_pool;
+
 pub use acl::{
     AclCheckResult, AclEntry, AclManager, AclPermissions, AclSupported, AclType, UserContext,
 };
@@ -82,3 +86,9 @@ pub use wasm::{
 // Extism plugin exports
 #[cfg(feature = "extism-backend")]
 pub use extism_plugin::{ExtismPlugin, SecurityConfig as WasmSecurityConfig};
+
+// Plugin pool exports
+#[cfg(feature = "extism-backend")]
+pub use plugin_pool::{
+    PoolConfig, PoolError, PoolStats, PooledPlugin, PluginPool, PluginPoolManager, PoolResult,
+};
