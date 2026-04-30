@@ -81,8 +81,8 @@ impl Repl {
                         continue;
                     }
 
-                    // 支持管道和重定向
-                    if line.contains('|') || line.contains('>') {
+                    // 支持管道和重定向（>, >>, <）
+                    if line.contains('|') || line.contains('>') || line.contains(" < ") {
                         if let Err(e) = self.handle_shell_syntax(line).await {
                             eprintln!("Error: {}", e);
                         }
@@ -239,45 +239,81 @@ impl Repl {
     }
 
     async fn handle_redirection(&mut self, line: &str) -> Result<()> {
-        let (command_part, target, append) = if let Some((left, right)) = line.split_once(">>") {
-            (left.trim(), right.trim(), true)
-        } else if let Some((left, right)) = line.split_once('>') {
-            (left.trim(), right.trim(), false)
-        } else {
+        use crate::redirection::{parse_redirection, RedirectionType};
+
+        let (command_part, redir) = parse_redirection(line);
+
+        let Some(redir) = redir else {
             return Ok(());
         };
 
-        let output = if let Some(output) = self.builtin_output(command_part).await? {
-            output
-        } else {
-            self.spawn_external_pipeline(&[command_part], None)?
-        };
+        match redir.redirect_type {
+            RedirectionType::Output | RedirectionType::Append => {
+                let append = redir.redirect_type == RedirectionType::Append;
 
-        let target_path = std::path::Path::new(target);
-        let treat_as_local = !target.starts_with('/')
-            || target_path
-                .parent()
-                .map(|parent| parent.exists())
-                .unwrap_or(false);
+                let output = if let Some(output) = self.builtin_output(&command_part).await? {
+                    output
+                } else {
+                    self.spawn_external_pipeline(&[&command_part], None)?
+                };
 
-        if treat_as_local {
-            if append {
-                let mut file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(target)?;
-                file.write_all(output.as_bytes())?;
-            } else {
-                std::fs::write(target, output)?;
+                let target_path = std::path::Path::new(&redir.target);
+                let treat_as_local = !redir.target.starts_with('/')
+                    || target_path
+                        .parent()
+                        .map(|parent| parent.exists())
+                        .unwrap_or(false);
+
+                if treat_as_local {
+                    if append {
+                        let mut file = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&redir.target)?;
+                        file.write_all(output.as_bytes())?;
+                    } else {
+                        // 确保父目录存在
+                        if let Some(parent) = target_path.parent() {
+                            if !parent.as_os_str().is_empty() {
+                                std::fs::create_dir_all(parent)?;
+                            }
+                        }
+                        std::fs::write(&redir.target, output)?;
+                    }
+                } else {
+                    self.command
+                        .write(
+                            redir.target.clone(),
+                            output.trim_end_matches('\n').to_string(),
+                            append,
+                        )
+                        .await?;
+                }
             }
-        } else {
-            self.command
-                .write(
-                    target.to_string(),
-                    output.trim_end_matches('\n').to_string(),
-                    append,
-                )
-                .await?;
+            RedirectionType::Input => {
+                // 输入重定向：从本地文件读取内容，作为 write 命令的输入
+                let content = crate::redirection::read_from_file(&redir.target)?;
+
+                // 解析命令，通常是 "write /path"
+                let parts: Vec<&str> = command_part.split_whitespace().collect();
+                let cmd = parts.first().copied().unwrap_or("");
+
+                match cmd {
+                    "write" | "cat>" => {
+                        let path = parts
+                            .get(1)
+                            .ok_or_else(|| anyhow::anyhow!("Usage: write <evif-path> < local-file"))?;
+                        self.command
+                            .write(path.to_string(), content, false)
+                            .await?;
+                    }
+                    _ => {
+                        // 对于其他命令，将文件内容作为参数传递
+                        // 例如: echo < file.txt 会将文件内容打印
+                        print!("{}", content);
+                    }
+                }
+            }
         }
 
         Ok(())
