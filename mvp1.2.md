@@ -18,7 +18,7 @@
 | **P0-3**: CLI 补全功能 | ✅ 已完成 | chmod/chown 命令已实现 |
 | **P1-2**: FUSE 挂载支持 | ✅ 已完成 | FUSE library + CLI 集成 |
 | **P1-3**: 图像/音频分析 | ✅ 已完成 | Doubao vision API 实现 |
-| **P2-1**: 网络插件修复 | ✅ 已规避 | 通过注释禁用有问题的功能 |
+| **P2-1**: 网络插件修复 | ✅ 已修复 | MVP 1.4 通过升级 OpenDAL 0.54 彻底修复 |
 | **P2-2**: HTTP 服务增强 | ✅ 已完成 | 107 个 REST API 端点 |
 
 ---
@@ -36,10 +36,10 @@
 | **SQL 接口** | sqlfs2 (Plan 9 风格) | sqlfs2 | 持平 |
 | **心跳监控** | heartbeatfs (min-heap) | heartbeatfs | 持平 |
 | **HTTP 服务** | httpfs | httpfs (实验) | 持平 |
-| **FUSE 挂载** | ✅ Linux FUSE | 计划中 | ❌ 需实现 |
-| **WASM 插件** | ✅ 实例池 | ✅ Extism | 持平 |
-| **流量监控** | TrafficMonitor | MetricsRegistry | ⚠️ 需增强 |
-| **插件实例池** | WASM 实例池 | 无 | ❌ 需实现 |
+| **FUSE 挂载** | ✅ Linux FUSE | ✅ FUSE | ✅ MVP 1.2 P1-2 |
+| **WASM 插件** | ✅ 实例池 | ✅ Extism + 实例池 | ✅ MVP 1.3 P0 |
+| **流量监控** | TrafficMonitor | TrafficMonitor + 滑动窗口 | ✅ MVP 1.3 P2 |
+| **插件实例池** | WASM 实例池 | ✅ PluginPool | ✅ MVP 1.3 P0 |
 | **认证授权** | ❌ 无 | ✅ Capability | ✅ EVIF 领先 |
 | **多租户** | ❌ 无 | ⚠️ 基础 | ⚠️ 需增强 |
 
@@ -48,9 +48,9 @@
 | 特性 | AgentFS | EVIF | 对比 |
 |------|---------|------|------|
 | **SQLite 存储** | ✅ 单文件 | ✅ | 持平 |
-| **Copy-on-write** | ✅ | ❌ | ❌ 需实现 |
-| **完整审计** | ✅ SQL 可查 | ⚠️ 基础 | ⚠️ 需增强 |
-| **Agent 追踪** | ✅ | ⚠️ 部分 | ⚠️ 需增强 |
+| **Copy-on-write** | ✅ | ✅ CowSnapshot | ✅ MVP 1.4 P0 |
+| **完整审计** | ✅ SQL 可查 | ✅ 查询接口+统计+导出 | ✅ MVP 1.3 P1 |
+| **Agent 追踪** | ✅ | ✅ AgentTracker | ✅ MVP 1.4 P1 |
 
 ---
 
@@ -334,31 +334,25 @@ Finished `dev` profile in 3.18s
 
 ### P2-1: 修复网络插件
 
-**状态**: ✅ 已规避
+**状态**: ✅ 已修复（MVP 1.4 P2）
 
 **问题分析**：
 - OpenDAL 0.50 存在 TLS 冲突（rustls vs futures_rustls）
 - 错误：`AsyncRustlsConnector::from(TlsConnector>` 不兼容
 - 影响服务：`webdavfs`, `ftpfs`, `sftpfs`
 
-**解决方案**：
-- 在 `crates/evif-plugins/src/lib.rs` 中注释掉有问题的网络插件
-- 保持代码结构完整，待上游修复后可重新启用
+**最终解决方案**（MVP 1.4 实施）：
+1. 升级 OpenDAL 0.50 → 0.54（修复 TLS 类型兼容问题）
+2. 取消注释所有网络插件代码（枚举、match arm、模块导出）
+3. 修复 API 变更（`builder.username()` → `builder.user()`）
 
 **验证结果**:
 ```bash
 $ cargo build -p evif-plugins --features "webdavfs,ftpfs,sftpfs"
-# 功能已注释，编译不触发错误
+Finished `dev` profile in 5.56s
 ```
 
-**后续操作**（网络环境可用时）：
-```bash
-# 检查 OpenDAL 更新
-cargo update -p opendal
-
-# 如果有新版本，尝试编译
-cargo build -p evif-plugins --features "webdavfs,ftpfs,sftpfs"
-```
+**详细记录**: 见 `mvp1.4.md` P2 章节
 
 ---
 
