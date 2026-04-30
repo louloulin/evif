@@ -1,486 +1,390 @@
-# EVIF Obsidian 插件开发计划
+# EVIF 100 插件开发计划
 
 > 创建时间：2026-04-30
 > 更新：2026-04-30
-> 目标：设计 EVIF Obsidian 插件，将 EVIF 的能力（上下文分层、技能系统、记忆系统）集成到 Obsidian
+> 目标：基于 MCP 生态分析，设计 EVIF 作为 Agent 统一接入平台的 100 个插件
 
 ---
 
-## 一、核心概念
+## 一、EVIF 定位：Agent 统一接入平台
 
-### 1.1 EVIF Obsidian 插件是什么？
+### 1.1 核心使命
 
-**EVIF Obsidian 插件**是一个运行在 Obsidian 内部的插件，它：
+**EVIF = Everything Is a Virtual Filesystem**
 
-1. 将 Obsidian 的笔记与 EVIF 后端同步
-2. 暴露 EVIF 的核心能力到 Obsidian：
-   - `/context/L0/L1/L2` 上下文分层
-   - `/skills` 技能系统
-   - `/memories` 记忆系统
-   - `/queue` 任务队列
-3. 允许 Obsidian 用户使用 AI Agent 的持久化能力
+EVIF 将所有外部服务暴露为文件系统接口，让 AI Agent 可以用统一的方式访问：
+- 本地文件
+- 云存储
+- 数据库
+- API 服务
+- AI 能力
+- 协作工具
 
-### 1.2 与 VaultSync 的区别
+### 1.2 MCP 对齐
 
-| 功能 | VaultSync | EVIF Obsidian 插件 |
-|------|------------|-------------------|
-| 同步目标 | Dropbox | EVIF 后端 |
-| 基本同步 | ✅ | ✅ |
-| 上下文分层 | ❌ | ✅ L0/L1/L2 |
-| 技能执行 | ❌ | ✅ SKILL.md |
-| 记忆系统 | ❌ | ✅ 向量记忆 |
-| Agent 协作 | ❌ | ✅ PipeFS |
-| MCP 集成 | ❌ | ✅ |
+MCP (Model Context Protocol) 是 Anthropic 2024 年 11 月推出的开放标准，用于连接 AI 应用与外部系统。
+
+**EVIF 与 MCP 的关系**：
+| MCP 概念 | EVIF 实现 |
+|---------|-----------|
+| MCP Server | EVIF Plugin |
+| MCP Resources | EVIF File System |
+| MCP Tools | EVIF File Operations |
+| MCP Prompts | EVIF Skills |
+| MCP Sampling | EVIF Pipeline |
+
+**EVIF 是 MCP 的文件系统实现**——所有 MCP 能力都通过 VFS 接口暴露。
 
 ---
 
-## 二、EVIF Obsidian 插件架构
+## 二、当前状态
 
-### 2.1 整体架构
+### 2.1 已实现插件（38 个）
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Obsidian App                              │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │              EVIF Obsidian 插件 (TypeScript)               │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
-│  │  │ Context Panel │  │ Skill Runner │  │ Memory Panel │    │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘    │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
-│  │  │ Queue Viewer │  │  MCP Bridge   │  │ Sync Engine  │    │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘    │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-│                               │                                    │
-│                    EVIF REST API / MCP Protocol                    │
-│                               ▼                                    │
-├─────────────────────────────────────────────────────────────────┤
-│                         EVIF Backend                              │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐           │
-│  │ContextFS│  │ SkillFS │  │VectorFS │  │ QueueFS │           │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘           │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 2.2 插件组件
-
-| 组件 | 功能 | 技术 |
+| 分类 | 插件 | 数量 |
 |------|------|------|
-| **Context Panel** | 显示 L0/L1/L2 上下文 | React/Svelte 面板 |
-| **Skill Runner** | 执行 SKILL.md 技能 | API 调用 |
-| **Memory Panel** | 向量记忆搜索 | 语义搜索 |
-| **Queue Viewer** | 任务队列管理 | 实时更新 |
-| **MCP Bridge** | 连接 Claude Desktop | MCP Protocol |
-| **Sync Engine** | Obsidian ↔ EVIF 同步 | 文件系统监控 |
+| 本地存储 | localfs, memfs, encryptedfs, tieredfs, streamrotatefs | 5 |
+| 数据库 | sqlfs, sqlfs2, kvfs, queuefs | 4 |
+| 云存储 | s3fs, gcsfs, azureblobfs, aliyunossfs, tencentcosfs, huaweiobsfs, miniofs | 7 |
+| 网络协议 | httpfs, webdavfs, ftpfs, sftpfs | 4 |
+| AI/LLM | gptfs, vectorfs, contextfs, context_manager | 4 |
+| Agent 专用 | skillfs, skill_runtime, pipefs, devfs, streamfs | 5 |
+| 系统服务 | heartbeatfs, handlefs, hellofs, catalog, serverinfofs | 5 |
+| 统一接入 | opendal (9 个后端) | 1 |
+
+### 2.2 与 AGFS 对比
+
+| 特性 | AGFS | EVIF | 差距 |
+|------|------|------|------|
+| 插件数量 | 17 | 38 | ✅ +21 |
+| REST API | ~40 | 108 | ✅ +68 |
+| MCP 协议 | ❌ | ✅ 26 工具 | ✅ 独有 |
+| 向量搜索 | ✅ | ✅ | 持平 |
+| 队列服务 | ✅ | ✅ | 持平 |
+| 技能系统 | ❌ | ✅ SKILL.md | ✅ 独有 |
+| 上下文分层 | ❌ | ✅ L0/L1/L2 | ✅ 独有 |
+| Agent 追踪 | ❌ | ✅ AgentTracker | ✅ 独有 |
+
+**结论：EVIF 已超越 AGFS**
 
 ---
 
-## 三、插件功能设计
+## 三、MCP 生态分析（2026）
 
-### 3.1 P0 必须功能
+### 3.1 MCP 服务器分类
 
-| 功能 | 描述 | 实现方式 |
+基于 [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers) 和 [Best of MCP](https://github.com/tolkonepiu/best-of-mcp-servers)：
+
+| 分类 | 数量 | 代表插件 |
 |------|------|----------|
-| **EVIF 连接** | 配置 EVIF 服务器地址和认证 | 设置面板 |
-| **笔记同步** | 将 Obsidian 笔记同步到 EVIF | 文件监听 |
-| **上下文写入** | 将当前笔记写入 L0/L1/L2 | 命令面板 |
-| **技能执行** | 在笔记中执行 SKILL.md | 侧边栏按钮 |
-| **记忆检索** | 搜索相关记忆 | 命令面板 |
+| **代码/开发** | 80+ | GitHub, GitLab, VSCode |
+| **数据库** | 60+ | PostgreSQL, MySQL, MongoDB, Redis |
+| **通信** | 50+ | Slack, Discord, Teams, Email |
+| **生产力** | 40+ | Notion, Linear, Asana, Jira |
+| **云服务** | 30+ | AWS, GCP, Azure |
+| **搜索** | 20+ | Brave, Google, Bing |
+| **AI/ML** | 30+ | OpenAI, Anthropic, Stability AI |
+| **媒体** | 20+ | Figma, YouTube, Twitter |
+| **存储** | 25+ | S3, Google Drive, Dropbox |
+| **其他** | 40+ | Browser, Filesystem |
 
-### 3.2 P1 重要功能
+### 3.2 Top MCP 服务器（按 stars）
 
-| 功能 | 描述 | 实现方式 |
-|------|------|----------|
-| **L0/L1/L2 视图** | 可视化上下文层级 | 面板视图 |
-| **技能市场** | 浏览可用技能 | 侧边栏 |
-| **记忆面板** | 显示相关记忆 | 右侧面板 |
-| **任务队列** | 查看/管理任务 | 面板视图 |
-| **Agent 通信** | PipeFS 消息传递 | 模态窗口 |
-
-### 3.3 P2 增强功能
-
-| 功能 | 描述 | 实现方式 |
-|------|------|----------|
-| **模板生成** | 基于上下文生成笔记模板 | AI API |
-| **自动摘要** | 生成笔记摘要 | LLM API |
-| **双向链接增强** | 结合向量记忆 | 图数据库 |
-| **协作视图** | 多用户上下文共享 | 实时同步 |
+| 排名 | 插件 | Stars | 分类 |
+|------|------|-------|------|
+| 1 | filesystem | 极高 | 本地文件 |
+| 2 | GitHub | 极高 | 代码管理 |
+| 3 | Slack | 高 | 通信 |
+| 4 | Notion | 高 | 知识库 |
+| 5 | PostgreSQL | 高 | 数据库 |
+| 6 | Google Calendar | 中高 | 日历 |
+| 7 | Linear | 中高 | 项目管理 |
+| 8 | Sentry | 中 | 监控 |
+| 9 | Brave Search | 中 | 搜索 |
+| 10 | Puppeteer | 中 | 浏览器 |
 
 ---
 
-## 四、技术实现
+## 四、EVIF 100 插件计划
 
-### 4.1 项目结构
+### P0 - MCP 核心对应（20 个）
 
-```
-evif-obsidian-plugin/
-├── src/
-│   ├── main.ts                 # 插件入口
-│   ├── settings/
-│   │   └── SettingsTab.ts      # 设置面板
-│   ├── panels/
-│   │   ├── ContextPanel.ts    # 上下文面板
-│   │   ├── MemoryPanel.ts     # 记忆面板
-│   │   ├── QueuePanel.ts      # 队列面板
-│   │   └── SkillPanel.ts      # 技能面板
-│   ├── commands/
-│   │   ├── context.ts         # 上下文命令
-│   │   ├── skill.ts           # 技能命令
-│   │   ├── memory.ts          # 记忆命令
-│   │   └── sync.ts            # 同步命令
-│   ├── api/
-│   │   ├── evif-client.ts     # EVIF API 客户端
-│   │   └── mcp-bridge.ts      # MCP 协议桥接
-│   └── sync/
-│       └── sync-engine.ts      # 同步引擎
-├── styles.css                   # 样式
-├── manifest.json               # Obsidian 清单
-└── package.json
-```
+**直接实现 MCP 服务器能力的 EVIF 插件**
 
-### 4.2 API 客户端
+| # | 插件 | MCP 对应 | 功能 | 优先级 | 工作量 |
+|---|------|---------|------|--------|--------|
+| 1 | **filesystem** | filesystem MCP | 本地文件系统完整实现 | P0 | 3 天 |
+| 2 | **githubfs** | GitHub MCP | 仓库、Issue、PR 管理 | P0 | 4 天 |
+| 3 | **slackfs** | Slack MCP | 消息发送/归档/搜索 | P0 | 3 天 |
+| 4 | **discordfs** | Discord MCP | 消息归档/频道操作 | P0 | 3 天 |
+| 5 | **notionfs** | Notion MCP | 页面读写/数据库 | P0 | 4 天 |
+| 6 | **postgresfs** | PostgreSQL MCP | SQL 查询/数据管理 | P0 | 3 天 |
+| 7 | **mysqlfs** | MySQL MCP | SQL 查询 | P0 | 2 天 |
+| 8 | **redisfs** | Redis MCP | KV 操作/缓存 | P0 | 2 天 |
+| 9 | **mongodbfs** | MongoDB MCP | NoSQL 操作 | P0 | 3 天 |
+| 10 | **s3fs** | S3 MCP | 对象存储 | P0 | 3 天 |
+| 11 | **googledrivefs** | Google Drive MCP | 云盘文件 | P0 | 3 天 |
+| 12 | **dropboxfs** | Dropbox MCP | 云盘文件 | P1 | 2 天 |
+| 13 | **gmailfs** | Gmail MCP | 邮件读写/搜索 | P0 | 3 天 |
+| 14 | **googlesearchfs** | Brave Search MCP | 网络搜索 | P0 | 2 天 |
+| 15 | **linearfs** | Linear MCP | Issue/项目 | P0 | 3 天 |
+| 16 | **gitlabfs** | GitLab MCP | 仓库/Issue/MR | P1 | 3 天 |
+| 17 | **jirafs** | Jira MCP | Issue/敏捷板 | P1 | 4 天 |
+| 18 | **asanafs** | Asana MCP | 任务管理 | P2 | 3 天 |
+| 19 | **trellofs** | Trello MCP | 看板/卡片 | P2 | 2 天 |
+| 20 | **sentryfs** | Sentry MCP | 错误监控 | P1 | 2 天 |
 
-```typescript
-// src/api/evif-client.ts
-export class EvifClient {
-  private baseUrl: string;
-  private apiKey: string;
+### P1 - 通信/协作（15 个）
 
-  constructor(baseUrl: string, apiKey: string) {
-    this.baseUrl = baseUrl;
-    this.apiKey = apiKey;
-  }
+| # | 插件 | MCP 对应 | 功能 | 优先级 | 工作量 |
+|---|------|---------|------|--------|--------|
+| 21 | **teamsfs** | Teams MCP | 消息/频道/会议 | P1 | 3 天 |
+| 22 | **zoomfs** | Zoom MCP | 会议/录制 | P2 | 3 天 |
+| 23 | **telegramfs** | Telegram MCP | Bot/消息 | P1 | 2 天 |
+| 24 | **whatsappfs** | WhatsApp MCP | 消息/媒体 | P2 | 3 天 |
+| 25 | **wechatfs** | WeChat MCP | 公众号/小程序 | P2 | 4 天 |
+| 26 | **dingtalkfs** | DingTalk MCP | 钉钉消息 | P2 | 3 天 |
+| 27 | **feishufs** | Feishu MCP | 飞书文档/消息 | P2 | 3 天 |
+| 28 | **larkfs** | Lark MCP | 文档/表格 | P2 | 3 天 |
+| 29 | **intercomfs** | Intercom MCP | 客服消息 | P2 | 2 天 |
+| 30 | **zendeskfs** | Zendesk MCP | 支持工单 | P2 | 3 天 |
+| 31 | **salesforcefs** | Salesforce MCP | CRM 操作 | P2 | 4 天 |
+| 32 | **hubspotfs** | HubSpot MCP | 营销 CRM | P2 | 3 天 |
+| 33 | **sendgridfs** | SendGrid MCP | 邮件发送 | P1 | 2 天 |
+| 34 | **mailgunfs** | Mailgun MCP | 邮件服务 | P2 | 2 天 |
+| 35 | **twiliofs** | Twilio MCP | SMS/语音 | P2 | 2 天 |
 
-  // 上下文操作
-  async readContext(layer: 'L0' | 'L1' | 'L2', path: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/context/${layer}/${path}`, {
-      headers: { 'X-API-Key': this.apiKey }
-    });
-    return response.text();
-  }
+### P2 - 云服务/基础设施（15 个）
 
-  async writeContext(layer: 'L0' | 'L1' | 'L2', path: string, content: string): Promise<void> {
-    await fetch(`${this.baseUrl}/context/${layer}/${path}`, {
-      method: 'PUT',
-      headers: {
-        'X-API-Key': this.apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ content })
-    });
-  }
+| # | 插件 | MCP 对应 | 功能 | 优先级 | 工作量 |
+|---|------|---------|------|--------|--------|
+| 36 | **awsfs** | AWS MCP | EC2/S3/Lambda | P1 | 4 天 |
+| 37 | **gcpfs** | GCP MCP | GCE/GCS/Cloud Functions | P1 | 4 天 |
+| 38 | **azurefs** | Azure MCP | VM/Blob/Functions | P1 | 4 天 |
+| 39 | **digitaloceanfs** | DigitalOcean MCP | Droplet/Spaces | P1 | 3 天 |
+| 40 | **herokufs** | Heroku MCP | 应用/Addon | P2 | 2 天 |
+| 41 | **vercelfs** | Vercel MCP | 部署/函数 | P0 | 3 天 |
+| 42 | **netlifyfs** | Netlify MCP | 部署/函数 | P1 | 3 天 |
+| 43 | **cloudflarefs** | Cloudflare MCP | Workers/D1/R2 | P1 | 3 天 |
+| 44 | **k8sfs** | K8s MCP | Pod/Service/Deployment | P1 | 5 天 |
+| 45 | **dockerfs** | Docker MCP | 容器/镜像 | P1 | 3 天 |
+| 46 | **terraformfs** | Terraform MCP | IaC 状态 | P2 | 3 天 |
+| 47 | **ansiblefs** | Ansible MCP | Playbook 执行 | P2 | 3 天 |
+| 48 | **prometheusfs** | Prometheus MCP | 指标查询 | P1 | 2 天 |
+| 49 | **grafanafs** | Grafana MCP | 仪表板/告警 | P1 | 3 天 |
+| 50 | **datadogfs** | Datadog MCP | 监控/日志 | P2 | 3 天 |
 
-  // 技能操作
-  async listSkills(): Promise<Skill[]> {
-    const response = await fetch(`${this.baseUrl}/skills`, {
-      headers: { 'X-API-Key': this.apiKey }
-    });
-    return response.json();
-  }
+### P3 - AI/ML 能力（15 个）
 
-  async executeSkill(skillName: string, input: string): Promise<SkillResult> {
-    const response = await fetch(`${this.baseUrl}/skills/${skillName}/execute`, {
-      method: 'POST',
-      headers: {
-        'X-API-Key': this.apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ input })
-    });
-    return response.json();
-  }
+| # | 插件 | MCP 对应 | 功能 | 优先级 | 工作量 |
+|---|------|---------|------|--------|--------|
+| 51 | **openaifs** | OpenAI MCP | GPT/DALL-E/Whisper | P0 | 3 天 |
+| 52 | **anthropicfs** | Anthropic MCP | Claude API | P0 | 3 天 |
+| 53 | **gemini_fs** | Gemini MCP | Gemini API | P1 | 3 天 |
+| 54 | **llama_fs** | Ollama MCP | 本地 LLM | P1 | 4 天 |
+| 55 | **midjourneyfs** | Midjourney MCP | AI 图像生成 | P1 | 4 天 |
+| 56 | **stable_diffusion_fs** | SD MCP | 本地图像生成 | P1 | 4 天 |
+| 57 | **dalle_fs** | DALL-E MCP | OpenAI 图像 | P1 | 2 天 |
+| 58 | **replicatefs** | Replicate MCP | AI 模型调用 | P2 | 3 天 |
+| 59 | **falaisfs** | fal.ai MCP | 视频/语音生成 | P2 | 3 天 |
+| 60 | **whisper_fs** | Whisper MCP | 语音转文字 | P1 | 2 天 |
+| 61 | **elevenlabsfs** | ElevenLabs MCP | 语音合成 | P2 | 2 天 |
+| 62 | **qdrantfs** | Qdrant MCP | 向量搜索 | P0 | 3 天 |
+| 63 | **pinecone_fs** | Pinecone MCP | 向量存储 | P1 | 3 天 |
+| 64 | **weaviatefs** | Weaviate MCP | 向量+GraphQL | P1 | 3 天 |
+| 65 | **chromafs** | Chroma MCP | 本地向量库 | P2 | 2 天 |
 
-  // 记忆操作
-  async searchMemories(query: string, limit: number = 10): Promise<Memory[]> {
-    const response = await fetch(`${this.baseUrl}/memories/search`, {
-      method: 'POST',
-      headers: {
-        'X-API-Key': this.apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ query, limit })
-    });
-    return response.json();
-  }
+### P4 - 媒体/内容（15 个）
 
-  async memorize(content: string, tags: string[]): Promise<void> {
-    await fetch(`${this.baseUrl}/memories`, {
-      method: 'POST',
-      headers: {
-        'X-API-Key': this.apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ content, tags })
-    });
-  }
+| # | 插件 | MCP 对应 | 功能 | 优先级 | 工作量 |
+|---|------|---------|------|--------|--------|
+| 66 | **figmafs** | Figma MCP | 设计文件 | P1 | 3 天 |
+| 67 | **youtubefs** | YouTube MCP | 视频/字幕 | P2 | 3 天 |
+| 68 | **twitterfs** | Twitter/X MCP | 推文/搜索 | P1 | 3 天 |
+| 69 | **linkedinfs** | LinkedIn MCP | 帖子/消息 | P2 | 2 天 |
+| 70 | **redditfs** | Reddit MCP | 帖子/搜索 | P2 | 2 天 |
+| 71 | **mediumfs** | Medium MCP | 文章发布 | P2 | 2 天 |
+| 72 | **substackfs** | Substack MCP | 通讯订阅 | P2 | 2 天 |
+| 73 | **spotifyfs** | Spotify MCP | 播放列表/播放 | P2 | 3 天 |
+| 74 | **pinterestfs** | Pinterest MCP | 图钉/搜索 | P3 | 2 天 |
+| 75 | **instagramfs** | Instagram MCP | 帖子/故事 | P3 | 3 天 |
+| 76 | **tiktokfs** | TikTok MCP | 视频数据 | P3 | 3 天 |
+| 77 | **shopifyfs** | Shopify MCP | 商品/订单 | P2 | 3 天 |
+| 78 | **wordpressfs** | WordPress MCP | 文章/媒体 | P2 | 3 天 |
+| 79 | **webhookfs** | Webhook MCP | 事件接收 | P1 | 2 天 |
+| 80 | **rssfs** | RSS MCP | 订阅聚合 | P2 | 2 天 |
+
+### P5 - 安全/监控（10 个）
+
+| # | 插件 | MCP 对应 | 功能 | 优先级 | 工作量 |
+|---|------|---------|------|--------|--------|
+| 81 | **vaultfs** | HashiCorp Vault MCP | 密钥管理 | P1 | 3 天 |
+| 82 | **awssecretsfs** | AWS Secrets MCP | 密钥轮换 | P1 | 2 天 |
+| 83 | **1passwordfs** | 1Password MCP | 密码管理 | P2 | 3 天 |
+| 84 | **lastpassfs** | LastPass MCP | 密码共享 | P3 | 2 天 |
+| 85 | **oktafs** | Okta MCP | SSO/身份 | P2 | 3 天 |
+| 86 | **auth0fs** | Auth0 MCP | 身份管理 | P2 | 3 天 |
+| 87 | **cloudflare_warpfs** | Cloudflare WARP MCP | VPN/网络 | P3 | 3 天 |
+| 88 | **pagerdutyfs** | PagerDuty MCP | 告警响应 | P2 | 2 天 |
+| 89 | **opsgeniefs** | OpsGenie MCP | 告警管理 | P3 | 2 天 |
+| 90 | **victoriametricsfs** | VictoriaMetrics MCP | 时序数据 | P2 | 3 天 |
+
+### P6 - 开发工具（10 个）
+
+| # | 插件 | MCP 对应 | 功能 | 优先级 | 工作量 |
+|---|------|---------|------|--------|--------|
+| 91 | **vscodefs** | VSCode MCP | 编辑/终端 | P1 | 4 天 |
+| 92 | **jetbrainsfs** | JetBrains MCP | IDE 集成 | P2 | 4 天 |
+| 93 | **jirafs** | Jira MCP | Issue 管理 | P2 | 4 天 |
+| 94 | **confluencefs** | Confluence MCP | Wiki 文档 | P2 | 3 天 |
+| 95 | **bitbucketfs** | Bitbucket MCP | 仓库/MR | P2 | 3 天 |
+| 96 | **npmfs** | NPM MCP | 包查询 | P3 | 2 天 |
+| 97 | **cratesiofs** | Crates.io MCP | Rust 包查询 | P3 | 2 天 |
+| 98 | **pypi_fs** | PyPI MCP | Python 包查询 | P3 | 2 天 |
+| 99 | **dockerhubfs** | Docker Hub MCP | 镜像搜索 | P3 | 2 天 |
+| 100 | **githubactionsfs** | GitHub Actions MCP | CI/CD 工作流 | P2 | 3 天 |
+
+---
+
+## 五、实施路线图
+
+### Phase 1: MCP 核心（1-2 月）
+
+| 周 | 插件 | 输出 |
+|---|------|------|
+| Week 1 | filesystem | 本地文件完整支持 |
+| Week 2 | githubfs, gitlabfs | 代码管理 |
+| Week 3 | slackfs, discordfs | 通信 |
+| Week 4 | notionfs | 知识库 |
+| Week 5 | postgresfs, mysqlfs | 数据库 |
+| Week 6 | redisfs, mongodbfs | KV/NoSQL |
+| Week 7 | s3fs, googledrivefs | 对象存储 |
+| Week 8 | gmailfs, linearfs | 邮件/项目 |
+
+### Phase 2: 云/AI（3-4 月）
+
+| 周 | 插件 | 输出 |
+|---|------|------|
+| Week 9-10 | **openaifs**, **anthropicfs** | AI 能力 |
+| Week 11-12 | **awsfs**, **gcpfs**, **azurefs** | 云服务 |
+| Week 13-14 | **vercelfs**, **netlifyfs**, **k8sfs** | 部署 |
+| Week 15-16 | **llama_fs**, **midjourneyfs**, **whisper_fs** | 本地 AI |
+
+### Phase 3: 协作/媒体（5-6 月）
+
+| 周 | 插件 | 输出 |
+|---|------|------|
+| Week 17-18 | teamsfs, telegramfs, wechatfs | 企业通信 |
+| Week 19-20 | shopifyfs, wordpressfs | 电商/CMS |
+| Week 21-22 | youtube, twitter, linkedin | 社媒 |
+| Week 23-24 | spotify, figma, notion | 创意工具 |
+
+### Phase 4: 安全/监控（5-6 月）
+
+| 周 | 插件 | 输出 |
+|---|------|------|
+| Week 25-26 | **vaultfs**, **awssecretsfs** | 密钥 |
+| Week 27-28 | **grafanafs**, **prometheusfs** | 监控 |
+| Week 29-30 | **pagerdutyfs**, **datadogfs** | 告警 |
+
+---
+
+## 六、技术实现模板
+
+### 6.1 MCP Server 转换模板
+
+```rust
+// 将 MCP Server 能力转换为 EVIF Plugin
+pub struct SlackFsPlugin {
+    client: SlackClient,
+    base_path: String,
 }
-```
 
-### 4.3 设置面板
-
-```typescript
-// src/settings/SettingsTab.ts
-export class EvifSettingsTab extends PluginSettingTab {
-  constructor(plugin: EvifPlugin) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
-
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.createEl('h2', { text: 'EVIF 设置' });
-
-    new Setting(containerEl)
-      .setName('EVIF 服务器地址')
-      .setDesc('例如: http://localhost:8081')
-      .addText(text => text
-        .setValue(this.plugin.settings.evifUrl)
-        .onChange(async (value) => {
-          this.plugin.settings.evifUrl = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('API 密钥')
-      .setDesc('从 EVIF 服务器获取')
-      .addText(text => text
-        .setValue(this.plugin.settings.apiKey)
-        .onChange(async (value) => {
-          this.plugin.settings.apiKey = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('自动同步')
-      .setDesc('笔记更改时自动同步到 EVIF')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.autoSync)
-        .onChange(async (value) => {
-          this.plugin.settings.autoSync = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('同步间隔')
-      .setDesc('自动同步间隔（秒）')
-      .addText(text => text
-        .setValue(String(this.plugin.settings.syncInterval))
-        .onChange(async (value) => {
-          this.plugin.settings.syncInterval = parseInt(value) || 30;
-          await this.plugin.saveSettings();
-        }));
-  }
-}
-```
-
-### 4.4 上下文面板
-
-```typescript
-// src/panels/ContextPanel.ts
-export class ContextPanel extends ItemView {
-  private evif: EvifClient;
-  private vault: Vault;
-
-  constructor(leaf: WorkspaceLeaf, evif: EvifClient) {
-    super(leaf);
-    this.evif = evif;
-    this.vault = this.app.vault;
-  }
-
-  getViewType(): string {
-    return 'evif-context-panel';
-  }
-
-  getIcon(): string {
-    return 'brain';
-  }
-
-  async onOpen(): Promise<void> {
-    const container = this.containerEl;
-    container.empty();
-
-    // L0 当前任务
-    const l0Section = container.createDiv('context-section');
-    l0Section.createEl('h3', { text: 'L0 - 当前任务' });
-    const l0Content = l0Section.createDiv('context-content');
-    l0Content.setText(await this.evif.readContext('L0', 'current'));
-
-    // L1 决策记录
-    const l1Section = container.createDiv('context-section');
-    l1Section.createEl('h3', { text: 'L1 - 决策记录' });
-    const l1List = l1Section.createEl('ul');
-    const l1Decisions = await this.evif.readContext('L1', 'decisions.md');
-    l1List.setText(l1Decisions);
-
-    // L2 项目知识
-    const l2Section = container.createDiv('context-section');
-    l2Section.createEl('h3', { text: 'L2 - 项目知识' });
-    const l2Files = await this.evif.listContext('L2');
-    l2Files.forEach(file => {
-      const item = l2Section.createEl('button');
-      item.setText(file);
-      item.onclick = () => this.loadL2File(file);
-    });
-
-    // 写入当前笔记到 L0
-    const currentNote = this.app.workspace.getActiveFile();
-    if (currentNote) {
-      const content = await this.vault.read(currentNote);
-      await this.evif.writeContext('L0', 'current', content);
+#[async_trait]
+impl EvifPlugin for SlackFsPlugin {
+    async fn read(&self, path: &str) -> Result<Vec<u8>> {
+        match path {
+            "/channels" => self.list_channels().await,
+            "/messages/{channel}" => self.get_messages(path).await,
+            _ => Err(EvifError::NotFound),
+        }
     }
-  }
+
+    async fn write(&self, path: &str, data: Vec<u8>) -> Result<()> {
+        match path {
+            "/send/{channel}" => self.send_message(path, data).await,
+            _ => Err(EvifError::PermissionDenied),
+        }
+    }
+
+    async fn readdir(&self, path: &str) -> Result<Vec<DirEntry>> {
+        match path {
+            "/" => vec![
+                DirEntry::dir("channels"),
+                DirEntry::dir("messages"),
+                DirEntry::dir("users"),
+            ],
+            "/channels" => self.list_channels_dir().await,
+            _ => Err(EvifError::NotFound),
+        }
+    }
+}
+```
+
+### 6.2 统一认证模式
+
+```rust
+// 所有插件支持统一认证
+pub struct EvifAuth {
+    api_key: Option<String>,
+    jwt: Option<String>,
+    oauth: Option<OAuthToken>,
+}
+
+impl EvifAuth {
+    pub fn from_env() -> Self {
+        Self {
+            api_key: std::env::var("EVIF_API_KEY").ok(),
+            jwt: std::env::var("EVIF_JWT").ok(),
+            oauth: Self::load_oauth(),
+        }
+    }
 }
 ```
 
 ---
 
-## 五、实施计划
+## 七、商业价值评估
 
-### Phase 1: 基础连接（第 1-2 周）
+### 7.1 高价值插件
 
-| 任务 | 工作量 | 输出 |
-|------|--------|------|
-| 项目初始化 | 1 天 | 插件骨架 |
-| EVIF API 客户端 | 2 天 | evif-client.ts |
-| 设置面板 | 2 天 | SettingsTab.ts |
-| 基本命令 | 2 天 | 同步命令 |
-| 测试运行 | 1 天 | 可用插件 |
+| 插件 | TAM | 竞品 | EVIF 优势 |
+|------|-----|------|----------|
+| **githubfs** | 100M 开发者 | GitHub CLI | VFS 接口 + MCP |
+| **slackfs** | 20M 企业 | Slack API | 统一文件访问 |
+| **openai_fs** | $5B LLM 市场 | OpenAI SDK | 上下文管理 |
+| **k8sfs** | $30B K8s 市场 | kubectl | AI 驱动运维 |
+| **notionfs** | 20M 用户 | Notion API | 本地优先 |
 
-### Phase 2: 上下文集成（第 3-4 周）
+### 7.2 差异化
 
-| 任务 | 工作量 | 输出 |
-|------|--------|------|
-| ContextPanel 视图 | 3 天 | 上下文面板 |
-| L0/L1/L2 读写 | 2 天 | 上下文命令 |
-| 自动同步引擎 | 3 天 | SyncEngine |
-| 笔记联动 | 2 天 | 双向同步 |
-
-### Phase 3: 技能系统（第 5-6 周）
-
-| 任务 | 工作量 | 输出 |
-|------|--------|------|
-| SkillPanel 视图 | 3 天 | 技能面板 |
-| 技能市场浏览 | 2 天 | 技能列表 |
-| 技能执行 | 3 天 | 执行命令 |
-| 结果展示 | 2 天 | 输出视图 |
-
-### Phase 4: 记忆系统（第 7-8 周）
-
-| 任务 | 工作量 | 输出 |
-|------|--------|------|
-| MemoryPanel 视图 | 3 天 | 记忆面板 |
-| 向量搜索集成 | 3 天 | 搜索命令 |
-| 自动记忆 | 2 天 | 记忆规则 |
-| 记忆面板 | 2 天 | 相关记忆 |
-
-### Phase 5: 高级功能（第 9-10 周）
-
-| 任务 | 工作量 | 输出 |
-|------|--------|------|
-| MCP Bridge | 4 天 | Claude 集成 |
-| QueuePanel | 2 天 | 任务队列 |
-| 协作功能 | 4 天 | PipeFS 集成 |
+| 能力 | EVIF | 其他 MCP |
+|------|------|----------|
+| 文件系统接口 | ✅ VFS | ❌ |
+| MCP + REST + CLI | ✅ 3 层 | ❌ |
+| 向量记忆 | ✅ VectorFS | ❌ |
+| 技能系统 | ✅ SKILL.md | ❌ |
+| 上下文分层 | ✅ L0/L1/L2 | ❌ |
+| 多租户安全 | ✅ RBAC | ❌ |
 
 ---
 
-## 六、核心插件命令
+## 八、参考资料
 
-### 6.1 Obsidian 命令面板命令
-
-| 命令 | 快捷键 | 功能 |
-|------|--------|------|
-| `EVIF: 同步笔记` | `Ctrl+Shift+S` | 同步当前笔记 |
-| `EVIF: 写入 L0` | `Ctrl+Shift+L0` | 写入当前任务 |
-| `EVIF: 写入 L1` | `Ctrl+Shift+L1` | 追加决策 |
-| `EVIF: 搜索记忆` | `Ctrl+Shift+M` | 语义搜索 |
-| `EVIF: 执行技能` | `Ctrl+Shift+K` | 运行技能 |
-| `EVIF: 查看上下文` | `Ctrl+Shift+C` | 打开面板 |
-| `EVIF: 记忆当前笔记` | `Ctrl+Shift+R` | 存储记忆 |
-| `EVIF: 打开任务队列` | `Ctrl+Shift+Q` | 查看队列 |
-
-### 6.2 侧边栏面板
-
-| 面板 | 图标 | 功能 |
-|------|------|------|
-| Context Panel | 🧠 | L0/L1/L2 上下文 |
-| Memory Panel | 💭 | 向量记忆搜索 |
-| Skill Panel | ⚡ | 技能市场 |
-| Queue Panel | 📋 | 任务队列 |
-
----
-
-## 七、差异化价值
-
-### 7.1 EVIF Obsidian 插件 vs 其他方案
-
-| 功能 | EVIF | Notion | Roam | Logseq |
-|------|------|--------|------|--------|
-| 本地优先 | ✅ | ❌ | ✅ | ✅ |
-| 云同步 | ✅ | ✅ | ❌ | ❌ |
-| AI Agent 集成 | ✅ | ❌ | ❌ | ❌ |
-| 向量记忆 | ✅ | ❌ | ❌ | ❌ |
-| 技能系统 | ✅ | ❌ | ❌ | ❌ |
-| MCP 协议 | ✅ | ❌ | ❌ | ❌ |
-| 多租户 | ✅ | ✅ | ❌ | ❌ |
-
-### 7.2 核心卖点
-
-1. **Obsidian + AI Agent**：Obsidian 用户可以直接使用 AI Agent 的上下文管理能力
-2. **本地优先**：数据存储在本地 EVIF 后端，隐私安全
-3. **技能复用**：使用 SKILL.md 标准化工作流
-4. **记忆增强**：向量搜索让笔记互联
-
----
-
-## 八、技术要求
-
-### 8.1 Obsidian 版本
-
-- **最低版本**：1.0.0
-- **推荐版本**：1.12.7+
-- **API 类型**：TypeScript API
-
-### 8.2 依赖
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| Obsidian | 1.0.0+ | 核心框架 |
-| @codemirror | 最新 | 编辑器集成 |
-| react | 18.x | UI 面板 |
-
-### 8.3 EVIF 后端要求
-
-| 功能 | API 端点 | 必须 |
-|------|----------|------|
-| 上下文读取 | `/context/{layer}/{path}` | ✅ |
-| 上下文写入 | `/context/{layer}/{path}` | ✅ |
-| 技能列表 | `/skills` | ✅ |
-| 技能执行 | `/skills/{name}/execute` | ✅ |
-| 记忆搜索 | `/memories/search` | ✅ |
-| 记忆存储 | `/memories` | ✅ |
-| MCP 协议 | MCP Server | 可选 |
-
----
-
-## 九、下一步行动
-
-### 本周
-
-1. [ ] 创建 `evif-obsidian-plugin` 仓库
-2. [ ] 实现基础 API 客户端
-3. [ ] 创建设置面板
-
-### 本月
-
-1. [ ] 完成 Phase 1-2（基础连接 + 上下文）
-2. [ ] 发布 Beta 版本
-3. [ ] 收集反馈
-
----
-
-## 参考资料
-
-- [Obsidian Plugin Developer Documentation](https://docs.obsidian.md/Plugins/Getting+started/Build+a+plugin)
-- [Obsidian Plugin API Reference](https://docs.obsidian.md/Plugins/API+Reference)
-- [Obsidian Community Plugins](https://obsidian.md/plugins)
+- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)
+- [Best of MCP Servers](https://github.com/tolkonepiu/best-of-mcp-servers)
+- [Model Context Protocol](https://modelcontextprotocol.io)
+- [Claude MCP Servers](https://github.com/modelcontextprotocol/servers)
+- [Awesome AI Agents 2026](https://github.com/Zijian-Ni/awesome-ai-agents-2026)
+- [Database MCP Servers](https://claudemarketplaces.com/mcp/category/database)
+- [MCP Directory](https://mcp.directory/categories/databases)
