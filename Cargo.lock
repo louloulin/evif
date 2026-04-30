@@ -2763,6 +2763,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "lazy_static",
+ "parking_lot",
  "prometheus",
  "serde",
  "serde_json",
