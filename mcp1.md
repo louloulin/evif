@@ -557,11 +557,252 @@ async fn test_mcp_end_to_end() {
 
 ---
 
-## 十一、关键文件
+## 十一、配置体系设计
+
+### 11.1 EVIF 现有配置模型
+
+EVIF 使用环境变量 + 配置文件双轨配置：
+
+```bash
+# ServerConfig (evif-rest/src/server.rs)
+EVIF_REST_HOST=0.0.0.0
+EVIF_REST_PORT=8081
+EVIF_CORS_ENABLED=true
+EVIF_CORS_ORIGINS=https://example.com
+EVIF_TLS_CERT_FILE=/path/to/cert.pem
+EVIF_TLS_KEY_FILE=/path/to/key.pem
+
+# McpServerConfig (evif-mcp/src/lib.rs)
+EVIF_URL=http://localhost:8081
+```
+
+### 11.2 MCP 配置扩展
+
+**统一配置位置**：`/etc/evif/mcp.toml` 或 `~/.evif/mcp.toml`
+
+```toml
+# MCP Server 全局配置
+[mcp]
+# 协议版本
+protocol_version = "2024-11-05"
+
+# 服务器标识
+server_name = "evif-mcp"
+version = "1.8.0"
+
+# EVIF 后端连接
+[evif]
+url = "http://localhost:8081"
+timeout_ms = 30000
+retry_attempts = 3
+
+# 认证配置
+[auth]
+type = "bearer"  # bearer | api_key | oauth
+token_file = "/etc/evif/mcp-token"
+
+# TLS 配置（可选）
+[tls]
+enabled = false
+cert_file = "/etc/evif/mcp-cert.pem"
+key_file = "/etc/evif/mcp-key.pem"
+```
+
+### 11.3 MCP Server 注册配置
+
+**配置每个外部 MCP Server 的连接**：
+
+```toml
+# MCP Server 注册表
+[[servers]]
+
+[[servers.github]]
+name = "github"
+mount_path = "/mcp/github"
+url = "https://api.github.com"
+auth_token_env = "GITHUB_TOKEN"
+tools = ["repos", "issues", "prs", "actions"]
+enabled = true
+
+[[servers.slack]]
+name = "slack"
+mount_path = "/mcp/slack"
+url = "https://slack.com/api"
+auth_token_env = "SLACK_BOT_TOKEN"
+tools = ["channels", "messages", "files"]
+enabled = true
+
+[[servers.notion]]
+name = "notion"
+mount_path = "/mcp/notion"
+url = "https://api.notion.com/v1"
+auth_token_env = "NOTION_TOKEN"
+tools = ["pages", "databases", "blocks"]
+enabled = false  # 需要手动启用
+```
+
+### 11.4 VFS 路径映射配置
+
+**MCP Resource URI ↔ VFS Path 映射规则**：
+
+```toml
+# 路径映射规则
+[mappings]
+
+[mappings.resources]
+"file:///context" = "/context"
+"file:///skills" = "/skills"
+"file:///pipes" = "/pipes"
+"file:///memories" = "/memories"
+"github://" = "/mcp/github"
+"notion://" = "/mcp/notion"
+
+[mappings.tools]
+"evif_ls" = { operation = "readdir", path_param = "path" }
+"evif_cat" = { operation = "read", path_param = "path" }
+"evif_write" = { operation = "write", path_param = "path", content_param = "content" }
+"evif_mkdir" = { operation = "mkdir", path_param = "path" }
+"evif_memorize" = { operation = "memory_store", backend = "vector" }
+"evif_skill_execute" = { operation = "skill_run", path = "/skills/{name}" }
+
+[mappings.prompts]
+"file_explorer" = { path = "/skills/file-explorer/SKILL.md" }
+"batch_operations" = { path = "/skills/batch-ops/SKILL.md" }
+"data_analysis" = { path = "/skills/data-analysis/SKILL.md" }
+```
+
+### 11.5 多租户 MCP 配置
+
+**按租户隔离 MCP 配置**：
+
+```toml
+# 租户级 MCP 配置
+[tenants]
+
+[tenants.acme-corp]
+mcp_servers = ["github", "slack", "notion"]
+allowed_paths = ["/context/*", "/skills/*", "/mcp/github/acme/*"]
+rate_limit = { requests_per_minute = 1000 }
+
+[tenants.startup-inc]
+mcp_servers = ["github", "notion"]
+allowed_paths = ["/context/*", "/skills/*"]
+rate_limit = { requests_per_minute = 500 }
+```
+
+### 11.6 配置加载优先级
+
+```
+命令行参数 > 环境变量 > 配置文件 > 默认值
+
+优先级顺序（高到低）：
+1. CLI args (--evif-url, --server-name)
+2. EVIF_URL, EVIF_MCP_SERVER_NAME 环境变量
+3. ~/.evif/mcp.toml 或 /etc/evif/mcp.toml
+4. McpServerConfig::default() 硬编码默认值
+```
+
+### 11.7 配置验证与热重载
+
+```rust
+// 配置验证
+pub struct McpConfigValidator;
+
+impl McpConfigValidator {
+    pub fn validate(config: &McpConfig) -> Result<(), ConfigError> {
+        // 1. 检查必需字段
+        if config.evif.url.is_empty() {
+            return Err(ConfigError::MissingField("evif.url"));
+        }
+
+        // 2. 验证 URL 格式
+        if !config.evif.url.starts_with("http://")
+            && !config.evif.url.starts_with("https://") {
+            return Err(ConfigError::InvalidUrl(config.evif.url));
+        }
+
+        // 3. 验证服务器注册
+        for server in &config.servers {
+            if server.mount_path.starts_with("/mcp/") {
+                return Err(ConfigError::InvalidMountPath(server.name));
+            }
+        }
+
+        // 4. 验证认证配置
+        for server in &config.servers {
+            if server.auth_token_env.is_some() {
+                let token = std::env::var(server.auth_token_env.as_ref().unwrap());
+                if token.is_err() {
+                    return Err(ConfigError::MissingEnvToken(
+                        server.auth_token_env.clone().unwrap()
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// 热重载机制
+pub struct McpConfigWatcher {
+    watcher: notify::Watcher,
+    reload_tx: Arc<Mutex<oneshot::Sender<()>>>,
+}
+
+impl McpConfigWatcher {
+    pub fn start(&self, config_path: &Path) {
+        // 监听配置文件变化
+        // 触发配置重载
+        // 通知 MCP Server 刷新工具列表
+    }
+}
+```
+
+### 11.8 与 EVIF Config 系统集成
+
+```rust
+// 在 EVIF Core 中统一配置管理
+pub struct EvifConfig {
+    // REST Server 配置
+    pub rest: ServerConfig,
+
+    // MCP Server 配置
+    pub mcp: McpConfig,
+
+    // 插件配置
+    pub plugins: HashMap<String, PluginConfig>,
+
+    // 多租户配置
+    pub tenants: HashMap<String, TenantConfig>,
+}
+
+impl EvifConfig {
+    /// 从多个来源加载配置
+    pub fn load() -> Result<Self> {
+        let rest = ServerConfig::default();  // 环境变量
+        let mcp = McpConfig::load()?;        // 配置文件 + 环境变量
+        let plugins = PluginConfig::load_all()?;
+        let tenants = TenantConfig::load_all()?;
+
+        Ok(Self { rest, mcp, plugins, tenants })
+    }
+
+    /// 导出配置到 YAML
+    pub fn export_yaml(&self) -> String {
+        // 用于配置备份和迁移
+    }
+}
+```
+
+---
+
+## 十二、关键文件
 
 | 文件 | 说明 |
 |------|------|
 | `crates/evif-mcp/src/lib.rs` | 当前 MCP Server 实现（2,427 LOC） |
+| `crates/evif-rest/src/server.rs` | REST Server 配置（ServerConfig） |
 | `crates/evif-plugins/src/contextfs.rs` | Context 层实现 |
 | `crates/evif-plugins/src/skillfs.rs` | SkillFS 实现 |
 | `crates/evif-core/src/radix_mount_table.rs` | Radix Mount Table |
@@ -569,7 +810,7 @@ async fn test_mcp_end_to_end() {
 
 ---
 
-## 十二、总结
+## 十三、总结
 
 EVIF 作为 MCP 网关的核心价值：
 
@@ -577,8 +818,11 @@ EVIF 作为 MCP 网关的核心价值：
 2. **协议透明**：MCP ↔ VFS 自动转换
 3. **能力复用**：现有插件系统即 MCP 能力
 4. **性能优化**：直接 VFS 调用 vs HTTP 桥接
+5. **配置集成**：与 EVIF 统一配置体系融合
 
 **推荐实施**：
-1. 短期：重构直接 VFS 集成，降低延迟
-2. 中期：实现 McpGateway Plugin，统一 MCP 入口
-3. 长期：按 mem33.md 计划，逐步接入 100 个 MCP Server
+1. **短期**：重构直接 VFS 集成，降低延迟；定义 McpConfig 结构
+2. **中期**：实现 McpGateway Plugin + 配置文件支持
+3. **长期**：按 mem33.md 计划，逐步接入 100 个 MCP Server
+
+**配置优先级**：CLI args > 环境变量 > 配置文件 > 默认值
