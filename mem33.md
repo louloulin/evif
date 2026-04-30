@@ -1,269 +1,486 @@
-# EVIF 全面分析与后续规划
+# EVIF Obsidian 插件开发计划
 
 > 创建时间：2026-04-30
 > 更新：2026-04-30
-> 目标：全面分析 EVIF vs AGFS/AgentFS，识别差距，制定后续规划
+> 目标：设计 EVIF Obsidian 插件，将 EVIF 的能力（上下文分层、技能系统、记忆系统）集成到 Obsidian
 
 ---
 
-## 一、代码状态总览
+## 一、核心概念
 
-### 1.1 测试通过率
+### 1.1 EVIF Obsidian 插件是什么？
 
-| Crate | 测试数 | 通过 | 失败 | 通过率 |
-|-------|--------|------|------|--------|
-| evif-core | 94 | 94 | 0 | 100% |
-| evif-plugins | 114 | 114 | 0 | 100% |
-| evif-mem | 199 | 199 | 0 | 100% |
-| evif-auth | 31 | 31 | 0 | 100% |
-| integration-tests | 11 | 11 | 0 | 100% |
-| **总计** | **449** | **449** | **0** | **100%** |
+**EVIF Obsidian 插件**是一个运行在 Obsidian 内部的插件，它：
 
-### 1.2 编译状态
+1. 将 Obsidian 的笔记与 EVIF 后端同步
+2. 暴露 EVIF 的核心能力到 Obsidian：
+   - `/context/L0/L1/L2` 上下文分层
+   - `/skills` 技能系统
+   - `/memories` 记忆系统
+   - `/queue` 任务队列
+3. 允许 Obsidian 用户使用 AI Agent 的持久化能力
 
-| 组件 | 编译 | 状态 |
-|------|------|------|
-| evif-core | ✅ | 编译通过 |
-| evif-plugins | ✅ | 38 个插件 |
-| evif-mem | ✅ | 核心功能完整 |
-| evif-auth | ✅ | 认证授权完整 |
-| evif-rest | ✅ | 108 个端点 |
-| evif-mcp | ✅ | 26 个工具 |
-| evif-cli | ✅ | 60+ 命令 |
-| evif-fuse | ✅ | 内核挂载 |
+### 1.2 与 VaultSync 的区别
 
----
-
-## 二、EVIF vs AGFS vs AgentFS 完整对比
-
-### 2.1 AGFS (c4pt0r/agfs) 对比
-
-| 特性 | AGFS | EVIF | 差距 |
-|------|------|------|------|
-| 插件数量 | 17 | 38 | ✅ EVIF +21 |
-| REST API 端点 | ~40 | 108 | ✅ EVIF +68 |
-| 向量搜索 | vectorfs (S3+TiDB) | vectorfs | ✅ 持平 |
-| 队列服务 | queuefs | queuefs | ✅ 持平 |
-| SQL 接口 | sqlfs2 | sqlfs + sqlfs2 | ✅ 持平 |
-| 心跳监控 | heartbeatfs | heartbeatfs | ✅ 持平 |
-| HTTP 服务 | httpfs | httpfs | ✅ 持平 |
-| FUSE 挂载 | ✅ Linux | ✅ FUSE | ✅ MVP 1.2 |
-| WASM 插件 | ✅ | ✅ Extism | ✅ MVP 1.3 |
-| 流量监控 | TrafficMonitor | TrafficMonitor + | ✅ MVP 1.3 |
-| 认证授权 | ❌ | ✅ Capability-based | ✅ EVIF 独有 |
-| 网络插件 | WebDAV/FTP/SFTP | OpenDAL 0.54 | ✅ MVP 1.4 |
-| 多租户 | ❌ | ✅ 完整实现 | ✅ EVIF 独有 |
-| CLI 工具 | 基础 | 60+ 命令 | ✅ EVIF 领先 |
-| MCP 集成 | ❌ | ✅ 26 工具 | ✅ EVIF 独有 |
-| Agent 追踪 | ❌ | ✅ AgentTracker | ✅ EVIF 独有 |
-| Copy-on-Write | ❌ | ✅ CowSnapshot | ✅ EVIF 独有 |
-| 审计日志 | 基础 | 查询+统计+导出 | ✅ EVIF 领先 |
-
-### 2.2 AgentFS (Turso) 对比
-
-| 特性 | AgentFS | EVIF | 差距 |
-|------|---------|------|------|
-| SQLite 存储 | ✅ | ✅ | ✅ 持平 |
-| Copy-on-Write | ✅ | ✅ CowSnapshot | ✅ MVP 1.4 |
-| 完整审计 | ✅ SQL | ✅ 查询+统计+导出 | ✅ MVP 1.3 |
-| Agent 追踪 | ✅ | ✅ AgentTracker | ✅ MVP 1.4 |
-| 多租户 | ❌ | ✅ | ✅ EVIF 独有 |
-| REST API | ❌ | ✅ 108 端点 | ✅ EVIF 独有 |
-| MCP 集成 | ❌ | ✅ 26 工具 | ✅ EVIF 独有 |
-| WASM 插件 | ❌ | ✅ Extism | ✅ EVIF 独有 |
-
-### 2.3 结论
-
-**EVIF 已全面超越参考项目**，核心功能已完整实现。
+| 功能 | VaultSync | EVIF Obsidian 插件 |
+|------|------------|-------------------|
+| 同步目标 | Dropbox | EVIF 后端 |
+| 基本同步 | ✅ | ✅ |
+| 上下文分层 | ❌ | ✅ L0/L1/L2 |
+| 技能执行 | ❌ | ✅ SKILL.md |
+| 记忆系统 | ❌ | ✅ 向量记忆 |
+| Agent 协作 | ❌ | ✅ PipeFS |
+| MCP 集成 | ❌ | ✅ |
 
 ---
 
-## 三、已实现的插件生态（38 个）
+## 二、EVIF Obsidian 插件架构
 
-### 3.1 按功能分类
+### 2.1 整体架构
 
-| 分类 | 插件 | 数量 |
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Obsidian App                              │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │              EVIF Obsidian 插件 (TypeScript)               │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
+│  │  │ Context Panel │  │ Skill Runner │  │ Memory Panel │    │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘    │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
+│  │  │ Queue Viewer │  │  MCP Bridge   │  │ Sync Engine  │    │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘    │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                               │                                    │
+│                    EVIF REST API / MCP Protocol                    │
+│                               ▼                                    │
+├─────────────────────────────────────────────────────────────────┤
+│                         EVIF Backend                              │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐           │
+│  │ContextFS│  │ SkillFS │  │VectorFS │  │ QueueFS │           │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 2.2 插件组件
+
+| 组件 | 功能 | 技术 |
 |------|------|------|
-| 本地存储 | localfs, memfs, encryptedfs, tieredfs, streamrotatefs | 5 |
-| 数据库 | sqlfs, sqlfs2, kvfs, queuefs | 4 |
-| 云存储 | s3fs, s3fs_opendal, azureblobfs, gcsfs, aliyunossfs, tencentcosfs, huaweiobsfs, miniofs | 8 |
-| 网络协议 | httpfs, proxyfs, webdavfs, ftpfs, sftpfs | 5 |
-| AI/LLM | gptfs, vectorfs, contextfs, context_manager | 4 |
-| Agent 专用 | skillfs, skill_runtime, pipefs, devfs, streamfs | 5 |
-| 系统服务 | serverinfofs, heartbeatfs, handlefs, hellofs, catalog | 5 |
-| 统一接入 | opendal (统一 9 个云后端) | 1 |
-
-### 3.2 按代码量排序（前 10）
-
-| 排名 | 插件 | 代码行 | 功能 |
-|------|------|--------|------|
-| 1 | queuefs | 1578 | FIFO 任务队列 |
-| 2 | sqlfs | 1259 | SQL 数据库文件系统 |
-| 3 | skillfs | 1159 | SKILL.md 工作流执行 |
-| 4 | s3fs | 1117 | AWS S3 存储 |
-| 5 | vectorfs | 1083 | 向量语义搜索 |
-| 6 | skill_runtime | 1058 | Docker 沙箱执行 |
-| 7 | contextfs | 957 | L0/L1/L2 上下文分层 |
-| 8 | gptfs | 696 | GPT 模型交互 |
-| 9 | opendal | 687 | 统一云存储接入 |
-| 10 | sqlfs2 | 657 | Plan 9 风格 SQL |
+| **Context Panel** | 显示 L0/L1/L2 上下文 | React/Svelte 面板 |
+| **Skill Runner** | 执行 SKILL.md 技能 | API 调用 |
+| **Memory Panel** | 向量记忆搜索 | 语义搜索 |
+| **Queue Viewer** | 任务队列管理 | 实时更新 |
+| **MCP Bridge** | 连接 Claude Desktop | MCP Protocol |
+| **Sync Engine** | Obsidian ↔ EVIF 同步 | 文件系统监控 |
 
 ---
 
-## 四、功能完整性分析
+## 三、插件功能设计
 
-### 4.1 核心层（evif-core）
+### 3.1 P0 必须功能
 
-| 功能 | 实现 | 状态 |
-|------|------|------|
-| Radix Tree Mount Table | ✅ O(k) 路径解析 | 完整 |
-| EvifPlugin trait | ✅ 8 个标准操作 | 完整 |
-| Handle Manager | ✅ 句柄租约 TTL | 完整 |
-| WASM Plugin Pool | ✅ LRU 淘汰 | 完整 |
-| CowSnapshot | ✅ 分支/差异/合并 | MVP 1.4 |
-| AgentTracker | ✅ 会话/思考链/活动 | MVP 1.4 |
-| CircuitBreaker | ✅ 状态机 | 完整 |
-| Streaming | ✅ 行/流读取 | 完整 |
-
-### 4.2 认证层（evif-auth）
-
-| 功能 | 实现 | 状态 |
-|------|------|------|
-| JWT Bearer | ✅ HS256 验证 | 完整 |
-| API Key | ✅ X-API-Key | 完整 |
-| Capability ACL | ✅ 路径 glob + 操作 | 完整 |
-| Audit Log | ✅ JSON/CSV 导出 | MVP 1.3 |
-
-### 4.3 REST API 层（evif-rest）
-
-| 功能 | 实现 | 状态 |
-|------|------|------|
-| 文件操作 | 16 端点 | 完整 |
-| Handle 操作 | 10 端点 | 完整 |
-| 插件管理 | 10 端点 | 完整 |
-| 记忆/协作 | 19 端点 | 完整 |
-| 多租户 | 6 端点 | MVP 1.5 |
-| 加密 | 5 端点 | MVP 1.2 |
-| GraphQL | 2 端点 | 完整 |
-| 限流/CORS | 中间件 | MVP 1.2 |
-
----
-
-## 五、剩余差距与可选增强
-
-### 5.1 功能差距（优先级排序）
-
-| 功能 | 说明 | 优先级 | 工作量 | 商业价值 |
-|------|------|--------|--------|----------|
-| **Qdrant 集成** | 向量数据库生产级支持 | P1 | 3 天 | ⭐⭐⭐⭐⭐ |
-| **图像/视频嵌入** | 多模态内容处理 | P1 | 5 天 | ⭐⭐⭐⭐⭐ |
-| **实时协作** | CRDTs 冲突解决 | P2 | 5 天 | ⭐⭐⭐⭐ |
-| **GraphQL 订阅** | 实时推送 | P2 | 3 天 | ⭐⭐⭐ |
-| **多集群同步** | Raft 共识 | P3 | 5 天 | ⭐⭐⭐ |
-| **Web UI** | 管理面板 | P3 | 5 天 | ⭐⭐⭐ |
-
-### 5.2 插件优先级（最值得做）
-
-| 插件 | 当前状态 | 价值 | 推荐 |
-|------|----------|------|------|
-| **qdrantfs** | 仅有桩代码 | 连接外部向量数据库 | 🔴 优先做 |
-| **notionfs** | 未实现 | 知识库集成 | 🟡 考虑 |
-| **slackfs** | 未实现 | 团队协作 | 🟡 考虑 |
-| **githubfs** | 未实现 | 代码上下文 | 🟡 考虑 |
-| **postgresfs** | sqlfs 已支持 | 增强 PostgreSQL | 🟢 已满足 |
-
-### 5.3 待完成的 Placeholder
-
-| 文件 | 问题 | 修复方案 |
+| 功能 | 描述 | 实现方式 |
 |------|------|----------|
-| `llamaindex.rs:188` | Storage 不支持 delete | 实现真正的删除操作 |
-| `llm.rs:1497` | 返回 placeholder | 实现真正的 LLM 调用 |
-| `llm.rs:2793` | 返回 placeholder | 实现真正的 LLM 调用 |
-| `pipeline.rs:1075` | 音频转录 placeholder | 集成 Whisper API |
-| `qdrant.rs:100` | 仅桩代码 | 实现完整 Qdrant 客户端 |
+| **EVIF 连接** | 配置 EVIF 服务器地址和认证 | 设置面板 |
+| **笔记同步** | 将 Obsidian 笔记同步到 EVIF | 文件监听 |
+| **上下文写入** | 将当前笔记写入 L0/L1/L2 | 命令面板 |
+| **技能执行** | 在笔记中执行 SKILL.md | 侧边栏按钮 |
+| **记忆检索** | 搜索相关记忆 | 命令面板 |
+
+### 3.2 P1 重要功能
+
+| 功能 | 描述 | 实现方式 |
+|------|------|----------|
+| **L0/L1/L2 视图** | 可视化上下文层级 | 面板视图 |
+| **技能市场** | 浏览可用技能 | 侧边栏 |
+| **记忆面板** | 显示相关记忆 | 右侧面板 |
+| **任务队列** | 查看/管理任务 | 面板视图 |
+| **Agent 通信** | PipeFS 消息传递 | 模态窗口 |
+
+### 3.3 P2 增强功能
+
+| 功能 | 描述 | 实现方式 |
+|------|------|----------|
+| **模板生成** | 基于上下文生成笔记模板 | AI API |
+| **自动摘要** | 生成笔记摘要 | LLM API |
+| **双向链接增强** | 结合向量记忆 | 图数据库 |
+| **协作视图** | 多用户上下文共享 | 实时同步 |
 
 ---
 
-## 六、后续规划（6 个月）
+## 四、技术实现
 
-### Phase 1: 生产化（1-2 月）
+### 4.1 项目结构
 
-| 任务 | 优先级 | 工作量 | 输出 |
-|------|--------|--------|------|
-| Qdrant 集成 | P0 | 3 天 | 完整的向量搜索 |
-| 音频转录（Whisper） | P0 | 2 天 | 多模态支持 |
-| 性能基准测试 | P0 | 2 天 | evif-bench 完整报告 |
-| PostgreSQL 测试验证 | P1 | 1 天 | Linux 环境验证 |
-| 速率限制测试验证 | P1 | 1 天 | Linux 环境验证 |
+```
+evif-obsidian-plugin/
+├── src/
+│   ├── main.ts                 # 插件入口
+│   ├── settings/
+│   │   └── SettingsTab.ts      # 设置面板
+│   ├── panels/
+│   │   ├── ContextPanel.ts    # 上下文面板
+│   │   ├── MemoryPanel.ts     # 记忆面板
+│   │   ├── QueuePanel.ts      # 队列面板
+│   │   └── SkillPanel.ts      # 技能面板
+│   ├── commands/
+│   │   ├── context.ts         # 上下文命令
+│   │   ├── skill.ts           # 技能命令
+│   │   ├── memory.ts          # 记忆命令
+│   │   └── sync.ts            # 同步命令
+│   ├── api/
+│   │   ├── evif-client.ts     # EVIF API 客户端
+│   │   └── mcp-bridge.ts      # MCP 协议桥接
+│   └── sync/
+│       └── sync-engine.ts      # 同步引擎
+├── styles.css                   # 样式
+├── manifest.json               # Obsidian 清单
+└── package.json
+```
 
-### Phase 2: 差异化（2-4 月）
+### 4.2 API 客户端
 
-| 任务 | 优先级 | 工作量 | 输出 |
-|------|--------|--------|------|
-| Notion 插件 | P1 | 5 天 | 知识库同步 |
-| GitHub 插件 | P1 | 5 天 | 代码上下文 |
-| Slack 插件 | P2 | 3 天 | 团队通知 |
-| 实时协作（CRDTs） | P2 | 5 天 | 冲突解决 |
+```typescript
+// src/api/evif-client.ts
+export class EvifClient {
+  private baseUrl: string;
+  private apiKey: string;
 
-### Phase 3: 商业化（4-6 月）
+  constructor(baseUrl: string, apiKey: string) {
+    this.baseUrl = baseUrl;
+    this.apiKey = apiKey;
+  }
 
-| 任务 | 优先级 | 工作量 | 输出 |
-|------|--------|--------|------|
-| Web UI 管理面板 | P1 | 5 天 | 用户友好的界面 |
-| GraphQL 订阅 | P2 | 3 天 | 实时推送 |
-| 多集群同步 | P3 | 5 天 | 分布式部署 |
-| 云服务演示 | P0 | 3 天 | 公共演示实例 |
+  // 上下文操作
+  async readContext(layer: 'L0' | 'L1' | 'L2', path: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/context/${layer}/${path}`, {
+      headers: { 'X-API-Key': this.apiKey }
+    });
+    return response.text();
+  }
+
+  async writeContext(layer: 'L0' | 'L1' | 'L2', path: string, content: string): Promise<void> {
+    await fetch(`${this.baseUrl}/context/${layer}/${path}`, {
+      method: 'PUT',
+      headers: {
+        'X-API-Key': this.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ content })
+    });
+  }
+
+  // 技能操作
+  async listSkills(): Promise<Skill[]> {
+    const response = await fetch(`${this.baseUrl}/skills`, {
+      headers: { 'X-API-Key': this.apiKey }
+    });
+    return response.json();
+  }
+
+  async executeSkill(skillName: string, input: string): Promise<SkillResult> {
+    const response = await fetch(`${this.baseUrl}/skills/${skillName}/execute`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': this.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ input })
+    });
+    return response.json();
+  }
+
+  // 记忆操作
+  async searchMemories(query: string, limit: number = 10): Promise<Memory[]> {
+    const response = await fetch(`${this.baseUrl}/memories/search`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': this.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query, limit })
+    });
+    return response.json();
+  }
+
+  async memorize(content: string, tags: string[]): Promise<void> {
+    await fetch(`${this.baseUrl}/memories`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': this.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ content, tags })
+    });
+  }
+}
+```
+
+### 4.3 设置面板
+
+```typescript
+// src/settings/SettingsTab.ts
+export class EvifSettingsTab extends PluginSettingTab {
+  constructor(plugin: EvifPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl('h2', { text: 'EVIF 设置' });
+
+    new Setting(containerEl)
+      .setName('EVIF 服务器地址')
+      .setDesc('例如: http://localhost:8081')
+      .addText(text => text
+        .setValue(this.plugin.settings.evifUrl)
+        .onChange(async (value) => {
+          this.plugin.settings.evifUrl = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('API 密钥')
+      .setDesc('从 EVIF 服务器获取')
+      .addText(text => text
+        .setValue(this.plugin.settings.apiKey)
+        .onChange(async (value) => {
+          this.plugin.settings.apiKey = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('自动同步')
+      .setDesc('笔记更改时自动同步到 EVIF')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.autoSync)
+        .onChange(async (value) => {
+          this.plugin.settings.autoSync = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('同步间隔')
+      .setDesc('自动同步间隔（秒）')
+      .addText(text => text
+        .setValue(String(this.plugin.settings.syncInterval))
+        .onChange(async (value) => {
+          this.plugin.settings.syncInterval = parseInt(value) || 30;
+          await this.plugin.saveSettings();
+        }));
+  }
+}
+```
+
+### 4.4 上下文面板
+
+```typescript
+// src/panels/ContextPanel.ts
+export class ContextPanel extends ItemView {
+  private evif: EvifClient;
+  private vault: Vault;
+
+  constructor(leaf: WorkspaceLeaf, evif: EvifClient) {
+    super(leaf);
+    this.evif = evif;
+    this.vault = this.app.vault;
+  }
+
+  getViewType(): string {
+    return 'evif-context-panel';
+  }
+
+  getIcon(): string {
+    return 'brain';
+  }
+
+  async onOpen(): Promise<void> {
+    const container = this.containerEl;
+    container.empty();
+
+    // L0 当前任务
+    const l0Section = container.createDiv('context-section');
+    l0Section.createEl('h3', { text: 'L0 - 当前任务' });
+    const l0Content = l0Section.createDiv('context-content');
+    l0Content.setText(await this.evif.readContext('L0', 'current'));
+
+    // L1 决策记录
+    const l1Section = container.createDiv('context-section');
+    l1Section.createEl('h3', { text: 'L1 - 决策记录' });
+    const l1List = l1Section.createEl('ul');
+    const l1Decisions = await this.evif.readContext('L1', 'decisions.md');
+    l1List.setText(l1Decisions);
+
+    // L2 项目知识
+    const l2Section = container.createDiv('context-section');
+    l2Section.createEl('h3', { text: 'L2 - 项目知识' });
+    const l2Files = await this.evif.listContext('L2');
+    l2Files.forEach(file => {
+      const item = l2Section.createEl('button');
+      item.setText(file);
+      item.onclick = () => this.loadL2File(file);
+    });
+
+    // 写入当前笔记到 L0
+    const currentNote = this.app.workspace.getActiveFile();
+    if (currentNote) {
+      const content = await this.vault.read(currentNote);
+      await this.evif.writeContext('L0', 'current', content);
+    }
+  }
+}
+```
 
 ---
 
-## 七、立即行动清单
+## 五、实施计划
 
-### 明天可以开始
+### Phase 1: 基础连接（第 1-2 周）
 
-1. [ ] **Qdrant 集成** - 实现 `crates/evif-plugins/src/qdrantfs.rs`
-   - 使用 qdrant-client crate
-   - 实现 CRUD + 向量搜索
-   - 添加单元测试
+| 任务 | 工作量 | 输出 |
+|------|--------|------|
+| 项目初始化 | 1 天 | 插件骨架 |
+| EVIF API 客户端 | 2 天 | evif-client.ts |
+| 设置面板 | 2 天 | SettingsTab.ts |
+| 基本命令 | 2 天 | 同步命令 |
+| 测试运行 | 1 天 | 可用插件 |
 
-2. [ ] **音频转录** - 修复 `pipeline.rs`
-   - 集成 Whisper API
-   - 实现 `transcribe_audio()` 方法
+### Phase 2: 上下文集成（第 3-4 周）
 
-### 本周可以完成
+| 任务 | 工作量 | 输出 |
+|------|--------|------|
+| ContextPanel 视图 | 3 天 | 上下文面板 |
+| L0/L1/L2 读写 | 2 天 | 上下文命令 |
+| 自动同步引擎 | 3 天 | SyncEngine |
+| 笔记联动 | 2 天 | 双向同步 |
 
-3. [ ] **evif-bench 性能测试**
-   - 运行非沙箱环境测试
-   - 生成性能报告
+### Phase 3: 技能系统（第 5-6 周）
 
-4. [ ] **PostgreSQL/速率限制验证**
-   - 在 Linux VM 中验证
-   - 更新测试为非 ignored
+| 任务 | 工作量 | 输出 |
+|------|--------|------|
+| SkillPanel 视图 | 3 天 | 技能面板 |
+| 技能市场浏览 | 2 天 | 技能列表 |
+| 技能执行 | 3 天 | 执行命令 |
+| 结果展示 | 2 天 | 输出视图 |
+
+### Phase 4: 记忆系统（第 7-8 周）
+
+| 任务 | 工作量 | 输出 |
+|------|--------|------|
+| MemoryPanel 视图 | 3 天 | 记忆面板 |
+| 向量搜索集成 | 3 天 | 搜索命令 |
+| 自动记忆 | 2 天 | 记忆规则 |
+| 记忆面板 | 2 天 | 相关记忆 |
+
+### Phase 5: 高级功能（第 9-10 周）
+
+| 任务 | 工作量 | 输出 |
+|------|--------|------|
+| MCP Bridge | 4 天 | Claude 集成 |
+| QueuePanel | 2 天 | 任务队列 |
+| 协作功能 | 4 天 | PipeFS 集成 |
 
 ---
 
-## 八、代码质量
+## 六、核心插件命令
 
-| 指标 | 状态 |
-|------|------|
-| 编译警告 | 20+ lint warnings (低严重性) |
-| 单元测试 | 449/449 通过 |
-| 集成测试 | 11/11 通过 |
-| TODO/FIXME | 仅 5 个（placeholder，非 bug） |
-| 代码文档 | 38 个插件均有文档 |
+### 6.1 Obsidian 命令面板命令
+
+| 命令 | 快捷键 | 功能 |
+|------|--------|------|
+| `EVIF: 同步笔记` | `Ctrl+Shift+S` | 同步当前笔记 |
+| `EVIF: 写入 L0` | `Ctrl+Shift+L0` | 写入当前任务 |
+| `EVIF: 写入 L1` | `Ctrl+Shift+L1` | 追加决策 |
+| `EVIF: 搜索记忆` | `Ctrl+Shift+M` | 语义搜索 |
+| `EVIF: 执行技能` | `Ctrl+Shift+K` | 运行技能 |
+| `EVIF: 查看上下文` | `Ctrl+Shift+C` | 打开面板 |
+| `EVIF: 记忆当前笔记` | `Ctrl+Shift+R` | 存储记忆 |
+| `EVIF: 打开任务队列` | `Ctrl+Shift+Q` | 查看队列 |
+
+### 6.2 侧边栏面板
+
+| 面板 | 图标 | 功能 |
+|------|------|------|
+| Context Panel | 🧠 | L0/L1/L2 上下文 |
+| Memory Panel | 💭 | 向量记忆搜索 |
+| Skill Panel | ⚡ | 技能市场 |
+| Queue Panel | 📋 | 任务队列 |
 
 ---
 
-## 九、总结
+## 七、差异化价值
 
-**EVIF 已具备生产就绪的核心功能**：
-- ✅ 38 个插件，覆盖存储/AI/Agent 全场景
-- ✅ 449 个测试 100% 通过
-- ✅ REST API / MCP / CLI / FUSE 全访问层
-- ✅ 认证授权 / 审计日志 / 多租户 企业级功能
+### 7.1 EVIF Obsidian 插件 vs 其他方案
 
-**下一步最值得做的**：
-1. Qdrant 集成（向量搜索生产化）
-2. 音频转录（多模态支持）
-3. Web UI（用户体验）
+| 功能 | EVIF | Notion | Roam | Logseq |
+|------|------|--------|------|--------|
+| 本地优先 | ✅ | ❌ | ✅ | ✅ |
+| 云同步 | ✅ | ✅ | ❌ | ❌ |
+| AI Agent 集成 | ✅ | ❌ | ❌ | ❌ |
+| 向量记忆 | ✅ | ❌ | ❌ | ❌ |
+| 技能系统 | ✅ | ❌ | ❌ | ❌ |
+| MCP 协议 | ✅ | ❌ | ❌ | ❌ |
+| 多租户 | ✅ | ✅ | ❌ | ❌ |
 
-**所有参考项目（AGFS + AgentFS）的核心功能已超越实现。**
+### 7.2 核心卖点
+
+1. **Obsidian + AI Agent**：Obsidian 用户可以直接使用 AI Agent 的上下文管理能力
+2. **本地优先**：数据存储在本地 EVIF 后端，隐私安全
+3. **技能复用**：使用 SKILL.md 标准化工作流
+4. **记忆增强**：向量搜索让笔记互联
+
+---
+
+## 八、技术要求
+
+### 8.1 Obsidian 版本
+
+- **最低版本**：1.0.0
+- **推荐版本**：1.12.7+
+- **API 类型**：TypeScript API
+
+### 8.2 依赖
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| Obsidian | 1.0.0+ | 核心框架 |
+| @codemirror | 最新 | 编辑器集成 |
+| react | 18.x | UI 面板 |
+
+### 8.3 EVIF 后端要求
+
+| 功能 | API 端点 | 必须 |
+|------|----------|------|
+| 上下文读取 | `/context/{layer}/{path}` | ✅ |
+| 上下文写入 | `/context/{layer}/{path}` | ✅ |
+| 技能列表 | `/skills` | ✅ |
+| 技能执行 | `/skills/{name}/execute` | ✅ |
+| 记忆搜索 | `/memories/search` | ✅ |
+| 记忆存储 | `/memories` | ✅ |
+| MCP 协议 | MCP Server | 可选 |
+
+---
+
+## 九、下一步行动
+
+### 本周
+
+1. [ ] 创建 `evif-obsidian-plugin` 仓库
+2. [ ] 实现基础 API 客户端
+3. [ ] 创建设置面板
+
+### 本月
+
+1. [ ] 完成 Phase 1-2（基础连接 + 上下文）
+2. [ ] 发布 Beta 版本
+3. [ ] 收集反馈
+
+---
+
+## 参考资料
+
+- [Obsidian Plugin Developer Documentation](https://docs.obsidian.md/Plugins/Getting+started/Build+a+plugin)
+- [Obsidian Plugin API Reference](https://docs.obsidian.md/Plugins/API+Reference)
+- [Obsidian Community Plugins](https://obsidian.md/plugins)
