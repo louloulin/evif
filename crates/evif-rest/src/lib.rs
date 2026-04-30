@@ -17,6 +17,7 @@ mod routes;
 mod server;
 mod sync_handlers;
 mod tenant_handlers;
+mod tenant_tests;
 mod wasm_handlers;
 mod ws_handlers;
 
