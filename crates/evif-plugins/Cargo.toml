@@ -53,8 +53,8 @@ urlencoding = "2.1"
 log = "0.4"
 
 # WASM runtime for skill sandbox (optional dependency)
-wasmtime = { version = "26", optional = true }
-wasmtime-wasi = { version = "26", optional = true }
+wasmtime = { version = "36", optional = true }
+wasmtime-wasi = { version = "36", optional = true }
 wat = { version = "1.221", optional = true }
 
 # AWS SDK for S3 (optional dependency)

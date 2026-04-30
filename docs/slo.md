@@ -90,7 +90,7 @@ Error Budget = (1 - 可用率目标) × 月总分钟数
 | **认证覆盖率** | 100% | 受保护端点全部需要认证 |
 | **审计日志完整性** | ≥ 99.9% | 写操作审计日志记录比例 |
 
-> **当前状态**：Phase H（依赖安全）完成度 0%，22 个 `cargo audit` 漏洞未修复。生产部署前必须解决 aws-lc-sys 等高危漏洞。
+> **当前状态**：Phase H（依赖安全）已大幅改善。通过 `cargo update` 和 wasmtime 升级修复了所有 aws-lc-sys 高危漏洞和 wasmtime CRITICAL 沙箱逃逸漏洞。剩余漏洞均为第三方上游未提供修复（protobuf v2 受限于 prometheus，rsa Marvin Attack 无官方修复）。
 
 ---
 
@@ -163,6 +163,6 @@ cat /var/lib/evif/sync_state.json  # 或 $EVIF_REST_SYNC_STATE_PATH
 | 吞吐量基线 | ✅ GREEN | ~7000 req/s（6600-7700 范围，开发环境）|
 | P99 延迟 | ✅ GREEN | 1ms（开发环境）|
 | 并发稳定性 | ✅ GREEN | 100/100 完成 |
-| 依赖安全 | 🔴 RED | 22 个漏洞未修复 |
+| 依赖安全 | 🟡 YELLOW | aws-lc-sys/wasmtime 已修复，protobuf/rsa 待上游 |
 | 认证覆盖 | ⚠️ 部分覆盖 | 需确认所有 P0 端点 |
 | 审计日志 | ⚠️ 未测量 | 需接入日志系统 |
