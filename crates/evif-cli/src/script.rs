@@ -6,21 +6,29 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 /// 脚本执行器
-#[allow(dead_code)]
 pub struct ScriptExecutor {
-    #[allow(dead_code)]
     variables: HashMap<String, String>,
-    #[allow(dead_code)]
     server: String,
+    client: Option<EvifCommand>,
 }
 
-#[allow(dead_code)]
 impl ScriptExecutor {
     /// 创建新的脚本执行器
     pub fn new(server: String) -> Self {
+        let client = EvifCommand::new(server.clone(), false);
         Self {
             variables: HashMap::new(),
             server,
+            client: Some(client),
+        }
+    }
+
+    /// 创建无客户端的脚本执行器（仅支持 echo/sleep/set）
+    pub fn new_without_client() -> Self {
+        Self {
+            variables: HashMap::new(),
+            server: String::new(),
+            client: None,
         }
     }
 
@@ -53,6 +61,13 @@ impl ScriptExecutor {
 
     /// 执行单个命令
     async fn execute_single_command(&mut self, command: &str) -> Result<()> {
+        // 优先使用 EvifClient 执行
+        if let Some(client) = &self.client {
+            Self::dispatch_command(command.to_string(), client).await?;
+            return Ok(());
+        }
+
+        // 无客户端时仅支持基本命令
         let parts: Vec<&str> = command.split_whitespace().collect();
         if parts.is_empty() {
             return Ok(());
@@ -81,10 +96,7 @@ impl ScriptExecutor {
                 }
             }
             _ => {
-                // EVIF 命令需要通过 REST API 执行
-                // 这里提供占位符实现，实际集成需要 EvifClient
-                println!("Executing EVIF command: {}", command);
-                println!("Note: Full EVIF command integration requires EvifClient");
+                eprintln!("Error: No server connection. Use 'evif script --server <url> <file>'");
             }
         }
 
