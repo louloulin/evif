@@ -910,11 +910,17 @@ fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
             path,
             "/api/v1/fs/write"
                 | "/api/v1/fs/create"
+                | "/api/v1/fs/stream"
+                | "/api/v1/fs/chmod"
+                | "/api/v1/fs/chown"
                 | "/api/v1/files"
                 | "/api/v1/directories"
                 | "/api/v1/touch"
                 | "/api/v1/rename"
                 | "/api/v1/memories"
+                | "/api/v1/digest"
+                | "/api/v1/grep"
+                | "/api/v1/copy"
         ))
         || (*method == Method::PUT && matches!(path, "/api/v1/files"))
         || (*method == Method::DELETE
@@ -922,6 +928,7 @@ fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
                 path,
                 "/api/v1/fs/delete" | "/api/v1/files" | "/api/v1/directories"
             ))
+        || (*method == Method::POST && path == "/api/v1/copy/recursive")
         || (*method == Method::POST && path.starts_with("/nodes/create/"))
         || (*method == Method::DELETE && path.starts_with("/nodes/"))
         || path.starts_with("/api/v1/handles")
@@ -930,7 +937,18 @@ fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
         || path.starts_with("/api/v1/permissions/")
         || path.starts_with("/api/v1/comments")
         || path == "/api/v1/activities"
-        || path == "/api/v1/users";
+        || path == "/api/v1/users"
+        // File lock operations require write permission
+        || path == "/api/v1/lock"
+        || path == "/api/v1/locks"
+        // Sync write operations
+        || path == "/api/v1/sync/delta"
+        || path == "/api/v1/sync/resolve"
+        // LLM operations are expensive
+        || path == "/api/v1/llm/complete"
+        // Memory queries access sensitive data
+        || path == "/api/v1/memories/search"
+        || path == "/api/v1/memories/query";
 
     if is_write_route {
         return Some(write_requirement());
@@ -944,11 +962,13 @@ fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
                 | "/api/v1/plugins/load"
                 | "/api/v1/plugins/unload"
                 | "/api/v1/plugins/wasm/load"
+                | "/api/v1/plugins/wasm/reload"
                 | "/api/v1/encryption/enable"
                 | "/api/v1/encryption/disable"
                 | "/api/v1/encryption/rotate"
                 | "/api/v1/tenants"
                 | "/api/v1/metrics/reset"
+                | "/api/v1/cloud/config"
         ))
         || (*method == Method::GET && path == "/api/v1/tenants")
         || (*method == Method::GET
@@ -965,7 +985,9 @@ fn route_requirement(method: &Method, path: &str) -> Option<RouteRequirement> {
             && path.ends_with("/quota"))
         || (*method == Method::POST
             && path.starts_with("/api/v1/plugins/")
-            && path.ends_with("/reload"));
+            && path.ends_with("/reload"))
+        // GraphQL exposes full data model
+        || path == "/api/v1/graphql";
 
     if is_admin_route {
         return Some(admin_requirement());

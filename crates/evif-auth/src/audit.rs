@@ -103,6 +103,16 @@ impl AuditEvent {
     }
 }
 
+/// 审计日志格式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AuditLogFormat {
+    /// 文本格式 (默认)
+    #[default]
+    Text,
+    /// JSON 结构化格式
+    Json,
+}
+
 /// 审计日志配置
 #[derive(Debug, Clone)]
 pub struct AuditConfig {
@@ -114,6 +124,8 @@ pub struct AuditConfig {
     pub rotation_size: usize,
     /// 是否同步写入
     pub sync_write: bool,
+    /// 日志格式
+    pub format: AuditLogFormat,
 }
 
 impl Default for AuditConfig {
@@ -123,6 +135,7 @@ impl Default for AuditConfig {
             log_path: Some("evif_audit.log".to_string()),
             rotation_size: 10 * 1024 * 1024, // 10MB
             sync_write: false,
+            format: AuditLogFormat::Json, // 默认使用 JSON 格式便于日志收集
         }
     }
 }
@@ -243,15 +256,18 @@ impl FileAuditLogger {
             })?;
         }
 
-        let log_line = format!(
-            "{} | {:?} | principal={:?} | resource={:?} | success={} | {}\n",
-            event.timestamp.format("%Y-%m-%d %H:%M:%S%.3f UTC"),
-            event.event_type,
-            event.principal_id,
-            event.resource_id,
-            event.success,
-            event.details
-        );
+        let log_line = match self.inner.config.format {
+            AuditLogFormat::Json => {
+                // JSON 结构化格式 (一行一条记录，便于日志收集和分析)
+                serde_json::to_string(event).unwrap_or_else(|_| {
+                    // 如果 JSON 序列化失败，回退到文本格式
+                    Self::format_as_text(event)
+                }) + "\n"
+            }
+            AuditLogFormat::Text => {
+                Self::format_as_text(event) + "\n"
+            }
+        };
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -262,10 +278,25 @@ impl FileAuditLogger {
         file.write_all(log_line.as_bytes())
             .map_err(|e| AuthError::IoError(format!("Failed to write audit log: {}", e)))?;
 
-        file.flush()
-            .map_err(|e| AuthError::IoError(format!("Failed to flush audit log: {}", e)))?;
+        if self.inner.config.sync_write {
+            file.flush()
+                .map_err(|e| AuthError::IoError(format!("Failed to flush audit log: {}", e)))?;
+        }
 
         Ok(())
+    }
+
+    /// 格式化事件为文本
+    fn format_as_text(event: &AuditEvent) -> String {
+        format!(
+            "{} | {:?} | principal={:?} | resource={:?} | success={} | {}",
+            event.timestamp.format("%Y-%m-%d %H:%M:%S%.3f UTC"),
+            event.event_type,
+            event.principal_id,
+            event.resource_id,
+            event.success,
+            event.details
+        )
     }
 }
 

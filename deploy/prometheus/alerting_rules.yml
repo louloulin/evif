@@ -1,0 +1,186 @@
+# EVIF Prometheus Alerting Rules
+# Based on SLO definitions in docs/slo.md
+#
+# Usage: Add to your Prometheus configuration:
+#   rule_files:
+#     - 'alerting_rules.yml'
+
+groups:
+  # === Availability Alerts ===
+  - name: evif_availability
+    rules:
+      - alert: EVIFServiceDown
+        expr: up{job="evif-rest"} == 0
+        for: 1m
+        labels:
+          severity: P1
+          team: platform
+        annotations:
+          summary: "EVIF REST API is down"
+          description: "EVIF instance {{ $labels.instance }} has been down for more than 1 minute."
+          runbook: "https://docs.evif.dev/runbooks/service-down"
+
+      - alert: EVIFHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job="evif-rest",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="evif-rest"}[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: P2
+          team: platform
+        annotations:
+          summary: "EVIF 5xx error rate exceeds 1%"
+          description: "Current 5xx error rate is {{ $value | humanizePercentage }}. SLO target: < 0.1%."
+          runbook: "https://docs.evif.dev/runbooks/high-error-rate"
+
+      - alert: EVIFStartupFailure
+        expr: |
+          evif_rest_up == 0
+          and
+          time() - process_start_time_seconds{job="evif-rest"} < 300
+        for: 30s
+        labels:
+          severity: P1
+          team: platform
+        annotations:
+          summary: "EVIF failed to start within 5 minutes"
+          description: "Instance {{ $labels.instance }} started but /health is not returning 200."
+
+  # === Performance Alerts ===
+  - name: evif_performance
+    rules:
+      - alert: EVIFHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="evif-rest"}[5m]))
+            by (le)
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: P2
+          team: platform
+        annotations:
+          summary: "EVIF P99 latency exceeds 200ms"
+          description: "Current P99 latency is {{ $value }}s. SLO target: < 200ms."
+          runbook: "https://docs.evif.dev/runbooks/high-latency"
+
+      - alert: EVIFHighLatencyP50
+        expr: |
+          histogram_quantile(0.5,
+            sum(rate(http_request_duration_seconds_bucket{job="evif-rest"}[5m]))
+            by (le)
+          ) > 0.02
+        for: 10m
+        labels:
+          severity: P3
+          team: platform
+        annotations:
+          summary: "EVIF P50 latency exceeds 20ms"
+          description: "Current P50 latency is {{ $value }}s. SLO target: < 20ms."
+          runbook: "https://docs.evif.dev/runbooks/high-latency"
+
+      - alert: EVIFLowThroughput
+        expr: |
+          sum(rate(http_requests_total{job="evif-rest"}[5m])) < 1
+        for: 10m
+        labels:
+          severity: P3
+          team: platform
+        annotations:
+          summary: "EVIF throughput below 1 req/s baseline"
+          description: "Current throughput is {{ $value }} req/s. Minimum SLO: 1 req/s."
+
+  # === Resource Alerts ===
+  - name: evif_resources
+    rules:
+      - alert: EVIFHighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="evif-rest"} > 1073741824
+        for: 10m
+        labels:
+          severity: P2
+          team: platform
+        annotations:
+          summary: "EVIF process memory exceeds 1GB"
+          description: "Current RSS: {{ $value | humanize }}B. Investigate for memory leaks."
+
+      - alert: EVIFHandleLeak
+        expr: |
+          evif_handles_open > 1000
+        for: 15m
+        labels:
+          severity: P2
+          team: platform
+        annotations:
+          summary: "EVIF has more than 1000 open handles"
+          description: "Current open handles: {{ $value }}. Possible handle leak."
+
+      - alert: EVIFHighGoroutines
+        expr: |
+          process_threads{job="evif-rest"} > 500
+        for: 10m
+        labels:
+          severity: P3
+          team: platform
+        annotations:
+          summary: "EVIF thread count exceeds 500"
+          description: "Current thread count: {{ $value }}. Check for thread leaks."
+
+  # === Filesystem SLO Alerts ===
+  - name: evif_filesystem
+    rules:
+      - alert: EVIFFileOperationFailures
+        expr: |
+          (
+            sum(rate(evif_fs_operations_total{success="false"}[5m]))
+            /
+            sum(rate(evif_fs_operations_total[5m]))
+          ) > 0.005
+        for: 5m
+        labels:
+          severity: P2
+          team: platform
+        annotations:
+          summary: "EVIF file operation failure rate exceeds 0.5%"
+          description: "Current failure rate: {{ $value | humanizePercentage }}. SLO target: < 0.5%."
+
+      - alert: EVIFHandleLeakDetected
+        expr: |
+          increase(evif_handles_open[1h]) > 100
+          and
+          evif_handles_open > 50
+        for: 1h
+        labels:
+          severity: P2
+          team: platform
+        annotations:
+          summary: "EVIF handle count growing consistently"
+          description: "Handles grew by {{ $value }} in the last hour. Possible handle leak."
+
+  # === Security Alerts ===
+  - name: evif_security
+    rules:
+      - alert: EVIFHighAuthFailures
+        expr: |
+          sum(rate(evif_auth_failures_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: P2
+          team: security
+        annotations:
+          summary: "EVIF authentication failure rate is high"
+          description: "{{ $value }} auth failures/sec. Possible brute-force attack."
+
+      - alert: EVIFTenantIsolationViolation
+        expr: |
+          increase(evif_tenant_cross_access_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: P1
+          team: security
+        annotations:
+          summary: "EVIF tenant isolation violation detected"
+          description: "{{ $value }} cross-tenant access attempts in the last 5 minutes."

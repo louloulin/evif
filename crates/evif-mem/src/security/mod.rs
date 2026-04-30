@@ -20,6 +20,8 @@ pub mod audit;
 #[cfg(feature = "security")]
 pub mod encryption;
 #[cfg(feature = "security")]
+pub mod key_provider;
+#[cfg(feature = "security")]
 pub mod rbac;
 
 pub mod masking;
@@ -28,6 +30,11 @@ pub mod masking;
 pub use audit::{AuditConfig, AuditEvent, AuditLevel, AuditLogger};
 #[cfg(feature = "security")]
 pub use encryption::{Encryption, EncryptionConfig};
+#[cfg(feature = "security")]
+pub use key_provider::{
+    KeyAlgorithm, KeyId, KeyMetadata, KeyProvider, KeyProviderError, KeyProviderRegistry,
+    KeyVersion, LocalKeyProvider,
+};
 #[cfg(feature = "security")]
 pub use rbac::{
     Action, Permission, PermissionBuilder, Rbac, RbacConfig, Resource, Role, RoleBuilder,
