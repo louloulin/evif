@@ -36,10 +36,14 @@ pub enum OpendalService {
     /// 华为云对象存储 (OBS)
     Obs,
 
-    // WebDAV, FTP, SFTP 暂时禁用，等待 OpenDAL 0.50.x TLS 冲突修复
-    // Webdav,
-    // Ftp,
-    // Sftp,
+    /// WebDAV 协议
+    Webdav,
+
+    /// FTP 协议
+    Ftp,
+
+    /// SFTP 协议
+    Sftp,
 }
 
 /// OpenDAL 配置
@@ -317,98 +321,89 @@ impl OpendalPlugin {
                 })?.finish())
             }
 
-//             OpendalService::Webdav => {
-//                 use opendal::services::Webdav;
-//
-//                 // 获取 endpoint (必需)
-//                 let endpoint = config.endpoint.as_ref().ok_or_else(|| {
-//                     EvifError::Other("Webdav service requires 'endpoint' in config".to_string())
-//                 })?;
-//
-//                 // 构建 Webdav builder
-//                 let builder = Webdav::default()
-//                     .endpoint(endpoint);
-//
-//                 // 添加访问密钥（如果需要认证）
-//                 let builder = if let (Some(access_key), Some(secret_key)) = (&config.access_key, &config.secret_key) {
-//                     builder.username(access_key).password(secret_key)
-//                 } else {
-//                     builder
-//                 };
-//
-//                 // 添加根路径
-//                 let builder = if let Some(root) = &config.root {
-//                     builder.root(root)
-//                 } else {
-//                     builder
-//                 };
-//
-//                 Ok(Operator::new(builder).map_err(|e| {
-//                     EvifError::Other(format!("Failed to create Webdav operator: {}", e))
-//                 })?.finish())
-//             }
-//
-//             OpendalService::Ftp => {
-//                 use opendal::services::Ftp;
-//
-//                 // 获取 endpoint (必需)
-//                 let endpoint = config.endpoint.as_ref().ok_or_else(|| {
-//                     EvifError::Other("Ftp service requires 'endpoint' in config".to_string())
-//                 })?;
-//
-//                 // 构建 Ftp builder
-//                 let builder = Ftp::default()
-//                     .endpoint(endpoint);
-//
-//                 // 添加访问密钥（如果需要认证）
-//                 let builder = if let (Some(access_key), Some(secret_key)) = (&config.access_key, &config.secret_key) {
-//                     builder.username(access_key).password(secret_key)
-//                 } else {
-//                     builder
-//                 };
-//
-//                 // 添加根路径
-//                 let builder = if let Some(root) = &config.root {
-//                     builder.root(root)
-//                 } else {
-//                     builder
-//                 };
-//
-//                 Ok(Operator::new(builder).map_err(|e| {
-//                     EvifError::Other(format!("Failed to create Ftp operator: {}", e))
-//                 })?.finish())
-//             }
-//
-//             OpendalService::Sftp => {
-//                 use opendal::services::Sftp;
-//
-//                 // 获取 endpoint (必需)
-//                 let endpoint = config.endpoint.as_ref().ok_or_else(|| {
-//                     EvifError::Other("Sftp service requires 'endpoint' in config".to_string())
-//                 })?;
-//
-//                 // 构建 Sftp builder
-//                 let builder = Sftp::default()
-//                     .endpoint(endpoint);
-//
-//                 // 添加访问密钥（如果需要认证）
-//                 let builder = if let (Some(access_key), Some(secret_key)) = (&config.access_key, &config.secret_key) {
-//                     builder.username(access_key).password(secret_key)
-//                 } else {
-//                     builder
-//                 };
-//
-//                 // 添加根路径
-//                 let builder = if let Some(root) = &config.root {
-//                     builder.root(root)
-//                 } else {
-//                     builder
-//                 };
-//
-//                 Ok(Operator::new(builder).map_err(|e| {
-//                     EvifError::Other(format!("Failed to create Sftp operator: {}", e))
-//                 })?.finish())
-//             }
+            OpendalService::Webdav => {
+                use opendal::services::Webdav;
+
+                // 获取 endpoint (必需)
+                let endpoint = config.endpoint.as_ref().ok_or_else(|| {
+                    EvifError::Other("Webdav service requires 'endpoint' in config".to_string())
+                })?;
+
+                // 构建 Webdav builder
+                let mut builder = Webdav::default()
+                    .endpoint(endpoint);
+
+                // 添加访问密钥（如果需要认证）
+                if let (Some(access_key), Some(secret_key)) = (&config.access_key, &config.secret_key) {
+                    builder = builder.username(access_key).password(secret_key);
+                }
+
+                // 添加根路径
+                if let Some(root) = &config.root {
+                    builder = builder.root(root);
+                }
+
+                Ok(Operator::new(builder).map_err(|e| {
+                    EvifError::Other(format!("Failed to create Webdav operator: {}", e))
+                })?.finish())
+            }
+
+            OpendalService::Ftp => {
+                use opendal::services::Ftp;
+
+                // 获取 endpoint (必需)
+                let endpoint = config.endpoint.as_ref().ok_or_else(|| {
+                    EvifError::Other("Ftp service requires 'endpoint' in config".to_string())
+                })?;
+
+                // 构建 Ftp builder
+                let mut builder = Ftp::default()
+                    .endpoint(endpoint);
+
+                // 添加访问密钥（如果需要认证）
+                if let (Some(access_key), Some(secret_key)) = (&config.access_key, &config.secret_key) {
+                    builder = builder.user(access_key).password(secret_key);
+                }
+
+                // 添加根路径
+                if let Some(root) = &config.root {
+                    builder = builder.root(root);
+                }
+
+                Ok(Operator::new(builder).map_err(|e| {
+                    EvifError::Other(format!("Failed to create Ftp operator: {}", e))
+                })?.finish())
+            }
+
+            OpendalService::Sftp => {
+                use opendal::services::Sftp;
+
+                // 获取 endpoint (必需)
+                let endpoint = config.endpoint.as_ref().ok_or_else(|| {
+                    EvifError::Other("Sftp service requires 'endpoint' in config".to_string())
+                })?;
+
+                // 构建 Sftp builder
+                let mut builder = Sftp::default()
+                    .endpoint(endpoint);
+
+                // 添加访问密钥（如果需要认证）
+                if let Some(access_key) = &config.access_key {
+                    builder = builder.user(access_key);
+                }
+                if let Some(secret_key) = &config.secret_key {
+                    builder = builder.key(secret_key);
+                }
+
+                // 添加根路径
+                if let Some(root) = &config.root {
+                    builder = builder.root(root);
+                }
+
+                Ok(Operator::new(builder).map_err(|e| {
+                    EvifError::Other(format!("Failed to create Sftp operator: {}", e))
+                })?.finish())
+            }
         }
     }
 

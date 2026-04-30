@@ -73,13 +73,12 @@ pub mod huaweiobsfs;
 
 #[cfg(feature = "miniofs")]
 pub mod miniofs;
-// 文件系统插件暂时禁用，等待 OpenDAL 0.50.x TLS 冲突修复
-// #[cfg(feature = "webdavfs")]
-// pub mod webdavfs;
-// #[cfg(feature = "ftpfs")]
-// pub mod ftpfs;
-// #[cfg(feature = "sftpfs")]
-// pub mod sftpfs;
+#[cfg(feature = "webdavfs")]
+pub mod webdavfs;
+#[cfg(feature = "ftpfs")]
+pub mod ftpfs;
+#[cfg(feature = "sftpfs")]
+pub mod sftpfs;
 
 pub use localfs::LocalFsPlugin;
 pub use contextfs::{ContextFsPlugin, ContextTokenBudget, BudgetLevel, BudgetStatus};
@@ -147,10 +146,9 @@ pub use huaweiobsfs::{HuaweiObsFsPlugin, HuaweiObsConfig};
 
 #[cfg(feature = "miniofs")]
 pub use miniofs::{MinioFsPlugin, MinioConfig};
-// 文件系统插件暂时禁用
-// #[cfg(feature = "webdavfs")]
-// pub use webdavfs::{WebdavFsPlugin, WebdavConfig};
-// #[cfg(feature = "ftpfs")]
-// pub use ftpfs::{FtpFsPlugin, FtpConfig};
-// #[cfg(feature = "sftpfs")]
-// pub use sftpfs::{SftpFsPlugin, SftpConfig};
+#[cfg(feature = "webdavfs")]
+pub use webdavfs::{WebdavFsPlugin, WebdavConfig};
+#[cfg(feature = "ftpfs")]
+pub use ftpfs::{FtpFsPlugin, FtpConfig};
+#[cfg(feature = "sftpfs")]
+pub use sftpfs::{SftpFsPlugin, SftpConfig};
