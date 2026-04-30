@@ -23,6 +23,7 @@ pub mod plugin_registry;
 pub mod radix_benchmarks;
 pub mod radix_mount_table;
 pub mod server;
+pub mod snapshot;
 pub mod streaming;
 
 // WASM plugin support (requires "wasm" feature - enables both backends)
@@ -74,6 +75,7 @@ pub use plugin::{
 pub use plugin_registry::{PluginRegistry, PluginRegistryRef, PluginState, RegisteredPlugin};
 pub use radix_mount_table::{MountTableStats, RadixMountTable};
 pub use server::EvifServer;
+pub use snapshot::{CowSnapshot, SnapshotDiff, SnapshotEntry, SnapshotManager, SnapshotMetadata};
 pub use streaming::{LineReader, MemoryStreamReader, StreamReader, Streamer};
 
 // WASM plugin exports
