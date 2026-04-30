@@ -1,0 +1,15 @@
+[package]
+name = "integration-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+evif-core = { path = "../../crates/evif-core" }
+evif-plugins = { path = "../../crates/evif-plugins", features = ["sqlfs"] }
+evif-rest = { path = "../../crates/evif-rest" }
+evif-auth = { path = "../../crates/evif-auth" }
+evif-mem = { path = "../../crates/evif-mem", features = ["security"] }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }

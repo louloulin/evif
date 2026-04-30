@@ -19,6 +19,7 @@ members = [
     "tests/cli",
     "tests/api",
     "tests/core",
+    "tests/integration",
 ]
 default-members = [
     "crates/evif-bench",
