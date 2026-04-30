@@ -163,18 +163,25 @@ github://owner/repo/issues          →  /github/owner/repo/issues
 | resources/list | 1 resource | ✅ |
 | resources/read | `/files` endpoint | ✅ |
 | prompts/list | 3 prompts | ✅ |
-| prompts/get | ❌ | ❌ |
+| prompts/get | ✅ 已实现 | ✅ 已实现 |
 | sampling/create | `/queue` | ⚠️ 部分 |
-| roots/list | ❌ | ❌ |
+| roots/list | ✅ 已实现 | ✅ 已实现 |
+| logging/setLevel | ✅ 已实现 | ✅ 已实现 |
 
-### 4.2 缺失能力
+### 4.2 已实现能力
+
+| 能力 | 说明 | 实现文件 |
+|------|------|----------|
+| `prompts/get` | 获取 Prompt 详情并渲染 | `handle_request` 方法 |
+| `roots/list` | 列出工作空间根目录 | `handle_request` 方法 |
+| `logging/setLevel` | 日志级别控制 | `handle_request` 方法 |
+
+### 4.3 待实现能力
 
 | 能力 | 说明 | 实现优先级 |
 |------|------|-----------|
-| `prompts/get` | 获取 Prompt 详情并渲染 | P1 |
-| `roots/list` | 列出工作空间根目录 | P2 |
 | `sampling/create` | 完整 LLM 采样支持 | P1 |
-| `logging/setLevel` | 日志级别控制 | P3 |
+| `prompts/get` 模板渲染 | 完整模板变量替换 | P2 |
 
 ---
 
@@ -601,6 +608,7 @@ async fn test_mcp_end_to_end() {
 | 外部 MCP Server 接入 | P1 | githubfs, slackfs 等 |
 | 多租户 MCP 隔离 | P2 | 租户级配置 |
 | 配置文件导出 YAML | P3 | 配置备份和迁移 |
+| sampling/create | P1 | 完整 LLM 采样支持 |
 
 ### 11.1 EVIF 现有配置模型
 

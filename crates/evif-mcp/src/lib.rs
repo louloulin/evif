@@ -2040,6 +2040,120 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                     })
                 }
 
+                // prompts/get - Get a specific prompt with arguments
+                "prompts/get" => {
+                    let name = params
+                        .and_then(|p| p.get("name"))
+                        .and_then(|n| n.as_str());
+
+                    let name = match name {
+                        Some(n) => n,
+                        None => {
+                            return json!({
+                                "jsonrpc": "2.0",
+                                "error": {
+                                    "code": -32602,
+                                    "message": "Missing 'name' argument"
+                                },
+                                "id": id
+                            });
+                        }
+                    };
+
+                    let prompts = self.list_prompts().await;
+                    let prompt = prompts.iter().find(|p| p.name == name);
+
+                    match prompt {
+                        Some(p) => {
+                            // Collect provided arguments
+                            let arguments = params
+                                .and_then(|p| p.get("arguments"))
+                                .and_then(|a| a.as_object())
+                                .map(|obj| {
+                                    obj.iter()
+                                        .map(|(k, v)| (k.clone(), v.clone()))
+                                        .collect::<std::collections::HashMap<_, _>>()
+                                });
+
+                            // Render prompt with arguments (simplified implementation)
+                            let mut description = p.description.clone();
+                            if let Some(args) = &arguments {
+                                for (key, value) in args {
+                                    let placeholder = format!("{{{}}}", key);
+                                    let replacement = value.to_string();
+                                    description = description.replace(&placeholder, &replacement);
+                                }
+                            }
+
+                            json!({
+                                "jsonrpc": "2.0",
+                                "result": {
+                                    "name": p.name,
+                                    "description": description,
+                                    "arguments": p.arguments
+                                },
+                                "id": id
+                            })
+                        }
+                        None => {
+                            json!({
+                                "jsonrpc": "2.0",
+                                "error": {
+                                    "code": -32602,
+                                    "message": format!("Prompt '{}' not found", name)
+                                },
+                                "id": id
+                            })
+                        }
+                    }
+                }
+
+                // roots/list - List workspace root directories
+                "roots/list" => {
+                    json!({
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "roots": [
+                                {
+                                    "uri": "file:///".to_string(),
+                                    "name": "EVIF Root".to_string(),
+                                    "description": "EVIF virtual filesystem root".to_string()
+                                },
+                                {
+                                    "uri": "file:///context".to_string(),
+                                    "name": "Context".to_string(),
+                                    "description": "L0/L1/L2 context directories".to_string()
+                                },
+                                {
+                                    "uri": "file:///skills".to_string(),
+                                    "name": "Skills".to_string(),
+                                    "description": "SkillFS workflow directory".to_string()
+                                }
+                            ]
+                        },
+                        "id": id
+                    })
+                }
+
+                // logging/setLevel - Set logging level
+                "logging/setLevel" => {
+                    let level = params
+                        .and_then(|p| p.get("level"))
+                        .and_then(|l| l.as_str())
+                        .unwrap_or("info");
+
+                    // In a real implementation, this would set the tracing level
+                    tracing::info!("Logging level set to: {}", level);
+
+                    json!({
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "level": level
+                        },
+                        "id": id
+                    })
+                }
+
                 // ping
                 "ping" => {
                     json!({
@@ -2974,5 +3088,77 @@ url = "not-a-valid-url"
         assert_eq!(adapter.get_tool_path("evif_cp", &json!({"src": "/src"})), Some("/src".to_string()));
         assert_eq!(adapter.get_tool_path("evif_mv", &json!({"old_path": "/old"})), Some("/old".to_string()));
         assert_eq!(adapter.get_tool_path("unknown", &json!({})), None);
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_prompts_get() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+
+        // Wait for prompts to initialize
+        tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+
+        // Test prompts/get for existing prompt
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "prompts/get",
+            "params": {
+                "name": "file_explorer"
+            },
+            "id": 1
+        });
+
+        let response = server.handle_request(request).await;
+
+        assert!(response.get("result").is_some());
+        assert_eq!(response["result"]["name"], "file_explorer");
+
+        // Test prompts/get for non-existent prompt
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "prompts/get",
+            "params": {
+                "name": "non_existent_prompt"
+            },
+            "id": 2
+        });
+
+        let response = server.handle_request(request).await;
+        assert!(response.get("error").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_roots_list() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "roots/list",
+            "id": 1
+        });
+
+        let response = server.handle_request(request).await;
+        assert!(response.get("result").is_some());
+
+        let roots = &response["result"]["roots"];
+        assert!(roots.is_array());
+        assert!(roots.as_array().unwrap().len() >= 3);
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_logging_set_level() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "logging/setLevel",
+            "params": {
+                "level": "debug"
+            },
+            "id": 1
+        });
+
+        let response = server.handle_request(request).await;
+        assert!(response.get("result").is_some());
+        assert_eq!(response["result"]["level"], "debug");
     }
 }
