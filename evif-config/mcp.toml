@@ -1,0 +1,35 @@
+# EVIF MCP Server Configuration
+# 配置文件示例
+
+[mcp]
+protocol_version = "2024-11-05"
+
+[evif]
+url = "http://localhost:8081"
+timeout_ms = 30000
+retry_attempts = 3
+
+[auth]
+auth_type = "bearer"
+
+# 注册的外部 MCP Servers
+[[servers]]
+name = "github"
+mount_path = "/mcp/github"
+url = "https://api.github.com"
+auth_token_env = "GITHUB_TOKEN"
+tools = ["repos", "issues", "prs"]
+enabled = true
+
+[[servers]]
+name = "slack"
+mount_path = "/mcp/slack"
+url = "https://slack.com/api"
+auth_token_env = "SLACK_BOT_TOKEN"
+tools = ["channels", "messages"]
+enabled = false
+
+# 路径映射
+[mappings.resources]
+"file:///context" = "/context"
+"file:///skills" = "/skills"

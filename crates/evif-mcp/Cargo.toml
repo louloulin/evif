@@ -20,6 +20,8 @@ urlencoding = "2.1"
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
+toml = "0.8"
 chrono = { workspace = true }
 
 # Error handling

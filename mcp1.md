@@ -559,6 +559,49 @@ async fn test_mcp_end_to_end() {
 
 ## 十一、配置体系设计
 
+### 11.1 已实现功能 ✅
+
+| 功能 | 状态 | 实现文件 |
+|------|------|----------|
+| McpConfig 结构定义 | ✅ 已实现 | `crates/evif-mcp/src/lib.rs` |
+| TOML 配置文件解析 | ✅ 已实现 | McpConfig::load_from_str |
+| 配置验证 | ✅ 已实现 | McpConfig::validate |
+| 环境变量覆盖 | ✅ 已实现 | apply_env_overrides |
+| 向后兼容 McpServerConfig | ✅ 已实现 | to_server_config |
+| VfsAdapter Tool→VFS 映射 | ✅ 已实现 | VfsAdapter::tool_to_vfs |
+| 路径到 Resource URI 转换 | ✅ 已实现 | VfsAdapter::path_to_resource |
+
+### 11.2 已实现的配置结构
+
+**McpConfig** (支持 TOML):
+- `protocol_version`: MCP 协议版本
+- `server_name`: 服务器名称
+- `version`: 版本号
+- `evif`: EVIF 后端连接配置
+- `auth`: 认证配置
+- `tls`: TLS 配置
+- `servers`: MCP Server 注册表
+- `mappings`: 路径映射规则
+- `tenants`: 多租户配置
+
+**测试覆盖**:
+- `test_mcp_config_load_from_str`: 配置解析测试
+- `test_mcp_config_validate`: 配置验证测试
+- `test_mcp_config_to_server_config`: 配置转换测试
+- `test_vfs_adapter_tool_to_vfs`: VFS 操作映射测试
+- `test_vfs_adapter_path_to_resource`: 路径转换测试
+- `test_vfs_adapter_get_tool_path`: 工具路径提取测试
+
+### 11.3 待实现功能
+
+| 功能 | 优先级 | 说明 |
+|------|--------|------|
+| McpConfig::load() 配置文件加载 | P2 | 从 ~/.evif/mcp.toml 加载 |
+| McpConfigWatcher 热重载 | P3 | 监听配置文件变化 |
+| 外部 MCP Server 接入 | P1 | githubfs, slackfs 等 |
+| 多租户 MCP 隔离 | P2 | 租户级配置 |
+| 配置文件导出 YAML | P3 | 配置备份和迁移 |
+
 ### 11.1 EVIF 现有配置模型
 
 EVIF 使用环境变量 + 配置文件双轨配置：
@@ -801,12 +844,13 @@ impl EvifConfig {
 
 | 文件 | 说明 |
 |------|------|
-| `crates/evif-mcp/src/lib.rs` | 当前 MCP Server 实现（2,427 LOC） |
+| `crates/evif-mcp/src/lib.rs` | MCP Server 实现 + McpConfig + VfsAdapter（约 3,000 LOC） |
 | `crates/evif-rest/src/server.rs` | REST Server 配置（ServerConfig） |
 | `crates/evif-plugins/src/contextfs.rs` | Context 层实现 |
 | `crates/evif-plugins/src/skillfs.rs` | SkillFS 实现 |
 | `crates/evif-core/src/radix_mount_table.rs` | Radix Mount Table |
 | `crates/evif-rest/src/routes.rs` | REST API 定义 |
+| `evif-config/mcp.toml` | 示例 MCP 配置文件 |
 
 ---
 

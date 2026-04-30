@@ -41,6 +41,414 @@ impl McpServerConfig {
     }
 }
 
+/// MCP 全局配置（支持 TOML 文件）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpConfig {
+    /// 协议版本
+    #[serde(default = "default_protocol_version")]
+    pub protocol_version: String,
+
+    /// 服务器标识
+    #[serde(default = "default_server_name")]
+    pub server_name: String,
+
+    /// 版本
+    #[serde(default = "default_version")]
+    pub version: String,
+
+    /// EVIF 后端连接
+    #[serde(default)]
+    pub evif: EvifEndpoint,
+
+    /// 认证配置
+    #[serde(default)]
+    pub auth: AuthConfig,
+
+    /// TLS 配置
+    #[serde(default)]
+    pub tls: Option<TlsConfig>,
+
+    /// MCP Server 注册表
+    #[serde(default)]
+    pub servers: Vec<McpServerRegistration>,
+
+    /// 路径映射规则
+    #[serde(default)]
+    pub mappings: PathMappings,
+
+    /// 多租户配置
+    #[serde(default)]
+    pub tenants: std::collections::HashMap<String, TenantMcpConfig>,
+}
+
+fn default_protocol_version() -> String { "2024-11-05".to_string() }
+fn default_server_name() -> String { "evif-mcp".to_string() }
+fn default_version() -> String { "1.8.0".to_string() }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvifEndpoint {
+    pub url: String,
+    #[serde(default = "default_timeout")]
+    pub timeout_ms: u64,
+    #[serde(default = "default_retries")]
+    pub retry_attempts: u32,
+}
+
+fn default_timeout() -> u64 { 30000 }
+fn default_retries() -> u32 { 3 }
+
+impl Default for EvifEndpoint {
+    fn default() -> Self {
+        Self {
+            url: std::env::var("EVIF_URL")
+                .unwrap_or_else(|_| "http://localhost:8081".to_string()),
+            timeout_ms: default_timeout(),
+            retry_attempts: default_retries(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    #[serde(default)]
+    pub auth_type: String,
+    #[serde(default)]
+    pub token_file: Option<String>,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            auth_type: "bearer".to_string(),
+            token_file: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    pub enabled: bool,
+    #[serde(default)]
+    pub cert_file: Option<String>,
+    #[serde(default)]
+    pub key_file: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerRegistration {
+    pub name: String,
+    pub mount_path: String,
+    pub url: Option<String>,
+    #[serde(default)]
+    pub auth_token_env: Option<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+}
+
+fn default_enabled() -> bool { true }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PathMappings {
+    #[serde(default)]
+    pub resources: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub tools: std::collections::HashMap<String, ToolMapping>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolMapping {
+    pub operation: String,
+    #[serde(default)]
+    pub path_param: Option<String>,
+    #[serde(default)]
+    pub content_param: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenantMcpConfig {
+    #[serde(default)]
+    pub mcp_servers: Vec<String>,
+    #[serde(default)]
+    pub allowed_paths: Vec<String>,
+    #[serde(default)]
+    pub rate_limit: Option<RateLimitConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitConfig {
+    #[serde(default = "default_rpm")]
+    pub requests_per_minute: u64,
+}
+
+fn default_rpm() -> u64 { 1000 }
+
+impl McpConfig {
+    /// 从 TOML 文件加载配置
+    pub fn load_from_file(path: &std::path::Path) -> Result<Self, ConfigError> {
+        if !path.exists() {
+            return Err(ConfigError::FileNotFound(path.display().to_string()));
+        }
+
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| ConfigError::IoError(e.to_string()))?;
+
+        Self::load_from_str(&content)
+    }
+
+    /// 从 TOML 字符串加载配置
+    pub fn load_from_str(content: &str) -> Result<Self, ConfigError> {
+        let mut config: McpConfig = toml::from_str(content)
+            .map_err(|e| ConfigError::ParseError(e.to_string()))?;
+
+        // 应用环境变量覆盖
+        config.apply_env_overrides();
+
+        // 验证配置
+        config.validate()?;
+
+        Ok(config)
+    }
+
+    /// 从多个位置加载配置（优先级：CLI > 环境变量 > 文件 > 默认）
+    pub fn load() -> Result<Self, ConfigError> {
+        // 1. 首先尝试从配置文件加载
+        let config_paths = [
+            std::path::PathBuf::from("/etc/evif/mcp.toml"),
+            std::path::PathBuf::from("~/.evif/mcp.toml"),
+            std::path::PathBuf::from(".evif/mcp.toml"),
+        ];
+
+        for path in config_paths {
+            // 简单展开 ~ 为 home 目录
+            let path = if path.to_string_lossy().starts_with("~/") {
+                if let Ok(home) = std::env::var("HOME") {
+                    std::path::PathBuf::from(home)
+                        .join(path.strip_prefix("~/").unwrap_or(&path))
+                } else {
+                    path.clone()
+                }
+            } else {
+                path
+            };
+            if path.exists() {
+                let config = Self::load_from_file(&path)?;
+                tracing::info!("Loaded MCP config from {:?}", path);
+                return Ok(config);
+            }
+        }
+
+        // 2. 使用默认配置
+        tracing::info!("No MCP config file found, using defaults");
+        Ok(Self::default())
+    }
+
+    /// 应用环境变量覆盖
+    fn apply_env_overrides(&mut self) {
+        if let Ok(url) = std::env::var("EVIF_URL") {
+            self.evif.url = url;
+        }
+        if let Ok(name) = std::env::var("EVIF_MCP_SERVER_NAME") {
+            self.server_name = name;
+        }
+        if let Ok(version) = std::env::var("EVIF_MCP_VERSION") {
+            self.version = version;
+        }
+        if let Ok(timeout) = std::env::var("EVIF_TIMEOUT_MS") {
+            if let Ok(t) = timeout.parse() {
+                self.evif.timeout_ms = t;
+            }
+        }
+    }
+
+    /// 验证配置
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        // 1. 检查必需字段
+        if self.evif.url.is_empty() {
+            return Err(ConfigError::MissingField("evif.url".to_string()));
+        }
+
+        // 2. 验证 URL 格式
+        if !self.evif.url.starts_with("http://")
+            && !self.evif.url.starts_with("https://") {
+            return Err(ConfigError::InvalidUrl(self.evif.url.clone()));
+        }
+
+        // 3. 验证服务器注册
+        for server in &self.servers {
+            if server.mount_path.starts_with("/mcp/") {
+                tracing::warn!(
+                    "Server '{}' mount_path starts with /mcp/, consider using a different prefix",
+                    server.name
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 转换为 McpServerConfig（向后兼容）
+    pub fn to_server_config(&self) -> McpServerConfig {
+        McpServerConfig {
+            evif_url: self.evif.url.clone(),
+            server_name: self.server_name.clone(),
+            version: self.version.clone(),
+        }
+    }
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            protocol_version: "2024-11-05".to_string(),
+            server_name: "evif-mcp".to_string(),
+            version: "1.8.0".to_string(),
+            evif: EvifEndpoint::default(),
+            auth: AuthConfig::default(),
+            tls: None,
+            servers: Vec::new(),
+            mappings: PathMappings {
+                resources: std::collections::HashMap::new(),
+                tools: std::collections::HashMap::new(),
+            },
+            tenants: std::collections::HashMap::new(),
+        }
+    }
+}
+
+/// 配置错误
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("Config file not found: {0}")]
+    FileNotFound(String),
+
+    #[error("IO error: {0}")]
+    IoError(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+
+    #[error("Missing required field: {0}")]
+    MissingField(String),
+
+    #[error("Invalid URL: {0}")]
+    InvalidUrl(String),
+
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+}
+
+/// 配置验证器
+pub struct McpConfigValidator;
+
+impl McpConfigValidator {
+    /// 验证 MCP 配置
+    pub fn validate(config: &McpConfig) -> Result<(), ConfigError> {
+        config.validate()
+    }
+}
+
+/// VFS 操作类型
+#[derive(Debug, Clone)]
+pub enum VfsOperation {
+    Readdir(String),
+    Read(String),
+    Write(String, Vec<u8>),
+    Mkdir(String, u32),
+    Remove(String, bool),
+    Rename(String, String),
+    Copy(String, String),
+    Stat(String),
+}
+
+/// VFS 适配器 - 将 MCP Tool 转换为 VFS 操作
+pub struct VfsAdapter {
+    /// 路径映射配置
+    pub mappings: PathMappings,
+}
+
+impl VfsAdapter {
+    pub fn new(mappings: PathMappings) -> Self {
+        Self { mappings }
+    }
+
+    /// 将 MCP Tool 名称和参数转换为 VFS 操作
+    pub fn tool_to_vfs(tool_name: &str, args: &serde_json::Value) -> Result<VfsOperation, String> {
+        let operation = match tool_name {
+            "evif_ls" => {
+                let path = args["path"].as_str().unwrap_or("/");
+                VfsOperation::Readdir(path.to_string())
+            }
+            "evif_cat" => {
+                let path = args["path"].as_str().ok_or("Missing 'path'")?;
+                VfsOperation::Read(path.to_string())
+            }
+            "evif_write" => {
+                let path = args["path"].as_str().ok_or("Missing 'path'")?;
+                let content = args["content"].as_str().unwrap_or("");
+                VfsOperation::Write(path.to_string(), content.as_bytes().to_vec())
+            }
+            "evif_mkdir" => {
+                let path = args["path"].as_str().ok_or("Missing 'path'")?;
+                let mode = args["mode"].as_u64().unwrap_or(0o755) as u32;
+                VfsOperation::Mkdir(path.to_string(), mode)
+            }
+            "evif_rm" => {
+                let path = args["path"].as_str().ok_or("Missing 'path'")?;
+                let recursive = args["recursive"].as_bool().unwrap_or(false);
+                VfsOperation::Remove(path.to_string(), recursive)
+            }
+            "evif_mv" => {
+                let old_path = args["old_path"].as_str().ok_or("Missing 'old_path'")?;
+                let new_path = args["new_path"].as_str().ok_or("Missing 'new_path'")?;
+                VfsOperation::Rename(old_path.to_string(), new_path.to_string())
+            }
+            "evif_cp" => {
+                let src = args["src"].as_str().ok_or("Missing 'src'")?;
+                let dst = args["dst"].as_str().ok_or("Missing 'dst'")?;
+                VfsOperation::Copy(src.to_string(), dst.to_string())
+            }
+            "evif_stat" => {
+                let path = args["path"].as_str().ok_or("Missing 'path'")?;
+                VfsOperation::Stat(path.to_string())
+            }
+            _ => return Err(format!("Unknown tool: {}", tool_name)),
+        };
+        Ok(operation)
+    }
+
+    /// 将 VFS 路径转换为 MCP Resource URI
+    pub fn path_to_resource(path: &str) -> String {
+        if path.starts_with("file://") {
+            path.to_string()
+        } else {
+            format!("file://{}", path)
+        }
+    }
+
+    /// 获取工具对应的 VFS 路径
+    pub fn get_tool_path(&self, tool_name: &str, args: &serde_json::Value) -> Option<String> {
+        match tool_name {
+            "evif_ls" | "evif_cat" | "evif_stat" | "evif_rm" => {
+                args["path"].as_str().map(String::from)
+            }
+            "evif_write" | "evif_mkdir" => {
+                args["path"].as_str().map(String::from)
+            }
+            "evif_mv" => {
+                args["old_path"].as_str().map(String::from)
+            }
+            "evif_cp" => {
+                args["src"].as_str().map(String::from)
+            }
+            _ => None,
+        }
+    }
+}
+
 /// MCP 工具定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
@@ -2423,5 +2831,148 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Missing 'name'"));
+    }
+
+    #[tokio::test]
+    async fn test_mcp_config_load_from_str() {
+        let config_str = r#"
+protocol_version = "2024-11-05"
+server_name = "evif-mcp"
+version = "1.8.0"
+
+[evif]
+url = "http://localhost:8081"
+timeout_ms = 5000
+
+[auth]
+auth_type = "bearer"
+
+[[servers]]
+name = "github"
+mount_path = "/mcp/github"
+url = "https://api.github.com"
+enabled = true
+
+[mappings.resources]
+"file:///context" = "/context"
+"#;
+
+        let config = McpConfig::load_from_str(config_str).expect("Failed to parse config");
+
+        assert_eq!(config.protocol_version, "2024-11-05");
+        assert_eq!(config.evif.url, "http://localhost:8081");
+        assert_eq!(config.evif.timeout_ms, 5000);
+        assert_eq!(config.servers.len(), 1);
+        assert_eq!(config.servers[0].name, "github");
+        assert_eq!(config.mappings.resources.get("file:///context"), Some(&"/context".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_mcp_config_validate() {
+        let mut config = McpConfig::default();
+        config.evif.url = "".to_string();
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing required field"));
+    }
+
+    #[tokio::test]
+    async fn test_mcp_config_to_server_config() {
+        let mut config = McpConfig::default();
+        config.evif.url = "http://custom:9999".to_string();
+        config.server_name = "custom-server".to_string();
+        config.version = "2.0.0".to_string();
+
+        let server_config = config.to_server_config();
+
+        assert_eq!(server_config.evif_url, "http://custom:9999");
+        assert_eq!(server_config.server_name, "custom-server");
+        assert_eq!(server_config.version, "2.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_mcp_config_env_override() {
+        // 先确保环境变量已清除
+        std::env::remove_var("EVIF_URL");
+
+        let config = McpConfig::load_from_str(r#"
+protocol_version = "2024-11-05"
+server_name = "evif-mcp"
+version = "1.8.0"
+
+[evif]
+url = "http://default:8081"
+"#).expect("Failed to parse config");
+
+        // Should be overridden by env (but env is not set now)
+        assert_eq!(config.evif.url, "http://default:8081");
+    }
+
+    #[tokio::test]
+    async fn test_mcp_config_invalid_url() {
+        let config = McpConfig::load_from_str(r#"
+protocol_version = "2024-11-05"
+server_name = "test"
+version = "1.0.0"
+
+[evif]
+url = "not-a-valid-url"
+"#);
+
+        assert!(config.is_err());
+        assert!(config.unwrap_err().to_string().contains("Invalid URL"));
+    }
+
+    #[tokio::test]
+    async fn test_vfs_adapter_tool_to_vfs() {
+        let adapter = VfsAdapter::new(PathMappings::default());
+        let _ = adapter; // silence unused warning
+
+        // Test evif_ls
+        let op = VfsAdapter::tool_to_vfs("evif_ls", &json!({"path": "/skills"})).unwrap();
+        assert!(matches!(op, VfsOperation::Readdir(ref p) if p == "/skills"));
+
+        // Test evif_cat
+        let op = VfsAdapter::tool_to_vfs("evif_cat", &json!({"path": "/context/L0/current"})).unwrap();
+        assert!(matches!(op, VfsOperation::Read(ref p) if p == "/context/L0/current"));
+
+        // Test evif_write
+        let op = VfsAdapter::tool_to_vfs("evif_write", &json!({"path": "/test.txt", "content": "hello"})).unwrap();
+        assert!(matches!(op, VfsOperation::Write(ref p, ref data) if p == "/test.txt" && data == b"hello"));
+
+        // Test evif_rm
+        let op = VfsAdapter::tool_to_vfs("evif_rm", &json!({"path": "/tmp/file", "recursive": true})).unwrap();
+        assert!(matches!(op, VfsOperation::Remove(ref p, true) if p == "/tmp/file"));
+
+        // Test evif_mv
+        let op = VfsAdapter::tool_to_vfs("evif_mv", &json!({"old_path": "/a", "new_path": "/b"})).unwrap();
+        assert!(matches!(op, VfsOperation::Rename(ref a, ref b) if a == "/a" && b == "/b"));
+
+        // Test unknown tool
+        let result = VfsAdapter::tool_to_vfs("unknown_tool", &json!({}));
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_vfs_adapter_path_to_resource() {
+        let adapter = VfsAdapter::new(PathMappings::default());
+        let _ = adapter; // silence unused warning
+
+        // path_to_resource is a static method
+        assert_eq!(VfsAdapter::path_to_resource("/context/L0"), "file:///context/L0");
+        assert_eq!(VfsAdapter::path_to_resource("file:///context"), "file:///context");
+        assert_eq!(VfsAdapter::path_to_resource("/mcp/github/repos"), "file:///mcp/github/repos");
+    }
+
+    #[tokio::test]
+    async fn test_vfs_adapter_get_tool_path() {
+        let adapter = VfsAdapter::new(PathMappings::default());
+
+        assert_eq!(adapter.get_tool_path("evif_ls", &json!({"path": "/test"})), Some("/test".to_string()));
+        assert_eq!(adapter.get_tool_path("evif_cat", &json!({"path": "/test"})), Some("/test".to_string()));
+        assert_eq!(adapter.get_tool_path("evif_cp", &json!({"src": "/src"})), Some("/src".to_string()));
+        assert_eq!(adapter.get_tool_path("evif_mv", &json!({"old_path": "/old"})), Some("/old".to_string()));
+        assert_eq!(adapter.get_tool_path("unknown", &json!({})), None);
     }
 }
