@@ -90,6 +90,8 @@ impl PostgresStorage {
                 reinforcement_count INTEGER DEFAULT 0,
                 last_reinforced_at TIMESTAMPTZ,
                 category_id VARCHAR(255),
+                tags TEXT[] DEFAULT '{}',
+                "references" TEXT[] DEFAULT '{}',
                 user_id VARCHAR(255),
                 tenant_id VARCHAR(255),
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -255,8 +257,8 @@ impl PostgresStorage {
 
         sqlx::query(
             r#"
-            INSERT INTO memory_items (id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, user_id, tenant_id, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+            INSERT INTO memory_items (id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, tags, "references", user_id, tenant_id, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP)
             ON CONFLICT (id) DO UPDATE SET
                 ref_id = EXCLUDED.ref_id,
                 resource_id = EXCLUDED.resource_id,
@@ -269,6 +271,8 @@ impl PostgresStorage {
                 reinforcement_count = EXCLUDED.reinforcement_count,
                 last_reinforced_at = EXCLUDED.last_reinforced_at,
                 category_id = EXCLUDED.category_id,
+                tags = EXCLUDED.tags,
+                "references" = EXCLUDED."references",
                 user_id = EXCLUDED.user_id,
                 tenant_id = EXCLUDED.tenant_id,
                 updated_at = CURRENT_TIMESTAMP
@@ -286,6 +290,8 @@ impl PostgresStorage {
         .bind(item.reinforcement_count as i32)
         .bind(item.last_reinforced_at)
         .bind(&item.category_id)
+        .bind(&item.tags)
+        .bind(&item.references)
         .bind(&item.user_id)
         .bind(&item.tenant_id)
         .execute(&*self.pool)
@@ -298,7 +304,7 @@ impl PostgresStorage {
     pub async fn get_item(&self, id: &str) -> MemResult<MemoryItem> {
         let row = sqlx::query(
             r#"
-            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, user_id, tenant_id, created_at, updated_at
+            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, tags, "references", user_id, tenant_id, created_at, updated_at
             FROM memory_items WHERE id = $1
             "#
         )
@@ -336,7 +342,7 @@ impl PostgresStorage {
     pub async fn get_items_by_type(&self, memory_type: &str) -> MemResult<Vec<MemoryItem>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, user_id, tenant_id, created_at, updated_at
+            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, tags, "references", user_id, tenant_id, created_at, updated_at
             FROM memory_items WHERE memory_type = $1
             "#
         )
@@ -378,7 +384,7 @@ last_reinforced_at: row.get("last_reinforced_at"),
     pub async fn get_all_items(&self) -> MemResult<Vec<MemoryItem>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at
+            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, tags, "references", user_id, tenant_id, created_at, updated_at
             FROM memory_items
             "#
         )
@@ -419,7 +425,7 @@ last_reinforced_at: row.get("last_reinforced_at"),
     pub async fn get_items_by_user(&self, user_id: &str) -> MemResult<Vec<MemoryItem>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at
+            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, tags, "references", user_id, tenant_id, created_at, updated_at
             FROM memory_items WHERE user_id = $1
             "#
         )
@@ -461,7 +467,7 @@ last_reinforced_at: row.get("last_reinforced_at"),
     pub async fn get_items_by_tenant(&self, tenant_id: &str) -> MemResult<Vec<MemoryItem>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, user_id, tenant_id, created_at, updated_at
+            SELECT id, ref_id, resource_id, memory_type, summary, content, embedding_id, happened_at, content_hash, reinforcement_count, last_reinforced_at, category_id, tags, "references", user_id, tenant_id, created_at, updated_at
             FROM memory_items WHERE tenant_id = $1
             "#
         )
@@ -696,7 +702,7 @@ last_reinforced_at: row.get("last_reinforced_at"),
     pub async fn get_items_in_category(&self, category_id: &str) -> MemResult<Vec<MemoryItem>> {
         let rows = sqlx::query(
             r#"
-            SELECT m.id, m.ref_id, m.resource_id, m.memory_type, m.summary, m.content, m.embedding_id, m.happened_at, m.content_hash, m.reinforcement_count, m.last_reinforced_at, m.category_id, m.user_id, m.tenant_id, m.created_at, m.updated_at
+            SELECT m.id, m.ref_id, m.resource_id, m.memory_type, m.summary, m.content, m.embedding_id, m.happened_at, m.content_hash, m.reinforcement_count, m.last_reinforced_at, m.category_id, m.tags, m."references", m.user_id, m.tenant_id, m.created_at, m.updated_at
             FROM memory_items m
             INNER JOIN category_items c ON m.id = c.item_id
             WHERE c.category_id = $1
