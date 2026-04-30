@@ -4,6 +4,7 @@
 // 使用 Radix Tree 进行插件路由，无图结构依赖
 
 pub mod acl;
+pub mod agent_tracking;
 pub mod batch_operations;
 pub mod cache;
 pub mod circuit_breaker;
@@ -40,6 +41,10 @@ pub mod plugin_pool;
 
 pub use acl::{
     AclCheckResult, AclEntry, AclManager, AclPermissions, AclSupported, AclType, UserContext,
+};
+pub use agent_tracking::{
+    ActivityEvent, ActivityType, AgentMetadata, AgentSession, AgentState, AgentTracker,
+    EventStatus, ThoughtEntry, TrackerStats,
 };
 pub use batch_operations::{
     BatchCopyRequest, BatchDeleteRequest, BatchError, BatchExecutor, BatchOperations,
