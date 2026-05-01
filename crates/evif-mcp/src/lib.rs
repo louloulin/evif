@@ -2078,6 +2078,88 @@ impl EvifMcpServer {
                     "required": ["name"]
                 }),
             },
+            Tool {
+                name: "evif_subagent_status".to_string(),
+                description: "Get subagent status".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "Subagent ID"
+                        }
+                    },
+                    "required": ["id"]
+                }),
+            },
+            Tool {
+                name: "evif_queue_list".to_string(),
+                description: "List queue items".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "description": "Filter by status (pending, processing, completed)"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "Maximum items to return"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_queue_stats".to_string(),
+                description: "Get queue statistics".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "detailed": {
+                            "type": "boolean",
+                            "description": "Include detailed stats"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_session_delete".to_string(),
+                description: "Delete a saved session".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Session name to delete"
+                        },
+                        "force": {
+                            "type": "boolean",
+                            "description": "Force delete"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "evif_memory_clear".to_string(),
+                description: "Clear memory entries".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "description": "Memory category to clear"
+                        },
+                        "confirm": {
+                            "type": "boolean",
+                            "description": "Confirm deletion"
+                        }
+                    },
+                    "required": []
+                }),
+            },
             // 文件搜索工具
             Tool {
                 name: "evif_find".to_string(),
@@ -3629,6 +3711,90 @@ impl EvifMcpServer {
                 }
                 None
             }
+            "evif_subagent_status" => {
+                // Get subagent status
+                if backend.is_mock() {
+                    let id = arguments["id"].as_str().unwrap_or("");
+
+                    return Some(Ok(json!({
+                        "agent_id": id,
+                        "status": "running",
+                        "uptime_seconds": 3600,
+                        "tasks_completed": 42
+                    })));
+                }
+                None
+            }
+            "evif_queue_list" => {
+                // List queue items
+                if backend.is_mock() {
+                    let status = arguments["status"].as_str().unwrap_or("");
+                    let limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
+
+                    return Some(Ok(json!({
+                        "items": [
+                            {"id": "q-001", "status": "pending", "created": "2026-05-01T12:00:00Z"},
+                            {"id": "q-002", "status": "processing", "created": "2026-05-01T12:05:00Z"}
+                        ],
+                        "total": 2,
+                        "filter": status
+                    })));
+                }
+                None
+            }
+            "evif_queue_stats" => {
+                // Get queue stats
+                if backend.is_mock() {
+                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+
+                    let mut stats = json!({
+                        "pending": 5,
+                        "processing": 2,
+                        "completed": 100,
+                        "failed": 3
+                    });
+
+                    if detailed {
+                        stats["by_type"] = json!({
+                            "file_ops": 50,
+                            "search": 30,
+                            "memory": 20
+                        });
+                    }
+
+                    return Some(Ok(stats));
+                }
+                None
+            }
+            "evif_session_delete" => {
+                // Delete session
+                if backend.is_mock() {
+                    let name = arguments["name"].as_str().unwrap_or("");
+                    let force = arguments["force"].as_bool().unwrap_or(false);
+
+                    return Some(Ok(json!({
+                        "session_name": name,
+                        "force": force,
+                        "deleted": true,
+                        "deleted_at": "2026-05-01T12:20:00Z"
+                    })));
+                }
+                None
+            }
+            "evif_memory_clear" => {
+                // Clear memory
+                if backend.is_mock() {
+                    let category = arguments["category"].as_str().unwrap_or("");
+                    let confirm = arguments["confirm"].as_bool().unwrap_or(false);
+
+                    return Some(Ok(json!({
+                        "category": if category.is_empty() { "all" } else { category },
+                        "cleared": confirm,
+                        "entries_removed": if confirm { 42 } else { 0 }
+                    })));
+                }
+                None
+            }
             "evif_mcp_capabilities" => {
                 // MCP capability discovery - returns all capabilities
                 if backend.is_mock() {
@@ -3640,7 +3806,7 @@ impl EvifMcpServer {
                         "server_name": "evif-mcp",
                         "version": "1.8.0",
                         "protocol_version": "2024-11-05",
-                        "total_tools": 70,
+                        "total_tools": 75,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "total_roots": 3
@@ -3829,7 +3995,7 @@ impl EvifMcpServer {
                         "version": "1.8.0",
                         "uptime_seconds": 3600,
                         "total_requests": 12345,
-                        "total_tools": 70,
+                        "total_tools": 75,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "cache_enabled": true

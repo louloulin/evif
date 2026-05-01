@@ -61,7 +61,7 @@ pub struct EvifMcpServer {
 - Protocol Version: 2024-11-05
 - 支持 `initialize`, `tools/list`, `resources/list`, `prompts/list`, `ping`, `shutdown`
 
-### 2.2 当前 70 个 Tools
+### 2.2 当前 75 个 Tools
 
 | 类别 | 工具 | VFS 操作映射 |
 |------|------|-------------|
@@ -188,7 +188,7 @@ github://owner/repo/issues          →  /github/owner/repo/issues
 
 | MCP 能力 | EVIF 实现 | 状态 |
 |----------|-----------|------|
-| tools/call | 70 tools | ✅ Mock + HTTP |
+| tools/call | 75 tools | ✅ Mock + HTTP |
 | tools/list | ✅ | ✅ |
 | tools/list_changed | ✅ | ✅ 已实现 |
 | resources/list | 3 resources | ✅ |
@@ -604,7 +604,7 @@ async fn test_mcp_end_to_end() {
 | **集成测试验证** | ✅ 验证通过 | `test_mcp_server.py` - 20/20 测试通过 |
 | **综合集成测试** | ✅ 验证通过 | `test_enhanced_mcp.py` - 15/15 测试通过 (50 tools, 54 responses) |
 | **工具验证测试** | ✅ 验证通过 | `test_tool_validation.py` - 50/50 工具响应验证 |
-| **完整验证测试** | ✅ 验证通过 | `test_complete_mcp.py` - 76/76 测试通过 (70 tools, 4 prompts, 3 resources, 3 roots) |
+| **完整验证测试** | ✅ 验证通过 | `test_complete_mcp.py` - 81/81 测试通过 (75 tools, 4 prompts, 3 resources, 3 roots) |
 
 ### Phase 2.1: MCP 服务器协议修复 ✅
 
@@ -663,7 +663,7 @@ async fn test_mcp_end_to_end() {
 - resources/list: ✓ (3 resources)
 - prompts/list: ✓ (4 prompts)
 - roots/list: ✓ (3 roots)
-- Tool Calls: ✓ (70/70 tools responded)
+- Tool Calls: ✓ (75/75 tools responded)
 - resources/read: ✓
 - prompts/get: ✓
 - sampling/create: ✓
@@ -747,7 +747,7 @@ async fn test_mcp_end_to_end() {
 | P2 | teamsfs, telegramfs, shopifyfs | ✅ teamsfs,telegramfs,shopifyfs | teamsfs 20 tests, telegramfs 25 tests, shopifyfs 27 tests |
 
 **MCP 测试覆盖**:
-- **70 MCP Tools**: evif_ls, evif_cat, evif_write, evif_mkdir, evif_rm, evif_stat, evif_mv, evif_cp, evif_mount, evif_unmount, evif_mounts, evif_grep, evif_health, evif_ping_with_stats, evif_find, evif_wc, evif_tail, evif_open_handle, evif_close_handle, evif_memorize, evif_retrieve, evif_skill_list, evif_skill_info, evif_skill_execute, evif_claude_md_generate, evif_session_save, evif_session_list, evif_subagent_create, evif_subagent_send, evif_subagent_list, evif_mcp_capabilities, evif_plugin_catalog, evif_server_stats, evif_batch, evif_search, evif_diff, evif_watch, evif_tree, evif_archive, evif_hash, evif_du, evif_latency_test, evif_request_trace, evif_cache_stats, evif_log_query, evif_metrics_export, evif_config_get, evif_event_subscribe, evif_event_list, evif_cron_schedule, evif_event_unsubscribe, evif_cron_list, evif_cron_remove, evif_session_load, evif_subagent_kill, evif_skill_create, evif_skill_delete, evif_memory_search, evif_memory_stats, evif_pipe_create, evif_pipe_list, evif_health_detailed, evif_server_restart, evif_log_level, evif_version, evif_config_set (新增), evif_config_list (新增), evif_plugin_load (新增), evif_plugin_unload (新增), evif_plugin_info (新增)
+- **75 MCP Tools**: evif_ls, evif_cat, evif_write, evif_mkdir, evif_rm, evif_stat, evif_mv, evif_cp, evif_mount, evif_unmount, evif_mounts, evif_grep, evif_health, evif_ping_with_stats, evif_find, evif_wc, evif_tail, evif_open_handle, evif_close_handle, evif_memorize, evif_retrieve, evif_skill_list, evif_skill_info, evif_skill_execute, evif_claude_md_generate, evif_session_save, evif_session_list, evif_subagent_create, evif_subagent_send, evif_subagent_list, evif_mcp_capabilities, evif_plugin_catalog, evif_server_stats, evif_batch, evif_search, evif_diff, evif_watch, evif_tree, evif_archive, evif_hash, evif_du, evif_latency_test, evif_request_trace, evif_cache_stats, evif_log_query, evif_metrics_export, evif_config_get, evif_event_subscribe, evif_event_list, evif_cron_schedule, evif_event_unsubscribe, evif_cron_list, evif_cron_remove, evif_session_load, evif_subagent_kill, evif_skill_create, evif_skill_delete, evif_memory_search, evif_memory_stats, evif_pipe_create, evif_pipe_list, evif_health_detailed, evif_server_restart, evif_log_level, evif_version, evif_config_set, evif_config_list, evif_plugin_load, evif_plugin_unload, evif_plugin_info, evif_subagent_status (新增), evif_queue_list (新增), evif_queue_stats (新增), evif_session_delete (新增), evif_memory_clear (新增)
 - **4 MCP Prompts**: file_explorer, batch_operations, data_analysis, **project_documentation** (新增)
 - **3 MCP Resources**: file:///, file:///context/L0/current, file:///context/L1/decisions.md (新增 2 个)
 - **3 MCP Roots**: /context, /skills, /pipes

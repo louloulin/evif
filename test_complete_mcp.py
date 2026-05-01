@@ -194,6 +194,12 @@ def run_complete_test():
         ("evif_plugin_load", {"name": "test-plugin"}, 76, "Plugin load"),
         ("evif_plugin_unload", {"name": "old-plugin"}, 77, "Plugin unload"),
         ("evif_plugin_info", {"name": "githubfs"}, 78, "Plugin info"),
+        # More v6 tools
+        ("evif_subagent_status", {"id": "agent-001"}, 79, "Subagent status"),
+        ("evif_queue_list", {"status": "pending"}, 80, "Queue list"),
+        ("evif_queue_stats", {"detailed": True}, 81, "Queue stats"),
+        ("evif_session_delete", {"name": "old-session"}, 82, "Session delete"),
+        ("evif_memory_clear", {"category": "all", "confirm": True}, 83, "Memory clear"),
     ]
 
     results = {"passed": [], "failed": []}
@@ -246,7 +252,7 @@ def run_complete_test():
             print("  ✗ tools/list failed")
             results["failed"].append("Tools list")
 
-        print("\n[4] Testing all 70 tool calls...")
+        print("\n[4] Testing all 75 tool calls...")
         for i, (tool_name, args, req_id, desc) in enumerate(all_tools, 1):
             test.start(mock=True)
             test.send_json("initialize", {
@@ -265,10 +271,10 @@ def run_complete_test():
 
             if resp and ("result" in resp or "error" in resp):
                 results["passed"].append(f"{tool_name}")
-                print(f"  ✓ [{i:02d}/70] {tool_name} ({desc})")
+                print(f"  ✓ [{i:02d}/75] {tool_name} ({desc})")
             else:
                 results["failed"].append(f"{tool_name}: No response")
-                print(f"  ✗ [{i:02d}/70] {tool_name} - No response")
+                print(f"  ✗ [{i:02d}/75] {tool_name} - No response")
 
         print("\n[5] Testing prompts/list...")
         test.start(mock=True)
