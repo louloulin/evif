@@ -1824,6 +1824,100 @@ impl EvifMcpServer {
                     "required": ["id"]
                 }),
             },
+            Tool {
+                name: "evif_skill_create".to_string(),
+                description: "Create a new skill from template".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Skill name"
+                        },
+                        "template": {
+                            "type": "string",
+                            "description": "Skill template type (code-review, test, docs)"
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Skill description"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "evif_skill_delete".to_string(),
+                description: "Delete a skill".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Skill name to delete"
+                        },
+                        "force": {
+                            "type": "boolean",
+                            "description": "Force delete without confirmation"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "evif_memory_search".to_string(),
+                description: "Search memories by content".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "Maximum results"
+                        },
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter by memory type"
+                        }
+                    },
+                    "required": ["query"]
+                }),
+            },
+            Tool {
+                name: "evif_memory_stats".to_string(),
+                description: "Get memory system statistics".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "detailed": {
+                            "type": "boolean",
+                            "description": "Include detailed statistics"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_pipe_create".to_string(),
+                description: "Create a pipe for multi-agent coordination".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Pipe name"
+                        },
+                        "capacity": {
+                            "type": "number",
+                            "description": "Pipe capacity"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
             // 文件搜索工具
             Tool {
                 name: "evif_find".to_string(),
@@ -3116,6 +3210,99 @@ impl EvifMcpServer {
                 }
                 None
             }
+            "evif_skill_create" => {
+                // Create a new skill
+                if backend.is_mock() {
+                    let name = arguments["name"].as_str().unwrap_or("");
+                    let template = arguments["template"].as_str().unwrap_or("default");
+                    let description = arguments["description"].as_str().unwrap_or("");
+
+                    return Some(Ok(json!({
+                        "skill_name": name,
+                        "template": template,
+                        "description": description,
+                        "created": true,
+                        "created_at": "2026-05-01T12:10:00Z"
+                    })));
+                }
+                None
+            }
+            "evif_skill_delete" => {
+                // Delete a skill
+                if backend.is_mock() {
+                    let name = arguments["name"].as_str().unwrap_or("");
+                    let force = arguments["force"].as_bool().unwrap_or(false);
+
+                    return Some(Ok(json!({
+                        "skill_name": name,
+                        "force": force,
+                        "deleted": true,
+                        "deleted_at": "2026-05-01T12:10:00Z"
+                    })));
+                }
+                None
+            }
+            "evif_memory_search" => {
+                // Search memories
+                if backend.is_mock() {
+                    let query = arguments["query"].as_str().unwrap_or("");
+                    let limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
+                    let filter = arguments["filter"].as_str().unwrap_or("all");
+
+                    return Some(Ok(json!({
+                        "query": query,
+                        "results": [
+                            {"key": "mem-001", "score": 0.95, "content": format!("Memory about {}", query)},
+                            {"key": "mem-002", "score": 0.87, "content": format!("Related to {}", query)}
+                        ],
+                        "total": 2,
+                        "filter": filter
+                    })));
+                }
+                None
+            }
+            "evif_memory_stats" => {
+                // Get memory statistics
+                if backend.is_mock() {
+                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+
+                    let mut stats = json!({
+                        "total_memories": 128,
+                        "total_size_bytes": 524288,
+                        "categories": {
+                            "code": 45,
+                            "docs": 32,
+                            "decisions": 51
+                        }
+                    });
+
+                    if detailed {
+                        stats["breakdown"] = json!({
+                            "vector_memories": 100,
+                            "key_value_memories": 28
+                        });
+                    }
+
+                    return Some(Ok(stats));
+                }
+                None
+            }
+            "evif_pipe_create" => {
+                // Create a pipe
+                if backend.is_mock() {
+                    let name = arguments["name"].as_str().unwrap_or("");
+                    let capacity = arguments["capacity"].as_i64().unwrap_or(100) as usize;
+
+                    return Some(Ok(json!({
+                        "pipe_name": name,
+                        "capacity": capacity,
+                        "created": true,
+                        "path": format!("/pipes/{}", name),
+                        "created_at": "2026-05-01T12:10:00Z"
+                    })));
+                }
+                None
+            }
             "evif_mcp_capabilities" => {
                 // MCP capability discovery - returns all capabilities
                 if backend.is_mock() {
@@ -3127,7 +3314,7 @@ impl EvifMcpServer {
                         "server_name": "evif-mcp",
                         "version": "1.8.0",
                         "protocol_version": "2024-11-05",
-                        "total_tools": 55,
+                        "total_tools": 60,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "total_roots": 3
@@ -3316,7 +3503,7 @@ impl EvifMcpServer {
                         "version": "1.8.0",
                         "uptime_seconds": 3600,
                         "total_requests": 12345,
-                        "total_tools": 55,
+                        "total_tools": 60,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "cache_enabled": true

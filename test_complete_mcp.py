@@ -176,6 +176,12 @@ def run_complete_test():
         ("evif_cron_remove", {"schedule_id": "cron-001"}, 61, "Cron remove"),
         ("evif_session_load", {"name": "test-session"}, 62, "Session load"),
         ("evif_subagent_kill", {"id": "agent-001", "reason": "done"}, 63, "Subagent kill"),
+        # More v3 tools
+        ("evif_skill_create", {"name": "test-skill", "template": "code-review", "description": "Test skill"}, 64, "Skill create"),
+        ("evif_skill_delete", {"name": "old-skill", "force": True}, 65, "Skill delete"),
+        ("evif_memory_search", {"query": "test query", "limit": 10}, 66, "Memory search"),
+        ("evif_memory_stats", {"detailed": True}, 67, "Memory stats"),
+        ("evif_pipe_create", {"name": "test-pipe", "capacity": 50}, 68, "Pipe create"),
     ]
 
     results = {"passed": [], "failed": []}
@@ -228,7 +234,7 @@ def run_complete_test():
             print("  ✗ tools/list failed")
             results["failed"].append("Tools list")
 
-        print("\n[4] Testing all 55 tool calls...")
+        print("\n[4] Testing all 60 tool calls...")
         for i, (tool_name, args, req_id, desc) in enumerate(all_tools, 1):
             test.start(mock=True)
             test.send_json("initialize", {
@@ -247,10 +253,10 @@ def run_complete_test():
 
             if resp and ("result" in resp or "error" in resp):
                 results["passed"].append(f"{tool_name}")
-                print(f"  ✓ [{i:02d}/55] {tool_name} ({desc})")
+                print(f"  ✓ [{i:02d}/60] {tool_name} ({desc})")
             else:
                 results["failed"].append(f"{tool_name}: No response")
-                print(f"  ✗ [{i:02d}/55] {tool_name} - No response")
+                print(f"  ✗ [{i:02d}/60] {tool_name} - No response")
 
         print("\n[5] Testing prompts/list...")
         test.start(mock=True)
