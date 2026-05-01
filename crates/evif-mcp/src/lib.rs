@@ -1918,6 +1918,80 @@ impl EvifMcpServer {
                     "required": ["name"]
                 }),
             },
+            Tool {
+                name: "evif_pipe_list".to_string(),
+                description: "List all pipes".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "description": "Filter by status (active, idle)"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_health_detailed".to_string(),
+                description: "Get detailed health information".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "include_components": {
+                            "type": "boolean",
+                            "description": "Include component status"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_server_restart".to_string(),
+                description: "Restart the EVIF server".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "graceful": {
+                            "type": "boolean",
+                            "description": "Graceful restart (wait for connections)"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_log_level".to_string(),
+                description: "Get or set log level".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "level": {
+                            "type": "string",
+                            "description": "Log level (debug, info, warn, error)"
+                        },
+                        "component": {
+                            "type": "string",
+                            "description": "Component name"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_version".to_string(),
+                description: "Get EVIF version information".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "detailed": {
+                            "type": "boolean",
+                            "description": "Include detailed version info"
+                        }
+                    },
+                    "required": []
+                }),
+            },
             // 文件搜索工具
             Tool {
                 name: "evif_find".to_string(),
@@ -3303,6 +3377,95 @@ impl EvifMcpServer {
                 }
                 None
             }
+            "evif_pipe_list" => {
+                // List all pipes
+                if backend.is_mock() {
+                    let status = arguments["status"].as_str().unwrap_or("all");
+
+                    return Some(Ok(json!({
+                        "pipes": [
+                            {"name": "pipe-1", "status": "active", "capacity": 100, "used": 45},
+                            {"name": "pipe-2", "status": "idle", "capacity": 200, "used": 0}
+                        ],
+                        "total": 2,
+                        "filter": status
+                    })));
+                }
+                None
+            }
+            "evif_health_detailed" => {
+                // Get detailed health
+                if backend.is_mock() {
+                    let include_components = arguments["include_components"].as_bool().unwrap_or(false);
+
+                    let mut health = json!({
+                        "status": "healthy",
+                        "uptime_seconds": 3600,
+                        "memory_used_bytes": 67108864,
+                        "memory_total_bytes": 134217728
+                    });
+
+                    if include_components {
+                        health["components"] = json!([
+                            {"name": "vfs", "status": "healthy", "latency_ms": 2},
+                            {"name": "plugins", "status": "healthy", "count": 5},
+                            {"name": "cache", "status": "healthy", "hit_rate": 0.95}
+                        ]);
+                    }
+
+                    return Some(Ok(health));
+                }
+                None
+            }
+            "evif_server_restart" => {
+                // Restart server
+                if backend.is_mock() {
+                    let graceful = arguments["graceful"].as_bool().unwrap_or(true);
+
+                    return Some(Ok(json!({
+                        "restarting": true,
+                        "graceful": graceful,
+                        "restart_at": "2026-05-01T12:15:00Z"
+                    })));
+                }
+                None
+            }
+            "evif_log_level" => {
+                // Get or set log level
+                if backend.is_mock() {
+                    let level = arguments["level"].as_str().unwrap_or("");
+                    let component = arguments["component"].as_str().unwrap_or("");
+
+                    return Some(Ok(json!({
+                        "level": if level.is_empty() { "info" } else { level },
+                        "component": if component.is_empty() { "global" } else { component },
+                        "previous_level": "info"
+                    })));
+                }
+                None
+            }
+            "evif_version" => {
+                // Get version info
+                if backend.is_mock() {
+                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+
+                    let mut version = json!({
+                        "version": "1.8.0",
+                        "build": "release"
+                    });
+
+                    if detailed {
+                        version["details"] = json!({
+                            "rustc_version": "1.75.0",
+                            "build_date": "2026-05-01",
+                            "features": ["vfs", "plugins", "mcp", "memory"]
+                        });
+                    }
+
+                    return Some(Ok(version));
+                }
+                None
+            }
             "evif_mcp_capabilities" => {
                 // MCP capability discovery - returns all capabilities
                 if backend.is_mock() {
@@ -3314,7 +3477,7 @@ impl EvifMcpServer {
                         "server_name": "evif-mcp",
                         "version": "1.8.0",
                         "protocol_version": "2024-11-05",
-                        "total_tools": 60,
+                        "total_tools": 65,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "total_roots": 3
@@ -3503,7 +3666,7 @@ impl EvifMcpServer {
                         "version": "1.8.0",
                         "uptime_seconds": 3600,
                         "total_requests": 12345,
-                        "total_tools": 60,
+                        "total_tools": 65,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "cache_enabled": true

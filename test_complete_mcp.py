@@ -182,6 +182,12 @@ def run_complete_test():
         ("evif_memory_search", {"query": "test query", "limit": 10}, 66, "Memory search"),
         ("evif_memory_stats", {"detailed": True}, 67, "Memory stats"),
         ("evif_pipe_create", {"name": "test-pipe", "capacity": 50}, 68, "Pipe create"),
+        # More v4 tools
+        ("evif_pipe_list", {"status": "active"}, 69, "Pipe list"),
+        ("evif_health_detailed", {"include_components": True}, 70, "Health detailed"),
+        ("evif_server_restart", {"graceful": True}, 71, "Server restart"),
+        ("evif_log_level", {"level": "debug"}, 72, "Log level"),
+        ("evif_version", {"detailed": True}, 73, "Version info"),
     ]
 
     results = {"passed": [], "failed": []}
@@ -234,7 +240,7 @@ def run_complete_test():
             print("  ✗ tools/list failed")
             results["failed"].append("Tools list")
 
-        print("\n[4] Testing all 60 tool calls...")
+        print("\n[4] Testing all 65 tool calls...")
         for i, (tool_name, args, req_id, desc) in enumerate(all_tools, 1):
             test.start(mock=True)
             test.send_json("initialize", {
@@ -253,10 +259,10 @@ def run_complete_test():
 
             if resp and ("result" in resp or "error" in resp):
                 results["passed"].append(f"{tool_name}")
-                print(f"  ✓ [{i:02d}/60] {tool_name} ({desc})")
+                print(f"  ✓ [{i:02d}/65] {tool_name} ({desc})")
             else:
                 results["failed"].append(f"{tool_name}: No response")
-                print(f"  ✗ [{i:02d}/60] {tool_name} - No response")
+                print(f"  ✗ [{i:02d}/65] {tool_name} - No response")
 
         print("\n[5] Testing prompts/list...")
         test.start(mock=True)
