@@ -1,7 +1,8 @@
 // EVIF MCP Server - 可执行文件
 
+use std::sync::Arc;
 use clap::Parser;
-use evif_mcp::{EvifMcpServer, McpServerConfig};
+use evif_mcp::{EvifMcpServer, McpServerConfig, VfsBackend};
 
 #[derive(clap::Parser, Debug)]
 #[command(
@@ -17,6 +18,10 @@ struct Args {
     /// Server name advertised in MCP protocol
     #[arg(long, env = "EVIF_MCP_SERVER_NAME", value_name = "NAME")]
     server_name: Option<String>,
+
+    /// Use mock mode for testing (no backend required)
+    #[arg(long)]
+    mock: bool,
 }
 
 impl Args {
@@ -33,12 +38,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let args = Args::parse();
+    let use_mock = args.mock;
     let config = args.into_config();
 
     tracing::info!("Starting EVIF MCP Server v{}", config.version);
-    tracing::info!("Connecting to EVIF at: {}", config.evif_url);
 
-    let server = EvifMcpServer::new(config);
+    let server = if use_mock {
+        tracing::info!("Using MOCK mode (no backend required)");
+        let backend = Arc::new(VfsBackend::new_mock());
+        EvifMcpServer::with_vfs_backend(config, backend)
+    } else {
+        tracing::info!("Connecting to EVIF at: {}", config.evif_url);
+        EvifMcpServer::new(config)
+    };
 
     // 等待初始化
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
