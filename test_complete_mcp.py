@@ -188,6 +188,12 @@ def run_complete_test():
         ("evif_server_restart", {"graceful": True}, 71, "Server restart"),
         ("evif_log_level", {"level": "debug"}, 72, "Log level"),
         ("evif_version", {"detailed": True}, 73, "Version info"),
+        # More v5 tools
+        ("evif_config_set", {"key": "test", "value": "value"}, 74, "Config set"),
+        ("evif_config_list", {"filter": "server"}, 75, "Config list"),
+        ("evif_plugin_load", {"name": "test-plugin"}, 76, "Plugin load"),
+        ("evif_plugin_unload", {"name": "old-plugin"}, 77, "Plugin unload"),
+        ("evif_plugin_info", {"name": "githubfs"}, 78, "Plugin info"),
     ]
 
     results = {"passed": [], "failed": []}
@@ -240,7 +246,7 @@ def run_complete_test():
             print("  ✗ tools/list failed")
             results["failed"].append("Tools list")
 
-        print("\n[4] Testing all 65 tool calls...")
+        print("\n[4] Testing all 70 tool calls...")
         for i, (tool_name, args, req_id, desc) in enumerate(all_tools, 1):
             test.start(mock=True)
             test.send_json("initialize", {
@@ -259,10 +265,10 @@ def run_complete_test():
 
             if resp and ("result" in resp or "error" in resp):
                 results["passed"].append(f"{tool_name}")
-                print(f"  ✓ [{i:02d}/65] {tool_name} ({desc})")
+                print(f"  ✓ [{i:02d}/70] {tool_name} ({desc})")
             else:
                 results["failed"].append(f"{tool_name}: No response")
-                print(f"  ✗ [{i:02d}/65] {tool_name} - No response")
+                print(f"  ✗ [{i:02d}/70] {tool_name} - No response")
 
         print("\n[5] Testing prompts/list...")
         test.start(mock=True)

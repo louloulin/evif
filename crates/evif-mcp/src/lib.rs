@@ -1992,6 +1992,92 @@ impl EvifMcpServer {
                     "required": []
                 }),
             },
+            Tool {
+                name: "evif_config_set".to_string(),
+                description: "Set a configuration value".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "Configuration key"
+                        },
+                        "value": {
+                            "type": "string",
+                            "description": "Configuration value"
+                        },
+                        "persist": {
+                            "type": "boolean",
+                            "description": "Persist to config file"
+                        }
+                    },
+                    "required": ["key", "value"]
+                }),
+            },
+            Tool {
+                name: "evif_config_list".to_string(),
+                description: "List all configuration keys".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter keys by prefix"
+                        }
+                    },
+                    "required": []
+                }),
+            },
+            Tool {
+                name: "evif_plugin_load".to_string(),
+                description: "Load a plugin dynamically".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Plugin name"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Plugin path or URL"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "evif_plugin_unload".to_string(),
+                description: "Unload a plugin".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Plugin name to unload"
+                        },
+                        "force": {
+                            "type": "boolean",
+                            "description": "Force unload"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
+            Tool {
+                name: "evif_plugin_info".to_string(),
+                description: "Get plugin information".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Plugin name"
+                        }
+                    },
+                    "required": ["name"]
+                }),
+            },
             // 文件搜索工具
             Tool {
                 name: "evif_find".to_string(),
@@ -3466,6 +3552,83 @@ impl EvifMcpServer {
                 }
                 None
             }
+            "evif_config_set" => {
+                // Set config value
+                if backend.is_mock() {
+                    let key = arguments["key"].as_str().unwrap_or("");
+                    let value = arguments["value"].as_str().unwrap_or("");
+                    let persist = arguments["persist"].as_bool().unwrap_or(false);
+
+                    return Some(Ok(json!({
+                        "key": key,
+                        "value": value,
+                        "persist": persist,
+                        "set": true
+                    })));
+                }
+                None
+            }
+            "evif_config_list" => {
+                // List config keys
+                if backend.is_mock() {
+                    let filter = arguments["filter"].as_str().unwrap_or("");
+
+                    return Some(Ok(json!({
+                        "keys": [
+                            {"key": "server_name", "value": "evif-mcp"},
+                            {"key": "log_level", "value": "info"},
+                            {"key": "cache_size", "value": "1000"}
+                        ],
+                        "total": 3,
+                        "filter": filter
+                    })));
+                }
+                None
+            }
+            "evif_plugin_load" => {
+                // Load plugin
+                if backend.is_mock() {
+                    let name = arguments["name"].as_str().unwrap_or("");
+                    let path = arguments["path"].as_str().unwrap_or("");
+
+                    return Some(Ok(json!({
+                        "plugin_name": name,
+                        "path": path,
+                        "loaded": true,
+                        "version": "1.0.0"
+                    })));
+                }
+                None
+            }
+            "evif_plugin_unload" => {
+                // Unload plugin
+                if backend.is_mock() {
+                    let name = arguments["name"].as_str().unwrap_or("");
+                    let force = arguments["force"].as_bool().unwrap_or(false);
+
+                    return Some(Ok(json!({
+                        "plugin_name": name,
+                        "force": force,
+                        "unloaded": true
+                    })));
+                }
+                None
+            }
+            "evif_plugin_info" => {
+                // Get plugin info
+                if backend.is_mock() {
+                    let name = arguments["name"].as_str().unwrap_or("");
+
+                    return Some(Ok(json!({
+                        "name": name,
+                        "version": "1.0.0",
+                        "description": format!("Plugin {}", name),
+                        "status": "loaded",
+                        "capabilities": ["read", "write", "search"]
+                    })));
+                }
+                None
+            }
             "evif_mcp_capabilities" => {
                 // MCP capability discovery - returns all capabilities
                 if backend.is_mock() {
@@ -3477,7 +3640,7 @@ impl EvifMcpServer {
                         "server_name": "evif-mcp",
                         "version": "1.8.0",
                         "protocol_version": "2024-11-05",
-                        "total_tools": 65,
+                        "total_tools": 70,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "total_roots": 3
@@ -3666,7 +3829,7 @@ impl EvifMcpServer {
                         "version": "1.8.0",
                         "uptime_seconds": 3600,
                         "total_requests": 12345,
-                        "total_tools": 65,
+                        "total_tools": 70,
                         "total_prompts": 4,
                         "total_resources": 3,
                         "cache_enabled": true
