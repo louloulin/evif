@@ -215,16 +215,16 @@ github://owner/repo/issues          →  /github/owner/repo/issues
 | `sampling/create` | LLM 采样请求创建 | `handle_request` 方法 + `/api/v1/queue/enqueue` |
 | `resources/unsubscribe` | 资源订阅取消 | `handle_request` 方法 |
 
-### 4.3 待实现能力
+### 4.3 已实现能力 ✅
 
-| 能力 | 说明 | 实现优先级 |
+| 能力 | 说明 | 实现状态 |
 |------|------|-----------|
 | `sampling/complete` | ✅ 已实现 | 完整 LLM 采样完成回调 |
 | `sampling/create` | ✅ 已实现 | 完整 LLM 采样支持 |
 | `complete_message` | ✅ 已实现 | 消息完成回调 |
 | `create_message` | ✅ 已实现 | 消息创建支持 |
 
-**注**: Phase 4.3 列出的所有功能均已实现或计划中
+**注**: Phase 4.3 列出的所有功能均已实现
 
 ---
 
@@ -910,7 +910,7 @@ async fn test_mcp_end_to_end() {
 - `test_authenticate_request_with_api_key`: API Key 认证测试
 - `test_cleanup_expired_sessions`: 过期会话清理测试
 
-### 11.3 待实现功能
+### 11.3 已实现功能 ✅
 
 | 功能 | 优先级 | 说明 |
 |------|--------|------|
@@ -919,7 +919,7 @@ async fn test_mcp_end_to_end() {
 | 外部 MCP Server 接入 | ✅ 已实现 | McpServerPlugin + McpClient |
 | 多租户 MCP 隔离 | ✅ 已实现 | 租户级配置 |
 | 配置文件导出 YAML | ✅ 已实现 | 配置备份和迁移 |
-| sampling/create | ✅ | 完整 LLM 采样支持 |
+| sampling/create | ✅ 已实现 | 完整 LLM 采样支持 |
 
 ### 11.4 EVIF 现有配置模型
 
