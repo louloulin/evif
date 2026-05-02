@@ -122,6 +122,9 @@ pub use telegramfs::{TelegramFsPlugin, TelegramConfig};
 pub mod shopifyfs;
 pub use shopifyfs::{ShopifyFsPlugin, ShopifyConfig};
 
+pub mod githubfs;
+pub use githubfs::GitHubFs;
+
 #[cfg(feature = "s3fs")]
 pub use s3fs::{S3fsPlugin, S3Config, DirCache, StatCache};
 

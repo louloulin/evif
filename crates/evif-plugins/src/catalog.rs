@@ -144,7 +144,7 @@ const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
     },
 ];
 
-const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 10] = [
+const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 11] = [
     PluginCatalogEntry {
         id: "devfs",
         display_name: "DevFS",
@@ -234,6 +234,15 @@ const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 10] = [
         support_tier: PluginSupportTier::Experimental,
         aliases: &[],
         is_mountable: false,
+    },
+    PluginCatalogEntry {
+        id: "githubfs",
+        display_name: "GitHubFS",
+        description: "GitHub API filesystem interface - repos, issues, PRs, search",
+        plugin_type: "vcs",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["github", "gh"],
+        is_mountable: true,
     },
 ];
 
