@@ -46,11 +46,10 @@ pub struct JsonRpcRequest {
 
 impl JsonRpcRequest {
     pub fn new(method: impl Into<String>, params: Option<Value>) -> Self {
-        static mut REQUEST_ID: u64 = 0;
-        // 安全地获取并递增 ID
+        static REQUEST_COUNTER: std::sync::OnceLock<RwLock<u64>> = std::sync::OnceLock::new();
         let id = {
-            static Mutex: RwLock<u64> = RwLock::new(1);
-            let mut guard = Mutex.write().unwrap();
+            let counter = REQUEST_COUNTER.get_or_init(|| RwLock::new(1));
+            let mut guard = counter.write().unwrap();
             let current = *guard;
             *guard = current + 1;
             current
@@ -159,8 +158,10 @@ pub enum ClientState {
 
 /// MCP JSON-RPC Client
 pub struct McpClient {
+    #[allow(dead_code)]
     /// 服务器名称
     name: String,
+    #[allow(dead_code)]
     /// 子进程
     process: Option<Child>,
     /// 标准输入

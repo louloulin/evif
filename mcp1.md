@@ -702,6 +702,16 @@ async fn test_mcp_end_to_end() {
 - 一次性读取所有响应并按 id 分组
 - 覆盖全部 30 个 MCP Tools
 
+**综合测试结果** (2026-05-02):
+- test_tool_validation.py: **115/115 passed** (75 schemas + 40 tool calls)
+- test_quick_mcp.py: **6/6 passed** (Initialize, Ping, roots, sampling, shutdown)
+- test_complete_mcp.py: **81/81 passed** (75 tools + 4 prompts + 3 resources + 3 roots)
+
+**警告修复**:
+- 修复 mcp_client.rs 中静态变量命名问题 (Mutex → REQUEST_COUNTER)
+- 修复未使用变量警告 (添加 _ 前缀)
+- 修复未使用字段警告 (添加 #[allow(dead_code)])
+
 **真实后端测试** (test_real_backend.py - HTTP 模式，8/8 通过):
 - Initialize: ✓ PASS
 - evif_health: ✓ PASS (真实 backend 返回 healthy)

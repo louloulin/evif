@@ -1269,6 +1269,7 @@ pub struct EvifMcpServer {
     /// 工具缓存 (LRU)
     tool_cache: Arc<RwLock<ToolCache>>,
     /// 缓存大小配置
+    #[allow(dead_code)]
     cache_size: usize,
     /// VFS 后端 (可选，用于直接 VFS 调用)
     vfs_backend: Option<Arc<VfsBackend>>,
@@ -2884,6 +2885,7 @@ impl EvifMcpServer {
     }
 
     /// 检查 VFS 后端是否可用
+    #[allow(dead_code)]
     fn has_vfs_backend(&self) -> bool {
         self.vfs_backend.as_ref().map(|b| b.is_available()).unwrap_or(false)
     }
@@ -3290,7 +3292,7 @@ impl EvifMcpServer {
                 // Get EVIF configuration values
                 if backend.is_mock() {
                     let key = arguments["key"].as_str().unwrap_or("");
-                    let include_hidden = arguments["include_hidden"].as_bool().unwrap_or(false);
+                    let _include_hidden = arguments["include_hidden"].as_bool().unwrap_or(false);
 
                     let configs = json!({
                         "evif_url": "http://localhost:8081",
@@ -3394,7 +3396,7 @@ impl EvifMcpServer {
             "evif_cron_list" => {
                 // List all scheduled tasks
                 if backend.is_mock() {
-                    let include_disabled = arguments["include_disabled"].as_bool().unwrap_or(false);
+                    let _include_disabled = arguments["include_disabled"].as_bool().unwrap_or(false);
 
                     return Some(Ok(json!({
                         "schedules": [
@@ -3488,7 +3490,7 @@ impl EvifMcpServer {
                 // Search memories
                 if backend.is_mock() {
                     let query = arguments["query"].as_str().unwrap_or("");
-                    let limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
+                    let _limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
                     let filter = arguments["filter"].as_str().unwrap_or("all");
 
                     return Some(Ok(json!({
@@ -3729,7 +3731,7 @@ impl EvifMcpServer {
                 // List queue items
                 if backend.is_mock() {
                     let status = arguments["status"].as_str().unwrap_or("");
-                    let limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
+                    let _limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
 
                     return Some(Ok(json!({
                         "items": [
@@ -4198,7 +4200,7 @@ impl EvifMcpServer {
                         for item in arr.iter().take(limit) {
                             let score = item.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
                             if score >= threshold {
-                                let mut result = item.clone();
+                                let result = item.clone();
                                 if source == "all" || source == "files" {
                                     results.push(result);
                                 }
