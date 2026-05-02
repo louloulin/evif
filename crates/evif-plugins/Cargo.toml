@@ -89,8 +89,13 @@ rusqlite2 = { version = "0.32", optional = true, features = ["bundled"], package
 # MySQL for QueueFS (optional dependency)
 sqlx = { version = "0.8", optional = true, features = ["mysql", "runtime-tokio", "tls-rustls"] }
 
+# PostgreSQL for PostgresFS (optional dependency)
+tokio-postgres = { version = "0.7", optional = true }
+
 [features]
 default = ["sqlfs", "queuefs-sqlite"]
+postgresfs = ["tokio-postgres"]
+gmailfs = []
 s3fs = ["aws-config", "aws-sdk-s3", "aws-smithy-types", "aws-credential-types"]
 sqlfs = ["rusqlite", "r2d2", "r2d2_sqlite"]
 sqlfs2 = ["rusqlite2"]

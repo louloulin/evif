@@ -144,7 +144,7 @@ const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
     },
 ];
 
-const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 5] = [
+const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 10] = [
     PluginCatalogEntry {
         id: "devfs",
         display_name: "DevFS",
@@ -161,6 +161,51 @@ const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 5] = [
         plugin_type: "other",
         support_tier: PluginSupportTier::Experimental,
         aliases: &[],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "postgresfs",
+        display_name: "PostgresFS",
+        description: "PostgreSQL database filesystem interface with Plan 9 style paths",
+        plugin_type: "database",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["postgres", "pgfs"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "gmailfs",
+        display_name: "GmailFS",
+        description: "Gmail/IMAP email filesystem interface with Plan 9 style paths",
+        plugin_type: "email",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["gmail", "email", "mail"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "teamsfs",
+        display_name: "TeamsFS",
+        description: "Microsoft Teams filesystem interface with Plan 9 style paths",
+        plugin_type: "collaboration",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["teams", "msteams"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "telegramfs",
+        display_name: "TelegramFS",
+        description: "Telegram Bot filesystem interface with Plan 9 style paths",
+        plugin_type: "messaging",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["telegram", "tg"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "shopifyfs",
+        display_name: "ShopifyFS",
+        description: "Shopify e-commerce filesystem interface with Plan 9 style paths",
+        plugin_type: "ecommerce",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["shopify", "shop"],
         is_mountable: true,
     },
     PluginCatalogEntry {

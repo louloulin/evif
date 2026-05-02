@@ -104,6 +104,24 @@ pub use catalog::{
     plugin_catalog, PluginCatalogEntry, PluginSupportTier,
 };
 
+#[cfg(feature = "postgresfs")]
+pub mod postgresfs;
+
+#[cfg(feature = "postgresfs")]
+pub use postgresfs::{PostgresFsPlugin, PostgresConfig};
+
+pub mod gmailfs;
+pub use gmailfs::{GmailFsPlugin, GmailConfig};
+
+pub mod teamsfs;
+pub use teamsfs::{TeamsFsPlugin, TeamsConfig};
+
+pub mod telegramfs;
+pub use telegramfs::{TelegramFsPlugin, TelegramConfig};
+
+pub mod shopifyfs;
+pub use shopifyfs::{ShopifyFsPlugin, ShopifyConfig};
+
 #[cfg(feature = "s3fs")]
 pub use s3fs::{S3fsPlugin, S3Config, DirCache, StatCache};
 
