@@ -9,6 +9,7 @@ use std::sync::Arc;
 /// 挂载表 trait，用于跨文件系统操作
 pub trait MountTableLookup: Send + Sync {
     /// 查找插件并返回相对路径
+    #[allow(async_fn_in_trait)]
     async fn lookup_with_path(&self, path: &str) -> (Option<Arc<dyn EvifPlugin>>, String);
 }
 

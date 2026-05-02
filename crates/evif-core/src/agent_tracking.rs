@@ -483,7 +483,7 @@ impl AgentTracker {
             None => return false,
         };
 
-        let mut guard = session.write();
+        let guard = session.write();
         if !guard.is_active() {
             return false;
         }

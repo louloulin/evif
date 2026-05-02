@@ -1201,17 +1201,39 @@ EVIF 作为 MCP 网关的核心价值：
 
 ## 十四、真实后端验证状态
 
-### 14.1 已验证功能
+### 14.1 已验证功能 ✅
 
 | 功能 | Mock 模式 | HTTP 模式 | 说明 |
 |------|-----------|-----------|------|
 | MCP 协议握手 | ✅ | ✅ | Initialize/Initialized 流程正确 |
-| 工具列表 (29) | ✅ | ✅ | 所有工具定义正确加载 |
-| Prompts 列表 (3) | ✅ | ✅ | Prompts 正确定义 |
-| Resources 列表 | ✅ | ✅ | Resource URI 正确 |
+| 工具列表 (75) | ✅ | ✅ | 所有 75 个工具定义正确加载 |
+| Prompts 列表 (4) | ✅ | ✅ | file_explorer, batch_operations, data_analysis |
+| Resources 列表 (3) | ✅ | ✅ | file:///, file:///context/L0/current, file:///context/L1/decisions.md |
 | tools/call | ✅ | ⚠ | HTTP 模式受网络限制 |
 | resources/read | ✅ | ⚠ | HTTP 模式受网络限制 |
 | 订阅/通知 | ✅ | ⚠ | MCP 协议正确实现 |
+| JSON-RPC 通信 | ✅ | ✅ | 完整协议验证通过 |
+
+### 14.1.1 Mock 模式验证结果 (2026-05-02)
+
+```
+Starting EVIF MCP Server v1.8.0
+Using MOCK mode (no backend required)
+Loaded 75 tools
+  - evif_ls, evif_cat, evif_write, evif_mkdir, evif_rm, evif_stat, evif_mv, evif_cp
+  - evif_find, evif_grep, evif_wc, evif_tail, evif_search
+  - evif_memorize, evif_retrieve, evif_skill_list, evif_skill_execute
+  - evif_session_save, evif_session_list, evif_subagent_create
+  - evif_health, evif_ping_with_stats, evif_latency_test
+  - ... (75 tools total)
+MCP server running on stdio...
+```
+
+**JSON-RPC 协议验证**:
+- initialize 请求 → 返回 capabilities (tools, resources, prompts, logging)
+- tools/list 请求 → 返回 75 个工具定义
+- prompts/list 请求 → 返回 4 个 prompts
+- resources/list 请求 → 返回 3 个 resources
 
 ### 14.2 已知限制
 
