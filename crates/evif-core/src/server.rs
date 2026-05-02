@@ -3,7 +3,7 @@
 // 提供 EvifPlugin trait 和 EvifServer 实现
 // 对标 AGFS 服务器架构
 
-use crate::cross_fs_copy::{CrossFsCopyManager, MountTableLookup};
+use crate::cross_fs_copy::CrossFsCopyManager;
 use crate::error::{EvifError, EvifResult};
 use crate::mount_table::MountTable;
 use crate::plugin::{EvifPlugin, FileInfo, WriteFlags};

@@ -374,7 +374,7 @@ impl SnapshotManager {
     /// Delete a snapshot (only if it has no children)
     pub fn delete(&self, id: u64) -> bool {
         let snapshots = self.snapshots.read();
-        let snapshot = match snapshots.get(&id) {
+        let _snapshot = match snapshots.get(&id) {
             Some(s) => s,
             None => return false,
         };

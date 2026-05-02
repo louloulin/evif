@@ -34,6 +34,7 @@ impl SystemCollector {
     }
 
     /// 获取总内存（字节）
+    #[allow(dead_code)]
     fn memory_total(&self) -> u64 {
         self.sys.total_memory() as u64
     }
