@@ -144,7 +144,7 @@ const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
     },
 ];
 
-const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
+const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 14] = [
     PluginCatalogEntry {
         id: "devfs",
         display_name: "DevFS",
@@ -260,6 +260,15 @@ const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
         plugin_type: "messaging",
         support_tier: PluginSupportTier::Experimental,
         aliases: &["discord", "discordfs"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "notionfs",
+        display_name: "NotionFS",
+        description: "Notion API filesystem interface - databases, pages, blocks, search",
+        plugin_type: "knowledge",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["notion", "notionfs"],
         is_mountable: true,
     },
 ];

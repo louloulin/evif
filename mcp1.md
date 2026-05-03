@@ -756,7 +756,7 @@ async fn test_mcp_end_to_end() {
 
 | 优先级 | 插件 | 工作量 | 状态 |
 |--------|------|--------|------|
-| P0 | githubfs, slackfs, notionfs | ✅ 已实现 | McpServerPlugin::github/slack/notion() |
+| P0 | githubfs, slackfs, **notionfs** | ✅ 已实现 | McpServerPlugin::github/slack/notion() + notionfs 27 tests |
 | P1 | postgresfs | ✅ 已实现 | crates/evif-plugins/src/postgresfs.rs (18 tests pass) |
 | P1 | s3fs | ✅ 已实现 | crates/evif-plugins/src/s3fs.rs (1117 LOC) |
 | P1 | gmailfs | ✅ 已实现 | crates/evif-plugins/src/gmailfs.rs (19 tests pass) |
@@ -775,6 +775,7 @@ async fn test_mcp_end_to_end() {
 - **teamsfs**: Microsoft Teams 文件系统接口，Plan 9 风格目录结构 `/teams/<team>/<channel>/{messages,files,members}` (20 tests pass)
 - **telegramfs**: Telegram Bot 文件系统接口，Plan 9 风格目录结构 `/telegram/<chat>/{messages,media,members,info}` (25 tests pass)
 - **shopifyfs**: Shopify 电商平台文件系统接口，Plan 9 风格目录结构 `/shopify/<store>/{products,orders,customers,inventory}` (27 tests pass)
+- **notionfs**: Notion API 文件系统接口，Plan 9 风格目录结构 `/notion/{search,databases,pages,blocks}` (27 tests pass)
 - **discordfs**: Discord 文件系统接口，Plan 9 风格目录结构 `/Guilds/<id>/{categories,roles,members,channels}` (21 tests pass)
 
 ---
@@ -1276,7 +1277,10 @@ MCP server running on stdio...
 - ping: ✅ OK
 - shutdown: ✅ OK
 
-**新增功能 (2026-05-03)**:
+**新增功能 (2026-05-03)**:**新增功能 (2026-05-03 续)**:
+- **notionfs**: Notion API 文件系统插件，Plan 9 风格路径支持
+  - /notion/{search,databases,pages,blocks}
+  - 27 个测试全部通过
 - **discordfs**: Discord 文件系统插件，Plan 9 风格路径支持
   - /Guilds/<id>/{categories,roles,members,channels}
   - /Guilds/<id>/<channel>/{messages,pins,webhooks,attachments}

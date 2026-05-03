@@ -122,6 +122,9 @@ pub use telegramfs::{TelegramFsPlugin, TelegramConfig};
 pub mod shopifyfs;
 pub use shopifyfs::{ShopifyFsPlugin, ShopifyConfig};
 
+pub mod notionfs;
+pub use notionfs::{NotionFsPlugin, NotionConfig};
+
 pub mod githubfs;
 pub use githubfs::GitHubFs;
 
