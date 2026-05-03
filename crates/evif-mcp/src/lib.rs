@@ -5464,7 +5464,51 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
                         }
                     };
 
-                    // Read from VFS via REST API
+                    // Try VFS backend first (includes Mock mode support)
+                    if let Some(backend) = &self.vfs_backend {
+                        if backend.is_available() {
+                            match backend.read_file(&vfs_path, 0, 0).await {
+                                Ok(contents) => {
+                                    let mime_type = if vfs_path.ends_with(".json") {
+                                        "application/json"
+                                    } else if vfs_path.ends_with(".md") {
+                                        "text/markdown"
+                                    } else if vfs_path.ends_with(".txt") {
+                                        "text/plain"
+                                    } else {
+                                        "text/plain"
+                                    };
+
+                                    return json!({
+                                        "jsonrpc": "2.0",
+                                        "result": {
+                                            "contents": [{
+                                                "uri": uri,
+                                                "mimeType": mime_type,
+                                                "text": contents
+                                            }]
+                                        },
+                                        "id": id
+                                    });
+                                }
+                                Err(e) => {
+                                    // If file not found in mock, try HTTP fallback
+                                    if !e.contains("not found") && !e.contains("Not found") {
+                                        return json!({
+                                            "jsonrpc": "2.0",
+                                            "error": {
+                                                "code": -32000,
+                                                "message": format!("Failed to read resource: {}", e)
+                                            },
+                                            "id": id
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Fallback to HTTP REST API
                     let encoded_path = urlencoding::encode(&vfs_path);
                     let url = format!("{}/api/v1/fs/read?path={}",
                         self.config.evif_url,

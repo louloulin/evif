@@ -1220,20 +1220,26 @@ EVIF 作为 MCP 网关的核心价值：
 Starting EVIF MCP Server v1.8.0
 Using MOCK mode (no backend required)
 Loaded 75 tools
-  - evif_ls, evif_cat, evif_write, evif_mkdir, evif_rm, evif_stat, evif_mv, evif_cp
-  - evif_find, evif_grep, evif_wc, evif_tail, evif_search
-  - evif_memorize, evif_retrieve, evif_skill_list, evif_skill_execute
-  - evif_session_save, evif_session_list, evif_subagent_create
-  - evif_health, evif_ping_with_stats, evif_latency_test
-  - ... (75 tools total)
 MCP server running on stdio...
 ```
 
-**JSON-RPC 协议验证**:
-- initialize 请求 → 返回 capabilities (tools, resources, prompts, logging)
-- tools/list 请求 → 返回 75 个工具定义
-- prompts/list 请求 → 返回 4 个 prompts
-- resources/list 请求 → 返回 3 个 resources
+**JSON-RPC 协议验证** (2026-05-03):
+- ✅ initialize: protocol=2024-11-05
+- ✅ tools/list: 75 tools
+- ✅ prompts/list: 4 prompts (file_explorer, batch_operations, data_analysis, project_documentation)
+- ✅ resources/list: 3 resources
+- ✅ roots/list: 3 roots
+- ✅ tools/call evif_health: OK
+- ✅ resources/read file:///: OK
+- ✅ resources/read /context/L0/current: 返回 "Currently working on MCP integration"
+- ✅ resources/read /context/L1/decisions.md: OK
+- ✅ prompts/get file_explorer: OK
+- ✅ ping: OK
+
+**总计**: 12/12 通过, 0 失败
+
+**修复历史**:
+- 2026-05-03: 修复 `resources/read` Mock 模式支持，现在可以正确读取 Mock 数据
 
 ### 14.2 已知限制
 
