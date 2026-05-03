@@ -144,7 +144,7 @@ const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
     },
 ];
 
-const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 11] = [
+const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 12] = [
     PluginCatalogEntry {
         id: "devfs",
         display_name: "DevFS",
@@ -242,6 +242,15 @@ const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 11] = [
         plugin_type: "vcs",
         support_tier: PluginSupportTier::Experimental,
         aliases: &["github", "gh"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "slackfs",
+        display_name: "SlackFS",
+        description: "Slack filesystem interface - channels, messages, files, search",
+        plugin_type: "messaging",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["slack", "slackfs"],
         is_mountable: true,
     },
 ];

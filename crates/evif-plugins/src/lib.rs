@@ -125,6 +125,9 @@ pub use shopifyfs::{ShopifyFsPlugin, ShopifyConfig};
 pub mod githubfs;
 pub use githubfs::GitHubFs;
 
+pub mod slackfs;
+pub use slackfs::{SlackFsPlugin, SlackConfig};
+
 #[cfg(feature = "s3fs")]
 pub use s3fs::{S3fsPlugin, S3Config, DirCache, StatCache};
 
