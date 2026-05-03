@@ -128,6 +128,9 @@ pub use githubfs::GitHubFs;
 pub mod slackfs;
 pub use slackfs::{SlackFsPlugin, SlackConfig};
 
+pub mod discordfs;
+pub use discordfs::{DiscordFsPlugin, DiscordConfig};
+
 #[cfg(feature = "s3fs")]
 pub use s3fs::{S3fsPlugin, S3Config, DirCache, StatCache};
 

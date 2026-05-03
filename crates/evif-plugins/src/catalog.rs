@@ -144,7 +144,7 @@ const CORE_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
     },
 ];
 
-const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 12] = [
+const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 13] = [
     PluginCatalogEntry {
         id: "devfs",
         display_name: "DevFS",
@@ -251,6 +251,15 @@ const EXPERIMENTAL_PLUGIN_CATALOG: [PluginCatalogEntry; 12] = [
         plugin_type: "messaging",
         support_tier: PluginSupportTier::Experimental,
         aliases: &["slack", "slackfs"],
+        is_mountable: true,
+    },
+    PluginCatalogEntry {
+        id: "discordfs",
+        display_name: "DiscordFS",
+        description: "Discord filesystem interface - guilds, channels, messages, roles",
+        plugin_type: "messaging",
+        support_tier: PluginSupportTier::Experimental,
+        aliases: &["discord", "discordfs"],
         is_mountable: true,
     },
 ];
