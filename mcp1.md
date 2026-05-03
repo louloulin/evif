@@ -760,7 +760,7 @@ async fn test_mcp_end_to_end() {
 | P1 | postgresfs | ✅ 已实现 | crates/evif-plugins/src/postgresfs.rs (18 tests pass) |
 | P1 | s3fs | ✅ 已实现 | crates/evif-plugins/src/s3fs.rs (1117 LOC) |
 | P1 | gmailfs | ✅ 已实现 | crates/evif-plugins/src/gmailfs.rs (19 tests pass) |
-| P2 | teamsfs, telegramfs, shopifyfs, slackfs | ✅ 已实现 | teamsfs 20 tests, telegramfs 25 tests, shopifyfs 27 tests, slackfs 23 tests |
+| P2 | teamsfs, telegramfs, shopifyfs, slackfs, **discordfs** | ✅ 已实现 | teamsfs 20 tests, telegramfs 25 tests, shopifyfs 27 tests, slackfs 23 tests, discordfs 21 tests |
 
 **MCP 测试覆盖**:
 - **75 MCP Tools**: evif_ls, evif_cat, evif_write, evif_mkdir, evif_rm, evif_stat, evif_mv, evif_cp, evif_mount, evif_unmount, evif_mounts, evif_grep, evif_health, evif_ping_with_stats, evif_find, evif_wc, evif_tail, evif_open_handle, evif_close_handle, evif_memorize, evif_retrieve, evif_skill_list, evif_skill_info, evif_skill_execute, evif_claude_md_generate, evif_session_save, evif_session_list, evif_subagent_create, evif_subagent_send, evif_subagent_list, evif_mcp_capabilities, evif_plugin_catalog, evif_server_stats, evif_batch, evif_search, evif_diff, evif_watch, evif_tree, evif_archive, evif_hash, evif_du, evif_latency_test, evif_request_trace, evif_cache_stats, evif_log_query, evif_metrics_export, evif_config_get, evif_event_subscribe, evif_event_list, evif_cron_schedule, evif_event_unsubscribe, evif_cron_list, evif_cron_remove, evif_session_load, evif_subagent_kill, evif_skill_create, evif_skill_delete, evif_memory_search, evif_memory_stats, evif_pipe_create, evif_pipe_list, evif_health_detailed, evif_server_restart, evif_log_level, evif_version, evif_config_set, evif_config_list, evif_plugin_load, evif_plugin_unload, evif_plugin_info, evif_subagent_status (新增), evif_queue_list (新增), evif_queue_stats (新增), evif_session_delete (新增), evif_memory_clear (新增)
@@ -775,6 +775,7 @@ async fn test_mcp_end_to_end() {
 - **teamsfs**: Microsoft Teams 文件系统接口，Plan 9 风格目录结构 `/teams/<team>/<channel>/{messages,files,members}` (20 tests pass)
 - **telegramfs**: Telegram Bot 文件系统接口，Plan 9 风格目录结构 `/telegram/<chat>/{messages,media,members,info}` (25 tests pass)
 - **shopifyfs**: Shopify 电商平台文件系统接口，Plan 9 风格目录结构 `/shopify/<store>/{products,orders,customers,inventory}` (27 tests pass)
+- **discordfs**: Discord 文件系统接口，Plan 9 风格目录结构 `/Guilds/<id>/{categories,roles,members,channels}` (21 tests pass)
 
 ---
 
@@ -1260,6 +1261,26 @@ MCP server running on stdio...
 2. 在真实环境（非 sandbox）部署时验证 HTTP 功能
 3. Docker 网络模式可绕过此限制
 
+
+
+### 14.4 最新验证 (2026-05-03)
+
+**Rust 测试结果**:
+- discordfs: 21/21 tests pass
+- evif-mcp: 0 failed, 14 ignored (port binding tests)
+- 全部测试通过
+
+**MCP Mock 模式验证**:
+- initialize: ✅ protocolVersion=2024-11-05
+- tools/list: ✅ 75 tools
+- ping: ✅ OK
+- shutdown: ✅ OK
+
+**新增功能 (2026-05-03)**:
+- **discordfs**: Discord 文件系统插件，Plan 9 风格路径支持
+  - /Guilds/<id>/{categories,roles,members,channels}
+  - /Guilds/<id>/<channel>/{messages,pins,webhooks,attachments}
+  - 21 个测试全部通过
 ### 14.3 后续验证计划
 
 在非 sandbox 环境验证:
