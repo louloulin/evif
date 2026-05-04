@@ -1005,3 +1005,362 @@ evif_skill  { action: "list|info|execute", name, ... }
 evif_session { action: "save|load|list", session_id, ... }
 evif_subagent { action: "create|send|list", agent_id, message, ... }
 ```
+
+---
+
+## 十一、核心工具分析：哪些需要保留和完善
+
+### 11.1 核心工具分类（基于实际可调用性）
+
+根据代码分析，工具分为三层：
+
+| 层级 | 定义 | 工具数 | 说明 |
+|------|------|--------|------|
+| **L1: 内核** | VFS 后端真实调用 | 7 | 任何后端都可用 |
+| **L2: 扩展** | VFS 模拟 + HTTP | 12 | mock 模式可测试 |
+| **L3: 桥接** | 仅 HTTP | 15 | 需要真实后端 |
+| **L4: 幽灵** | 模拟无 HTTP | 31 | 无任何分发 |
+
+### 11.2 L1: VFS 内核工具（7 个）
+
+**必须保留**，因为它们直接调用 VFS 后端，在任何模式下都工作：
+
+```rust
+// VFS 内核 - 任何后端都可用
+evif_ls      // backend.list_dir()
+evif_cat     // backend.read_file()
+evif_write   // backend.write_file()
+evif_mkdir   // backend.make_dir()
+evif_rm      // backend.remove()
+evif_stat    // backend.stat()
+evif_mv      // backend.rename()
+```
+
+这些是 **EVIF MCP 的核心**，用于文件操作。
+
+### 11.3 L2: VFS 模拟 + HTTP 桥接工具（12 个）
+
+**保留但需要完善 VFS 模拟**：
+
+| 工具 | VFS 模拟 | HTTP 桥接 | 问题 |
+|------|----------|-----------|------|
+| `evif_memorize` | ✅ 有 | ✅ 有 | **参数名不匹配**：模拟读 `key`/`value`，schema 定义 `content`/`modality` |
+| `evif_retrieve` | ✅ 有 | ✅ 有 | **参数名不匹配**：模拟读 `key`，schema 定义 `query`/`mode`/`k`/`threshold` |
+| `evif_skill_list` | ✅ 有 | ✅ 有 | 模拟返回硬编码 2 个技能 |
+| `evif_health` | ✅ 有 | ✅ 有 | mock 返回固定 `status: ok` |
+| `evif_ping_with_stats` | ✅ 有 | ❌ 无 | 幽灵（非 mock 模式报错） |
+| `evif_latency_test` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_request_trace` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_cache_stats` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_log_query` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_metrics_export` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_config_get` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_event_subscribe` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_event_list` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_cron_schedule` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_event_unsubscribe` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_cron_list` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_cron_remove` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_session_load` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_subagent_kill` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_skill_create` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_skill_delete` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_memory_search` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_memory_stats` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_pipe_create` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_pipe_list` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_health_detailed` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_server_restart` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_log_level` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_version` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_config_set` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_config_list` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_plugin_load` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_plugin_unload` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_plugin_info` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_subagent_status` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_queue_list` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_queue_stats` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_session_delete` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_memory_clear` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_mcp_capabilities` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_plugin_catalog` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_server_stats` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_batch` | ✅ 有 | ❌ 无 | **⚠️ 有 bug** - line 4142 阻塞代码 |
+| `evif_search` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_diff` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_watch` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_tree` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_archive` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_hash` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_du` | ✅ 有 | ❌ 无 | 幽灵 |
+| `evif_find` | ✅ 有 | ❌ 无 | 模拟返回硬编码 |
+| `evif_wc` | ✅ 有 | ❌ 无 | 模拟返回硬编码 |
+| `evif_tail` | ✅ 有 | ❌ 无 | 模拟返回硬编码 |
+
+### 11.4 L3: 仅 HTTP 桥接工具（15 个）
+
+**保留作为 HTTP-only 工具**（无 VFS 模拟）：
+
+| 工具 | HTTP 端点 | 说明 |
+|------|-----------|------|
+| `evif_grep` | POST /api/v1/grep | **无 VFS 模拟** - 纯 HTTP |
+| `evif_cp` | GET read + POST write | 文件复制 |
+| `evif_mount` | POST /api/v1/mount | 挂载插件 |
+| `evif_unmount` | POST /api/v1/unmount | 卸载插件 |
+| `evif_mounts` | GET /api/v1/mounts | 列出挂载 |
+| `evif_open_handle` | POST /api/v1/handles/open | 打开句柄 |
+| `evif_close_handle` | POST /api/v1/handles/:id/close | 关闭句柄 |
+| `evif_skill_info` | GET /api/v1/files?path=/skills/{name}/SKILL.md | 技能详情 |
+| `evif_skill_execute` | PUT input + GET output | 执行技能 |
+| `evif_claude_md_generate` | GET dirs + 本地生成 | 生成模板 |
+| `evif_session_save` | PUT /context/L0/current | 保存会话 |
+| `evif_session_list` | GET /api/v1/directories?path=/context/{level} | 列出会话 |
+| `evif_subagent_create` | POST /pipes/{name} + PUT input | 创建 Agent |
+| `evif_subagent_send` | PUT /api/v1/files?path=/pipes/{name}/input | 发送消息 |
+| `evif_subagent_list` | GET /api/v1/directories?path=/pipes | 列出 Agent |
+
+### 11.5 L4: 幽灵工具（31 个）
+
+**必须删除** — 只有 VFS 模拟，无 HTTP 桥接：
+
+```rust
+// 诊断工具 - 5 个（全部删除）
+evif_latency_test
+evif_request_trace
+evif_cache_stats
+evif_log_query
+evif_server_stats
+
+// 事件与定时 - 6 个（全部删除）
+evif_event_subscribe
+evif_event_list
+evif_event_unsubscribe
+evif_cron_schedule
+evif_cron_list
+evif_cron_remove
+
+// 插件管理 - 3 个（删除）
+evif_plugin_load     // 改用 evif_mount
+evif_plugin_unload   // 改用 evif_unmount
+evif_plugin_info     // 改用 evif_mount with action
+
+// 队列 - 2 个（全部删除）
+evif_queue_list
+evif_queue_stats
+
+// 实用工具 - 6 个（全部删除）
+evif_diff
+evif_watch
+evif_archive
+evif_hash
+evif_du
+evif_tree          // 合并到 evif_ls
+
+// 指标 - 1 个（删除）
+evif_metrics_export
+
+// 元工具 - 2 个（删除）
+evif_server_restart
+evif_mcp_capabilities
+
+// 配置 - 3 个（合并到 CLI）
+evif_config_get    // 改用 evif_cat
+evif_config_set    // 改用 evif_write
+evif_config_list   // 改用 evif_ls
+
+// 批量 - 1 个（有 bug，暂删）
+evif_batch         // 暂删，等待修复
+
+// 其他 - 2 个（删除）
+evif_plugin_catalog
+evif_search        // 改用 evif_memory_search
+```
+
+---
+
+## 十二、实现问题清单
+
+### 12.1 参数名不匹配（必须修复）
+
+```rust
+// 问题 1: evif_memorize VFS 模拟读错误的参数名
+// line 2942: 读 arguments["key"] 和 arguments["value"]
+// 但 schema 定义的是 content 和 modality
+
+// 问题 2: evif_retrieve VFS 模拟读错误的参数名
+// line 2955: 读 arguments["key"]
+// 但 schema 定义的是 query, mode, k, threshold
+```
+
+### 12.2 死代码问题
+
+```rust
+// 问题 1: #[allow(dead_code)] 函数未被调用
+// line 2888: has_vfs_backend() 方法从未被调用
+
+// 问题 2: evif_batch 有阻塞 bug
+// line 4142: futures::executor::block_on(f) 在 async 上下文中
+// 这段代码在 continue_on_error=false 且 op_futures.is_empty() 时执行
+// 但此时循环体永远不执行，实际上是死代码
+
+// 问题 3: HTTP 错误被静默忽略
+// line 5212, 5220: subagent_create 中两处 let _ = ... 忽略错误
+```
+
+### 12.3 假数据工具
+
+| 工具 | 问题 | 建议 |
+|------|------|------|
+| `evif_find` | 返回硬编码假文件列表 | 合并到 evif_ls |
+| `evif_wc` | 返回硬编码字数 | 删除 |
+| `evif_tail` | 返回硬编码内容 | 合并到 evif_cat |
+| `evif_skill_list` (mock) | 只返回 2 个硬编码技能 | 补全或删除 |
+
+---
+
+## 十三、修复优先级（更新）
+
+### Phase 0: 删除幽灵工具（31 个）
+
+删除所有只有 VFS 模拟、无 HTTP 桥接的工具。
+
+### Phase 1: 修复参数不匹配（2 个）
+
+```rust
+// evif_memorize VFS 模拟
+// 改为读 arguments["content"] 或 arguments["text"]
+
+// evif_retrieve VFS 模拟
+// 改为读 arguments["query"]
+```
+
+### Phase 2: 删除或修复假数据工具（3 个）
+
+| 工具 | 操作 |
+|------|------|
+| `evif_find` | 合并到 evif_ls { action: "find" } |
+| `evif_wc` | 删除 |
+| `evif_tail` | 合并到 evif_cat { action: "tail" } |
+
+### Phase 3: 补全缺失的 HTTP 桥接（4 个）
+
+| 工具 | 操作 |
+|------|------|
+| `evif_skill_create` | 添加 HTTP: POST /api/v1/files?path=/skills/{name} |
+| `evif_skill_delete` | 添加 HTTP: DELETE /api/v1/files?path=/skills/{name} |
+| `evif_memory_search` | 添加 HTTP: POST /api/v1/memories/search |
+| `evif_batch` | 修复 bug 后添加 HTTP |
+
+### Phase 4: 合并子工具（9 个合并为 3 个）
+
+```rust
+// evif_mount = evif_mount + evif_unmount + evif_mounts + evif_plugin_*
+evif_mount {
+    action: "mount|unmount|list"
+    plugin: Option<String>
+    path: Option<String>
+}
+
+// evif_skill = evif_skill_list + evif_skill_info + evif_skill_execute
+evif_skill {
+    action: "list|info|execute|create|delete"
+    name: Option<String>
+    content: Option<String>
+}
+
+// evif_session = evif_session_save + evif_session_list + evif_session_load
+evif_session {
+    action: "save|load|list"
+    level: Option<String>
+    content: Option<String>
+}
+```
+
+---
+
+## 十四、最终工具集（简化后）
+
+### 14.1 内核工具（7 个）- 不可删除
+
+```rust
+evif_ls        // 目录列表
+evif_cat       // 文件读取
+evif_write     // 文件写入
+evif_mkdir     // 创建目录
+evif_rm        // 删除文件
+evif_stat      // 文件信息
+evif_mv        // 重命名
+```
+
+### 14.2 记忆工具（4 个）- 核心功能
+
+```rust
+evif_memorize  // 存储记忆
+evif_retrieve  // 检索记忆
+evif_memory_search // 语义搜索
+evif_memory_clear // 清除记忆
+```
+
+### 14.3 技能工具（1 个）- 子工具合并
+
+```rust
+evif_skill { action: "list|info|execute|create|delete" }
+```
+
+### 14.4 会话工具（1 个）- 子工具合并
+
+```rust
+evif_session { action: "save|load|list" }
+```
+
+### 14.5 管道/子 Agent（1 个）- 子工具合并
+
+```rust
+evif_pipe { action: "create|list|send|recv" }
+```
+
+### 14.6 挂载管理（1 个）- 子工具合并
+
+```rust
+evif_mount { action: "mount|unmount|list" }
+```
+
+### 14.7 其他工具（4 个）
+
+```rust
+evif_grep     // 文本搜索
+evif_health   // 健康检查
+evif_cp       // 文件复制
+evif_batch    // 批量操作（有 bug 暂删）
+```
+
+### 14.8 总计：20 个工具
+
+```
+内核 (7):  evif_ls, evif_cat, evif_write, evif_mkdir, evif_rm, evif_stat, evif_mv
+记忆 (4):  evif_memorize, evif_retrieve, evif_memory_search, evif_memory_clear
+技能 (1):  evif_skill { action: "list|info|execute|create|delete" }
+会话 (1):  evif_session { action: "save|load|list" }
+管道 (1):  evif_pipe { action: "create|list|send|recv" }
+挂载 (1):  evif_mount { action: "mount|unmount|list" }
+其他 (4):  evif_grep, evif_health, evif_cp, evif_batch
+总计: 20 个工具（合并后）
+```
+
+---
+
+## 十五、行动清单
+
+| 优先级 | 任务 | 工具数 | 工作量 |
+|--------|------|--------|--------|
+| **P0** | 删除 31 个幽灵工具 | 31 | 1 小时 |
+| **P0** | 修复 evif_memorize 参数名不匹配 | 1 | 10 分钟 |
+| **P0** | 修复 evif_retrieve 参数名不匹配 | 1 | 10 分钟 |
+| **P1** | 删除 3 个假数据工具 | 3 | 30 分钟 |
+| **P1** | 合并 9 个子工具为 3 个 | 6 | 4 小时 |
+| **P2** | 补全 4 个缺失的 HTTP 桥接 | 4 | 3 小时 |
+| **P2** | 修复 evif_batch 阻塞 bug | 1 | 2 小时 |
+| **P3** | 完善 VFS 模拟实现 | 12 | 6 小时 |
+
+**总计**: 51 个工具待处理，预计 17 小时工作
