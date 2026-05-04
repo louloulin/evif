@@ -1760,45 +1760,36 @@ impl EvifMcpServer {
                     "required": []
                 }),
             },
-            // ── Auto-memory 增强 ──────────────────────────────────────────
+            // ── Session management (统一: save/list) ─────────────────────
             Tool {
-                name: "evif_session_save".to_string(),
-                description: "Save current session state to L0/L1 context".to_string(),
+                name: "evif_session".to_string(),
+                description: "Manage sessions: save to or list from L0/L1 context".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["save", "list"],
+                            "description": "Action to perform"
+                        },
                         "level": {
                             "type": "string",
-                            "description": "Context level: L0 (current task) or L1 (decisions)"
+                            "description": "Context level: L0 or L1 (default: L0)"
                         },
                         "content": {
                             "type": "string",
-                            "description": "Session content to save"
+                            "description": "Session content to save (for save action)"
                         },
                         "summary": {
                             "type": "string",
-                            "description": "Brief summary of the session"
-                        }
-                    },
-                    "required": ["content"]
-                }),
-            },
-            Tool {
-                name: "evif_session_list".to_string(),
-                description: "List all saved sessions".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "level": {
-                            "type": "string",
-                            "description": "Filter by level: L0 or L1"
+                            "description": "Brief summary of the session (for save action)"
                         },
                         "limit": {
                             "type": "number",
-                            "description": "Maximum number of sessions to return"
+                            "description": "Maximum number of sessions to return (for list action)"
                         }
                     },
-                    "required": []
+                    "required": ["action"]
                 }),
             },
             // ── Subagent 协调 ─────────────────────────────────────────────
@@ -2951,8 +2942,7 @@ impl EvifMcpServer {
                             {"name": "evif_retrieve", "category": "memory"},
                             {"name": "evif_skill", "category": "skill"},
                             {"name": "evif_claude_md_generate", "category": "claude"},
-                            {"name": "evif_session_save", "category": "context"},
-                            {"name": "evif_session_list", "category": "context"},
+                            {"name": "evif_session", "category": "context"},
                             {"name": "evif_subagent_create", "category": "agent"},
                             {"name": "evif_subagent_send", "category": "agent"},
                             {"name": "evif_subagent_list", "category": "agent"},
@@ -4236,87 +4226,95 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
             }
 
             // Phase 15.2: Session management
-            "evif_session_save" => {
-                let level = arguments["level"].as_str().unwrap_or("L0");
-                let content = arguments["content"]
+            "evif_session" => {
+                let action = arguments["action"]
                     .as_str()
-                    .ok_or("Missing 'content' argument")?;
-                let summary = arguments["summary"].as_str().unwrap_or("");
+                    .ok_or("Missing 'action' argument")?;
 
-                let context_path = if level == "L1" {
-                    "/context/L1/decisions.md"
-                } else {
-                    "/context/L0/current"
-                };
+                match action {
+                    "save" => {
+                        let level = arguments["level"].as_str().unwrap_or("L0");
+                        let content = arguments["content"]
+                            .as_str()
+                            .ok_or("Missing 'content' argument for save action")?;
+                        let summary = arguments["summary"].as_str().unwrap_or("");
 
-                // Append to context file
-                let write_url = format!(
-                    "{}/api/v1/files?path={}",
-                    self.config.evif_url,
-                    urlencoding::encode(context_path)
-                );
+                        let context_path = if level == "L1" {
+                            "/context/L1/decisions.md"
+                        } else {
+                            "/context/L0/current"
+                        };
 
-                let body = if level == "L1" {
-                    serde_json::json!({
-                        "data": format!("\n\n## Session {}\n\n{}\n\n{}", chrono::Utc::now().format("%Y-%m-%d %H:%M"), summary, content)
-                    })
-                } else {
-                    serde_json::json!({ "data": content })
-                };
+                        // Append to context file
+                        let write_url = format!(
+                            "{}/api/v1/files?path={}",
+                            self.config.evif_url,
+                            urlencoding::encode(context_path)
+                        );
 
-                let response = self
-                    .client
-                    .put(&write_url)
-                    .json(&body)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to save session: {}", e))?;
+                        let body = if level == "L1" {
+                            serde_json::json!({
+                                "data": format!("\n\n## Session {}\n\n{}\n\n{}", chrono::Utc::now().format("%Y-%m-%d %H:%M"), summary, content)
+                            })
+                        } else {
+                            serde_json::json!({ "data": content })
+                        };
 
-                if response.status().is_success() || response.status().as_u16() == 201 {
-                    Ok(json!({
-                        "status": "saved",
-                        "level": level,
-                        "path": context_path
-                    }))
-                } else {
-                    Err(format!(
-                        "Failed to save (HTTP {})",
-                        response.status().as_u16()
-                    ))
+                        let response = self
+                            .client
+                            .put(&write_url)
+                            .json(&body)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to save session: {}", e))?;
+
+                        if response.status().is_success() || response.status().as_u16() == 201 {
+                            Ok(json!({
+                                "status": "saved",
+                                "level": level,
+                                "path": context_path
+                            }))
+                        } else {
+                            Err(format!(
+                                "Failed to save (HTTP {})",
+                                response.status().as_u16()
+                            ))
+                        }
+                    }
+                    "list" => {
+                        let level = arguments["level"].as_str().unwrap_or("");
+                        let _limit = arguments["limit"].as_i64().unwrap_or(20);
+
+                        // Read context directory
+                        let path = if level == "L1" {
+                            "/context/L1"
+                        } else if level == "L0" {
+                            "/context/L0"
+                        } else {
+                            "/context"
+                        };
+
+                        let url = format!(
+                            "{}/api/v1/directories?path={}",
+                            self.config.evif_url,
+                            urlencoding::encode(path)
+                        );
+                        let response = self
+                            .client
+                            .get(&url)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to list sessions: {}", e))?;
+
+                        let result: Value = response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse: {}", e))?;
+
+                        Ok(result)
+                    }
+                    _ => Err(format!("Unknown action '{}'. Use: save, list", action)),
                 }
-            }
-
-            "evif_session_list" => {
-                let level = arguments["level"].as_str().unwrap_or("");
-                let _limit = arguments["limit"].as_i64().unwrap_or(20);
-
-                // Read context directory
-                let path = if level == "L1" {
-                    "/context/L1"
-                } else if level == "L0" {
-                    "/context/L0"
-                } else {
-                    "/context"
-                };
-
-                let url = format!(
-                    "{}/api/v1/directories?path={}",
-                    self.config.evif_url,
-                    urlencoding::encode(path)
-                );
-                let response = self
-                    .client
-                    .get(&url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to list sessions: {}", e))?;
-
-                let result: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse: {}", e))?;
-
-                Ok(result)
             }
 
             // Phase 15.3: Subagent coordination
