@@ -314,11 +314,11 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 
 | 序号 | 任务 | 文件位置 | 行号 | 工时 | 状态 |
 |------|------|----------|------|------|------|
-| T2.1 | 删除 `evif_find` | lib.rs | 2166 | 5m | ⬜ |
-| T2.2 | 删除 `evif_wc` | lib.rs | 2188 | 5m | ⬜ |
-| T2.3 | 删除 `evif_tail` | lib.rs | 2214 | 5m | ⬜ |
+| T2.1 | 删除 `evif_find` | lib.rs | ~2166 | 5m | ✅ |
+| T2.2 | 删除 `evif_wc` | lib.rs | ~2188 | 5m | ✅ |
+| T2.3 | 删除 `evif_tail` | lib.rs | ~2214 | 5m | ✅ |
 
-**Phase 2 小计**: 3 个工具，约 15 分钟
+**Phase 2 小计**: 3 个工具，约 15 分钟 ✅ 已完成（清理孤儿 mock 实现）
 
 ---
 
@@ -390,7 +390,7 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 | **M4: 全工具可调用** | 所有工具在 mock 模式下可调用 | Day 4 | ⬜ 待开始 |
 | **M5: 最终优化** | 20 个核心工具，全面测试通过 | Day 5 | ⬜ 待开始 |
 
-> **2026-05-04 更新**: M1 + M2 已完成，测试验证通过（136 tests passed）
+> **2026-05-04 更新**: M1 + M2 + Phase 2 已完成，测试验证通过（136 tests passed）
 
 ---
 

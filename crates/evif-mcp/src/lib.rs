@@ -2092,10 +2092,11 @@ impl EvifMcpServer {
                         .unwrap_or("");
                     let k = arguments.get("k")
                         .and_then(|v| v.as_u64())
-                        .unwrap_or(5) as usize;
+                        .unwrap_or(5);
                     return Some(Ok(json!({
                         "found": false,
                         "query": query,
+                        "k": k,
                         "results": [],
                         "count": 0
                     })));
@@ -2111,74 +2112,6 @@ impl EvifMcpServer {
                             {"name": "code-review", "path": "/skills/code-review"}
                         ]
                     })));
-                }
-                None
-            }
-            "evif_find" => {
-                // Mock file find
-                if backend.is_mock() {
-                    let path = arguments["path"].as_str().unwrap_or("/");
-                    let name = arguments["name"].as_str().unwrap_or("*");
-                    // Simple mock: return files matching the pattern
-                    let mock_files = vec![
-                        format!("{}/{}", path.trim_end_matches('/'), name.replace("*", "file")),
-                    ];
-                    return Some(Ok(json!({
-                        "matches": mock_files,
-                        "count": mock_files.len()
-                    })));
-                }
-                None
-            }
-            "evif_wc" => {
-                // Mock word count
-                if backend.is_mock() {
-                    let path = arguments["path"].as_str().unwrap_or("");
-                    return match backend.read_file(path, 0, 0).await {
-                        Ok(content) => {
-                            let lines = content.lines().count();
-                            let words = content.split_whitespace().count();
-                            let chars = content.chars().count();
-                            let count_lines = arguments["lines"].as_bool().unwrap_or(true);
-                            let count_words = arguments["words"].as_bool().unwrap_or(true);
-                            let count_chars = arguments["chars"].as_bool().unwrap_or(false);
-
-                            let mut result = json!({
-                                "path": path,
-                                "lines": lines,
-                                "words": words,
-                                "chars": chars
-                            });
-
-                            // Remove fields based on flags
-                            if !count_lines { result["lines"] = json!(null); }
-                            if !count_words { result["words"] = json!(null); }
-                            if !count_chars { result["chars"] = json!(null); }
-
-                            Some(Ok(result))
-                        }
-                        Err(e) => Some(Err(e)),
-                    };
-                }
-                None
-            }
-            "evif_tail" => {
-                // Mock tail
-                if backend.is_mock() {
-                    let path = arguments["path"].as_str().unwrap_or("");
-                    let n = arguments["lines"].as_u64().unwrap_or(10) as usize;
-                    return match backend.read_file(path, 0, 0).await {
-                        Ok(content) => {
-                            let lines: Vec<&str> = content.lines().collect();
-                            let tail_lines: Vec<&str> = lines.iter().rev().take(n).cloned().collect();
-                            let tail: String = tail_lines.iter().rev().map(|s| *s).collect::<Vec<_>>().join("\n");
-                            Some(Ok(json!({
-                                "lines": tail_lines.len(),
-                                "content": tail
-                            })))
-                        }
-                        Err(e) => Some(Err(e)),
-                    };
                 }
                 None
             }
@@ -2969,9 +2902,6 @@ impl EvifMcpServer {
                             {"name": "evif_unmount", "category": "plugin"},
                             {"name": "evif_mounts", "category": "plugin"},
                             {"name": "evif_grep", "category": "search"},
-                            {"name": "evif_find", "category": "search"},
-                            {"name": "evif_wc", "category": "search"},
-                            {"name": "evif_tail", "category": "search"},
                             {"name": "evif_open_handle", "category": "handle"},
                             {"name": "evif_close_handle", "category": "handle"},
                             {"name": "evif_memorize", "category": "memory"},
