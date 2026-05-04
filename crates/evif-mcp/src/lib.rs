@@ -1792,54 +1792,36 @@ impl EvifMcpServer {
                     "required": ["action"]
                 }),
             },
-            // ── Subagent 协调 ─────────────────────────────────────────────
+            // ── Subagent 协调 (统一: create/send/list) ─────────────────
             Tool {
-                name: "evif_subagent_create".to_string(),
-                description: "Create a new subagent with assigned context".to_string(),
+                name: "evif_agent".to_string(),
+                description: "Manage subagents: create, send, list".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["create", "send", "list"],
+                            "description": "Action to perform"
+                        },
                         "name": {
                             "type": "string",
-                            "description": "Subagent name/ID"
+                            "description": "Subagent name/ID (required for create/send)"
                         },
                         "task": {
                             "type": "string",
-                            "description": "Task description for the subagent"
-                        },
-                        "context_path": {
-                            "type": "string",
-                            "description": "Context path to share with subagent"
-                        }
-                    },
-                    "required": ["name", "task"]
-                }),
-            },
-            Tool {
-                name: "evif_subagent_send".to_string(),
-                description: "Send a message to a subagent".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Subagent name/ID"
+                            "description": "Task description (for create action)"
                         },
                         "message": {
                             "type": "string",
-                            "description": "Message to send"
+                            "description": "Message to send (for send action)"
+                        },
+                        "context_path": {
+                            "type": "string",
+                            "description": "Context path to share (for create action)"
                         }
                     },
-                    "required": ["name", "message"]
-                }),
-            },
-            Tool {
-                name: "evif_subagent_list".to_string(),
-                description: "List all active subagents".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {},
-                    "required": []
+                    "required": ["action"]
                 }),
             },
             // MCP Capability Discovery Tool
@@ -2943,9 +2925,7 @@ impl EvifMcpServer {
                             {"name": "evif_skill", "category": "skill"},
                             {"name": "evif_claude_md_generate", "category": "claude"},
                             {"name": "evif_session", "category": "context"},
-                            {"name": "evif_subagent_create", "category": "agent"},
-                            {"name": "evif_subagent_send", "category": "agent"},
-                            {"name": "evif_subagent_list", "category": "agent"},
+                            {"name": "evif_agent", "category": "agent"},
                             {"name": "evif_mcp_capabilities", "category": "meta"},
                             {"name": "evif_plugin_catalog", "category": "meta"},
                             {"name": "evif_server_stats", "category": "meta"},
@@ -4318,88 +4298,95 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
             }
 
             // Phase 15.3: Subagent coordination
-            "evif_subagent_create" => {
-                let name = arguments["name"]
+            "evif_agent" => {
+                let action = arguments["action"]
                     .as_str()
-                    .ok_or("Missing 'name' argument")?;
-                let task = arguments["task"]
-                    .as_str()
-                    .ok_or("Missing 'task' argument")?;
-                let context_path = arguments["context_path"].as_str().unwrap_or("/context");
+                    .ok_or("Missing 'action' argument")?;
 
-                // Create pipe for subagent communication
-                let pipe_url = format!(
-                    "{}/api/v1/directories?path=/pipes/{}",
-                    self.config.evif_url,
-                    urlencoding::encode(name)
-                );
-                let _ = self.client.post(&pipe_url).send().await;
+                match action {
+                    "create" => {
+                        let name = arguments["name"]
+                            .as_str()
+                            .ok_or("Missing 'name' argument for create action")?;
+                        let task = arguments["task"]
+                            .as_str()
+                            .ok_or("Missing 'task' argument for create action")?;
+                        let context_path = arguments["context_path"].as_str().unwrap_or("/context");
 
-                // Write task to pipe input
-                let input_url = format!(
-                    "{}/api/v1/files?path=/pipes/{}/input",
-                    self.config.evif_url,
-                    urlencoding::encode(name)
-                );
-                let _ = self
-                    .client
-                    .put(&input_url)
-                    .json(&serde_json::json!({ "data": task }))
-                    .send()
-                    .await;
+                        // Create pipe for subagent communication
+                        let pipe_url = format!(
+                            "{}/api/v1/directories?path=/pipes/{}",
+                            self.config.evif_url,
+                            urlencoding::encode(name)
+                        );
+                        let _ = self.client.post(&pipe_url).send().await;
 
-                Ok(json!({
-                    "status": "created",
-                    "name": name,
-                    "context_path": context_path,
-                    "input": format!("/pipes/{}/input", name),
-                    "output": format!("/pipes/{}/output", name)
-                }))
-            }
+                        // Write task to pipe input
+                        let input_url = format!(
+                            "{}/api/v1/files?path=/pipes/{}/input",
+                            self.config.evif_url,
+                            urlencoding::encode(name)
+                        );
+                        let _ = self
+                            .client
+                            .put(&input_url)
+                            .json(&serde_json::json!({ "data": task }))
+                            .send()
+                            .await;
 
-            "evif_subagent_send" => {
-                let name = arguments["name"]
-                    .as_str()
-                    .ok_or("Missing 'name' argument")?;
-                let message = arguments["message"]
-                    .as_str()
-                    .ok_or("Missing 'message' argument")?;
+                        Ok(json!({
+                            "status": "created",
+                            "name": name,
+                            "context_path": context_path,
+                            "input": format!("/pipes/{}/input", name),
+                            "output": format!("/pipes/{}/output", name)
+                        }))
+                    }
+                    "send" => {
+                        let name = arguments["name"]
+                            .as_str()
+                            .ok_or("Missing 'name' argument for send action")?;
+                        let message = arguments["message"]
+                            .as_str()
+                            .ok_or("Missing 'message' argument for send action")?;
 
-                let url = format!(
-                    "{}/api/v1/files?path=/pipes/{}/input",
-                    self.config.evif_url,
-                    urlencoding::encode(name)
-                );
-                let response = self
-                    .client
-                    .put(&url)
-                    .json(&serde_json::json!({ "data": message }))
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to send to subagent: {}", e))?;
+                        let url = format!(
+                            "{}/api/v1/files?path=/pipes/{}/input",
+                            self.config.evif_url,
+                            urlencoding::encode(name)
+                        );
+                        let response = self
+                            .client
+                            .put(&url)
+                            .json(&serde_json::json!({ "data": message }))
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to send to subagent: {}", e))?;
 
-                if response.status().is_success() || response.status().as_u16() == 201 {
-                    Ok(json!({
-                        "status": "sent",
-                        "to": name
-                    }))
-                } else {
-                    Err(format!("Subagent '{}' not found or unavailable", name))
+                        if response.status().is_success() || response.status().as_u16() == 201 {
+                            Ok(json!({
+                                "status": "sent",
+                                "to": name
+                            }))
+                        } else {
+                            Err(format!("Subagent '{}' not found or unavailable", name))
+                        }
+                    }
+                    "list" => {
+                        let url = format!("{}/api/v1/directories?path=/pipes", self.config.evif_url);
+                        let response = self
+                            .client
+                            .get(&url)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to list subagents: {}", e))?;
+
+                        let result: Value = response.json().await.unwrap_or(json!({"data": []}));
+
+                        Ok(result)
+                    }
+                    _ => Err(format!("Unknown action '{}'. Use: create, send, list", action)),
                 }
-            }
-
-            "evif_subagent_list" => {
-                let url = format!("{}/api/v1/directories?path=/pipes", self.config.evif_url);
-                let response = self
-                    .client
-                    .get(&url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to list subagents: {}", e))?;
-
-                let result: Value = response.json().await.unwrap_or(json!({"data": []}));
-
-                Ok(result)
             }
 
             _ => Err(format!("Unknown tool: {}", tool_name)),
