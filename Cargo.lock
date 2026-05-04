@@ -2970,6 +2970,7 @@ dependencies = [
  "evif-core",
  "evif-plugins",
  "evif-rest",
+ "futures",
  "lru",
  "notify",
  "regex-lite",
