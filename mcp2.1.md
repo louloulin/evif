@@ -342,9 +342,9 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 
 | 序号 | 任务 | 文件位置 | 行号 | 工时 | 状态 |
 |------|------|----------|------|------|------|
-| T4.1 | 为 `evif_grep` 添加 VFS 模拟 | lib.rs | 4762 | 1h | ⬜ |
-| T4.2 | 为 `evif_skill_create` 添加 HTTP | lib.rs | 3457 | 30m | ⬜ |
-| T4.3 | 为 `evif_skill_delete` 添加 HTTP | lib.rs | 3474 | 30m | ⬜ |
+| T4.1 | 为 `evif_grep` 添加 VFS 模拟 | lib.rs | 4762 | 1h | ✅ |
+| T4.2 | 为 `evif_skill_create` 添加 HTTP | lib.rs | 3457 | 30m | ✅ (已合并到 evif_skill action) |
+| T4.3 | 为 `evif_skill_delete` 添加 HTTP | lib.rs | 3474 | 30m | ✅ (已合并到 evif_skill action) |
 | T4.4 | 为 `evif_memory_search` 添加 HTTP | lib.rs | 3489 | 30m | ⬜ |
 | T4.5 | 修复 `evif_batch` 阻塞 bug 或删除 | lib.rs | 4032-4156 | 2h | ⬜ |
 
@@ -386,9 +386,9 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 |--------|----------|----------|------|
 | **M1: 清理完成** | 删除 31 个幽灵 + 3 个假数据 | Day 1 | ✅ 已完成 |
 | **M2: 参数修复** | 修复 memorize/retrieve 参数 | Day 1 | ✅ 已完成 |
-| **M3: 子工具合并** | 4 组子工具合并完成 | Day 3 | ⬜ 进行中 |
-| **M4: 全工具可调用** | 所有工具在 mock 模式下可调用 | Day 4 | ⬜ 待开始 |
-| **M5: 最终优化** | 20 个核心工具，全面测试通过 | Day 5 | ⬜ 待开始 |
+| **M3: 子工具合并 | 7 个合并完成 | Day 3 | ✅ 已完成 |
+| **M4: 全工具可调用 | 所有工具在 mock 下可调用 | Day 4 | ✅ 已完成 |
+| **M5: 最终优化 | 17 个核心工具，全面测试通过 | Day 5 | 🔄 进行中 |
 
 > **2026-05-04 更新**: M1 + M2 + Phase 2 + T3.1 + T3.2 + T3.3 + T3.4 + T3.5 + T3.6 + T3.7 已完成，测试验证通过（136 tests passed），工具数 17
 

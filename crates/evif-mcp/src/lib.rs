@@ -1695,25 +1695,37 @@ impl EvifMcpServer {
                     "required": ["query"]
                 }),
             },
-            // SkillFS tools (统一: list/info/execute)
+            // SkillFS tools (统一: list/info/execute/create/delete)
             Tool {
                 name: "evif_skill".to_string(),
-                description: "Manage skills: list, info, execute".to_string(),
+                description: "Manage skills: list, info, execute, create, delete".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["list", "info", "execute"],
-                            "description": "Action to perform"
+                            "enum": ["list", "info", "execute", "create", "delete"],
+                            "description": "Action to perform: list (show all), info (details), execute (run), create (new), delete (remove)"
                         },
                         "name": {
                             "type": "string",
-                            "description": "Skill name (required for info/execute actions)"
+                            "description": "Skill name (required for info/execute/create/delete actions)"
                         },
                         "input": {
                             "type": "string",
                             "description": "Input data for execute action"
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Skill description (for create action)"
+                        },
+                        "template": {
+                            "type": "string",
+                            "description": "Skill template (for create action)"
+                        },
+                        "force": {
+                            "type": "boolean",
+                            "description": "Force delete without confirmation (for delete action)"
                         },
                         "mode": {
                             "type": "string",
@@ -2069,6 +2081,38 @@ impl EvifMcpServer {
                                 "output": format!("Executed {} with input: {}", name, input)
                             })));
                         }
+                        "create" => {
+                            let name = arguments.get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let template = arguments.get("template")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("default");
+                            let description = arguments.get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            return Some(Ok(json!({
+                                "skill_name": name,
+                                "template": template,
+                                "description": description,
+                                "created": true,
+                                "created_at": "2026-05-04T12:00:00Z"
+                            })));
+                        }
+                        "delete" => {
+                            let name = arguments.get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let force = arguments.get("force")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            return Some(Ok(json!({
+                                "skill_name": name,
+                                "force": force,
+                                "deleted": true,
+                                "deleted_at": "2026-05-04T12:00:00Z"
+                            })));
+                        }
                         _ => {
                             return Some(Err(format!("Unknown action: {}", action)));
                         }
@@ -2153,6 +2197,44 @@ impl EvifMcpServer {
                         "mode": "mock",
                         "version": "1.8.0",
                         "uptime_seconds": 0
+                    })));
+                }
+                None
+            }
+            "evif_grep" => {
+                // Mock grep - search for pattern in path
+                if backend.is_mock() {
+                    let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+                    let pattern = arguments.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
+                    let limit = arguments.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+
+                    // Mock search results
+                    let results = vec![
+                        json!({
+                            "path": format!("{}/file1.txt", path),
+                            "line": 10,
+                            "content": format!("line containing '{}'", pattern),
+                            "match_count": 1
+                        }),
+                        json!({
+                            "path": format!("{}/file2.rs", path),
+                            "line": 42,
+                            "content": format!("function match_{}() {{}}", pattern),
+                            "match_count": 2
+                        }),
+                        json!({
+                            "path": format!("{}/subdir/config.toml", path),
+                            "line": 5,
+                            "content": format!("# {} pattern", pattern),
+                            "match_count": 1
+                        })
+                    ];
+
+                    return Some(Ok(json!({
+                        "matches": results.into_iter().take(limit).collect::<Vec<_>>(),
+                        "total_matches": 3,
+                        "pattern": pattern,
+                        "path": path
                     })));
                 }
                 None
@@ -2550,38 +2632,6 @@ impl EvifMcpServer {
                         "reason": reason,
                         "killed": true,
                         "terminated_at": "2026-05-01T12:05:00Z"
-                    })));
-                }
-                None
-            }
-            "evif_skill_create" => {
-                // Create a new skill
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
-                    let template = arguments["template"].as_str().unwrap_or("default");
-                    let description = arguments["description"].as_str().unwrap_or("");
-
-                    return Some(Ok(json!({
-                        "skill_name": name,
-                        "template": template,
-                        "description": description,
-                        "created": true,
-                        "created_at": "2026-05-01T12:10:00Z"
-                    })));
-                }
-                None
-            }
-            "evif_skill_delete" => {
-                // Delete a skill
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
-                    let force = arguments["force"].as_bool().unwrap_or(false);
-
-                    return Some(Ok(json!({
-                        "skill_name": name,
-                        "force": force,
-                        "deleted": true,
-                        "deleted_at": "2026-05-01T12:10:00Z"
                     })));
                 }
                 None
@@ -4150,7 +4200,88 @@ impl EvifMcpServer {
 
                         Ok(output)
                     }
-                    _ => Err(format!("Unknown action '{}'. Use: list, info, execute", action)),
+                    "create" => {
+                        let name = arguments["name"]
+                            .as_str()
+                            .ok_or("Missing 'name' argument for create action")?;
+                        let description = arguments["description"]
+                            .as_str()
+                            .unwrap_or("");
+                        let template = arguments["template"]
+                            .as_str()
+                            .unwrap_or("default");
+
+                        // Create skill directory and SKILL.md file
+                        let skill_md_content = format!(
+                            "# {}\n\n{}\n\n## Usage\n\n```bash\nevif skill run {} [input]\n```",
+                            name, description, name
+                        );
+
+                        let write_url = format!(
+                            "{}/api/v1/files?path=/skills/{}/SKILL.md",
+                            self.config.evif_url,
+                            urlencoding::encode(name)
+                        );
+                        let write_response = self
+                            .client
+                            .put(&write_url)
+                            .body(skill_md_content)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to create skill: {}", e))?;
+
+                        if write_response.status().as_u16() >= 400 {
+                            let status = write_response.status().as_u16();
+                            let body = write_response.text().await.unwrap_or_default();
+                            return Err(format!(
+                                "Failed to create skill '{}' (HTTP {}): {}",
+                                name, status, body
+                            ));
+                        }
+
+                        Ok(json!({
+                            "skill_name": name,
+                            "template": template,
+                            "description": description,
+                            "created": true,
+                            "path": format!("/skills/{}/SKILL.md", name)
+                        }))
+                    }
+                    "delete" => {
+                        let name = arguments["name"]
+                            .as_str()
+                            .ok_or("Missing 'name' argument for delete action")?;
+                        let force = arguments["force"].as_bool().unwrap_or(false);
+
+                        // Delete skill directory
+                        let delete_url = format!(
+                            "{}/api/v1/files?path=/skills/{}",
+                            self.config.evif_url,
+                            urlencoding::encode(name)
+                        );
+                        let delete_response = self
+                            .client
+                            .delete(&delete_url)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to delete skill: {}", e))?;
+
+                        if delete_response.status().as_u16() >= 400 {
+                            let status = delete_response.status().as_u16();
+                            let body = delete_response.text().await.unwrap_or_default();
+                            return Err(format!(
+                                "Failed to delete skill '{}' (HTTP {}): {}",
+                                name, status, body
+                            ));
+                        }
+
+                        Ok(json!({
+                            "skill_name": name,
+                            "force": force,
+                            "deleted": true
+                        }))
+                    }
+                    _ => Err(format!("Unknown action '{}'. Use: list, info, execute, create, delete", action)),
                 }
             }
 
