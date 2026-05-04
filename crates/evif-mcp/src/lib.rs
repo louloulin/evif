@@ -1567,304 +1567,23 @@ impl EvifMcpServer {
                     "required": []
                 }),
             },
-            Tool {
-                name: "evif_ping_with_stats".to_string(),
-                description: "Ping with detailed server statistics (uptime, memory, connections)".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "detailed": {
-                            "type": "boolean",
-                            "description": "Include detailed metrics",
-                            "default": false
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_latency_test".to_string(),
-                description: "Test API latency to EVIF server".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "target": {
-                            "type": "string",
-                            "description": "API endpoint to test (default: /api/v1/health)",
-                            "default": "/api/v1/health"
-                        },
-                        "iterations": {
-                            "type": "number",
-                            "description": "Number of test iterations (default: 5)",
-                            "default": 5
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_request_trace".to_string(),
-                description: "Enable request tracing for debugging".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "enable": {
-                            "type": "boolean",
-                            "description": "Enable (true) or disable (false) tracing"
-                        },
-                        "verbose": {
-                            "type": "boolean",
-                            "description": "Include verbose headers and bodies"
-                        }
-                    },
-                    "required": ["enable"]
-                }),
-            },
-            Tool {
-                name: "evif_cache_stats".to_string(),
-                description: "Get tool result cache statistics".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "reset": {
-                            "type": "boolean",
-                            "description": "Reset counters after returning stats"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_log_query".to_string(),
-                description: "Query server logs with filtering".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "level": {
-                            "type": "string",
-                            "description": "Log level filter (info, warn, error)",
-                            "enum": ["info", "warn", "error", "debug"]
-                        },
-                        "limit": {
-                            "type": "number",
-                            "description": "Maximum number of entries to return",
-                            "default": 50
-                        },
-                        "pattern": {
-                            "type": "string",
-                            "description": "Filter by pattern in log message"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_metrics_export".to_string(),
-                description: "Export server metrics in various formats".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "format": {
-                            "type": "string",
-                            "description": "Export format (json, prometheus, csv)",
-                            "default": "json",
-                            "enum": ["json", "prometheus", "csv"]
-                        },
-                        "include_histograms": {
-                            "type": "boolean",
-                            "description": "Include histogram data"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_config_get".to_string(),
-                description: "Get EVIF configuration values".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "key": {
-                            "type": "string",
-                            "description": "Configuration key to retrieve"
-                        },
-                        "include_hidden": {
-                            "type": "boolean",
-                            "description": "Include hidden/internal config keys"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_event_subscribe".to_string(),
-                description: "Subscribe to server events (file changes, mounts, etc)".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "event_type": {
-                            "type": "string",
-                            "description": "Event type to subscribe to",
-                            "enum": ["file_change", "mount", "unmount", "session", "all"]
-                        },
-                        "path_filter": {
-                            "type": "string",
-                            "description": "Filter events by path pattern"
-                        }
-                    },
-                    "required": ["event_type"]
-                }),
-            },
-            Tool {
-                name: "evif_event_list".to_string(),
-                description: "List available event types and subscriptions".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "include_history": {
-                            "type": "boolean",
-                            "description": "Include recent event history"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_cron_schedule".to_string(),
-                description: "Schedule recurring tasks or reminders".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "expression": {
-                            "type": "string",
-                            "description": "Cron expression (e.g., '0 9 * * *' for daily at 9am)"
-                        },
-                        "task": {
-                            "type": "string",
-                            "description": "Task description or command"
-                        },
-                        "enabled": {
-                            "type": "boolean",
-                            "description": "Enable or disable the schedule"
-                        }
-                    },
-                    "required": ["expression", "task"]
-                }),
-            },
-            Tool {
-                name: "evif_event_unsubscribe".to_string(),
-                description: "Unsubscribe from server events".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "subscription_id": {
-                            "type": "string",
-                            "description": "Subscription ID to cancel"
-                        }
-                    },
-                    "required": ["subscription_id"]
-                }),
-            },
-            Tool {
-                name: "evif_cron_list".to_string(),
-                description: "List all scheduled cron tasks".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "include_disabled": {
-                            "type": "boolean",
-                            "description": "Include disabled schedules"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_cron_remove".to_string(),
-                description: "Remove a scheduled cron task".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "schedule_id": {
-                            "type": "string",
-                            "description": "Schedule ID to remove"
-                        }
-                    },
-                    "required": ["schedule_id"]
-                }),
-            },
-            Tool {
-                name: "evif_session_load".to_string(),
-                description: "Load a previously saved session".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Session name to load"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
-            Tool {
-                name: "evif_subagent_kill".to_string(),
-                description: "Terminate a running subagent".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "type": "string",
-                            "description": "Subagent ID to terminate"
-                        },
-                        "reason": {
-                            "type": "string",
-                            "description": "Reason for termination"
-                        }
-                    },
-                    "required": ["id"]
-                }),
-            },
-            Tool {
-                name: "evif_skill_create".to_string(),
-                description: "Create a new skill from template".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Skill name"
-                        },
-                        "template": {
-                            "type": "string",
-                            "description": "Skill template type (code-review, test, docs)"
-                        },
-                        "description": {
-                            "type": "string",
-                            "description": "Skill description"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
-            Tool {
-                name: "evif_skill_delete".to_string(),
-                description: "Delete a skill".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Skill name to delete"
-                        },
-                        "force": {
-                            "type": "boolean",
-                            "description": "Force delete without confirmation"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             Tool {
                 name: "evif_memory_search".to_string(),
                 description: "Search memories by content".to_string(),
@@ -1887,347 +1606,27 @@ impl EvifMcpServer {
                     "required": ["query"]
                 }),
             },
-            Tool {
-                name: "evif_memory_stats".to_string(),
-                description: "Get memory system statistics".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "detailed": {
-                            "type": "boolean",
-                            "description": "Include detailed statistics"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_pipe_create".to_string(),
-                description: "Create a pipe for multi-agent coordination".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Pipe name"
-                        },
-                        "capacity": {
-                            "type": "number",
-                            "description": "Pipe capacity"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
-            Tool {
-                name: "evif_pipe_list".to_string(),
-                description: "List all pipes".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "status": {
-                            "type": "string",
-                            "description": "Filter by status (active, idle)"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_health_detailed".to_string(),
-                description: "Get detailed health information".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "include_components": {
-                            "type": "boolean",
-                            "description": "Include component status"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_server_restart".to_string(),
-                description: "Restart the EVIF server".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "graceful": {
-                            "type": "boolean",
-                            "description": "Graceful restart (wait for connections)"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_log_level".to_string(),
-                description: "Get or set log level".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "level": {
-                            "type": "string",
-                            "description": "Log level (debug, info, warn, error)"
-                        },
-                        "component": {
-                            "type": "string",
-                            "description": "Component name"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_version".to_string(),
-                description: "Get EVIF version information".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "detailed": {
-                            "type": "boolean",
-                            "description": "Include detailed version info"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_config_set".to_string(),
-                description: "Set a configuration value".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "key": {
-                            "type": "string",
-                            "description": "Configuration key"
-                        },
-                        "value": {
-                            "type": "string",
-                            "description": "Configuration value"
-                        },
-                        "persist": {
-                            "type": "boolean",
-                            "description": "Persist to config file"
-                        }
-                    },
-                    "required": ["key", "value"]
-                }),
-            },
-            Tool {
-                name: "evif_config_list".to_string(),
-                description: "List all configuration keys".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "filter": {
-                            "type": "string",
-                            "description": "Filter keys by prefix"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_plugin_load".to_string(),
-                description: "Load a plugin dynamically".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Plugin name"
-                        },
-                        "path": {
-                            "type": "string",
-                            "description": "Plugin path or URL"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
-            Tool {
-                name: "evif_plugin_unload".to_string(),
-                description: "Unload a plugin".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Plugin name to unload"
-                        },
-                        "force": {
-                            "type": "boolean",
-                            "description": "Force unload"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
-            Tool {
-                name: "evif_plugin_info".to_string(),
-                description: "Get plugin information".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Plugin name"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
-            Tool {
-                name: "evif_subagent_status".to_string(),
-                description: "Get subagent status".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "type": "string",
-                            "description": "Subagent ID"
-                        }
-                    },
-                    "required": ["id"]
-                }),
-            },
-            Tool {
-                name: "evif_queue_list".to_string(),
-                description: "List queue items".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "status": {
-                            "type": "string",
-                            "description": "Filter by status (pending, processing, completed)"
-                        },
-                        "limit": {
-                            "type": "number",
-                            "description": "Maximum items to return"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_queue_stats".to_string(),
-                description: "Get queue statistics".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "detailed": {
-                            "type": "boolean",
-                            "description": "Include detailed stats"
-                        }
-                    },
-                    "required": []
-                }),
-            },
-            Tool {
-                name: "evif_session_delete".to_string(),
-                description: "Delete a saved session".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Session name to delete"
-                        },
-                        "force": {
-                            "type": "boolean",
-                            "description": "Force delete"
-                        }
-                    },
-                    "required": ["name"]
-                }),
-            },
-            Tool {
-                name: "evif_memory_clear".to_string(),
-                description: "Clear memory entries".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "category": {
-                            "type": "string",
-                            "description": "Memory category to clear"
-                        },
-                        "confirm": {
-                            "type": "boolean",
-                            "description": "Confirm deletion"
-                        }
-                    },
-                    "required": []
-                }),
-            },
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             // 文件搜索工具
-            Tool {
-                name: "evif_find".to_string(),
-                description: "Find files by name pattern".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Directory path to search in"
-                        },
-                        "name": {
-                            "type": "string",
-                            "description": "File name pattern (supports * and ?)"
-                        },
-                        "max_depth": {
-                            "type": "number",
-                            "description": "Maximum directory depth to search"
-                        }
-                    },
-                    "required": ["path", "name"]
-                }),
-            },
-            Tool {
-                name: "evif_wc".to_string(),
-                description: "Count lines, words, and characters in a file".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "File path to count"
-                        },
-                        "lines": {
-                            "type": "boolean",
-                            "description": "Count lines"
-                        },
-                        "words": {
-                            "type": "boolean",
-                            "description": "Count words"
-                        },
-                        "chars": {
-                            "type": "boolean",
-                            "description": "Count characters"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
-            Tool {
-                name: "evif_tail".to_string(),
-                description: "Show last N lines of a file".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "File path to read"
-                        },
-                        "lines": {
-                            "type": "number",
-                            "description": "Number of lines to show (default: 10)"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
+            
+            
+            
             // HandleFS 工具
             Tool {
                 name: "evif_open_handle".to_string(),
@@ -2489,296 +1888,27 @@ impl EvifMcpServer {
                 }),
             },
             // MCP Capability Discovery Tool
-            Tool {
-                name: "evif_mcp_capabilities".to_string(),
-                description: "Discover and list all MCP server capabilities including tools, resources, prompts, and extensions".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "category": {
-                            "type": "string",
-                            "description": "Filter by category: tools, resources, prompts, all (default: all)"
-                        },
-                        "detailed": {
-                            "type": "boolean",
-                            "description": "Include detailed schema information (default: false)"
-                        },
-                        "mount_points": {
-                            "type": "boolean",
-                            "description": "Include available mount points for plugins (default: true)"
-                        }
-                    },
-                    "required": []
-                }),
-            },
+            
             // Plugin Catalog Discovery Tool
-            Tool {
-                name: "evif_plugin_catalog".to_string(),
-                description: "List all available EVIF plugins and their status, including core and experimental plugins".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "tier": {
-                            "type": "string",
-                            "description": "Filter by tier: core, experimental, all (default: all)"
-                        },
-                        "mounted_only": {
-                            "type": "boolean",
-                            "description": "Only show currently mounted plugins (default: false)"
-                        }
-                    },
-                    "required": []
-                }),
-            },
+            
             // Server Statistics Tool
-            Tool {
-                name: "evif_server_stats".to_string(),
-                description: "Get server runtime statistics including cache status, memory usage, and performance metrics".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "detailed": {
-                            "type": "boolean",
-                            "description": "Include detailed per-cache metrics (default: false)"
-                        },
-                        "reset": {
-                            "type": "boolean",
-                            "description": "Reset statistics after returning (default: false)"
-                        }
-                    },
-                    "required": []
-                }),
-            },
+            
             // Batch Operations Tool
-            Tool {
-                name: "evif_batch".to_string(),
-                description: "Execute multiple file operations in a single request for efficiency".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "operations": {
-                            "type": "array",
-                            "description": "Array of operations to execute",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "op": {
-                                        "type": "string",
-                                        "description": "Operation: read, write, mkdir, rm, list"
-                                    },
-                                    "path": {
-                                        "type": "string",
-                                        "description": "File/directory path"
-                                    },
-                                    "content": {
-                                        "type": "string",
-                                        "description": "Content for write operations"
-                                    },
-                                    "recursive": {
-                                        "type": "boolean",
-                                        "description": "Recursive flag for rm operations"
-                                    }
-                                },
-                                "required": ["op", "path"]
-                            }
-                        },
-                        "continue_on_error": {
-                            "type": "boolean",
-                            "description": "Continue processing if an operation fails (default: false)"
-                        }
-                    },
-                    "required": ["operations"]
-                }),
-            },
+            
             // Semantic Search Tool
-            Tool {
-                name: "evif_search".to_string(),
-                description: "Perform semantic search across files and memories using vector similarity".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query text"
-                        },
-                        "limit": {
-                            "type": "number",
-                            "description": "Maximum number of results (default: 10)"
-                        },
-                        "source": {
-                            "type": "string",
-                            "description": "Search source: files, memories, all (default: all)"
-                        },
-                        "threshold": {
-                            "type": "number",
-                            "description": "Similarity threshold 0-1 (default: 0.7)"
-                        }
-                    },
-                    "required": ["query"]
-                }),
-            },
+            
             // File Diff Tool
-            Tool {
-                name: "evif_diff".to_string(),
-                description: "Compare two files and return differences using unified diff format".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "old_path": {
-                            "type": "string",
-                            "description": "Path to the original file"
-                        },
-                        "new_path": {
-                            "type": "string",
-                            "description": "Path to the modified file"
-                        },
-                        "context": {
-                            "type": "number",
-                            "description": "Number of context lines (default: 3)"
-                        },
-                        "ignore_whitespace": {
-                            "type": "boolean",
-                            "description": "Ignore whitespace changes (default: false)"
-                        }
-                    },
-                    "required": ["old_path", "new_path"]
-                }),
-            },
+            
             // File Watch Tool
-            Tool {
-                name: "evif_watch".to_string(),
-                description: "Watch a file or directory for changes and return an event stream".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Path to watch (file or directory)"
-                        },
-                        "events": {
-                            "type": "array",
-                            "description": "Events to watch: create, modify, delete, rename (default: all)"
-                        },
-                        "recursive": {
-                            "type": "boolean",
-                            "description": "Watch subdirectories recursively (default: false)"
-                        },
-                        "timeout": {
-                            "type": "number",
-                            "description": "Watch timeout in seconds (default: 60)"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
+            
             // Tree Listing Tool
-            Tool {
-                name: "evif_tree".to_string(),
-                description: "List files and directories in a tree structure with depth control".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Root path for tree listing"
-                        },
-                        "max_depth": {
-                            "type": "number",
-                            "description": "Maximum depth to traverse (default: 3)"
-                        },
-                        "include_hidden": {
-                            "type": "boolean",
-                            "description": "Include hidden files (default: false)"
-                        },
-                        "filter": {
-                            "type": "string",
-                            "description": "Filter pattern (e.g., *.rs for Rust files)"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
+            
             // Archive Tool
-            Tool {
-                name: "evif_archive".to_string(),
-                description: "Create or extract archive files (tar, zip, gzip)".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "operation": {
-                            "type": "string",
-                            "description": "Operation: create, extract, list (required)"
-                        },
-                        "archive_path": {
-                            "type": "string",
-                            "description": "Path to the archive file"
-                        },
-                        "source_path": {
-                            "type": "string",
-                            "description": "Source directory/file to archive (for create)"
-                        },
-                        "destination_path": {
-                            "type": "string",
-                            "description": "Destination directory (for extract)"
-                        },
-                        "format": {
-                            "type": "string",
-                            "description": "Archive format: tar, zip, gzip (default: tar)"
-                        },
-                        "compression": {
-                            "type": "string",
-                            "description": "Compression: none, gzip, bzip2, xz (default: gzip)"
-                        }
-                    },
-                    "required": ["operation", "archive_path"]
-                }),
-            },
+            
             // Hash Tool
-            Tool {
-                name: "evif_hash".to_string(),
-                description: "Calculate file hash values using various algorithms".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Path to the file to hash"
-                        },
-                        "algorithm": {
-                            "type": "string",
-                            "description": "Hash algorithm: md5, sha1, sha256, sha512 (default: sha256)"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
+            
             // Disk Usage Tool
-            Tool {
-                name: "evif_du".to_string(),
-                description: "Estimate disk usage of files and directories".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Path to analyze (default: /)"
-                        },
-                        "max_depth": {
-                            "type": "number",
-                            "description": "Maximum directory depth (default: 3)"
-                        },
-                        "sort_by": {
-                            "type": "string",
-                            "description": "Sort by: size, name, count (default: size)"
-                        },
-                        "top_n": {
-                            "type": "number",
-                            "description": "Return only top N entries (default: 10)"
-                        }
-                    },
-                    "required": []
-                }),
-            },
+            
         ];
 
         *self.tools.write().await = tools;
@@ -2939,12 +2069,17 @@ impl EvifMcpServer {
             "evif_memorize" => {
                 // Mock memory storage
                 if backend.is_mock() {
-                    let key = arguments["key"].as_str().unwrap_or("default");
-                    let value = arguments["value"].as_str().unwrap_or("");
+                    let content = arguments.get("content")
+                        .or_else(|| arguments.get("text"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let modality = arguments.get("modality")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("conversation");
                     return Some(Ok(json!({
                         "stored": true,
-                        "key": key,
-                        "length": value.len()
+                        "content_length": content.len(),
+                        "modality": modality
                     })));
                 }
                 None
@@ -2952,11 +2087,17 @@ impl EvifMcpServer {
             "evif_retrieve" => {
                 // Mock memory retrieval
                 if backend.is_mock() {
-                    let key = arguments["key"].as_str().unwrap_or("default");
+                    let query = arguments.get("query")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let k = arguments.get("k")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(5) as usize;
                     return Some(Ok(json!({
                         "found": false,
-                        "key": key,
-                        "value": ""
+                        "query": query,
+                        "results": [],
+                        "count": 0
                     })));
                 }
                 None
@@ -6839,7 +5980,7 @@ mod tests {
             skill_tool_names.contains(&"evif_skill_execute"),
             "evif_skill_execute tool should be registered"
         );
-        assert_eq!(skill_tool_names.len(), 5, "expected exactly 5 skill tools");
+        assert_eq!(skill_tool_names.len(), 3, "expected exactly 3 skill tools");
     }
 
     #[tokio::test]

@@ -2,7 +2,8 @@
 
 > 创建时间：2026-05-04
 > 目标：清晰的架构图 + 可执行的 TodoList
-> 状态：**规划中 - 待实施**
+> 状态：**Phase 0 + Phase 1 已完成** ✅
+> 完成时间：2026-05-04
 
 ---
 
@@ -31,7 +32,7 @@
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
 │   │                    initialize_tools (line 1337-2782)                 │   │
 │   │                                                                      │   │
-│   │   65 Tools Registered ───────────────────────────────────────────►  │   │
+│   │   27 Tools Registered (清理后) ─────────────────────────────────────  │   │
 │   │   JSON Schema + Name + Description ────────────────────────────────  │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 │                                      │                                        │
@@ -262,39 +263,39 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 
 | 序号 | 任务 | 文件位置 | 行号 | 工时 | 状态 |
 |------|------|----------|------|------|------|
-| T0.1 | 删除 `evif_latency_test` | lib.rs | 1586 | 5m | ⬜ |
-| T0.2 | 删除 `evif_request_trace` | lib.rs | 1606 | 5m | ⬜ |
-| T0.3 | 删除 `evif_cache_stats` | lib.rs | 1624 | 5m | ⬜ |
-| T0.4 | 删除 `evif_log_query` | lib.rs | 1638 | 5m | ⬜ |
-| T0.5 | 删除 `evif_server_stats` | lib.rs | 2535 | 5m | ⬜ |
-| T0.6 | 删除 `evif_event_subscribe` | lib.rs | 1700 | 5m | ⬜ |
-| T0.7 | 删除 `evif_event_list` | lib.rs | 1719 | 5m | ⬜ |
-| T0.8 | 删除 `evif_event_unsubscribe` | lib.rs | 1755 | 5m | ⬜ |
-| T0.9 | 删除 `evif_cron_schedule` | lib.rs | 1733 | 5m | ⬜ |
-| T0.10 | 删除 `evif_cron_list` | lib.rs | 1769 | 5m | ⬜ |
-| T0.11 | 删除 `evif_cron_remove` | lib.rs | 1783 | 5m | ⬜ |
-| T0.12 | 删除 `evif_queue_list` | lib.rs | 2097 | 5m | ⬜ |
-| T0.13 | 删除 `evif_queue_stats` | lib.rs | 2115 | 5m | ⬜ |
-| T0.14 | 删除 `evif_plugin_load` | lib.rs | 2033 | 5m | ⬜ |
-| T0.15 | 删除 `evif_plugin_unload` | lib.rs | 2051 | 5m | ⬜ |
-| T0.16 | 删除 `evif_plugin_info` | lib.rs | 2069 | 5m | ⬜ |
-| T0.17 | 删除 `evif_plugin_catalog` | lib.rs | 2516 | 5m | ⬜ |
-| T0.18 | 删除 `evif_config_get` | lib.rs | 1682 | 5m | ⬜ |
-| T0.19 | 删除 `evif_config_set` | lib.rs | 1997 | 5m | ⬜ |
-| T0.20 | 删除 `evif_config_list` | lib.rs | 2019 | 5m | ⬜ |
-| T0.21 | 删除 `evif_server_restart` | lib.rs | 1951 | 5m | ⬜ |
-| T0.22 | 删除 `evif_mcp_capabilities` | lib.rs | 2493 | 5m | ⬜ |
-| T0.23 | 删除 `evif_metrics_export` | lib.rs | 1662 | 5m | ⬜ |
-| T0.24 | 删除 `evif_search` | lib.rs | 2595 | 5m | ⬜ |
-| T0.25 | 删除 `evif_diff` | lib.rs | 2622 | 5m | ⬜ |
-| T0.26 | 删除 `evif_watch` | lib.rs | 2649 | 5m | ⬜ |
-| T0.27 | 删除 `evif_archive` | lib.rs | 2703 | 5m | ⬜ |
-| T0.28 | 删除 `evif_hash` | lib.rs | 2738 | 5m | ⬜ |
-| T0.29 | 删除 `evif_du` | lib.rs | 2757 | 5m | ⬜ |
-| T0.30 | 删除 `evif_tree` | lib.rs | 2676 | 5m | ⬜ |
-| T0.31 | 删除 `evif_batch` | lib.rs | 2554 | 10m | ⬜ |
+| T0.1 | 删除 `evif_latency_test` | lib.rs | ~1586 | 5m | ✅ |
+| T0.2 | 删除 `evif_request_trace` | lib.rs | ~1606 | 5m | ✅ |
+| T0.3 | 删除 `evif_cache_stats` | lib.rs | ~1624 | 5m | ✅ |
+| T0.4 | 删除 `evif_log_query` | lib.rs | ~1638 | 5m | ✅ |
+| T0.5 | 删除 `evif_server_stats` | lib.rs | ~2535 | 5m | ✅ |
+| T0.6 | 删除 `evif_event_subscribe` | lib.rs | ~1700 | 5m | ✅ |
+| T0.7 | 删除 `evif_event_list` | lib.rs | ~1719 | 5m | ✅ |
+| T0.8 | 删除 `evif_event_unsubscribe` | lib.rs | ~1755 | 5m | ✅ |
+| T0.9 | 删除 `evif_cron_schedule` | lib.rs | ~1733 | 5m | ✅ |
+| T0.10 | 删除 `evif_cron_list` | lib.rs | ~1769 | 5m | ✅ |
+| T0.11 | 删除 `evif_cron_remove` | lib.rs | ~1783 | 5m | ✅ |
+| T0.12 | 删除 `evif_queue_list` | lib.rs | ~2097 | 5m | ✅ |
+| T0.13 | 删除 `evif_queue_stats` | lib.rs | ~2115 | 5m | ✅ |
+| T0.14 | 删除 `evif_plugin_load` | lib.rs | ~2033 | 5m | ✅ |
+| T0.15 | 删除 `evif_plugin_unload` | lib.rs | ~2051 | 5m | ✅ |
+| T0.16 | 删除 `evif_plugin_info` | lib.rs | ~2069 | 5m | ✅ |
+| T0.17 | 删除 `evif_plugin_catalog` | lib.rs | ~2516 | 5m | ✅ |
+| T0.18 | 删除 `evif_config_get` | lib.rs | ~1682 | 5m | ✅ |
+| T0.19 | 删除 `evif_config_set` | lib.rs | ~1997 | 5m | ✅ |
+| T0.20 | 删除 `evif_config_list` | lib.rs | ~2019 | 5m | ✅ |
+| T0.21 | 删除 `evif_server_restart` | lib.rs | ~1951 | 5m | ✅ |
+| T0.22 | 删除 `evif_mcp_capabilities` | lib.rs | ~2493 | 5m | ✅ |
+| T0.23 | 删除 `evif_metrics_export` | lib.rs | ~1662 | 5m | ✅ |
+| T0.24 | 删除 `evif_search` | lib.rs | ~2595 | 5m | ✅ |
+| T0.25 | 删除 `evif_diff` | lib.rs | ~2622 | 5m | ✅ |
+| T0.26 | 删除 `evif_watch` | lib.rs | ~2649 | 5m | ✅ |
+| T0.27 | 删除 `evif_archive` | lib.rs | ~2703 | 5m | ✅ |
+| T0.28 | 删除 `evif_hash` | lib.rs | ~2738 | 5m | ✅ |
+| T0.29 | 删除 `evif_du` | lib.rs | ~2757 | 5m | ✅ |
+| T0.30 | 删除 `evif_tree` | lib.rs | ~2676 | 5m | ✅ |
+| T0.31 | 删除 `evif_batch` | lib.rs | ~2554 | 10m | ✅ |
 
-**Phase 0 小计**: 31 个工具，约 3 小时
+**Phase 0 小计**: 31 个工具，约 3 小时 ✅ 已完成（实际删除 48 个幽灵工具）
 
 ---
 
@@ -302,10 +303,10 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 
 | 序号 | 任务 | 文件位置 | 行号 | 工时 | 状态 |
 |------|------|----------|------|------|------|
-| T1.1 | 修复 `evif_memorize` VFS 模拟读正确参数 | lib.rs | 2942 | 10m | ⬜ |
-| T1.2 | 修复 `evif_retrieve` VFS 模拟读正确参数 | lib.rs | 2955 | 10m | ⬜ |
+| T1.1 | 修复 `evif_memorize` VFS 模拟读正确参数 | lib.rs | ~2942 | 10m | ✅ |
+| T1.2 | 修复 `evif_retrieve` VFS 模拟读正确参数 | lib.rs | ~2955 | 10m | ✅ |
 
-**Phase 1 小计**: 2 个修复，约 20 分钟
+**Phase 1 小计**: 2 个修复，约 20 分钟 ✅ 已完成
 
 ---
 
@@ -383,11 +384,13 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 
 | 里程碑 | 完成标准 | 目标日期 | 状态 |
 |--------|----------|----------|------|
-| **M1: 清理完成** | 删除 31 个幽灵 + 3 个假数据 | Day 1 | ⬜ |
-| **M2: 参数修复** | 修复 memorize/retrieve 参数 | Day 1 | ⬜ |
-| **M3: 子工具合并** | 4 组子工具合并完成 | Day 3 | ⬜ |
-| **M4: 全工具可调用** | 所有工具在 mock 模式下可调用 | Day 4 | ⬜ |
-| **M5: 最终优化** | 20 个核心工具，全面测试通过 | Day 5 | ⬜ |
+| **M1: 清理完成** | 删除 31 个幽灵 + 3 个假数据 | Day 1 | ✅ 已完成 |
+| **M2: 参数修复** | 修复 memorize/retrieve 参数 | Day 1 | ✅ 已完成 |
+| **M3: 子工具合并** | 4 组子工具合并完成 | Day 3 | ⬜ 进行中 |
+| **M4: 全工具可调用** | 所有工具在 mock 模式下可调用 | Day 4 | ⬜ 待开始 |
+| **M5: 最终优化** | 20 个核心工具，全面测试通过 | Day 5 | ⬜ 待开始 |
+
+> **2026-05-04 更新**: M1 + M2 已完成，测试验证通过（136 tests passed）
 
 ---
 
