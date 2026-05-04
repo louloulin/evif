@@ -254,6 +254,35 @@ pub struct VfsFileInfo {
     pub created: String,
 }
 
+/// 记忆存储结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryResult {
+    pub id: String,
+    pub stored: bool,
+    pub content_length: u64,
+    pub modality: String,
+    pub created_at: String,
+}
+
+/// 记忆搜索结果条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemorySearchResultEntry {
+    pub id: String,
+    pub score: f32,
+    pub content: String,
+    pub modality: String,
+    pub created_at: String,
+}
+
+/// 记忆搜索结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemorySearchResult {
+    pub found: bool,
+    pub query: String,
+    pub results: Vec<MemorySearchResultEntry>,
+    pub count: usize,
+}
+
 /// VFS 后端 - 支持直接 VFS 调用和 HTTP 桥接两种模式
 ///
 /// 直接 VFS 模式优势:
@@ -269,6 +298,16 @@ pub struct VfsBackend {
     http_client: Client,
     /// Mock 文件系统 (用于测试模式)
     mock_fs: Option<Mutex<std::collections::HashMap<String, String>>>,
+    /// Mock 记忆存储 (用于测试模式)
+    mock_memory: Option<Mutex<Vec<MemoryEntry>>>,
+}
+
+/// Memory entry for mock storage
+#[derive(Clone, Debug)]
+struct MemoryEntry {
+    content: String,
+    modality: String,
+    created_at: String,
 }
 
 impl VfsBackend {
@@ -284,6 +323,7 @@ impl VfsBackend {
             http_url: evif_url,
             http_client,
             mock_fs: None,
+            mock_memory: None,
         }
     }
 
@@ -299,11 +339,26 @@ impl VfsBackend {
         mock_fs_map.insert("/skills/evif-ls".to_string(), "# EVIF LS Skill\nA skill for listing files.".to_string());
         mock_fs_map.insert("/hello".to_string(), "Hello from EVIF!".to_string());
 
+        // 添加一些测试记忆
+        let mock_memory = vec![
+            MemoryEntry {
+                content: "EVIF MCP server provides 18 unified tools".to_string(),
+                modality: "conversation".to_string(),
+                created_at: "2026-05-04T10:00:00Z".to_string(),
+            },
+            MemoryEntry {
+                content: "Remember to review code before committing".to_string(),
+                modality: "task".to_string(),
+                created_at: "2026-05-04T09:30:00Z".to_string(),
+            },
+        ];
+
         Self {
             mode: VfsMode::Mock,
             http_url: String::new(),
             http_client: Client::new(),
             mock_fs: Some(Mutex::new(mock_fs_map)),
+            mock_memory: Some(Mutex::new(mock_memory)),
         }
     }
 
@@ -578,6 +633,143 @@ impl VfsBackend {
     /// 检查后端是否可用
     pub fn is_available(&self) -> bool {
         self.mock_fs.is_some() || !self.http_url.is_empty()
+    }
+
+    /// 存储记忆 (Mock 模式真实实现)
+    pub async fn memorize(&self, content: &str, modality: &str) -> Result<MemoryResult, String> {
+        if let Some(ref mock_memory) = self.mock_memory {
+            let mut memory = mock_memory.lock().map_err(|e| e.to_string())?;
+            let now = chrono::Utc::now().to_rfc3339();
+            let id = format!("mem-{:03}", memory.len() + 1);
+            memory.push(MemoryEntry {
+                content: content.to_string(),
+                modality: modality.to_string(),
+                created_at: now.clone(),
+            });
+            return Ok(MemoryResult {
+                id,
+                stored: true,
+                content_length: content.len() as u64,
+                modality: modality.to_string(),
+                created_at: now,
+            });
+        }
+
+        // HTTP 模式
+        let url = format!("{}/api/v1/memories", self.http_url);
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&json!({
+                "content": content,
+                "modality": modality
+            }))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to memorize: {}", e))?;
+
+        let body: Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(MemoryResult {
+            id: body["id"].as_str().unwrap_or("").to_string(),
+            stored: body["stored"].as_bool().unwrap_or(true),
+            content_length: body["content_length"].as_u64().unwrap_or(content.len() as u64),
+            modality: modality.to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+        })
+    }
+
+    /// 检索记忆 (Mock 模式真实实现)
+    pub async fn retrieve(&self, query: &str, k: usize) -> Result<MemorySearchResult, String> {
+        if let Some(ref mock_memory) = self.mock_memory {
+            let memory = mock_memory.lock().map_err(|e| e.to_string())?;
+            // 简单的关键词匹配
+            let query_lower = query.to_lowercase();
+            let mut results: Vec<MemorySearchResultEntry> = memory
+                .iter()
+                .filter(|m| m.content.to_lowercase().contains(&query_lower))
+                .take(k)
+                .enumerate()
+                .map(|(i, m)| MemorySearchResultEntry {
+                    id: format!("mem-{:03}", i + 1),
+                    score: 1.0 - (i as f32 * 0.1), // Mock relevance scores
+                    content: m.content.clone(),
+                    modality: m.modality.clone(),
+                    created_at: m.created_at.clone(),
+                })
+                .collect();
+
+            if results.is_empty() {
+                // 如果没有精确匹配，返回前 k 条作为相关结果
+                results = memory
+                    .iter()
+                    .take(k)
+                    .enumerate()
+                    .map(|(i, m)| MemorySearchResultEntry {
+                        id: format!("mem-{:03}", i + 1),
+                        score: 0.5, // 较低的相关性分数
+                        content: m.content.clone(),
+                        modality: m.modality.clone(),
+                        created_at: m.created_at.clone(),
+                    })
+                    .collect();
+            }
+
+            let count = results.len();
+            return Ok(MemorySearchResult {
+                found: !results.is_empty(),
+                query: query.to_string(),
+                results,
+                count,
+            });
+        }
+
+        // HTTP 模式
+        let url = format!("{}/api/v1/memories/search", self.http_url);
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&json!({
+                "query": query,
+                "k": k
+            }))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to retrieve: {}", e))?;
+
+        let body: Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        let results: Vec<MemorySearchResultEntry> = body["results"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|r| MemorySearchResultEntry {
+                id: r["id"].as_str().unwrap_or("").to_string(),
+                score: r["score"].as_f64().unwrap_or(0.0) as f32,
+                content: r["content"].as_str().unwrap_or("").to_string(),
+                modality: r["modality"].as_str().unwrap_or("conversation").to_string(),
+                created_at: r["created_at"].as_str().unwrap_or("").to_string(),
+            })
+            .collect();
+
+        let count = results.len();
+        Ok(MemorySearchResult {
+            found: !results.is_empty(),
+            query: query.to_string(),
+            results,
+            count,
+        })
+    }
+
+    /// 搜索记忆 (简化的别名)
+    pub async fn search_memories(&self, query: &str, k: usize) -> Result<MemorySearchResult, String> {
+        self.retrieve(query, k).await
     }
 }
 
@@ -2005,41 +2197,50 @@ impl EvifMcpServer {
                 }
             }
             "evif_memorize" => {
-                // Mock memory storage
-                if backend.is_mock() {
-                    let content = arguments.get("content")
-                        .or_else(|| arguments.get("text"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    let modality = arguments.get("modality")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("conversation");
-                    return Some(Ok(json!({
-                        "stored": true,
-                        "content_length": content.len(),
-                        "modality": modality
-                    })));
+                // 真实记忆存储 (使用 VfsBackend 的内存存储)
+                let content = arguments.get("content")
+                    .or_else(|| arguments.get("text"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let modality = arguments.get("modality")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("conversation");
+
+                match backend.memorize(content, modality).await {
+                    Ok(result) => Some(Ok(json!({
+                        "id": result.id,
+                        "stored": result.stored,
+                        "content_length": result.content_length,
+                        "modality": result.modality,
+                        "created_at": result.created_at
+                    }))),
+                    Err(e) => Some(Err(e)),
                 }
-                None
             }
             "evif_retrieve" => {
-                // Mock memory retrieval
-                if backend.is_mock() {
-                    let query = arguments.get("query")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    let k = arguments.get("k")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(5);
-                    return Some(Ok(json!({
-                        "found": false,
-                        "query": query,
-                        "k": k,
-                        "results": [],
-                        "count": 0
-                    })));
+                // 真实记忆检索 (使用 VfsBackend 的内存存储)
+                let query = arguments.get("query")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let k = arguments.get("k")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(5) as usize;
+
+                match backend.retrieve(query, k).await {
+                    Ok(result) => Some(Ok(json!({
+                        "found": result.found,
+                        "query": result.query,
+                        "results": result.results.into_iter().map(|r| json!({
+                            "id": r.id,
+                            "score": r.score,
+                            "content": r.content,
+                            "modality": r.modality,
+                            "created_at": r.created_at
+                        })).collect::<Vec<_>>(),
+                        "count": result.count
+                    }))),
+                    Err(e) => Some(Err(e)),
                 }
-                None
             }
             "evif_skill" => {
                 // Mock skill operations
@@ -2687,23 +2888,33 @@ impl EvifMcpServer {
                 None
             }
             "evif_memory_search" => {
-                // Search memories
-                if backend.is_mock() {
-                    let query = arguments["query"].as_str().unwrap_or("");
-                    let _limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
-                    let filter = arguments["filter"].as_str().unwrap_or("all");
+                // 真实记忆搜索 (使用 VfsBackend 的内存存储)
+                let query = arguments["query"].as_str().unwrap_or("");
+                let limit = arguments["limit"].as_u64().unwrap_or(10) as usize;
+                let filter = arguments["filter"].as_str().unwrap_or("all");
 
-                    return Some(Ok(json!({
-                        "query": query,
-                        "results": [
-                            {"key": "mem-001", "score": 0.95, "content": format!("Memory about {}", query)},
-                            {"key": "mem-002", "score": 0.87, "content": format!("Related to {}", query)}
-                        ],
-                        "total": 2,
-                        "filter": filter
-                    })));
+                match backend.search_memories(query, limit).await {
+                    Ok(result) => {
+                        // Apply filter if specified and collect to JSON
+                        let results_json: Vec<_> = result.results.iter()
+                            .filter(|r| filter == "all" || r.modality == filter)
+                            .map(|r| json!({
+                                "id": r.id,
+                                "score": r.score,
+                                "content": r.content,
+                                "modality": r.modality
+                            }))
+                            .collect();
+
+                        Some(Ok(json!({
+                            "query": result.query,
+                            "results": results_json,
+                            "total": results_json.len(),
+                            "filter": filter
+                        })))
+                    }
+                    Err(e) => Some(Err(e)),
                 }
-                None
             }
             "evif_memory_stats" => {
                 // Get memory statistics
