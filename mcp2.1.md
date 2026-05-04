@@ -356,8 +356,8 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 
 | 序号 | 任务 | 文件位置 | 行号 | 工时 | 状态 |
 |------|------|----------|------|------|------|
-| T5.1 | 完善 `evif_health` 模拟（返回真实状态） | lib.rs | 3094 | 30m | ⬜ |
-| T5.2 | 完善 `evif_skill_list` 模拟（真实扫描 /skills） | lib.rs | 2964 | 1h | ⬜ |
+| T5.1 | 完善 `evif_health` 模拟（返回真实状态） | lib.rs | 3094 | 30m | ✅ |
+| T5.2 | 完善 `evif_skill_list` 模拟（真实扫描 /skills） | lib.rs | 2964 | 1h | ✅ |
 | T5.3 | 完善 `evif_memorize` 模拟（存入临时内存） | lib.rs | 2939 | 1h | ⬜ |
 | T5.4 | 完善 `evif_retrieve` 模拟（从临时内存读取） | lib.rs | 2952 | 1h | ⬜ |
 

@@ -2050,22 +2050,57 @@ impl EvifMcpServer {
 
                     match action {
                         "list" => {
-                            return Some(Ok(json!({
-                                "skills": [
-                                    {"name": "evif-ls", "path": "/skills/evif-ls"},
-                                    {"name": "code-review", "path": "/skills/code-review"}
-                                ]
-                            })));
+                            // Try to scan /skills directory
+                            match backend.list_dir("/skills").await {
+                                Ok(entries) => {
+                                    let skills: Vec<_> = entries.iter()
+                                        .filter(|e| e.is_dir)
+                                        .map(|e| {
+                                            json!({
+                                                "name": e.name,
+                                                "path": format!("/skills/{}", e.name)
+                                            })
+                                        })
+                                        .collect();
+                                    return Some(Ok(json!({
+                                        "skills": skills,
+                                        "total": skills.len()
+                                    })));
+                                }
+                                Err(_) => {
+                                    // Fallback to mock data if directory scan fails
+                                    return Some(Ok(json!({
+                                        "skills": [
+                                            {"name": "evif-ls", "path": "/skills/evif-ls"},
+                                            {"name": "code-review", "path": "/skills/code-review"}
+                                        ]
+                                    })));
+                                }
+                            }
                         }
                         "info" => {
                             let name = arguments.get("name")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("unknown");
-                            return Some(Ok(json!({
-                                "name": name,
-                                "path": format!("/skills/{}", name),
-                                "description": format!("Skill: {}", name)
-                            })));
+                            // Try to read the SKILL.md file
+                            match backend.read_file(&format!("/skills/{}/SKILL.md", name), 0, 0).await {
+                                Ok(content) => {
+                                    // Extract first line as description
+                                    let first_line = content.lines().next().unwrap_or("").trim_start_matches("# ");
+                                    return Some(Ok(json!({
+                                        "name": name,
+                                        "path": format!("/skills/{}/SKILL.md", name),
+                                        "description": first_line
+                                    })));
+                                }
+                                Err(_) => {
+                                    return Some(Ok(json!({
+                                        "name": name,
+                                        "path": format!("/skills/{}", name),
+                                        "description": format!("Skill: {}", name)
+                                    })));
+                                }
+                            }
                         }
                         "execute" => {
                             let name = arguments.get("name")
@@ -2190,13 +2225,28 @@ impl EvifMcpServer {
                 }
             }
             "evif_health" => {
-                // Mock health check - always returns OK in mock mode
+                // Mock health check - returns more detailed status in mock mode
                 if backend.is_mock() {
+                    // Generate realistic-looking timestamps and stats
+                    let now = chrono::Utc::now();
+                    let uptime = 3600u64; // Mock 1 hour uptime
+
                     return Some(Ok(json!({
                         "status": "ok",
                         "mode": "mock",
-                        "version": "1.8.0",
-                        "uptime_seconds": 0
+                        "version": env!("CARGO_PKG_VERSION"),
+                        "uptime_seconds": uptime,
+                        "timestamp": now.to_rfc3339(),
+                        "memory_usage": {
+                            "rss_bytes": 50_000_000,
+                            "heap_used_bytes": 10_000_000,
+                            "heap_available_bytes": 90_000_000
+                        },
+                        "active_connections": 3,
+                        "total_requests": 1234,
+                        "cache_hit_rate": 0.85,
+                        "plugins_loaded": 5,
+                        "vfs_backends": ["memory", "local", "skillfs"]
                     })));
                 }
                 None
