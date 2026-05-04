@@ -345,7 +345,7 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 | T4.1 | 为 `evif_grep` 添加 VFS 模拟 | lib.rs | 4762 | 1h | ✅ |
 | T4.2 | 为 `evif_skill_create` 添加 HTTP | lib.rs | 3457 | 30m | ✅ (已合并到 evif_skill action) |
 | T4.3 | 为 `evif_skill_delete` 添加 HTTP | lib.rs | 3474 | 30m | ✅ (已合并到 evif_skill action) |
-| T4.4 | 为 `evif_memory_search` 添加 HTTP | lib.rs | 3489 | 30m | ⬜ |
+| T4.4 | 为 `evif_memory_search` 添加 HTTP | lib.rs | 3489 | 30m | ✅ |
 | T4.5 | 修复 `evif_batch` 阻塞 bug 或删除 | lib.rs | 4032-4156 | 2h | ⬜ |
 
 **Phase 4 小计**: 5 个任务，约 4.5 小时

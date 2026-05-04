@@ -4285,6 +4285,35 @@ impl EvifMcpServer {
                 }
             }
 
+            // Memory tools - search
+            "evif_memory_search" => {
+                let query = arguments["query"]
+                    .as_str()
+                    .ok_or("Missing 'query' argument")?;
+                let limit = arguments["limit"].as_u64().unwrap_or(10) as usize;
+                let filter = arguments["filter"].as_str().unwrap_or("all");
+
+                let url = format!("{}/api/v1/memories/search", self.config.evif_url);
+                let response = self
+                    .client
+                    .post(&url)
+                    .json(&json!({
+                        "query": query,
+                        "k": limit,
+                        "filter": filter
+                    }))
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to search memories: {}", e))?;
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+                Ok(result)
+            }
+
             // Phase 15.1: CLAUDE.md auto-generation
             "evif_claude_md_generate" => {
                 let project_path = arguments["path"].as_str().unwrap_or("/");
