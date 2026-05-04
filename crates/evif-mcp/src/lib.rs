@@ -1489,50 +1489,32 @@ impl EvifMcpServer {
                     "required": ["src", "dst"]
                 }),
             },
-            // 插件管理工具
+            // 插件管理工具 (统一: mount/unmount/list)
             Tool {
                 name: "evif_mount".to_string(),
-                description: "Mount a plugin".to_string(),
+                description: "Manage plugin mounts: mount, unmount, or list mount points".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["mount", "unmount", "list"],
+                            "description": "Action to perform: mount (attach plugin), unmount (detach), list (show all mounts)"
+                        },
                         "plugin": {
                             "type": "string",
-                            "description": "Plugin name"
+                            "description": "Plugin name (required for mount action)"
                         },
                         "path": {
                             "type": "string",
-                            "description": "Mount path"
+                            "description": "Mount path (required for mount/unmount actions)"
                         },
                         "config": {
                             "type": "object",
-                            "description": "Plugin configuration"
+                            "description": "Plugin configuration (optional, for mount action)"
                         }
                     },
-                    "required": ["plugin", "path"]
-                }),
-            },
-            Tool {
-                name: "evif_unmount".to_string(),
-                description: "Unmount a plugin".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Mount path to unmount"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
-            Tool {
-                name: "evif_mounts".to_string(),
-                description: "List all mount points".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {},
-                    "required": []
+                    "required": ["action"]
                 }),
             },
             // 高级工具
@@ -2174,6 +2156,52 @@ impl EvifMcpServer {
                         "version": "1.8.0",
                         "uptime_seconds": 0
                     })));
+                }
+                None
+            }
+            "evif_mount" => {
+                // Mock mount operations
+                if backend.is_mock() {
+                    let action = arguments.get("action")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("list");
+
+                    match action {
+                        "list" => {
+                            return Some(Ok(json!({
+                                "mounts": [
+                                    {"path": "/tmp", "plugin": "localfs", "status": "active"},
+                                    {"path": "/mnt/s3", "plugin": "s3fs", "status": "active"}
+                                ]
+                            })));
+                        }
+                        "mount" => {
+                            let plugin = arguments.get("plugin")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
+                            let path = arguments.get("path")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("/");
+                            return Some(Ok(json!({
+                                "mounted": true,
+                                "path": path,
+                                "plugin": plugin,
+                                "status": "active"
+                            })));
+                        }
+                        "unmount" => {
+                            let path = arguments.get("path")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("/");
+                            return Some(Ok(json!({
+                                "unmounted": true,
+                                "path": path
+                            })));
+                        }
+                        _ => {
+                            return Some(Err(format!("Unknown action: {}", action)));
+                        }
+                    }
                 }
                 None
             }
@@ -2899,8 +2927,6 @@ impl EvifMcpServer {
                             {"name": "evif_mv", "category": "file_ops"},
                             {"name": "evif_cp", "category": "file_ops"},
                             {"name": "evif_mount", "category": "plugin"},
-                            {"name": "evif_unmount", "category": "plugin"},
-                            {"name": "evif_mounts", "category": "plugin"},
                             {"name": "evif_grep", "category": "search"},
                             {"name": "evif_open_handle", "category": "handle"},
                             {"name": "evif_close_handle", "category": "handle"},
@@ -3744,23 +3770,6 @@ impl EvifMcpServer {
                 Ok(result)
             }
 
-            "evif_mounts" => {
-                let url = format!("{}/api/v1/mounts", self.config.evif_url);
-                let response = self
-                    .client
-                    .get(&url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to list mounts: {}", e))?;
-
-                let mounts: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-                Ok(mounts)
-            }
-
             "evif_health" => {
                 let url = format!("{}/api/v1/health", self.config.evif_url);
                 let response = self
@@ -3779,55 +3788,79 @@ impl EvifMcpServer {
             }
 
             "evif_mount" => {
-                let plugin = arguments["plugin"]
+                let action = arguments["action"]
                     .as_str()
-                    .ok_or("Missing 'plugin' argument")?;
-                let path = arguments["path"]
-                    .as_str()
-                    .ok_or("Missing 'path' argument")?;
-                let config = arguments.get("config").cloned().unwrap_or(json!({}));
+                    .ok_or("Missing 'action' argument")?;
 
-                let url = format!("{}/api/v1/mount", self.config.evif_url);
-                let response = self
-                    .client
-                    .post(&url)
-                    .json(&json!({
-                        "plugin": plugin,
-                        "path": path,
-                        "config": config
-                    }))
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to mount plugin: {}", e))?;
+                match action {
+                    "list" => {
+                        let url = format!("{}/api/v1/mounts", self.config.evif_url);
+                        let response = self
+                            .client
+                            .get(&url)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to list mounts: {}", e))?;
 
-                let result: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+                        let mounts: Value = response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-                Ok(result)
-            }
+                        Ok(mounts)
+                    }
+                    "mount" => {
+                        let plugin = arguments["plugin"]
+                            .as_str()
+                            .ok_or("Missing 'plugin' argument for mount action")?;
+                        let path = arguments["path"]
+                            .as_str()
+                            .ok_or("Missing 'path' argument for mount action")?;
+                        let config = arguments.get("config").cloned().unwrap_or(json!({}));
 
-            "evif_unmount" => {
-                let path = arguments["path"]
-                    .as_str()
-                    .ok_or("Missing 'path' argument")?;
+                        let url = format!("{}/api/v1/mount", self.config.evif_url);
+                        let response = self
+                            .client
+                            .post(&url)
+                            .json(&json!({
+                                "plugin": plugin,
+                                "path": path,
+                                "config": config
+                            }))
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to mount plugin: {}", e))?;
 
-                let url = format!("{}/api/v1/unmount", self.config.evif_url);
-                let response = self
-                    .client
-                    .post(&url)
-                    .json(&json!({ "path": path }))
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to unmount: {}", e))?;
+                        let result: Value = response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-                let result: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+                        Ok(result)
+                    }
+                    "unmount" => {
+                        let path = arguments["path"]
+                            .as_str()
+                            .ok_or("Missing 'path' argument for unmount action")?;
 
-                Ok(result)
+                        let url = format!("{}/api/v1/unmount", self.config.evif_url);
+                        let response = self
+                            .client
+                            .post(&url)
+                            .json(&json!({ "path": path }))
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to unmount: {}", e))?;
+
+                        let result: Value = response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+                        Ok(result)
+                    }
+                    _ => Err(format!("Unknown action '{}'. Use: mount, unmount, or list", action)),
+                }
             }
 
             "evif_grep" => {
@@ -5783,6 +5816,7 @@ mod tests {
             .call_tool(
                 "evif_mount",
                 json!({
+                    "action": "mount",
                     "plugin": "s3fs",
                     "path": "/s3",
                     "config": {"region": "us-west-1"}
