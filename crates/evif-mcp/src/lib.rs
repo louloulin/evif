@@ -4030,32 +4030,31 @@ impl EvifMcpServer {
                 None
             }
             "evif_batch" => {
-                // Batch operations - execute multiple operations
+                // Batch operations - execute multiple operations in parallel
                 if backend.is_mock() {
                     let operations = arguments["operations"].as_array()
                         .map(|arr| arr.to_vec())
                         .unwrap_or_default();
                     let continue_on_error = arguments["continue_on_error"].as_bool().unwrap_or(false);
 
-                    let mut results: Vec<Value> = Vec::new();
-                    let mut has_error = false;
+                    // Create futures for all operations
+                    let op_futures: Vec<_> = operations.into_iter().map(|op| {
+                        let op_type = op.get("op").and_then(|v| v.as_str()).unwrap_or("read").to_string();
+                        let path = op.get("path").and_then(|v| v.as_str()).unwrap_or("/").to_string();
+                        let content = op.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        let recursive = op.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    for op in operations {
-                        let op_type = op.get("op").and_then(|v| v.as_str()).unwrap_or("read");
-                        let path = op.get("path").and_then(|v| v.as_str()).unwrap_or("/");
-
-                        let result = match op_type {
-                            "read" => {
-                                match backend.read_file(path, 0, 0).await {
-                                    Ok(content) => json!({
-                                        "op": "read",
-                                        "path": path,
-                                        "success": true,
-                                        "content": content
-                                    }),
-                                    Err(e) => {
-                                        has_error = true;
-                                        json!({
+                        async move {
+                            match op_type.as_str() {
+                                "read" => {
+                                    match backend.read_file(&path, 0, 0).await {
+                                        Ok(content) => json!({
+                                            "op": "read",
+                                            "path": path,
+                                            "success": true,
+                                            "content": content
+                                        }),
+                                        Err(e) => json!({
                                             "op": "read",
                                             "path": path,
                                             "success": false,
@@ -4063,18 +4062,15 @@ impl EvifMcpServer {
                                         })
                                     }
                                 }
-                            }
-                            "list" => {
-                                match backend.list_dir(path).await {
-                                    Ok(entries) => json!({
-                                        "op": "list",
-                                        "path": path,
-                                        "success": true,
-                                        "entries": entries
-                                    }),
-                                    Err(e) => {
-                                        has_error = true;
-                                        json!({
+                                "list" => {
+                                    match backend.list_dir(&path).await {
+                                        Ok(entries) => json!({
+                                            "op": "list",
+                                            "path": path,
+                                            "success": true,
+                                            "entries": entries
+                                        }),
+                                        Err(e) => json!({
                                             "op": "list",
                                             "path": path,
                                             "success": false,
@@ -4082,19 +4078,15 @@ impl EvifMcpServer {
                                         })
                                     }
                                 }
-                            }
-                            "write" => {
-                                let content = op.get("content").and_then(|v| v.as_str()).unwrap_or("");
-                                match backend.write_file(path, content).await {
-                                    Ok(write_result) => json!({
-                                        "op": "write",
-                                        "path": path,
-                                        "success": true,
-                                        "bytes_written": write_result.bytes_written
-                                    }),
-                                    Err(e) => {
-                                        has_error = true;
-                                        json!({
+                                "write" => {
+                                    match backend.write_file(&path, &content).await {
+                                        Ok(write_result) => json!({
+                                            "op": "write",
+                                            "path": path,
+                                            "success": true,
+                                            "bytes_written": write_result.bytes_written
+                                        }),
+                                        Err(e) => json!({
                                             "op": "write",
                                             "path": path,
                                             "success": false,
@@ -4102,17 +4094,14 @@ impl EvifMcpServer {
                                         })
                                     }
                                 }
-                            }
-                            "mkdir" => {
-                                match backend.make_dir(path, 0o755).await {
-                                    Ok(_) => json!({
-                                        "op": "mkdir",
-                                        "path": path,
-                                        "success": true
-                                    }),
-                                    Err(e) => {
-                                        has_error = true;
-                                        json!({
+                                "mkdir" => {
+                                    match backend.make_dir(&path, 0o755).await {
+                                        Ok(_) => json!({
+                                            "op": "mkdir",
+                                            "path": path,
+                                            "success": true
+                                        }),
+                                        Err(e) => json!({
                                             "op": "mkdir",
                                             "path": path,
                                             "success": false,
@@ -4120,18 +4109,14 @@ impl EvifMcpServer {
                                         })
                                     }
                                 }
-                            }
-                            "rm" => {
-                                let recursive = op.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
-                                match backend.remove(path, recursive).await {
-                                    Ok(_) => json!({
-                                        "op": "rm",
-                                        "path": path,
-                                        "success": true
-                                    }),
-                                    Err(e) => {
-                                        has_error = true;
-                                        json!({
+                                "rm" => {
+                                    match backend.remove(&path, recursive).await {
+                                        Ok(_) => json!({
+                                            "op": "rm",
+                                            "path": path,
+                                            "success": true
+                                        }),
+                                        Err(e) => json!({
                                             "op": "rm",
                                             "path": path,
                                             "success": false,
@@ -4139,30 +4124,32 @@ impl EvifMcpServer {
                                         })
                                     }
                                 }
-                            }
-                            _ => {
-                                has_error = true;
-                                json!({
+                                _ => json!({
                                     "op": op_type,
                                     "path": path,
                                     "success": false,
                                     "error": format!("Unknown operation: {}", op_type)
                                 })
                             }
-                        };
-
-                        results.push(result);
-
-                        if has_error && !continue_on_error {
-                            break;
                         }
-                    }
+                    }).collect::<Vec<_>>();
+
+                    // Execute all operations in parallel
+                    let results: Vec<Value> = if continue_on_error || !op_futures.is_empty() {
+                        // Parallel execution with futures::future::join_all
+                        futures::future::join_all(op_futures).await
+                    } else {
+                        op_futures.into_iter().map(|f| futures::executor::block_on(f)).collect()
+                    };
+
+                    let successful = results.iter().filter(|r| r.get("success").and_then(|v| v.as_bool()).unwrap_or(false)).count();
+                    let failed = results.len() - successful;
 
                     return Some(Ok(json!({
                         "results": results,
                         "total": results.len(),
-                        "successful": results.iter().filter(|r| r.get("success").and_then(|v| v.as_bool()).unwrap_or(false)).count(),
-                        "failed": results.iter().filter(|r| !r.get("success").and_then(|v| v.as_bool()).unwrap_or(true)).count()
+                        "successful": successful,
+                        "failed": failed
                     })));
                 }
                 None

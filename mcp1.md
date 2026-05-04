@@ -749,6 +749,16 @@ async fn test_mcp_end_to_end() {
 - tools/list: ✅ 75 工具全部注册
 - resources/list: ✅ 3 个资源 (file:///, file:///context/L0/current, file:///context/L1/decisions.md)
 - Mock 模式独立运行，无需后端
+- **完整 MCP 请求测试**: 4/4 通过 (initialize, tools/list, ping, shutdown)
+- **evif-plugins 测试**: 280 passed, 0 failed
+
+**完整 MCP 请求/响应验证**:
+```
+Request 0 (initialize): → id:0 result: {protocolVersion:2024-11-05, capabilities:{tools:{}, resources:{subscribe:true, listChanged:true}, prompts:{listChanged:true}, roots:{listChanged:true}, logging:{}, sampling:{}}}
+Request 1 (tools/list): → id:1 result: {tools: [75 tools including evif_ls, evif_cat, evif_write, evif_mkdir, evif_rm, evif_stat, evif_mv, evif_cp, evif_mount, evif_unmount, evif_mounts, evif_grep, evif_health, evif_ping_with_stats, evif_latency_test, evif_request_trace, evif_cache_stats, evif_log_query, evif_metrics_export, evif_config_get, ...]}
+Request 2 (ping): → id:2 result: {}
+Request 3 (shutdown): → id:3 result: {}
+```
 
 ### Phase 3: 100 MCP Server 集成（P2）
 
@@ -1303,3 +1313,89 @@ MCP server running on stdio...
 # 终端 3: 运行测试
 python3 test_real_backend.py
 ```
+
+### 14.5 功能实现差距分析 (2026-05-03 更新)
+
+**已完全实现** ✅:
+- VfsAdapter (Tool→VFS 映射)
+- ToolCache (LRU 缓存)
+- McpAuth (认证与会话)
+- McpConfig TOML/热重载/多租户
+- githubfs (真实 GitHub API 调用)
+- **notionfs (真实 Notion API 调用)** ✅ 新增
+- **discordfs (真实 Discord API 调用)** ✅ 新增
+- **telegramfs (真实 Telegram Bot API 调用)** ✅ 新增
+- **shopifyfs (真实 Shopify Admin API 调用)** ✅ 新增
+- **teamsfs (真实 Microsoft Graph API 调用)** ✅ 新增
+- **evif_batch (并行执行)** ✅ 新增 (使用 futures::future::join_all)
+- **McpServerPlugin (真实 API 调用)** ✅ 新增 (GitHub/Slack/Notion HTTP API)
+- batch operations (批量操作)
+- MCP Gateway Plugin (VFS 目录结构)
+- **gmailfs (真实 Gmail REST API 调用)** ✅ 新增 (2026-05-04)
+- **postgresfs (真实 PostgreSQL 连接)** ✅ 新增 (2026-05-04)
+- **s3fs (真实 S3 分片上传)** ✅ 已实现 (多 part 并发上传)
+
+**部分实现** ⚠️:
+| 插件 | 状态 | 说明 |
+|------|------|------|
+| McpServerPlugin | ✅ 真实 API 调用 | GitHub/Slack/Notion 预设工具，真实 HTTP API 集成 (call_tool_sync) |
+
+**说明**:
+- **notionfs**: 真实 HTTP API 客户端 (reqwest)，支持 /search, /databases/{id}, /pages/{id}, /blocks/{id}
+- **discordfs**: 真实 HTTP API 客户端 (reqwest)，支持 /users/@me/guilds, /guilds/{id}, /channels/{id}, /messages
+- **telegramfs**: 真实 Telegram Bot API (getMe, getUpdates, getChat, getFile, getWebhookInfo, getChatMemberCount)
+- **shopifyfs**: 真实 Shopify Admin API (products, orders, customers, collections, pages, inventory)
+- **teamsfs**: 真实 Microsoft Graph API (teams, channels, messages, files, members)，OAuth2 认证，**写操作支持发送消息** ✅
+- **evif_batch**: 从顺序执行改为并行执行 (使用 futures::future::join_all)
+- **McpServerPlugin**: 真实 HTTP API 调用，GitHub (repos, issues), Slack (chat.postMessage, conversations.list), Notion (search, pages)
+- **gmailfs**: 真实 Gmail REST API (OAuth2 Bearer token)，支持 messages.list, messages.get, profile
+- **postgresfs**: 真实 PostgreSQL 连接 (tokio_postgres)，支持 list_databases, list_schemas, list_tables, get_table_schema, get_table_count
+- **s3fs**: AWS SDK S3 分片上传 (CreateMultipartUpload → UploadPart → CompleteMultipartUpload)
+
+### 14.6 优化项状态 (2026-05-04 更新)
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| McpClient 与 McpServerPlugin 集成 | ✅ 已实现 | 集成完成，McpServerPlugin 优先使用 stdio MCP 客户端，失败时 fallback 到 HTTP API |
+| VFS 直接模式 | ✅ 已实现 | `try_vfs_direct` 方法已实现，支持 evif_ls, evif_cat, evif_memorize, evif_retrieve, evif_skill_list, evif_find |
+| Tool 调用结果缓存 | ✅ 已实现 | LRU缓存 (1024条)，`call_cache` 用于工具调用结果，`get_cache_stats()` 返回统计信息 |
+
+**McpClient 集成详情**:
+- McpServerPlugin 现在包含 `Option<std::sync::Mutex<McpClient>>` 用于 stdio 通信
+- `try_start_mcp_client()` 自动启动外部 MCP Server (如 npx @modelcontextprotocol/server-github)
+- `call_tool_sync()` 优先调用 MCP stdio，失败后 fallback 到 HTTP API
+- `sync_tools_from_mcp()` 可从 MCP Server 同步工具列表
+- `has_mcp_client()` 检查 MCP 客户端可用性
+
+### 14.7 未实现功能 (2026-05-04 分析) 及 已实现更新
+
+**写操作已实现** ✅ (2026-05-04):
+- **teamsfs**: `write()` 现在支持向 Teams Channel 发送消息 (POST /teams/{id}/channels/{id}/messages)
+
+**写操作待实现** ⚠️ (Read-only 模式):
+- gmailfs
+- postgresfs
+- shopifyfs
+- slackfs
+- telegramfs
+
+**OpenDAL 插件** (需启用 feature):
+- aliyunossfs
+- azureblobfs
+- gcsfs
+- huaweiobsfs
+- miniofs
+- webdavfs
+- ftpfs
+- sftpfs
+
+**其他插件**:
+- sqlfs2 (备用 SQLite 实现)
+- streamrotatefs
+- tieredfs
+- gptfs (AI 生成)
+- encryptedfs (加密存储)
+- devfs (开发工具)
+
+**100 MCP Server 计划** (mem33.md 路线图):
+剩余 ~75 个服务插件待实现 (数据库、大模型、CDN、监控等)

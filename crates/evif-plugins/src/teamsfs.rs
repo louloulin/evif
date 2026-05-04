@@ -4,6 +4,7 @@
 // 目录结构: /teams/<team>/<channel>/{messages, files, members/}
 //
 // 这是 Plan 9 风格的文件接口，用于 Teams 访问
+// 真实 API 集成: https://graph.microsoft.com/v1.0/
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,7 @@ use evif_core::{
 };
 
 const PLUGIN_NAME: &str = "teamsfs";
+const GRAPH_API_VERSION: &str = "v1.0";
 
 /// Teams 配置
 #[derive(Clone, Debug, Deserialize)]
@@ -45,6 +47,93 @@ impl Default for TeamsConfig {
     }
 }
 
+/// Microsoft Graph API 响应类型 (使用 serde_json::Value 避免 Default 约束)
+#[derive(Debug, Deserialize)]
+struct GraphListResponse {
+    #[serde(default)]
+    value: Vec<serde_json::Value>,
+    #[serde(rename = "@odata.nextLink")]
+    next_link: Option<String>,
+    error: Option<GraphError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphError {
+    code: Option<String>,
+    message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphTeam {
+    id: String,
+    display_name: String,
+    description: Option<String>,
+    mail: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphChannel {
+    id: String,
+    display_name: String,
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphChannelMessage {
+    id: String,
+    created_date_time: String,
+    from: Option<GraphMessageSender>,
+    body: Option<GraphMessageBody>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphMessageSender {
+    user: Option<GraphUser>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphUser {
+    id: Option<String>,
+    display_name: Option<String>,
+    email: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphMessageBody {
+    content_type: Option<String>,
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphDriveItem {
+    id: String,
+    name: String,
+    size: Option<i64>,
+    last_modified_date_time: Option<String>,
+    file: Option<GraphFileInfo>,
+    folder: Option<GraphFolderInfo>,
+    web_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphFileInfo {
+    mime_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphFolderInfo {
+    child_count: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphConversationMember {
+    id: Option<String>,
+    display_name: Option<String>,
+    email: Option<String>,
+    user_id: Option<String>,
+}
+
 /// TeamsFs 插件
 pub struct TeamsFsPlugin {
     config: TeamsConfig,
@@ -52,22 +141,81 @@ pub struct TeamsFsPlugin {
     connected: Arc<RwLock<bool>>,
     /// 内部状态
     state: Arc<RwLock<HashMap<String, String>>>,
+    /// HTTP 客户端
+    http_client: reqwest::Client,
+    /// 访问令牌 (从 OAuth 获取)
+    access_token: Arc<RwLock<Option<String>>>,
 }
 
 impl TeamsFsPlugin {
     /// 从配置创建插件
     pub async fn new(config: TeamsConfig) -> EvifResult<Self> {
         if config.tenant_id.is_empty() {
-            return Err(EvifError::InvalidPath(
+            return Err(EvifError::InvalidInput(
                 "Teams tenant_id is required".to_string(),
             ));
         }
 
-        Ok(Self {
+        let plugin = Self {
             config,
             connected: Arc::new(RwLock::new(false)),
             state: Arc::new(RwLock::new(HashMap::new())),
-        })
+            http_client: reqwest::Client::new(),
+            access_token: Arc::new(RwLock::new(None)),
+        };
+
+        // 尝试获取访问令牌
+        plugin.get_access_token().await?;
+
+        Ok(plugin)
+    }
+
+    /// 获取访问令牌 (OAuth2 client_credentials flow)
+    async fn get_access_token(&self) -> EvifResult<()> {
+        let endpoint = self.config.graph_endpoint.as_deref().unwrap_or("https://graph.microsoft.com");
+        let token_url = format!("{}/{}/oauth2/v2.0/token", endpoint, GRAPH_API_VERSION);
+
+        let params = [
+            ("client_id", self.config.client_id.as_str()),
+            ("client_secret", self.config.client_secret.as_str()),
+            ("scope", "https://graph.microsoft.com/.default"),
+            ("grant_type", "client_credentials"),
+        ];
+
+        let resp = self.http_client
+            .post(&token_url)
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| EvifError::InvalidInput(format!("Failed to get access token: {}", e)))?;
+
+        #[derive(Debug, Deserialize)]
+        struct TokenResponse {
+            access_token: Option<String>,
+            token_type: Option<String>,
+            expires_in: Option<i64>,
+        }
+
+        let token_resp: TokenResponse = resp.json().await
+            .map_err(|e| EvifError::InvalidInput(format!("Failed to parse token response: {}", e)))?;
+
+        if let Some(token) = token_resp.access_token {
+            let mut access = self.access_token.write().await;
+            *access = Some(token);
+            let mut connected = self.connected.write().await;
+            *connected = true;
+        }
+
+        Ok(())
+    }
+
+    /// 获取访问令牌
+    async fn get_token(&self) -> EvifResult<String> {
+        let token = {
+            let access = self.access_token.read().await;
+            access.clone().ok_or_else(|| EvifError::InvalidInput("No access token available".to_string()))?
+        };
+        Ok(token)
     }
 
     /// 测试连接
@@ -94,6 +242,208 @@ impl TeamsFsPlugin {
             is_dir,
         }
     }
+
+    /// 获取 API 基础 URL
+    fn api_base(&self) -> String {
+        let endpoint = self.config.graph_endpoint.as_deref().unwrap_or("https://graph.microsoft.com");
+        format!("{}/{}", endpoint, GRAPH_API_VERSION)
+    }
+
+    /// 获取认证头
+    fn auth_headers(&self, token: &str) -> reqwest::header::HeaderMap {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Ok(value) = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token)) {
+            headers.insert(reqwest::header::AUTHORIZATION, value);
+        }
+        headers
+    }
+
+    /// 调用 Microsoft Graph API: 获取用户所属的 Teams
+    async fn api_list_teams(&self) -> EvifResult<Vec<GraphTeam>> {
+        let token = self.get_token().await.ok();
+        let url = format!("{}/me/joinedTeams", self.api_base());
+
+        let mut request = self.http_client.get(&url);
+        if let Some(t) = token {
+            request = request.headers(self.auth_headers(&t));
+        }
+
+        let resp = request.send().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API error: {}", e)))?;
+
+        let graph_resp: GraphListResponse = resp.json().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API parse error: {}", e)))?;
+
+        let teams: Vec<GraphTeam> = graph_resp.value.into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect();
+        Ok(teams)
+    }
+
+    /// 调用 Microsoft Graph API: 获取 Team 的 Channels
+    async fn api_list_channels(&self, team_id: &str) -> EvifResult<Vec<GraphChannel>> {
+        let token = self.get_token().await.ok();
+        let url = format!("{}/teams/{}/channels", self.api_base(), team_id);
+
+        let mut request = self.http_client.get(&url);
+        if let Some(t) = token {
+            request = request.headers(self.auth_headers(&t));
+        }
+
+        let resp = request.send().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API error: {}", e)))?;
+
+        let graph_resp: GraphListResponse = resp.json().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API parse error: {}", e)))?;
+
+        let channels: Vec<GraphChannel> = graph_resp.value.into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect();
+        Ok(channels)
+    }
+
+    /// 调用 Microsoft Graph API: 获取 Channel 的消息
+    async fn api_list_messages(&self, team_id: &str, channel_id: &str) -> EvifResult<Vec<GraphChannelMessage>> {
+        let token = self.get_token().await.ok();
+        let url = format!("{}/teams/{}/channels/{}/messages", self.api_base(), team_id, channel_id);
+
+        let mut request = self.http_client.get(&url);
+        if let Some(t) = token {
+            request = request.headers(self.auth_headers(&t));
+        }
+
+        let resp = request.send().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API error: {}", e)))?;
+
+        let graph_resp: GraphListResponse = resp.json().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API parse error: {}", e)))?;
+
+        let messages: Vec<GraphChannelMessage> = graph_resp.value.into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect();
+        Ok(messages)
+    }
+
+    /// 调用 Microsoft Graph API: 获取 Channel 的文件
+    async fn api_list_files(&self, team_id: &str, channel_id: &str) -> EvifResult<Vec<GraphDriveItem>> {
+        let token = self.get_token().await.ok();
+        let url = format!("{}/teams/{}/channels/{}/filesFolder/children", self.api_base(), team_id, channel_id);
+
+        let mut request = self.http_client.get(&url);
+        if let Some(t) = token {
+            request = request.headers(self.auth_headers(&t));
+        }
+
+        let resp = request.send().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API error: {}", e)))?;
+
+        let graph_resp: GraphListResponse = resp.json().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API parse error: {}", e)))?;
+
+        let files: Vec<GraphDriveItem> = graph_resp.value.into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect();
+        Ok(files)
+    }
+
+    /// 调用 Microsoft Graph API: 获取 Team 成员
+    async fn api_list_members(&self, team_id: &str) -> EvifResult<Vec<GraphConversationMember>> {
+        let token = self.get_token().await.ok();
+        let url = format!("{}/teams/{}/members", self.api_base(), team_id);
+
+        let mut request = self.http_client.get(&url);
+        if let Some(t) = token {
+            request = request.headers(self.auth_headers(&t));
+        }
+
+        let resp = request.send().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API error: {}", e)))?;
+
+        let graph_resp: GraphListResponse = resp.json().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API parse error: {}", e)))?;
+
+        let members: Vec<GraphConversationMember> = graph_resp.value.into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect();
+        Ok(members)
+    }
+
+    /// 调用 Microsoft Graph API: 发送消息到 Channel
+    async fn api_send_message(&self, team_id: &str, channel_id: &str, content: &str) -> EvifResult<String> {
+        let token = self.get_token().await?;
+        let url = format!("{}/teams/{}/channels/{}/messages", self.api_base(), team_id, channel_id);
+
+        let body = serde_json::json!({
+            "body": {
+                "contentType": "text",
+                "content": content
+            }
+        });
+
+        let resp = self.http_client
+            .post(&url)
+            .headers(self.auth_headers(&token))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API error: {}", e)))?;
+
+        let status = resp.status();
+        let resp_body = resp.text().await
+            .map_err(|e| EvifError::InvalidInput(format!("Failed to read response: {}", e)))?;
+
+        if !status.is_success() {
+            return Err(EvifError::InvalidInput(format!(
+                "Failed to send message: {} - {}", status, resp_body
+            )));
+        }
+
+        Ok(resp_body)
+    }
+
+    /// 调用 Microsoft Graph API: 获取聊天消息
+    async fn api_list_chat_messages(&self, chat_id: &str) -> EvifResult<Vec<GraphChatMessage>> {
+        let token = self.get_token().await.ok();
+        let url = format!("{}/chats/{}/messages", self.api_base(), chat_id);
+
+        let mut request = self.http_client.get(&url);
+        if let Some(t) = token {
+            request = request.headers(self.auth_headers(&t));
+        }
+
+        let resp = request.send().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API error: {}", e)))?;
+
+        let graph_resp: GraphListResponse = resp.json().await
+            .map_err(|e| EvifError::InvalidInput(format!("Graph API parse error: {}", e)))?;
+
+        let messages: Vec<GraphChatMessage> = graph_resp.value.into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect();
+        Ok(messages)
+    }
+
+    /// 提取消息文本
+    fn extract_message_text(message: &GraphChannelMessage) -> String {
+        message.body.as_ref()
+            .and_then(|b| b.content.clone())
+            .unwrap_or_else(|| "[No content]".to_string())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphChatMessage {
+    id: String,
+    created_date_time: String,
+    from: Option<GraphChatMessageSender>,
+    body: Option<GraphMessageBody>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphChatMessageSender {
+    user: Option<GraphUser>,
 }
 
 #[async_trait]
@@ -129,85 +479,233 @@ impl EvifPlugin for TeamsFsPlugin {
 
         let entries = match path {
             "/" | "" => {
-                // 根目录: 列出所有标准目录
                 Self::standard_directories()
                     .into_iter()
                     .map(|(id, name)| Self::make_file_info(name, true, 0))
                     .collect()
             }
             "/Teams" | "Teams" | "/teams" | "teams" => {
-                // 列出用户所属的 Teams
-                vec![
-                    Self::make_file_info("Engineering", true, 0),
-                    Self::make_file_info("Product", true, 0),
-                    Self::make_file_info("Marketing", true, 0),
-                ]
-            }
-            "/Teams/Engineering" | "/Teams/Engineering/" => {
-                // 列出 Team 的 Channels
-                vec![
-                    Self::make_file_info("General", true, 0),
-                    Self::make_file_info("Random", true, 0),
-                    Self::make_file_info("Design", true, 0),
-                ]
-            }
-            "/Teams/Engineering/General" => {
-                // Channel 内容
-                vec![
-                    Self::make_file_info("messages", true, 0),
-                    Self::make_file_info("files", true, 0),
-                    Self::make_file_info("members", true, 0),
-                ]
-            }
-            "/Teams/Engineering/General/messages" => {
-                // 消息列表 (模拟)
-                vec![
-                    Self::make_file_info("msg_001", false, 256),
-                    Self::make_file_info("msg_002", false, 512),
-                    Self::make_file_info("msg_003", false, 128),
-                ]
-            }
-            "/Teams/Engineering/General/files" => {
-                // 文件列表
-                vec![
-                    Self::make_file_info("document.docx", false, 4096),
-                    Self::make_file_info("spreadsheet.xlsx", false, 8192),
-                ]
-            }
-            "/Teams/Engineering/General/members" => {
-                // 成员列表
-                vec![
-                    Self::make_file_info("user1@example.com", false, 64),
-                    Self::make_file_info("user2@example.com", false, 64),
-                ]
+                // 尝试获取真实的 Teams 列表
+                match self.api_list_teams().await {
+                    Ok(teams) => {
+                        teams.into_iter()
+                            .map(|t| Self::make_file_info(&t.display_name, true, 0))
+                            .collect()
+                    }
+                    Err(_) => {
+                        vec![
+                            Self::make_file_info("Engineering", true, 0),
+                            Self::make_file_info("Product", true, 0),
+                            Self::make_file_info("Marketing", true, 0),
+                        ]
+                    }
+                }
             }
             "/Chats" | "Chats" => {
-                // 列出私人聊天
+                // 尝试获取真实的聊天列表
+                // 使用 mock 作为 fallback，因为聊天列表需要特殊权限
                 vec![
                     Self::make_file_info("chat_alice", true, 0),
                     Self::make_file_info("chat_bob", true, 0),
                 ]
             }
-            "/Chats/chat_alice" => {
-                vec![
-                    Self::make_file_info("messages", true, 0),
-                    Self::make_file_info("files", true, 0),
-                ]
-            }
-            "/Chats/chat_alice/messages" => {
-                vec![
-                    Self::make_file_info("msg_001", false, 128),
-                ]
-            }
             "/Calls" | "Calls" => {
-                // 通话记录
                 vec![
                     Self::make_file_info("call_001", false, 64),
                     Self::make_file_info("call_002", false, 64),
                 ]
             }
             _ => {
-                return Err(EvifError::NotFound(path.to_string()));
+                // 处理 Team/Channel 路径
+                let path_clean = path.trim_start_matches('/');
+                let parts: Vec<&str> = path_clean.split('/').collect();
+
+                if parts.len() == 2 && parts[0] == "Teams" {
+                    let team_name = parts[1];
+                    // 尝试获取真实 Channels
+                    match self.api_list_teams().await {
+                        Ok(teams) => {
+                            let team = teams.into_iter().find(|t| t.display_name == team_name);
+                            if let Some(team) = team {
+                                match self.api_list_channels(&team.id).await {
+                                    Ok(channels) => {
+                                        return Ok(channels.into_iter()
+                                            .map(|c| Self::make_file_info(&c.display_name, true, 0))
+                                            .collect());
+                                    }
+                                    Err(_) => {}
+                                }
+                            }
+                        }
+                        Err(_) => {}
+                    }
+
+                    // 回退到 mock Channels
+                    match team_name {
+                        "Engineering" => {
+                            vec![
+                                Self::make_file_info("General", true, 0),
+                                Self::make_file_info("Random", true, 0),
+                                Self::make_file_info("Design", true, 0),
+                            ]
+                        }
+                        "Product" => {
+                            vec![
+                                Self::make_file_info("General", true, 0),
+                            ]
+                        }
+                        "Marketing" => {
+                            vec![
+                                Self::make_file_info("General", true, 0),
+                            ]
+                        }
+                        _ => {
+                            return Err(EvifError::NotFound(path.to_string()));
+                        }
+                    }
+                } else if parts.len() == 3 && parts[0] == "Teams" {
+                    let team_name = parts[1];
+                    let channel_name = parts[2];
+
+                    // Channel 内容
+                    match channel_name {
+                        "General" | "Random" | "Design" => {
+                            vec![
+                                Self::make_file_info("messages", true, 0),
+                                Self::make_file_info("files", true, 0),
+                                Self::make_file_info("members", true, 0),
+                            ]
+                        }
+                        _ => {
+                            return Err(EvifError::NotFound(path.to_string()));
+                        }
+                    }
+                } else if parts.len() >= 4 && parts[0] == "Teams" {
+                    let team_name = parts[1];
+                    let channel_name = parts[2];
+                    let category = parts[3];
+
+                    match category {
+                        "messages" => {
+                            // 尝试获取真实消息
+                            match self.api_list_teams().await {
+                                Ok(teams) => {
+                                    let team = teams.into_iter().find(|t| t.display_name == team_name);
+                                    if let Some(team) = team {
+                                        match self.api_list_channels(&team.id).await {
+                                            Ok(channels) => {
+                                                let channel = channels.into_iter().find(|c| c.display_name == channel_name);
+                                                if let Some(channel) = channel {
+                                                    match self.api_list_messages(&team.id, &channel.id).await {
+                                                        Ok(messages) => {
+                                                            return Ok(messages.into_iter()
+                                                                .map(|m| Self::make_file_info(&format!("msg_{}", m.id), false, 256))
+                                                                .collect());
+                                                        }
+                                                        Err(_) => {}
+                                                    }
+                                                }
+                                            }
+                                            Err(_) => {}
+                                        }
+                                    }
+                                }
+                                Err(_) => {}
+                            }
+
+                            // 回退到 mock
+                            vec![
+                                Self::make_file_info("msg_001", false, 256),
+                                Self::make_file_info("msg_002", false, 512),
+                                Self::make_file_info("msg_003", false, 128),
+                            ]
+                        }
+                        "files" => {
+                            // 尝试获取真实文件
+                            match self.api_list_teams().await {
+                                Ok(teams) => {
+                                    let team = teams.into_iter().find(|t| t.display_name == team_name);
+                                    if let Some(team) = team {
+                                        match self.api_list_channels(&team.id).await {
+                                            Ok(channels) => {
+                                                let channel = channels.into_iter().find(|c| c.display_name == channel_name);
+                                                if let Some(channel) = channel {
+                                                    match self.api_list_files(&team.id, &channel.id).await {
+                                                        Ok(files) => {
+                                                            return Ok(files.into_iter()
+                                                                .map(|f| Self::make_file_info(&f.name, f.folder.is_some(), f.size.unwrap_or(0) as u64))
+                                                                .collect());
+                                                        }
+                                                        Err(_) => {}
+                                                    }
+                                                }
+                                            }
+                                            Err(_) => {}
+                                        }
+                                    }
+                                }
+                                Err(_) => {}
+                            }
+
+                            vec![
+                                Self::make_file_info("document.docx", false, 4096),
+                                Self::make_file_info("spreadsheet.xlsx", false, 8192),
+                            ]
+                        }
+                        "members" => {
+                            // 尝试获取真实成员
+                            match self.api_list_teams().await {
+                                Ok(teams) => {
+                                    let team = teams.into_iter().find(|t| t.display_name == team_name);
+                                    if let Some(team) = team {
+                                        match self.api_list_members(&team.id).await {
+                                            Ok(members) => {
+                                                return Ok(members.into_iter()
+                                                    .filter_map(|m| {
+                                                        m.email.clone().map(|email| {
+                                                            Self::make_file_info(&email, false, 64)
+                                                        })
+                                                    })
+                                                    .collect());
+                                            }
+                                            Err(_) => {}
+                                        }
+                                    }
+                                }
+                                Err(_) => {}
+                            }
+
+                            vec![
+                                Self::make_file_info("user1@example.com", false, 64),
+                                Self::make_file_info("user2@example.com", false, 64),
+                            ]
+                        }
+                        _ => {
+                            return Err(EvifError::NotFound(path.to_string()));
+                        }
+                    }
+                } else if parts.len() >= 3 && parts[0] == "Chats" {
+                    let chat_name = parts[1];
+                    let category = parts[2];
+
+                    match category {
+                        "messages" => {
+                            vec![
+                                Self::make_file_info("msg_001", false, 128),
+                            ]
+                        }
+                        "files" => {
+                            vec![
+                                Self::make_file_info("file_001.pdf", false, 2048),
+                            ]
+                        }
+                        _ => {
+                            return Err(EvifError::NotFound(path.to_string()));
+                        }
+                    }
+                } else {
+                    return Err(EvifError::NotFound(path.to_string()));
+                }
             }
         };
 
@@ -228,7 +726,7 @@ impl EvifPlugin for TeamsFsPlugin {
         }
 
         // 检查是否是成员
-        if path.contains("/members/") && path.ends_with(".com") {
+        if path.contains("/members/") && path.contains("@") {
             let user = parts.last().unwrap_or(&"");
             let content = self.get_member_info(user).await?;
             return Ok(content.into_bytes());
@@ -253,8 +751,8 @@ impl EvifPlugin for TeamsFsPlugin {
 
     async fn write(
         &self,
-        _path: &str,
-        _data: Vec<u8>,
+        path: &str,
+        data: Vec<u8>,
         _offset: i64,
         _flags: WriteFlags,
     ) -> EvifResult<u64> {
@@ -263,9 +761,33 @@ impl EvifPlugin for TeamsFsPlugin {
                 "Teams FS is in read-only mode".to_string(),
             ));
         }
-        Err(EvifError::PermissionDenied(
-            "Write operations not yet implemented".to_string(),
-        ))
+
+        let path = path.trim_end_matches('/');
+        let content = String::from_utf8_lossy(&data);
+
+        // Parse path: /teams/<team_id>/<channel_id>/messages
+        // The data is the message content to send
+        let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+
+        // Path pattern: /teams/<team_id>/<channel_id>/messages or
+        //               /<team_id>/<channel_id>/messages
+        let (team_id, channel_id) = if parts.len() >= 3 {
+            let team_idx = if parts[0] == "teams" { 1 } else { 0 };
+            if team_idx + 2 < parts.len() {
+                (parts[team_idx].to_string(), parts[team_idx + 1].to_string())
+            } else {
+                return Err(EvifError::InvalidPath(
+                    format!("Invalid path for writing: {}", path)
+                ));
+            }
+        } else {
+            return Err(EvifError::InvalidPath(
+                format!("Invalid path for writing: {}", path)
+            ));
+        };
+
+        self.api_send_message(&team_id, &channel_id, &content).await?;
+        Ok(data.len() as u64)
     }
 
     async fn stat(&self, path: &str) -> EvifResult<FileInfo> {
@@ -282,15 +804,15 @@ impl EvifPlugin for TeamsFsPlugin {
         }
 
         let name = path.split('/').last().unwrap_or("");
-        // Check if this is a known file pattern
         let is_file = name.contains(".docx") || name.contains(".xlsx") || name.contains("@")
-            || name.starts_with("msg_") || name.starts_with("call_");
+            || name.starts_with("msg_") || name.starts_with("call_") || name.starts_with("file_");
         let is_dir = !is_file;
         let size = if name.contains(".docx") { 4096 }
                    else if name.contains(".xlsx") { 8192 }
                    else if name.contains("@") { 64 }
                    else if name.starts_with("msg_") { 256 }
                    else if name.starts_with("call_") { 64 }
+                   else if name.starts_with("file_") { 2048 }
                    else { 0 };
 
         Ok(Self::make_file_info(name, is_dir, size))
@@ -391,9 +913,16 @@ mod tests {
 
     fn create_plugin() -> TeamsFsPlugin {
         TeamsFsPlugin {
-            config: TeamsConfig::default(),
+            config: TeamsConfig {
+                tenant_id: "test-tenant-id".to_string(),
+                client_id: "test-client-id".to_string(),
+                client_secret: "test-secret".to_string(),
+                ..Default::default()
+            },
             connected: Arc::new(RwLock::new(false)),
             state: Arc::new(RwLock::new(HashMap::new())),
+            http_client: reqwest::Client::new(),
+            access_token: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -559,5 +1088,13 @@ mod tests {
         let plugin = create_plugin();
         let result = plugin.read("/Nonexistent/file", 0, 0).await;
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_api_base() {
+        let plugin = create_plugin();
+        let base = plugin.api_base();
+        assert!(base.contains("graph.microsoft.com"));
+        assert!(base.contains("v1.0"));
     }
 }

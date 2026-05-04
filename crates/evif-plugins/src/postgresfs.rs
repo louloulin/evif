@@ -71,20 +71,175 @@ impl PostgresFsPlugin {
 
     /// 测试数据库连接
     pub async fn test_connection(&self) -> EvifResult<bool> {
-        Ok(!self.config.connection_string.is_empty())
+        if self.config.connection_string.is_empty() {
+            return Ok(false);
+        }
+
+        // 尝试连接数据库
+        let (client, connection) = tokio_postgres::connect(
+            &self.config.connection_string,
+            NoTls,
+        ).await.map_err(|e| EvifError::Internal(format!("Connection failed: {}", e)))?;
+
+        // spawn the connection handling task
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("PostgreSQL connection error: {}", e);
+            }
+        });
+
+        // 执行一个简单的查询来验证连接
+        let _rows = client.query("SELECT 1", &[]).await
+            .map_err(|e| EvifError::Internal(format!("Query failed: {}", e)))?;
+
+        Ok(true)
     }
 
-    /// 获取表结构 (CREATE TABLE 语句)
+    /// 列出所有数据库
+    async fn list_databases(&self) -> EvifResult<Vec<String>> {
+        let (client, connection) = tokio_postgres::connect(
+            &self.config.connection_string,
+            NoTls,
+        ).await.map_err(|e| EvifError::Internal(format!("Connection failed: {}", e)))?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("PostgreSQL connection error: {}", e);
+            }
+        });
+
+        let rows = client.query(
+            "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname",
+            &[]
+        ).await
+            .map_err(|e| EvifError::Internal(format!("Failed to list databases: {}", e)))?;
+
+        Ok(rows.iter().map(|r| r.get("datname")).collect())
+    }
+
+    /// 列出所有 schema
+    async fn list_schemas(&self, _db: &str) -> EvifResult<Vec<String>> {
+        let (client, connection) = tokio_postgres::connect(
+            &self.config.connection_string,
+            NoTls,
+        ).await.map_err(|e| EvifError::Internal(format!("Connection failed: {}", e)))?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("PostgreSQL connection error: {}", e);
+            }
+        });
+
+        let rows = client.query(
+            "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT LIKE 'pg_%' AND schema_name != 'information_schema' ORDER BY schema_name",
+            &[]
+        ).await
+            .map_err(|e| EvifError::Internal(format!("Failed to list schemas: {}", e)))?;
+
+        Ok(rows.iter().map(|r| r.get("schema_name")).collect())
+    }
+
+    /// 列出所有表
+    async fn list_tables(&self, _db: &str, schema: &str) -> EvifResult<Vec<String>> {
+        let (client, connection) = tokio_postgres::connect(
+            &self.config.connection_string,
+            NoTls,
+        ).await.map_err(|e| EvifError::Internal(format!("Connection failed: {}", e)))?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("PostgreSQL connection error: {}", e);
+            }
+        });
+
+        let rows = client.query(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE' ORDER BY table_name",
+            &[&schema]
+        ).await
+            .map_err(|e| EvifError::Internal(format!("Failed to list tables: {}", e)))?;
+
+        Ok(rows.iter().map(|r| r.get("table_name")).collect())
+    }
+
+    /// 获取表结构 (使用 information_schema)
     pub async fn get_table_schema(&self, _db: &str, schema: &str, table: &str) -> EvifResult<String> {
-        Ok(format!(
-            "-- Schema for {}.{}\nCREATE TABLE {} ();\n",
-            schema, table, table
-        ))
+        let (client, connection) = tokio_postgres::connect(
+            &self.config.connection_string,
+            NoTls,
+        ).await.map_err(|e| EvifError::Internal(format!("Connection failed: {}", e)))?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("PostgreSQL connection error: {}", e);
+            }
+        });
+
+        let query = "
+            SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = $1 AND table_name = $2
+            ORDER BY ordinal_position
+        ";
+
+        let rows = client.query(query, &[&schema, &table]).await
+            .map_err(|e| EvifError::Internal(format!("Failed to get schema: {}", e)))?;
+
+        let mut schema_str = format!("-- Schema for {}.{}\nCREATE TABLE {} (\n", schema, table, table);
+        let mut first = true;
+
+        for row in rows {
+            if !first {
+                schema_str.push_str(",\n");
+            }
+            let col_name: String = row.get("column_name");
+            let data_type: String = row.get("data_type");
+            let nullable: String = row.get("is_nullable");
+            let default: Option<String> = row.get("column_default");
+
+            schema_str.push_str(&format!("  {} {}", col_name, data_type));
+            if nullable == "YES" {
+                schema_str.push_str(" NULL");
+            } else {
+                schema_str.push_str(" NOT NULL");
+            }
+            if let Some(def) = default {
+                schema_str.push_str(&format!(" DEFAULT {}", def));
+            }
+            first = false;
+        }
+
+        schema_str.push_str("\n);\n");
+        Ok(schema_str)
     }
 
     /// 获取表记录数
-    pub async fn get_table_count(&self, _db: &str, _schema: &str, _table: &str) -> EvifResult<i64> {
-        Ok(0)
+    pub async fn get_table_count(&self, _db: &str, schema: &str, table: &str) -> EvifResult<i64> {
+        let (client, connection) = tokio_postgres::connect(
+            &self.config.connection_string,
+            NoTls,
+        ).await.map_err(|e| EvifError::Internal(format!("Connection failed: {}", e)))?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("PostgreSQL connection error: {}", e);
+            }
+        });
+
+        let query = format!(
+            "SELECT COUNT(*) as cnt FROM \"{}\".\"{}\"",
+            schema.replace("\"", "\"\""),
+            table.replace("\"", "\"\"")
+        );
+
+        let rows = client.query(&query, &[]).await
+            .map_err(|e| EvifError::Internal(format!("Failed to get count: {}", e)))?;
+
+        if let Some(row) = rows.first() {
+            let count: i64 = row.get("cnt");
+            Ok(count)
+        } else {
+            Ok(0)
+        }
     }
 
     /// 解析路径: /<db>/<schema>/<table>/<file>
@@ -150,20 +305,58 @@ impl EvifPlugin for PostgresFsPlugin {
                 vec![Self::make_file_info("databases", true)]
             }
             "/databases" | "databases" => {
-                vec![Self::make_file_info("postgres", true)]
+                // 列出所有数据库
+                let dbs = self.list_databases().await?;
+                if dbs.is_empty() {
+                    vec![Self::make_file_info("postgres", true)]
+                } else {
+                    dbs.into_iter().map(|name| Self::make_file_info(&name, true)).collect()
+                }
             }
-            p if p == "/databases/postgres" || p == "databases/postgres" => {
-                vec![
-                    Self::make_file_info("schemas", true),
-                    Self::make_file_info("tables", true),
-                ]
-            }
-            p if p.ends_with("/schemas") || p.ends_with("schemas") => {
-                vec![
-                    Self::make_file_info("public", true),
-                    Self::make_file_info("information_schema", true),
-                    Self::make_file_info("pg_catalog", true),
-                ]
+            p if p.starts_with("/databases/") || p.starts_with("databases/") => {
+                // 解析路径: /databases/<db>/<path>
+                let parts: Vec<&str> = p.trim_start_matches("/databases/").trim_start_matches("databases/").split('/').collect();
+                let db = parts.first().unwrap_or(&"postgres");
+
+                if parts.len() == 1 {
+                    // /databases/<db> -> 列出 schemas 和 tables
+                    vec![
+                        Self::make_file_info("schemas", true),
+                        Self::make_file_info("tables", true),
+                    ]
+                } else {
+                    let subpath = parts[1..].join("/");
+                    if subpath == "schemas" {
+                        // 列出所有 schemas
+                        let schemas = self.list_schemas(db).await?;
+                        if schemas.is_empty() {
+                            vec![
+                                Self::make_file_info("public", true),
+                                Self::make_file_info("pg_catalog", true),
+                            ]
+                        } else {
+                            schemas.into_iter().map(|name| Self::make_file_info(&name, true)).collect()
+                        }
+                    } else if subpath == "tables" {
+                        // 列出 public schema 的表
+                        let tables = self.list_tables(db, "public").await?;
+                        tables.into_iter().map(|name| Self::make_file_info(&name, true)).collect()
+                    } else if subpath.starts_with("schemas/") || subpath.starts_with("tables/") {
+                        // /databases/<db>/schemas/<schema> -> 列出该 schema 的表
+                        // /databases/<db>/tables/<schema> -> 列出该 schema 的表
+                        let schema_name = subpath.trim_start_matches("schemas/")
+                            .trim_start_matches("tables/");
+
+                        if schema_name == "public" || schema_name == "pg_catalog" || schema_name == "information_schema" {
+                            let tables = self.list_tables(db, schema_name).await?;
+                            tables.into_iter().map(|name| Self::make_file_info(&name, true)).collect()
+                        } else {
+                            vec![]
+                        }
+                    } else {
+                        return Err(EvifError::NotFound(path.to_string()));
+                    }
+                }
             }
             _ => return Err(EvifError::NotFound(path.to_string())),
         };
