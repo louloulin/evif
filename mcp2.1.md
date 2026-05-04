@@ -2,8 +2,8 @@
 
 > 创建时间：2026-05-04
 > 目标：清晰的架构图 + 可执行的 TodoList
-> 状态：**Phase 0 + Phase 1 已完成** ✅
-> 完成时间：2026-05-04
+> 状态：**Phase 0-9 全部完成** ✅
+> 完成时间：2026-05-04（持续更新）
 
 ---
 
@@ -378,6 +378,78 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 
 **总计**: ~22 小时（约 2.5 天）
 
+### Phase 6: 真实实现替换（2026-05-04 新增）
+
+| 序号 | 任务 | 状态 |
+|------|------|------|
+| T6.1 | 移除 `evif_health` mock，调用真实后端 API | ✅ |
+| T6.2 | 移除 `evif_mount` mock，调用真实后端 API | ✅ |
+| T6.3 | 实现 `evif_memory_stats` 真实统计 | ✅ |
+| T6.4 | 实现 `evif_ping_with_stats` 真实实现 | ✅ |
+| T6.5 | 实现 `evif_latency_test` 真实延迟测试 | ✅ |
+| T6.6 | 实现 `evif_cache_stats` 真实缓存统计 | ✅ |
+| T6.7 | 实现 `evif_log_query` 真实日志查询 | ✅ |
+| T6.8 | 实现 `evif_metrics_export` 真实指标导出 | ✅ |
+| T6.9 | 实现 `evif_config_get` 真实配置获取 | ✅ |
+| T6.10 | 实现 `evif_request_trace` 真实追踪配置 | ✅ |
+
+### Phase 7: 扩展工具真实实现（2026-05-04 新增）
+
+| 序号 | 任务 | 状态 |
+|------|------|------|
+| T7.1 | 实现 `evif_search` 真实搜索（使用 grep） | ✅ |
+| T7.2 | 实现 `evif_diff` 真实文件对比 | ✅ |
+| T7.3 | 实现 `evif_tree` 真实目录树列出 | ✅ |
+| T7.4 | 实现 `evif_hash` 真实哈希计算（SHA256/SHA512/SHA1/MD5） | ✅ |
+| T7.5 | 实现 `evif_du` 真实磁盘使用分析 | ✅ |
+| T7.6 | 实现 `evif_pipe_create` 真实管道创建 | ✅ |
+| T7.7 | 实现 `evif_pipe_list` 真实管道列表 | ✅ |
+| T7.8 | 实现 `evif_plugin_*` 真实插件操作 | ✅ |
+| T7.9 | 实现 `evif_queue_*` 真实队列操作 | ✅ |
+
+### Phase 8: 后端 API 完整实现（2026-05-04 续）
+
+| 序号 | 任务 | 状态 |
+|------|------|------|
+| T8.1 | 实现 `evif_event_subscribe` 后端 API 调用 | ✅ |
+| T8.2 | 实现 `evif_event_list` 后端 API 调用 | ✅ |
+| T8.3 | 实现 `evif_event_unsubscribe` 后端 API 调用 | ✅ |
+| T8.4 | 实现 `evif_cron_schedule` 后端 API 调用 | ✅ |
+| T8.5 | 实现 `evif_cron_list` 后端 API 调用 | ✅ |
+| T8.6 | 实现 `evif_cron_remove` 后端 API 调用 | ✅ |
+| T8.7 | 实现 `evif_plugin_load/unload/info` 后端 API 调用 | ✅ |
+| T8.8 | 实现 `evif_subagent_status` 后端 API 调用 | ✅ |
+| T8.9 | 实现 `evif_queue_list/stats` 后端 API 调用 | ✅ |
+| T8.10 | 实现 `evif_health_detailed` 后端 API 调用 | ✅ |
+| T8.11 | 实现 `evif_server_restart` 后端 API 调用 | ✅ |
+| T8.12 | 实现 `evif_log_level` 后端 API 调用 | ✅ |
+| T8.13 | 实现 `evif_version` 后端 API 调用 | ✅ |
+| T8.14 | 实现 `evif_config_set/list` 后端 API 调用 | ✅ |
+| T8.15 | 添加 VfsBackend.get_url() 和 get_http_client() 方法 | ✅ |
+
+### Phase 9: 真实实现汇总（2026-05-04 完成）
+
+| 工具 | 实现方式 | 状态 |
+|------|----------|------|
+| `evif_event_subscribe` | 后端 `/api/v1/events/subscribe` | ✅ |
+| `evif_event_list` | 后端 `/api/v1/events` | ✅ |
+| `evif_event_unsubscribe` | 后端 `/api/v1/events/unsubscribe` | ✅ |
+| `evif_cron_schedule` | 后端 `/api/v1/cron/schedule` | ✅ |
+| `evif_cron_list` | 后端 `/api/v1/cron/list` | ✅ |
+| `evif_cron_remove` | 后端 `/api/v1/cron/remove` | ✅ |
+| `evif_plugin_load` | 后端 `/api/v1/plugins/load` | ✅ |
+| `evif_plugin_unload` | 后端 `/api/v1/plugins/unload` | ✅ |
+| `evif_plugin_info` | 后端 `/api/v1/plugins/{name}` | ✅ |
+| `evif_subagent_status` | 后端 `/api/v1/agents/{id}` | ✅ |
+| `evif_queue_list` | 后端 `/api/v1/queue` | ✅ |
+| `evif_queue_stats` | 后端 `/api/v1/queue/stats` | ✅ |
+| `evif_health_detailed` | 后端 `/api/v1/health/detailed` | ✅ |
+| `evif_server_restart` | 后端 `/api/v1/server/restart` | ✅ |
+| `evif_log_level` | 后端 `/api/v1/server/log_level` | ✅ |
+| `evif_version` | 后端 `/api/v1/version` | ✅ |
+| `evif_config_set` | 后端 `/api/v1/config/set` | ✅ |
+| `evif_config_list` | 后端 `/api/v1/config/list` | ✅ |
+
 ---
 
 ## 四、里程碑
@@ -386,11 +458,22 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 |--------|----------|----------|------|
 | **M1: 清理完成** | 删除 31 个幽灵 + 3 个假数据 | Day 1 | ✅ 已完成 |
 | **M2: 参数修复** | 修复 memorize/retrieve 参数 | Day 1 | ✅ 已完成 |
-| **M3: 子工具合并 | 7 个合并完成 | Day 3 | ✅ 已完成 |
-| **M4: 全工具可调用 | 所有工具在 mock 下可调用 | Day 4 | ✅ 已完成 |
-| **M5: 最终优化 | 18 个核心工具，全面测试通过 | Day 5 | ✅ 已完成 |
+| **M3: 子工具合并** | 7 个合并完成 | Day 3 | ✅ 已完成 |
+| **M4: 全工具可调用** | 所有工具在 mock 下可调用 | Day 4 | ✅ 已完成 |
+| **M5: 最终优化** | 18 个核心工具，全面测试通过 | Day 5 | ✅ 已完成 |
+| **M6: 真实实现** | 所有工具使用真实后端调用 | Day 6 | ✅ 已完成 |
+| **M7: 扩展工具** | 搜索、对比、树形、哈希、磁盘分析 | Day 7 | ✅ 已完成 |
+| **M8: 后端 API** | 事件、调度、配置、插件、队列等后端调用 | Day 8 | ✅ 已完成 |
+| **M9: 完整实现** | 18+ 后端 API 真实调用，136 tests passed | Day 9 | ✅ 已完成 |
 
-> **2026-05-04 更新**: M1 + M2 + Phase 2 + T3.1 + T3.2 + T3.3 + T3.4 + T3.5 + T3.6 + T3.7 已完成，测试验证通过（136 tests passed），工具数 18
+> **2026-05-04 更新**: M1 + M2 + M3 + M4 + M5 + M6 + M7 + M8 + M9 全部完成，测试验证通过（136 tests passed），核心工具数 23+
+>
+> **真实实现更新**: 所有文件操作、记忆操作、诊断工具、搜索工具现在都使用真实实现：
+> - 文件操作：VfsBackend 方法
+> - HTTP 操作：后端 API 调用
+> - 诊断工具：真实延迟测试、缓存统计、日志查询、指标导出
+> - 搜索工具：grep 搜索、文件对比、目录树、哈希计算、磁盘分析
+> - 后端 API：事件订阅、调度任务、插件管理、队列操作、服务器配置等
 
 ---
 
@@ -516,3 +599,178 @@ sed -i '/\.tool("evif_hash")/d' lib.rs
 - 性能优化
 - 监控指标完善
 - 社区反馈收集
+
+---
+
+## 十、真实实现更新日志（2026-05-04）
+
+### 100% 完成！所有 Mock 已移除
+
+**进度**: 100% ✅
+
+所有 `if backend.is_mock()` mock 实现已替换为真实实现：
+- **0 个 mock 实现剩余**
+- **所有工具都调用真实后端 API 或使用 VfsBackend 方法**
+
+### 已实现的真实功能
+
+| 工具 | 实现方式 | 状态 |
+|------|----------|------|
+| `evif_health` | 调用后端 `/api/v1/health` | ✅ 真实实现 |
+| `evif_mount` | 调用后端 `/api/v1/mount`, `/api/v1/mounts`, `/api/v1/unmount` | ✅ 真实实现 |
+| `evif_grep` | 使用 VfsBackend.grep() 真实搜索 | ✅ 真实实现 |
+| `evif_memorize` | 使用 VfsBackend.memorize() 真实存储 | ✅ 真实实现 |
+| `evif_retrieve` | 使用 VfsBackend.retrieve() 真实检索 | ✅ 真实实现 |
+| `evif_memory_search` | 使用 VfsBackend.search_memories() 真实搜索 | ✅ 真实实现 |
+| `evif_memory_stats` | 调用后端 `/api/v1/memory/stats` API | ✅ 真实实现 |
+| `evif_memory_clear` | 调用后端 `/api/v1/memory/clear` API | ✅ 真实实现 |
+| `evif_ping_with_stats` | 调用后端健康检查 + 延迟测量 | ✅ 真实实现 |
+| `evif_latency_test` | 真实测量到后端的延迟 | ✅ 真实实现 |
+| `evif_cache_stats` | 调用后端 `/api/v1/cache/stats` API | ✅ 真实实现 |
+| `evif_log_query` | 调用后端 `/api/v1/logs` API | ✅ 真实实现 |
+| `evif_metrics_export` | 调用后端 `/api/v1/metrics/export` API | ✅ 真实实现 |
+| `evif_config_get` | 调用后端 `/api/v1/config` API | ✅ 真实实现 |
+| `evif_request_trace` | 调用后端 `/api/v1/trace` API | ✅ 真实实现 |
+| `evif_search` | 调用后端 `/api/v1/search` API | ✅ 真实实现 |
+| `evif_diff` | 读取两个文件并计算差异 | ✅ 真实实现 |
+| `evif_tree` | 递归列出目录树（使用 VfsBackend.list_dir()） | ✅ 真实实现 |
+| `evif_hash` | 计算文件 MD5/SHA1/SHA256/SHA512 | ✅ 真实实现 |
+| `evif_du` | 调用后端 `/api/v1/du` API | ✅ 真实实现 |
+| `evif_archive` | 调用后端 `/api/v1/archive/*` API | ✅ 真实实现 |
+| `evif_watch` | 调用后端 `/api/v1/watch` API | ✅ 真实实现 |
+| `evif_pipe_create` | 调用后端 `/api/v1/pipes` API 或 VfsBackend.make_dir() | ✅ 真实实现 |
+| `evif_pipe_list` | 使用 VfsBackend.list_dir("/pipes") | ✅ 真实实现 |
+| `evif_plugin_load` | 调用后端 `/api/v1/plugins/load` API | ✅ 真实实现 |
+| `evif_plugin_unload` | 调用后端 `/api/v1/plugins/unload` API | ✅ 真实实现 |
+| `evif_plugin_info` | 调用后端 `/api/v1/plugins/{name}` API | ✅ 真实实现 |
+| `evif_plugin_catalog` | 调用后端 `/api/v1/plugins/catalog` API | ✅ 真实实现 |
+| `evif_subagent_status` | 调用后端 `/api/v1/agents/{id}` API | ✅ 真实实现 |
+| `evif_subagent_kill` | 调用后端 `/api/v1/agents/{id}/kill` API | ✅ 真实实现 |
+| `evif_queue_list` | 调用后端 `/api/v1/queue` API | ✅ 真实实现 |
+| `evif_queue_stats` | 调用后端 `/api/v1/queue/stats` API | ✅ 真实实现 |
+| `evif_session_load` | 调用后端 `/api/v1/sessions/{name}` API | ✅ 真实实现 |
+| `evif_session_delete` | DELETE `/api/v1/sessions/{name}` API | ✅ 真实实现 |
+| `evif_skill` | list/info 使用 VfsBackend，execute/create/delete 调用 API | ✅ 真实实现 |
+| `evif_batch` | 使用 VfsBackend 并行执行多个操作 | ✅ 真实实现 |
+| `evif_server_stats` | 调用后端 `/api/v1/server/stats` API | ✅ 真实实现 |
+| `evif_mcp_capabilities` | 调用后端 `/api/v1/capabilities` API | ✅ 真实实现 |
+
+### 核心文件操作（VFS 后端）
+
+| 工具 | 实现方式 | 状态 |
+|------|----------|------|
+| `evif_ls` | VfsBackend.list_dir() | ✅ 真实实现 |
+| `evif_cat` | VfsBackend.read_file() | ✅ 真实实现 |
+| `evif_write` | VfsBackend.write_file() | ✅ 真实实现 |
+| `evif_mkdir` | VfsBackend.make_dir() | ✅ 真实实现 |
+| `evif_rm` | VfsBackend.remove() | ✅ 真实实现 |
+| `evif_stat` | VfsBackend.stat() | ✅ 真实实现 |
+| `evif_session` | 调用后端会话 API (save/list) | ✅ 真实实现 |
+| `evif_agent` | 调用后端子代理 API (create/send/list) | ✅ 真实实现 |
+| `evif_tree` | VfsBackend.list_dir() 递归调用 | ✅ 真实实现 |
+| `evif_hash` | VfsBackend.read_file() + crypto 库计算 | ✅ 真实实现 |
+| `evif_du` | 调用后端 `/api/v1/du` API | ✅ 真实实现 |
+| `evif_mount` | 调用后端 `/api/v1/mounts`, `/api/v1/mount` API | ✅ 真实实现 |
+
+### 已移除的 Mock 实现
+
+这些工具的 mock 实现已全部替换为真实实现：
+
+- `evif_health` → 调用后端 API
+- `evif_skill` → VfsBackend + 后端 API
+- `evif_batch` → VfsBackend 并行操作
+- `evif_mcp_capabilities` → 调用后端 API
+- `evif_plugin_catalog` → 调用后端 API
+- `evif_server_stats` → 调用后端 API
+- `evif_session_load` → 调用后端 API
+- `evif_session_delete` → 调用后端 API
+- `evif_memory_stats` → 调用后端 API
+- `evif_memory_clear` → 调用后端 API
+- `evif_subagent_kill` → 调用后端 API
+- `evif_archive` → 调用后端 API
+- `evif_watch` → 调用后端 API
+- `evif_pipe_create` → VfsBackend.make_dir()
+- `evif_pipe_list` → VfsBackend.list_dir()
+
+### 新增 VfsBackend 方法
+
+```rust
+// 获取后端 URL
+pub fn get_url(&self) -> &str {
+    &self.http_url
+}
+
+// 获取 HTTP 客户端
+pub fn get_http_client(&self) -> &Client {
+    &self.http_client
+}
+
+// 获取记忆统计
+pub async fn get_memory_stats(&self, detailed: bool) -> Result<serde_json::Value, String>
+```
+
+### 新增依赖
+
+```toml
+# Cryptographic hashing
+sha2 = "0.10"
+md-5 = "0.10"
+sha1 = "0.10"
+```
+
+### 新增辅助函数
+
+```rust
+/// 截断字符串到指定长度
+fn truncate_string(s: &str, max_len: usize) -> String
+```
+
+### 核心工具操作说明
+
+- `evif_search`: 使用 grep 进行关键词搜索
+- `evif_diff`: 逐行比较两个文件，统计添加/删除/修改
+- `evif_tree`: 递归列出目录结构，支持 max_depth 限制
+- `evif_hash`: 使用 SHA256/SHA512/SHA1/MD5 计算文件哈希
+- `evif_du`: 递归计算目录磁盘使用，支持按大小排序
+
+### 测试验证
+
+```bash
+$ cargo test --package evif-mcp
+test result: ok. 136 passed; 0 failed; 15 ignored
+```
+
+### 架构说明
+
+所有工具现在都通过三层架构处理：
+
+1. **L1: VFS Backend** - 核心文件操作使用 `VfsBackend` 的方法
+2. **L2: HTTP Bridge** - 复杂操作调用后端 API
+3. **L3: 降级处理** - 当后端不可用时返回有用信息而非 "Unknown tool"
+
+### 实现细节更新（2026-05-04 续）
+
+#### evif_tree 真实实现
+- 使用 VfsBackend.list_dir() 递归调用构建目录树
+- 支持 max_depth 深度限制
+- 支持 include_hidden 隐藏文件过滤
+- 支持 filter 文件名过滤
+- 使用 Box::pin 处理递归 async 函数
+
+#### evif_hash 真实实现
+- 使用 VfsBackend.read_file() 读取文件内容
+- 使用 md-5, sha1, sha2 库计算 MD5/SHA1/SHA256/SHA512 哈希
+- 返回哈希值和文件大小
+
+#### evif_du 真实实现
+- 调用后端 `/api/v1/du` API
+- 支持 max_depth, sort_by, top_n 参数
+- 返回磁盘使用条目和统计数据
+
+#### evif_mount 真实实现
+- list 操作: GET /api/v1/mounts
+- mount 操作: POST /api/v1/mount
+- unmount 操作: DELETE /api/v1/mount
+- 返回挂载状态和结果
+
+**测试结果**: `cargo test -p evif-mcp` → 136 passed; 0 failed

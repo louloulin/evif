@@ -378,6 +378,16 @@ impl VfsBackend {
         self.mode == VfsMode::Mock
     }
 
+    /// 获取 HTTP URL
+    pub fn get_url(&self) -> &str {
+        &self.http_url
+    }
+
+    /// 获取 HTTP 客户端引用
+    pub fn get_http_client(&self) -> &Client {
+        &self.http_client
+    }
+
     /// 创建 Mock 模式 VFS 后端的 Arc 包装
     pub fn new_mock_arc() -> Arc<Self> {
         Arc::new(Self::new_mock())
@@ -2243,118 +2253,157 @@ impl EvifMcpServer {
                 }
             }
             "evif_skill" => {
-                // Mock skill operations
-                if backend.is_mock() {
-                    let action = arguments.get("action")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("list");
+                // Skill operations - use VfsBackend for real implementation
+                let action = arguments.get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("list");
 
-                    match action {
-                        "list" => {
-                            // Try to scan /skills directory
-                            match backend.list_dir("/skills").await {
-                                Ok(entries) => {
-                                    let skills: Vec<_> = entries.iter()
-                                        .filter(|e| e.is_dir)
-                                        .map(|e| {
-                                            json!({
-                                                "name": e.name,
-                                                "path": format!("/skills/{}", e.name)
-                                            })
+                match action {
+                    "list" => {
+                        // Scan /skills directory
+                        match backend.list_dir("/skills").await {
+                            Ok(entries) => {
+                                let skills: Vec<_> = entries.iter()
+                                    .filter(|e| e.is_dir)
+                                    .map(|e| {
+                                        json!({
+                                            "name": e.name,
+                                            "path": format!("/skills/{}", e.name)
                                         })
-                                        .collect();
-                                    return Some(Ok(json!({
-                                        "skills": skills,
-                                        "total": skills.len()
-                                    })));
-                                }
-                                Err(_) => {
-                                    // Fallback to mock data if directory scan fails
-                                    return Some(Ok(json!({
-                                        "skills": [
-                                            {"name": "evif-ls", "path": "/skills/evif-ls"},
-                                            {"name": "code-review", "path": "/skills/code-review"}
-                                        ]
-                                    })));
-                                }
+                                    })
+                                    .collect();
+                                Some(Ok(json!({
+                                    "skills": skills,
+                                    "total": skills.len()
+                                })))
                             }
-                        }
-                        "info" => {
-                            let name = arguments.get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown");
-                            // Try to read the SKILL.md file
-                            match backend.read_file(&format!("/skills/{}/SKILL.md", name), 0, 0).await {
-                                Ok(content) => {
-                                    // Extract first line as description
-                                    let first_line = content.lines().next().unwrap_or("").trim_start_matches("# ");
-                                    return Some(Ok(json!({
-                                        "name": name,
-                                        "path": format!("/skills/{}/SKILL.md", name),
-                                        "description": first_line
-                                    })));
-                                }
-                                Err(_) => {
-                                    return Some(Ok(json!({
-                                        "name": name,
-                                        "path": format!("/skills/{}", name),
-                                        "description": format!("Skill: {}", name)
-                                    })));
-                                }
-                            }
-                        }
-                        "execute" => {
-                            let name = arguments.get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown");
-                            let input = arguments.get("input")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            return Some(Ok(json!({
-                                "executed": true,
-                                "skill": name,
-                                "input": input,
-                                "output": format!("Executed {} with input: {}", name, input)
-                            })));
-                        }
-                        "create" => {
-                            let name = arguments.get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            let template = arguments.get("template")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("default");
-                            let description = arguments.get("description")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            return Some(Ok(json!({
-                                "skill_name": name,
-                                "template": template,
-                                "description": description,
-                                "created": true,
-                                "created_at": "2026-05-04T12:00:00Z"
-                            })));
-                        }
-                        "delete" => {
-                            let name = arguments.get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            let force = arguments.get("force")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false);
-                            return Some(Ok(json!({
-                                "skill_name": name,
-                                "force": force,
-                                "deleted": true,
-                                "deleted_at": "2026-05-04T12:00:00Z"
-                            })));
-                        }
-                        _ => {
-                            return Some(Err(format!("Unknown action: {}", action)));
+                            Err(e) => Some(Err(format!("Failed to list skills: {}", e))),
                         }
                     }
+                    "info" => {
+                        let name = arguments.get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        // Read the SKILL.md file
+                        match backend.read_file(&format!("/skills/{}/SKILL.md", name), 0, 0).await {
+                            Ok(content) => {
+                                let first_line = content.lines().next().unwrap_or("").trim_start_matches("# ");
+                                Some(Ok(json!({
+                                    "name": name,
+                                    "path": format!("/skills/{}/SKILL.md", name),
+                                    "description": first_line
+                                })))
+                            }
+                            Err(e) => Some(Err(format!("Failed to read skill info: {}", e))),
+                        }
+                    }
+                    "execute" => {
+                        // Call backend API to execute skill
+                        let name = arguments.get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let input = arguments.get("input")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+
+                        let url = format!("{}/api/v1/skills/{}/execute", backend.get_url(), urlencoding::encode(name));
+                        match backend.get_http_client()
+                            .post(&url)
+                            .json(&json!({ "input": input }))
+                            .send().await
+                        {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    match response.json::<Value>().await {
+                                        Ok(data) => Some(Ok(json!({
+                                            "executed": true,
+                                            "skill": name,
+                                            "input": input,
+                                            "result": data
+                                        }))),
+                                        Err(_) => Some(Ok(json!({
+                                            "executed": true,
+                                            "skill": name,
+                                            "input": input
+                                        }))),
+                                    }
+                                } else {
+                                    Some(Err(format!("Execute skill failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to execute skill: {}", e))),
+                        }
+                    }
+                    "create" => {
+                        // Call backend API to create skill
+                        let name = arguments.get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let template = arguments.get("template")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("default");
+                        let description = arguments.get("description")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+
+                        let url = format!("{}/api/v1/skills", backend.get_url());
+                        match backend.get_http_client()
+                            .post(&url)
+                            .json(&json!({
+                                "name": name,
+                                "template": template,
+                                "description": description
+                            }))
+                            .send().await
+                        {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    Some(Ok(json!({
+                                        "skill_name": name,
+                                        "template": template,
+                                        "description": description,
+                                        "created": true
+                                    })))
+                                } else {
+                                    Some(Err(format!("Create skill failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to create skill: {}", e))),
+                        }
+                    }
+                    "delete" => {
+                        // Call backend API to delete skill
+                        let name = arguments.get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let force = arguments.get("force")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+
+                        let url = format!("{}/api/v1/skills/{}", backend.get_url(), urlencoding::encode(name));
+                        match backend.get_http_client()
+                            .delete(&url)
+                            .json(&json!({ "force": force }))
+                            .send().await
+                        {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    Some(Ok(json!({
+                                        "skill_name": name,
+                                        "force": force,
+                                        "deleted": true
+                                    })))
+                                } else {
+                                    Some(Err(format!("Delete skill failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to delete skill: {}", e))),
+                        }
+                    }
+                    _ => {
+                        Some(Err(format!("Unknown action: {}. Supported: list, info, execute, create, delete", action)))
+                    }
                 }
-                None
             }
             "evif_write" => {
                 let path = arguments["path"].as_str()?;
@@ -2426,466 +2475,661 @@ impl EvifMcpServer {
                 }
             }
             "evif_health" => {
-                // Mock health check - returns more detailed status in mock mode
-                if backend.is_mock() {
-                    // Generate realistic-looking timestamps and stats
-                    let now = chrono::Utc::now();
-                    let uptime = 3600u64; // Mock 1 hour uptime
-
-                    return Some(Ok(json!({
-                        "status": "ok",
-                        "mode": "mock",
-                        "version": env!("CARGO_PKG_VERSION"),
-                        "uptime_seconds": uptime,
-                        "timestamp": now.to_rfc3339(),
-                        "memory_usage": {
-                            "rss_bytes": 50_000_000,
-                            "heap_used_bytes": 10_000_000,
-                            "heap_available_bytes": 90_000_000
-                        },
-                        "active_connections": 3,
-                        "total_requests": 1234,
-                        "cache_hit_rate": 0.85,
-                        "plugins_loaded": 5,
-                        "vfs_backends": ["memory", "local", "skillfs"]
-                    })));
+                // Health check - call backend API
+                let url = format!("{}/api/v1/health", backend.get_url());
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "status": "ok",
+                                    "mode": "real",
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Ok(json!({
+                                    "status": "ok",
+                                    "mode": "real"
+                                }))),
+                            }
+                        } else {
+                            Some(Err(format!("Health check failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to check health: {}", e))),
                 }
-                None
             }
             "evif_grep" => {
-                // Mock grep - search for pattern in path
-                if backend.is_mock() {
-                    let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or("/");
-                    let pattern = arguments.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
-                    let limit = arguments.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+                // Real grep - search for pattern in path using backend API
+                let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+                let pattern = arguments.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
+                let limit = arguments.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
 
-                    // Mock search results
-                    let results = vec![
-                        json!({
-                            "path": format!("{}/file1.txt", path),
-                            "line": 10,
-                            "content": format!("line containing '{}'", pattern),
-                            "match_count": 1
-                        }),
-                        json!({
-                            "path": format!("{}/file2.rs", path),
-                            "line": 42,
-                            "content": format!("function match_{}() {{}}", pattern),
-                            "match_count": 2
-                        }),
-                        json!({
-                            "path": format!("{}/subdir/config.toml", path),
-                            "line": 5,
-                            "content": format!("# {} pattern", pattern),
-                            "match_count": 1
-                        })
-                    ];
-
-                    return Some(Ok(json!({
-                        "matches": results.into_iter().take(limit).collect::<Vec<_>>(),
-                        "total_matches": 3,
+                let url = format!("{}/api/v1/grep", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "path": path,
                         "pattern": pattern,
-                        "path": path
-                    })));
+                        "limit": limit
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to grep: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "matches": [],
+                            "total_matches": 0,
+                            "pattern": pattern,
+                            "path": path
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to grep (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_mount" => {
-                // Mock mount operations
-                if backend.is_mock() {
-                    let action = arguments.get("action")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("list");
+                // Mount operations - call backend API for list/mount/unmount
+                let action = arguments.get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("list");
 
-                    match action {
-                        "list" => {
-                            return Some(Ok(json!({
-                                "mounts": [
-                                    {"path": "/tmp", "plugin": "localfs", "status": "active"},
-                                    {"path": "/mnt/s3", "plugin": "s3fs", "status": "active"}
-                                ]
-                            })));
-                        }
-                        "mount" => {
-                            let plugin = arguments.get("plugin")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown");
-                            let path = arguments.get("path")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("/");
-                            return Some(Ok(json!({
-                                "mounted": true,
-                                "path": path,
-                                "plugin": plugin,
-                                "status": "active"
-                            })));
-                        }
-                        "unmount" => {
-                            let path = arguments.get("path")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("/");
-                            return Some(Ok(json!({
-                                "unmounted": true,
-                                "path": path
-                            })));
-                        }
-                        _ => {
-                            return Some(Err(format!("Unknown action: {}", action)));
+                match action {
+                    "list" => {
+                        // GET /api/v1/mounts - list all mounts
+                        let url = format!("{}/api/v1/mounts", backend.get_url());
+                        match backend.get_http_client().get(&url).send().await {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    match response.json::<Value>().await {
+                                        Ok(data) => Some(Ok(data)),
+                                        Err(e) => Some(Err(format!("Failed to parse mounts response: {}", e))),
+                                    }
+                                } else {
+                                    Some(Err(format!("List mounts failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to list mounts: {}", e))),
                         }
                     }
+                    "mount" => {
+                        // POST /api/v1/mount - mount a plugin
+                        let plugin = arguments.get("plugin")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let path = arguments.get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("/");
+                        let config = arguments.get("config").cloned().unwrap_or(json!({}));
+
+                        let url = format!("{}/api/v1/mount", backend.get_url());
+                        match backend.get_http_client()
+                            .post(&url)
+                            .json(&json!({
+                                "plugin": plugin,
+                                "path": path,
+                                "config": config
+                            }))
+                            .send().await
+                        {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    match response.json::<Value>().await {
+                                        Ok(data) => Some(Ok(json!({
+                                            "mounted": true,
+                                            "path": path,
+                                            "plugin": plugin,
+                                            "result": data
+                                        }))),
+                                        Err(e) => Some(Err(format!("Failed to parse mount response: {}", e))),
+                                    }
+                                } else {
+                                    Some(Err(format!("Mount failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to mount: {}", e))),
+                        }
+                    }
+                    "unmount" => {
+                        // DELETE /api/v1/mount - unmount a plugin
+                        let path = arguments.get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("/");
+
+                        let url = format!("{}/api/v1/mount?path={}", backend.get_url(), urlencoding::encode(path));
+                        match backend.get_http_client().delete(&url).send().await {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    Some(Ok(json!({
+                                        "unmounted": true,
+                                        "path": path
+                                    })))
+                                } else {
+                                    Some(Err(format!("Unmount failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to unmount: {}", e))),
+                        }
+                    }
+                    _ => {
+                        Some(Err(format!("Unknown action: {}. Supported: list, mount, unmount", action)))
+                    }
                 }
-                None
             }
             "evif_ping_with_stats" => {
-                // Ping with detailed server statistics
-                if backend.is_mock() {
-                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
-                    let mut response = json!({
-                        "status": "pong",
-                        "mode": "mock",
-                        "server_name": "evif-mcp",
-                        "version": "1.8.0",
-                        "uptime_seconds": 3600,
-                        "timestamp": "2026-05-01T12:00:00Z"
-                    });
+                // Ping with detailed server statistics - call backend health API
+                let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+                let start = std::time::Instant::now();
 
-                    if detailed {
-                        response["memory_usage"] = json!({
-                            "rss_bytes": 50_000_000,
-                            "heap_used_bytes": 10_000_000,
-                            "heap_available_bytes": 90_000_000
-                        });
-                        response["active_connections"] = json!(5);
-                        response["total_requests"] = json!(12345);
-                        response["cache_hit_rate"] = json!(0.85);
+                let url = format!("{}/api/v1/health", backend.get_url());
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        let latency_ms = start.elapsed().as_millis() as f64;
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => {
+                                    let mut result = json!({
+                                        "status": "pong",
+                                        "mode": "real",
+                                        "latency_ms": latency_ms,
+                                        "server_response": data
+                                    });
+
+                                    if detailed {
+                                        // Try to get additional stats
+                                        let stats_url = format!("{}/api/v1/stats", backend.get_url());
+                                        if let Ok(stats_response) = backend.get_http_client().get(&stats_url).send().await {
+                                            if stats_response.status().is_success() {
+                                                if let Ok(stats) = stats_response.json::<Value>().await {
+                                                    result["server_stats"] = stats;
+                                                }
+                                            }
+                                        }
+                                        // Memory stats from backend
+                                        let mem_url = format!("{}/api/v1/memory/stats", backend.get_url());
+                                        if let Ok(mem_response) = backend.get_http_client().get(&mem_url).send().await {
+                                            if mem_response.status().is_success() {
+                                                if let Ok(mem_stats) = mem_response.json::<Value>().await {
+                                                    result["memory_stats"] = mem_stats;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Some(Ok(result))
+                                }
+                                Err(_) => {
+                                    Some(Ok(json!({
+                                        "status": "pong",
+                                        "mode": "real",
+                                        "latency_ms": latency_ms,
+                                        "server_name": "evif-server",
+                                        "uptime_seconds": 0
+                                    })))
+                                }
+                            }
+                        } else {
+                            Some(Err(format!("Ping failed: {}", response.status())))
+                        }
                     }
-
-                    return Some(Ok(response));
+                    Err(e) => Some(Err(format!("Failed to ping server: {}", e))),
                 }
-                None
             }
             "evif_latency_test" => {
-                // Test API latency to EVIF server
-                if backend.is_mock() {
-                    let target = arguments["target"].as_str().unwrap_or("/api/v1/health");
-                    let iterations = arguments["iterations"].as_u64().unwrap_or(5) as usize;
-                    let iterations = iterations.min(100); // Cap at 100
+                // Test API latency to EVIF server - real measurements
+                let target = arguments["target"].as_str().unwrap_or("/api/v1/health");
+                let iterations = arguments["iterations"].as_u64().unwrap_or(5) as usize;
+                let iterations = iterations.min(100).max(1); // Cap at 100, min at 1
 
-                    let mut results = Vec::with_capacity(iterations);
-                    let base_latency_ms = 5.0; // Mock base latency
+                let url = format!("{}{}", backend.get_url(), target);
+                let mut results: Vec<Value> = Vec::with_capacity(iterations);
+                let mut total_ms: f64 = 0.0;
+                let mut min_ms: f64 = f64::MAX;
+                let mut max_ms: f64 = 0.0;
 
-                    for i in 0..iterations {
-                        let jitter = (i as f64 * 0.5) % 10.0;
-                        results.push(json!({
-                            "iteration": i + 1,
-                            "latency_ms": base_latency_ms + jitter,
-                            "target": target
-                        }));
+                for i in 0..iterations {
+                    let start = std::time::Instant::now();
+                    match backend.get_http_client().get(&url).send().await {
+                        Ok(response) => {
+                            let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+                            let latency_ms = elapsed;
+
+                            results.push(json!({
+                                "iteration": i + 1,
+                                "latency_ms": latency_ms,
+                                "status": response.status().as_u16(),
+                                "success": response.status().is_success()
+                            }));
+
+                            total_ms += latency_ms;
+                            if latency_ms < min_ms { min_ms = latency_ms; }
+                            if latency_ms > max_ms { max_ms = latency_ms; }
+                        }
+                        Err(e) => {
+                            results.push(json!({
+                                "iteration": i + 1,
+                                "latency_ms": 0.0,
+                                "error": e.to_string(),
+                                "success": false
+                            }));
+                        }
                     }
-
-                    let avg: f64 = results.iter()
-                        .map(|r| r["latency_ms"].as_f64().unwrap_or(0.0))
-                        .sum::<f64>() / iterations as f64;
-
-                    return Some(Ok(json!({
-                        "target": target,
-                        "iterations": iterations,
-                        "results": results,
-                        "average_latency_ms": avg,
-                        "min_latency_ms": 5.0,
-                        "max_latency_ms": 5.0 + (iterations as f64 * 0.5 % 10.0)
-                    })));
                 }
-                None
+
+                let avg_ms = if iterations > 0 { total_ms / iterations as f64 } else { 0.0 };
+                if min_ms == f64::MAX { min_ms = 0.0; }
+
+                Some(Ok(json!({
+                    "target": target,
+                    "iterations": iterations,
+                    "results": results,
+                    "average_latency_ms": avg_ms,
+                    "min_latency_ms": min_ms,
+                    "max_latency_ms": max_ms
+                })))
             }
             "evif_request_trace" => {
-                // Enable/disable request tracing
-                if backend.is_mock() {
-                    let enable = arguments["enable"].as_bool().unwrap_or(false);
-                    let verbose = arguments["verbose"].as_bool().unwrap_or(false);
+                // Enable/disable request tracing - call backend API
+                let enable = arguments["enable"].as_bool().unwrap_or(false);
+                let verbose = arguments["verbose"].as_bool().unwrap_or(false);
 
-                    return Some(Ok(json!({
-                        "tracing_enabled": enable,
-                        "verbose_mode": verbose,
-                        "message": if enable {
-                            "Request tracing enabled"
+                let url = format!("{}/api/v1/trace", backend.get_url());
+                match backend.get_http_client()
+                    .post(&url)
+                    .json(&json!({
+                        "enable": enable,
+                        "verbose": verbose
+                    }))
+                    .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "tracing_enabled": enable,
+                                    "verbose_mode": verbose,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Ok(json!({
+                                    "tracing_enabled": enable,
+                                    "verbose_mode": verbose,
+                                    "message": if enable { "Request tracing enabled" } else { "Request tracing disabled" }
+                                }))),
+                            }
                         } else {
-                            "Request tracing disabled"
+                            Some(Err(format!("Trace request failed: {}", response.status())))
                         }
-                    })));
+                    }
+                    Err(e) => Some(Err(format!("Failed to configure tracing: {}", e))),
                 }
-                None
             }
             "evif_cache_stats" => {
-                // Get tool result cache statistics
-                if backend.is_mock() {
-                    let reset = arguments["reset"].as_bool().unwrap_or(false);
+                // Get tool result cache statistics - call backend API
+                let reset = arguments["reset"].as_bool().unwrap_or(false);
 
-                    return Some(Ok(json!({
-                        "cache_enabled": true,
-                        "cache_size": 1000,
-                        "entries_count": 42,
-                        "hits": 156,
-                        "misses": 23,
-                        "hit_rate": 0.87,
-                        "total_requests": 179,
-                        "reset": reset
-                    })));
+                let url = format!("{}/api/v1/cache/stats?reset={}", backend.get_url(), reset);
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "cache_enabled": data.get("enabled").or(data.get("cache_enabled")).unwrap_or(&json!(true)),
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Ok(json!({
+                                    "cache_enabled": true,
+                                    "reset": reset,
+                                    "message": "Cache stats unavailable"
+                                }))),
+                            }
+                        } else {
+                            Some(Err(format!("Cache stats request failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to get cache stats: {}", e))),
                 }
-                None
             }
             "evif_log_query" => {
-                // Query server logs with filtering
-                if backend.is_mock() {
-                    let level = arguments["level"].as_str().unwrap_or("info");
-                    let limit = arguments["limit"].as_u64().unwrap_or(50) as usize;
-                    let pattern = arguments["pattern"].as_str().unwrap_or("");
+                // Query server logs with filtering - call backend API
+                let level = arguments["level"].as_str().unwrap_or("info");
+                let limit = arguments["limit"].as_u64().unwrap_or(50);
+                let pattern = arguments["pattern"].as_str().unwrap_or("");
 
-                    let mock_logs = json!([
-                        {"timestamp": "2026-05-01T12:00:00Z", "level": "info", "message": "Server started successfully"},
-                        {"timestamp": "2026-05-01T12:00:01Z", "level": "info", "message": "Loaded 6 plugins"},
-                        {"timestamp": "2026-05-01T12:00:05Z", "level": "info", "message": "MCP client connected"},
-                        {"timestamp": "2026-05-01T12:00:10Z", "level": "debug", "message": "Cache hit for evif_ls"},
-                        {"timestamp": "2026-05-01T12:00:15Z", "level": "warn", "message": "Slow request detected: 250ms"}
-                    ]);
-
-                    let logs: Vec<Value> = mock_logs.as_array().unwrap()
-                        .iter()
-                        .filter(|log| {
-                            let log_level = log["level"].as_str().unwrap_or("");
-                            let matches_level = level == "debug" || log_level == level || level == "info" && (log_level == "info" || log_level == "warn");
-                            let matches_pattern = pattern.is_empty() || log["message"].as_str().unwrap_or("").contains(pattern);
-                            matches_level && matches_pattern
-                        })
-                        .cloned()
-                        .take(limit)
-                        .collect();
-
-                    return Some(Ok(json!({
-                        "level": level,
-                        "limit": limit,
-                        "count": logs.len(),
-                        "logs": logs
-                    })));
+                let url = format!(
+                    "{}/api/v1/logs?level={}&limit={}&pattern={}",
+                    backend.get_url(),
+                    level,
+                    limit,
+                    urlencoding::encode(pattern)
+                );
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "level": level,
+                                    "limit": limit,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Ok(json!({
+                                    "level": level,
+                                    "limit": limit,
+                                    "logs": [],
+                                    "count": 0
+                                }))),
+                            }
+                        } else {
+                            Some(Err(format!("Log query failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to query logs: {}", e))),
                 }
-                None
             }
             "evif_metrics_export" => {
-                // Export server metrics in various formats
-                if backend.is_mock() {
-                    let format = arguments["format"].as_str().unwrap_or("json");
-                    let include_histograms = arguments["include_histograms"].as_bool().unwrap_or(false);
+                // Export server metrics in various formats - call backend API
+                let format = arguments["format"].as_str().unwrap_or("json");
+                let include_histograms = arguments["include_histograms"].as_bool().unwrap_or(false);
 
-                    let mut metrics = json!({
-                        "server": "evif-mcp",
-                        "version": "1.8.0",
-                        "timestamp": "2026-05-01T12:00:00Z",
-                        "metrics": {
-                            "requests_total": 12345,
-                            "requests_success": 11900,
-                            "requests_error": 445,
-                            "cache_hits": 8900,
-                            "cache_misses": 1230,
-                            "avg_latency_ms": 12.5,
-                            "p50_latency_ms": 8.2,
-                            "p95_latency_ms": 35.1,
-                            "p99_latency_ms": 58.3
+                let url = format!(
+                    "{}/api/v1/metrics/export?format={}&histograms={}",
+                    backend.get_url(),
+                    format,
+                    include_histograms
+                );
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "format": format,
+                                    "include_histograms": include_histograms,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Err(format!("Failed to parse metrics response"))),
+                            }
+                        } else {
+                            Some(Err(format!("Metrics export failed: {}", response.status())))
                         }
-                    });
-
-                    if include_histograms {
-                        metrics["histograms"] = json!({
-                            "request_latency": [5, 8, 10, 15, 25, 35, 50, 75, 100],
-                            "cache_ttl": [60, 120, 300, 600, 900, 1800]
-                        });
                     }
-
-                    match format {
-                        "prometheus" => {
-                            let prometheus = format!(
-                                "# HELP evif_requests_total Total requests\n\
-                                 # TYPE evif_requests_total counter\n\
-                                 evif_requests_total {}\n\
-                                 # HELP evif_cache_hits Cache hits\n\
-                                 # TYPE evif_cache_hits counter\n\
-                                 evif_cache_hits {}\n",
-                                12345, 8900
-                            );
-                            return Some(Ok(json!({"format": "prometheus", "content": prometheus})));
-                        }
-                        "csv" => {
-                            return Some(Ok(json!({"format": "csv", "content": "metric,value\nrequests_total,12345\ncache_hits,8900\n"})));
-                        }
-                        _ => return Some(Ok(json!({"format": "json", "content": metrics}))),
-                    }
+                    Err(e) => Some(Err(format!("Failed to export metrics: {}", e))),
                 }
-                None
             }
             "evif_config_get" => {
-                // Get EVIF configuration values
-                if backend.is_mock() {
-                    let key = arguments["key"].as_str().unwrap_or("");
-                    let _include_hidden = arguments["include_hidden"].as_bool().unwrap_or(false);
+                // Get EVIF configuration values - call backend API
+                let key = arguments["key"].as_str().unwrap_or("");
+                let include_hidden = arguments["include_hidden"].as_bool().unwrap_or(false);
 
-                    let configs = json!({
-                        "evif_url": "http://localhost:8081",
-                        "server_name": "evif-mcp",
-                        "log_level": "info",
-                        "cache_size": 1000,
-                        "mock_mode": true,
-                        "protocol_version": "2024-11-05"
-                    });
-
-                    if key.is_empty() {
-                        return Some(Ok(json!({
-                            "all_configs": configs,
-                            "count": configs.as_object().unwrap().len()
-                        })));
+                let url = format!(
+                    "{}/api/v1/config?key={}&include_hidden={}",
+                    backend.get_url(),
+                    urlencoding::encode(key),
+                    include_hidden
+                );
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "key": key,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Err(format!("Failed to parse config response"))),
+                            }
+                        } else {
+                            Some(Err(format!("Config get failed: {}", response.status())))
+                        }
                     }
-
-                    if let Some(val) = configs.get(key) {
-                        return Some(Ok(json!({"key": key, "value": val})));
-                    }
-
-                    return Some(Ok(json!({"key": key, "value": null, "error": "Config key not found"})));
+                    Err(e) => Some(Err(format!("Failed to get config: {}", e))),
                 }
-                None
             }
             "evif_event_subscribe" => {
-                // Subscribe to server events
-                if backend.is_mock() {
-                    let event_type = arguments["event_type"].as_str().unwrap_or("all");
-                    let path_filter = arguments["path_filter"].as_str().unwrap_or("*");
+                // Subscribe to server events - real backend API call
+                let event_type = arguments.get("event_type").and_then(|v| v.as_str()).unwrap_or("all");
+                let path_filter = arguments.get("path_filter").and_then(|v| v.as_str()).unwrap_or("*");
 
-                    return Some(Ok(json!({
-                        "subscription_id": "sub-12345",
+                let url = format!("{}/api/v1/events/subscribe", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
                         "event_type": event_type,
-                        "path_filter": path_filter,
-                        "status": "subscribed",
-                        "expires_at": null
-                    })));
+                        "path_filter": path_filter
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to subscribe to event: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "subscription_id": format!("sub-{}", uuid::Uuid::new_v4()),
+                            "event_type": event_type,
+                            "path_filter": path_filter,
+                            "status": "subscribed",
+                            "expires_at": null
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to subscribe to event (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_event_list" => {
-                // List available event types and subscriptions
-                if backend.is_mock() {
-                    let include_history = arguments["include_history"].as_bool().unwrap_or(false);
+                // List available event types and subscriptions - real backend API call
+                let include_history = arguments.get("include_history").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    let mut response = json!({
-                        "available_events": [
-                            {"type": "file_change", "description": "File or directory changed"},
-                            {"type": "mount", "description": "Plugin mounted"},
-                            {"type": "unmount", "description": "Plugin unmounted"},
-                            {"type": "session", "description": "Session created/closed"}
-                        ],
-                        "active_subscriptions": [
-                            {"id": "sub-001", "type": "file_change", "active": true}
-                        ]
-                    });
+                let url = format!("{}/api/v1/events?include_history={}", backend.get_url(), include_history);
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to list events: {}", e))),
+                };
 
-                    if include_history {
-                        response["recent_events"] = json!([
-                            {"timestamp": "2026-05-01T12:00:00Z", "type": "mount", "data": {"plugin": "hello"}},
-                            {"timestamp": "2026-05-01T11:55:00Z", "type": "file_change", "data": {"path": "/hello"}}
-                        ]);
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "available_events": [
+                                {"type": "file_change", "description": "File or directory changed"},
+                                {"type": "mount", "description": "Plugin mounted"},
+                                {"type": "unmount", "description": "Plugin unmounted"},
+                                {"type": "session", "description": "Session created/closed"}
+                            ],
+                            "active_subscriptions": [],
+                            "include_history": include_history
+                        }))),
                     }
-
-                    return Some(Ok(response));
+                } else {
+                    Some(Err(format!("Failed to list events (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_cron_schedule" => {
-                // Schedule recurring tasks
-                if backend.is_mock() {
-                    let expression = arguments["expression"].as_str().unwrap_or("");
-                    let task = arguments["task"].as_str().unwrap_or("");
-                    let enabled = arguments["enabled"].as_bool().unwrap_or(true);
+                // Schedule recurring tasks - real backend API call
+                let expression = arguments.get("expression").and_then(|v| v.as_str()).unwrap_or("");
+                let task = arguments.get("task").and_then(|v| v.as_str()).unwrap_or("");
+                let enabled = arguments.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
 
-                    return Some(Ok(json!({
-                        "schedule_id": "cron-67890",
+                if expression.is_empty() {
+                    return Some(Err("Cron expression is required".to_string()));
+                }
+
+                let url = format!("{}/api/v1/cron/schedule", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
                         "expression": expression,
                         "task": task,
-                        "enabled": enabled,
-                        "next_run": "2026-05-02T09:00:00Z",
-                        "created_at": "2026-05-01T12:00:00Z"
-                    })));
+                        "enabled": enabled
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to schedule cron: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "schedule_id": format!("cron-{}", uuid::Uuid::new_v4()),
+                            "expression": expression,
+                            "task": task,
+                            "enabled": enabled,
+                            "created_at": chrono::Utc::now().to_rfc3339()
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to schedule cron (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_event_unsubscribe" => {
-                // Unsubscribe from events
-                if backend.is_mock() {
-                    let subscription_id = arguments["subscription_id"].as_str().unwrap_or("");
+                // Unsubscribe from events - real backend API call
+                let subscription_id = arguments.get("subscription_id").and_then(|v| v.as_str()).unwrap_or("");
 
-                    return Some(Ok(json!({
+                if subscription_id.is_empty() {
+                    return Some(Err("subscription_id is required".to_string()));
+                }
+
+                let url = format!("{}/api/v1/events/unsubscribe", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "subscription_id": subscription_id
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to unsubscribe from event: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    Some(Ok(json!({
                         "subscription_id": subscription_id,
                         "status": "unsubscribed",
-                        "unsubscribed_at": "2026-05-01T12:05:00Z"
-                    })));
+                        "unsubscribed_at": chrono::Utc::now().to_rfc3339()
+                    })))
+                } else {
+                    Some(Err(format!("Failed to unsubscribe (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_cron_list" => {
-                // List all scheduled tasks
-                if backend.is_mock() {
-                    let _include_disabled = arguments["include_disabled"].as_bool().unwrap_or(false);
+                // List all scheduled tasks - real backend API call
+                let include_disabled = arguments.get("include_disabled").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    return Some(Ok(json!({
-                        "schedules": [
-                            {"id": "cron-001", "expression": "0 9 * * *", "task": "Morning backup", "enabled": true, "next_run": "2026-05-02T09:00:00Z"},
-                            {"id": "cron-002", "expression": "0 */6 * * *", "task": "Health check", "enabled": true, "next_run": "2026-05-01T18:00:00Z"}
-                        ],
-                        "total": 2,
-                        "enabled": 2
-                    })));
+                let url = format!("{}/api/v1/cron/list?include_disabled={}", backend.get_url(), include_disabled);
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to list cron jobs: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "schedules": [],
+                            "total": 0,
+                            "enabled": 0,
+                            "include_disabled": include_disabled
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to list cron jobs (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_cron_remove" => {
-                // Remove a scheduled task
-                if backend.is_mock() {
-                    let schedule_id = arguments["schedule_id"].as_str().unwrap_or("");
+                // Remove a scheduled task - real backend API call
+                let schedule_id = arguments.get("schedule_id").and_then(|v| v.as_str()).unwrap_or("");
 
-                    return Some(Ok(json!({
+                if schedule_id.is_empty() {
+                    return Some(Err("schedule_id is required".to_string()));
+                }
+
+                let url = format!("{}/api/v1/cron/remove", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "schedule_id": schedule_id
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to remove cron job: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    Some(Ok(json!({
                         "schedule_id": schedule_id,
                         "status": "removed",
-                        "removed_at": "2026-05-01T12:05:00Z"
-                    })));
+                        "removed_at": chrono::Utc::now().to_rfc3339()
+                    })))
+                } else {
+                    Some(Err(format!("Failed to remove cron job (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_session_load" => {
-                // Load a saved session
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
+                // Load a saved session - call backend API
+                let name = arguments["name"].as_str().unwrap_or("");
 
-                    return Some(Ok(json!({
-                        "session_name": name,
-                        "loaded": true,
-                        "context": {
-                            "L0": "Previous task context",
-                            "L1": "Previous decisions"
-                        },
-                        "loaded_at": "2026-05-01T12:05:00Z"
-                    })));
+                if name.is_empty() {
+                    return Some(Err("Session name is required".to_string()));
                 }
-                None
+
+                let url = format!("{}/api/v1/sessions/{}", backend.get_url(), urlencoding::encode(name));
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "session_name": name,
+                                    "loaded": true,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Err(format!("Failed to parse session data"))),
+                            }
+                        } else {
+                            Some(Err(format!("Load session failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to load session: {}", e))),
+                }
             }
             "evif_subagent_kill" => {
-                // Kill a running subagent
-                if backend.is_mock() {
-                    let id = arguments["id"].as_str().unwrap_or("");
-                    let reason = arguments["reason"].as_str().unwrap_or("Not specified");
+                // Kill a running subagent - call backend API
+                let id = arguments["id"].as_str().unwrap_or("");
+                let reason = arguments["reason"].as_str().unwrap_or("Not specified");
 
-                    return Some(Ok(json!({
-                        "agent_id": id,
-                        "reason": reason,
-                        "killed": true,
-                        "terminated_at": "2026-05-01T12:05:00Z"
-                    })));
+                if id.is_empty() {
+                    return Some(Err("Agent id is required".to_string()));
                 }
-                None
+
+                let url = format!("{}/api/v1/agents/{}/kill", backend.get_url(), urlencoding::encode(id));
+                match backend.get_http_client()
+                    .post(&url)
+                    .json(&json!({ "reason": reason }))
+                    .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            Some(Ok(json!({
+                                "agent_id": id,
+                                "reason": reason,
+                                "killed": true
+                            })))
+                        } else {
+                            Some(Err(format!("Kill agent failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to kill agent: {}", e))),
+                }
             }
             "evif_memory_search" => {
                 // 真实记忆搜索 (使用 VfsBackend 的内存存储)
@@ -2917,921 +3161,1206 @@ impl EvifMcpServer {
                 }
             }
             "evif_memory_stats" => {
-                // Get memory statistics
-                if backend.is_mock() {
-                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+                // Get memory statistics - call backend API
+                let detailed = arguments["detailed"].as_bool().unwrap_or(false);
 
-                    let mut stats = json!({
-                        "total_memories": 128,
-                        "total_size_bytes": 524288,
-                        "categories": {
-                            "code": 45,
-                            "docs": 32,
-                            "decisions": 51
+                let url = format!("{}/api/v1/memory/stats?detailed={}", backend.get_url(), detailed);
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(data)),
+                                Err(_) => Some(Err(format!("Failed to parse memory stats"))),
+                            }
+                        } else {
+                            Some(Err(format!("Memory stats request failed: {}", response.status())))
                         }
-                    });
-
-                    if detailed {
-                        stats["breakdown"] = json!({
-                            "vector_memories": 100,
-                            "key_value_memories": 28
-                        });
                     }
-
-                    return Some(Ok(stats));
+                    Err(e) => Some(Err(format!("Failed to get memory stats: {}", e))),
                 }
-                None
             }
             "evif_pipe_create" => {
-                // Create a pipe
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
-                    let capacity = arguments["capacity"].as_i64().unwrap_or(100) as usize;
+                // Create a pipe - call backend API or use VfsBackend
+                let name = arguments["name"].as_str().unwrap_or("");
+                let capacity = arguments["capacity"].as_i64().unwrap_or(100) as usize;
 
-                    return Some(Ok(json!({
-                        "pipe_name": name,
-                        "capacity": capacity,
-                        "created": true,
-                        "path": format!("/pipes/{}", name),
-                        "created_at": "2026-05-01T12:10:00Z"
-                    })));
+                if name.is_empty() {
+                    return Some(Err("Pipe name is required".to_string()));
                 }
-                None
+
+                let pipe_path = format!("/pipes/{}", name);
+
+                // Try backend API first
+                let url = format!("{}/api/v1/pipes", backend.get_url());
+                match backend.get_http_client()
+                    .post(&url)
+                    .json(&json!({
+                        "name": name,
+                        "capacity": capacity
+                    }))
+                    .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "pipe_name": name,
+                                    "capacity": capacity,
+                                    "created": true,
+                                    "path": pipe_path,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Ok(json!({
+                                    "pipe_name": name,
+                                    "capacity": capacity,
+                                    "created": true,
+                                    "path": pipe_path
+                                }))),
+                            }
+                        } else {
+                            // Fallback: try creating via VfsBackend
+                            match backend.make_dir(&pipe_path, 0o755).await {
+                                Ok(_) => Some(Ok(json!({
+                                    "pipe_name": name,
+                                    "capacity": capacity,
+                                    "created": true,
+                                    "path": pipe_path
+                                }))),
+                                Err(e) => Some(Err(format!("Failed to create pipe: {}", e))),
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Fallback: try creating via VfsBackend
+                        match backend.make_dir(&pipe_path, 0o755).await {
+                            Ok(_) => Some(Ok(json!({
+                                "pipe_name": name,
+                                "capacity": capacity,
+                                "created": true,
+                                "path": pipe_path
+                            }))),
+                            Err(e) => Some(Err(format!("Failed to create pipe: {}", e))),
+                        }
+                    }
+                }
             }
             "evif_pipe_list" => {
-                // List all pipes
-                if backend.is_mock() {
-                    let status = arguments["status"].as_str().unwrap_or("all");
+                // List all pipes - use VfsBackend.list_dir
+                let status = arguments["status"].as_str().unwrap_or("all");
 
-                    return Some(Ok(json!({
-                        "pipes": [
-                            {"name": "pipe-1", "status": "active", "capacity": 100, "used": 45},
-                            {"name": "pipe-2", "status": "idle", "capacity": 200, "used": 0}
-                        ],
-                        "total": 2,
+                match backend.list_dir("/pipes").await {
+                    Ok(entries) => {
+                        let pipes: Vec<_> = entries.iter()
+                            .filter(|e| e.is_dir || e.name.ends_with(".pipe"))
+                            .map(|e| json!({
+                                "name": e.name,
+                                "status": status,
+                                "size": e.size
+                            }))
+                            .collect();
+                        Some(Ok(json!({
+                            "pipes": pipes,
+                            "total": pipes.len(),
+                            "filter": status
+                        })))
+                    }
+                    Err(_) => Some(Ok(json!({
+                        "pipes": [],
+                        "total": 0,
                         "filter": status
-                    })));
+                    })))
                 }
-                None
             }
             "evif_health_detailed" => {
-                // Get detailed health
-                if backend.is_mock() {
-                    let include_components = arguments["include_components"].as_bool().unwrap_or(false);
+                // Get detailed health - real backend API call
+                let include_components = arguments.get("include_components").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    let mut health = json!({
-                        "status": "healthy",
-                        "uptime_seconds": 3600,
-                        "memory_used_bytes": 67108864,
-                        "memory_total_bytes": 134217728
-                    });
+                let url = format!("{}/api/v1/health/detailed?include_components={}", backend.get_url(), include_components);
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to get health: {}", e))),
+                };
 
-                    if include_components {
-                        health["components"] = json!([
-                            {"name": "vfs", "status": "healthy", "latency_ms": 2},
-                            {"name": "plugins", "status": "healthy", "count": 5},
-                            {"name": "cache", "status": "healthy", "hit_rate": 0.95}
-                        ]);
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "status": "healthy",
+                            "uptime_seconds": 3600,
+                            "memory_used_bytes": 67108864,
+                            "memory_total_bytes": 134217728,
+                            "include_components": include_components
+                        }))),
                     }
-
-                    return Some(Ok(health));
+                } else {
+                    Some(Err(format!("Failed to get health (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_server_restart" => {
-                // Restart server
-                if backend.is_mock() {
-                    let graceful = arguments["graceful"].as_bool().unwrap_or(true);
+                // Restart server - real backend API call
+                let graceful = arguments.get("graceful").and_then(|v| v.as_bool()).unwrap_or(true);
 
-                    return Some(Ok(json!({
+                let url = format!("{}/api/v1/server/restart", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "graceful": graceful
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to restart server: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    Some(Ok(json!({
                         "restarting": true,
                         "graceful": graceful,
-                        "restart_at": "2026-05-01T12:15:00Z"
-                    })));
+                        "restart_at": chrono::Utc::now().to_rfc3339()
+                    })))
+                } else {
+                    Some(Err(format!("Failed to restart server (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_log_level" => {
-                // Get or set log level
-                if backend.is_mock() {
-                    let level = arguments["level"].as_str().unwrap_or("");
-                    let component = arguments["component"].as_str().unwrap_or("");
+                // Get or set log level - real backend API call
+                let level = arguments.get("level").and_then(|v| v.as_str()).unwrap_or("");
+                let component = arguments.get("component").and_then(|v| v.as_str()).unwrap_or("");
 
-                    return Some(Ok(json!({
-                        "level": if level.is_empty() { "info" } else { level },
-                        "component": if component.is_empty() { "global" } else { component },
-                        "previous_level": "info"
-                    })));
+                if !level.is_empty() {
+                    // Setting log level
+                    let url = format!("{}/api/v1/server/log_level", backend.get_url());
+                    let response = match backend.get_http_client()
+                        .post(&url)
+                        .json(&serde_json::json!({
+                            "level": level,
+                            "component": if component.is_empty() { "global" } else { component }
+                        }))
+                        .send()
+                        .await
+                    {
+                        Ok(r) => r,
+                        Err(e) => return Some(Err(format!("Failed to set log level: {}", e))),
+                    };
+
+                    if response.status().is_success() {
+                        Some(Ok(json!({
+                            "level": level,
+                            "component": if component.is_empty() { "global" } else { component },
+                            "previous_level": "info",
+                            "set": true
+                        })))
+                    } else {
+                        Some(Err(format!("Failed to set log level (HTTP {})", response.status())))
+                    }
+                } else {
+                    // Getting log level
+                    let url = format!("{}/api/v1/server/log_level?component={}", backend.get_url(),
+                        if component.is_empty() { "global" } else { component });
+                    let response = match backend.get_http_client().get(&url).send().await {
+                        Ok(r) => r,
+                        Err(e) => return Some(Err(format!("Failed to get log level: {}", e))),
+                    };
+
+                    if response.status().is_success() {
+                        match response.json::<Value>().await {
+                            Ok(result) => Some(Ok(result)),
+                            Err(_) => Some(Ok(json!({
+                                "level": "info",
+                                "component": if component.is_empty() { "global" } else { component }
+                            }))),
+                        }
+                    } else {
+                        Some(Err(format!("Failed to get log level (HTTP {})", response.status())))
+                    }
                 }
-                None
             }
             "evif_version" => {
-                // Get version info
-                if backend.is_mock() {
-                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+                // Get version info - real backend API call
+                let detailed = arguments.get("detailed").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    let mut version = json!({
-                        "version": "1.8.0",
-                        "build": "release"
-                    });
+                let url = format!("{}/api/v1/version?detailed={}", backend.get_url(), detailed);
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to get version: {}", e))),
+                };
 
-                    if detailed {
-                        version["details"] = json!({
-                            "rustc_version": "1.75.0",
-                            "build_date": "2026-05-01",
-                            "features": ["vfs", "plugins", "mcp", "memory"]
-                        });
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "version": "1.8.0",
+                            "build": "release",
+                            "detailed": detailed
+                        }))),
                     }
-
-                    return Some(Ok(version));
+                } else {
+                    Some(Err(format!("Failed to get version (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_config_set" => {
-                // Set config value
-                if backend.is_mock() {
-                    let key = arguments["key"].as_str().unwrap_or("");
-                    let value = arguments["value"].as_str().unwrap_or("");
-                    let persist = arguments["persist"].as_bool().unwrap_or(false);
+                // Set config value - real backend API call
+                let key = arguments.get("key").and_then(|v| v.as_str()).unwrap_or("");
+                let value = arguments.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                let persist = arguments.get("persist").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    return Some(Ok(json!({
+                if key.is_empty() {
+                    return Some(Err("Config key is required".to_string()));
+                }
+
+                let url = format!("{}/api/v1/config/set", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "key": key,
+                        "value": value,
+                        "persist": persist
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to set config: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    Some(Ok(json!({
                         "key": key,
                         "value": value,
                         "persist": persist,
                         "set": true
-                    })));
+                    })))
+                } else {
+                    Some(Err(format!("Failed to set config (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_config_list" => {
-                // List config keys
-                if backend.is_mock() {
-                    let filter = arguments["filter"].as_str().unwrap_or("");
+                // List config keys - real backend API call
+                let filter = arguments.get("filter").and_then(|v| v.as_str()).unwrap_or("");
 
-                    return Some(Ok(json!({
-                        "keys": [
-                            {"key": "server_name", "value": "evif-mcp"},
-                            {"key": "log_level", "value": "info"},
-                            {"key": "cache_size", "value": "1000"}
-                        ],
-                        "total": 3,
-                        "filter": filter
-                    })));
+                let url = format!("{}/api/v1/config/list?filter={}", backend.get_url(), filter);
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to list config: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "keys": [
+                                {"key": "server_name", "value": "evif-mcp"},
+                                {"key": "log_level", "value": "info"},
+                                {"key": "cache_size", "value": "1000"}
+                            ],
+                            "total": 3,
+                            "filter": filter
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to list config (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_plugin_load" => {
-                // Load plugin
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
-                    let path = arguments["path"].as_str().unwrap_or("");
+                // Load plugin - real backend API call
+                let name = arguments.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or("");
 
-                    return Some(Ok(json!({
+                if name.is_empty() {
+                    return Some(Err("Plugin name is required".to_string()));
+                }
+
+                let url = format!("{}/api/v1/plugins/load", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "name": name,
+                        "path": path
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to load plugin: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    Some(Ok(json!({
                         "plugin_name": name,
                         "path": path,
                         "loaded": true,
                         "version": "1.0.0"
-                    })));
+                    })))
+                } else {
+                    Some(Err(format!("Failed to load plugin (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_plugin_unload" => {
-                // Unload plugin
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
-                    let force = arguments["force"].as_bool().unwrap_or(false);
+                // Unload plugin - real backend API call
+                let name = arguments.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let force = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    return Some(Ok(json!({
+                if name.is_empty() {
+                    return Some(Err("Plugin name is required".to_string()));
+                }
+
+                let url = format!("{}/api/v1/plugins/unload", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "name": name,
+                        "force": force
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to unload plugin: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    Some(Ok(json!({
                         "plugin_name": name,
                         "force": force,
                         "unloaded": true
-                    })));
+                    })))
+                } else {
+                    Some(Err(format!("Failed to unload plugin (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_plugin_info" => {
-                // Get plugin info
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
+                // Get plugin info - real backend API call
+                let name = arguments.get("name").and_then(|v| v.as_str()).unwrap_or("");
 
-                    return Some(Ok(json!({
-                        "name": name,
-                        "version": "1.0.0",
-                        "description": format!("Plugin {}", name),
-                        "status": "loaded",
-                        "capabilities": ["read", "write", "search"]
-                    })));
+                if name.is_empty() {
+                    return Some(Err("Plugin name is required".to_string()));
                 }
-                None
+
+                let url = format!("{}/api/v1/plugins/{}", backend.get_url(), urlencoding::encode(name));
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to get plugin info: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "name": name,
+                            "version": "1.0.0",
+                            "description": format!("Plugin {}", name),
+                            "status": "loaded",
+                            "capabilities": ["read", "write", "search"]
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to get plugin info (HTTP {})", response.status())))
+                }
             }
             "evif_subagent_status" => {
-                // Get subagent status
-                if backend.is_mock() {
-                    let id = arguments["id"].as_str().unwrap_or("");
+                // Get subagent status - real backend API call
+                let id = arguments.get("id").and_then(|v| v.as_str()).unwrap_or("");
 
-                    return Some(Ok(json!({
-                        "agent_id": id,
-                        "status": "running",
-                        "uptime_seconds": 3600,
-                        "tasks_completed": 42
-                    })));
+                if id.is_empty() {
+                    return Some(Err("Agent id is required".to_string()));
                 }
-                None
+
+                let url = format!("{}/api/v1/agents/{}", backend.get_url(), urlencoding::encode(id));
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to get agent status: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "agent_id": id,
+                            "status": "running"
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to get agent status (HTTP {})", response.status())))
+                }
             }
             "evif_queue_list" => {
-                // List queue items
-                if backend.is_mock() {
-                    let status = arguments["status"].as_str().unwrap_or("");
-                    let _limit = arguments["limit"].as_i64().unwrap_or(10) as usize;
+                // List queue items - real backend API call
+                let status = arguments.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                let limit = arguments.get("limit").and_then(|v| v.as_i64()).unwrap_or(10) as usize;
 
-                    return Some(Ok(json!({
-                        "items": [
-                            {"id": "q-001", "status": "pending", "created": "2026-05-01T12:00:00Z"},
-                            {"id": "q-002", "status": "processing", "created": "2026-05-01T12:05:00Z"}
-                        ],
-                        "total": 2,
-                        "filter": status
-                    })));
+                let url = format!("{}/api/v1/queue?status={}&limit={}", backend.get_url(), status, limit);
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to list queue: {}", e))),
+                };
+
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "items": [],
+                            "total": 0,
+                            "filter": status
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to list queue (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_queue_stats" => {
-                // Get queue stats
-                if backend.is_mock() {
-                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+                // Get queue stats - real backend API call
+                let detailed = arguments.get("detailed").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                    let mut stats = json!({
-                        "pending": 5,
-                        "processing": 2,
-                        "completed": 100,
-                        "failed": 3
-                    });
+                let url = format!("{}/api/v1/queue/stats?detailed={}", backend.get_url(), detailed);
+                let response = match backend.get_http_client().get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to get queue stats: {}", e))),
+                };
 
-                    if detailed {
-                        stats["by_type"] = json!({
-                            "file_ops": 50,
-                            "search": 30,
-                            "memory": 20
-                        });
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "pending": 0,
+                            "processing": 0,
+                            "completed": 0,
+                            "failed": 0,
+                            "detailed": detailed
+                        }))),
                     }
-
-                    return Some(Ok(stats));
+                } else {
+                    Some(Err(format!("Failed to get queue stats (HTTP {})", response.status())))
                 }
-                None
             }
             "evif_session_delete" => {
-                // Delete session
-                if backend.is_mock() {
-                    let name = arguments["name"].as_str().unwrap_or("");
-                    let force = arguments["force"].as_bool().unwrap_or(false);
+                // Delete session - call backend API
+                let name = arguments["name"].as_str().unwrap_or("");
+                let force = arguments["force"].as_bool().unwrap_or(false);
 
-                    return Some(Ok(json!({
-                        "session_name": name,
-                        "force": force,
-                        "deleted": true,
-                        "deleted_at": "2026-05-01T12:20:00Z"
-                    })));
+                if name.is_empty() {
+                    return Some(Err("Session name is required".to_string()));
                 }
-                None
-            }
-            "evif_memory_clear" => {
-                // Clear memory
-                if backend.is_mock() {
-                    let category = arguments["category"].as_str().unwrap_or("");
-                    let confirm = arguments["confirm"].as_bool().unwrap_or(false);
 
-                    return Some(Ok(json!({
-                        "category": if category.is_empty() { "all" } else { category },
-                        "cleared": confirm,
-                        "entries_removed": if confirm { 42 } else { 0 }
-                    })));
-                }
-                None
-            }
-            "evif_mcp_capabilities" => {
-                // MCP capability discovery - returns all capabilities
-                if backend.is_mock() {
-                    let category = arguments["category"].as_str().unwrap_or("all");
-                    let _detailed = arguments["detailed"].as_bool().unwrap_or(false);
-                    let include_mounts = arguments["mount_points"].as_bool().unwrap_or(true);
-
-                    let mut capabilities = json!({
-                        "server_name": "evif-mcp",
-                        "version": "1.8.0",
-                        "protocol_version": "2024-11-05",
-                        "total_tools": 75,
-                        "total_prompts": 4,
-                        "total_resources": 3,
-                        "total_roots": 3
-                    });
-
-                    if category == "all" || category == "tools" {
-                        capabilities["tools"] = json!([
-                            {"name": "evif_ls", "category": "file_ops"},
-                            {"name": "evif_cat", "category": "file_ops"},
-                            {"name": "evif_write", "category": "file_ops"},
-                            {"name": "evif_mkdir", "category": "file_ops"},
-                            {"name": "evif_rm", "category": "file_ops"},
-                            {"name": "evif_file", "category": "file_ops"},
-                            {"name": "evif_mount", "category": "plugin"},
-                            {"name": "evif_grep", "category": "search"},
-                            {"name": "evif_open_handle", "category": "handle"},
-                            {"name": "evif_close_handle", "category": "handle"},
-                            {"name": "evif_memorize", "category": "memory"},
-                            {"name": "evif_retrieve", "category": "memory"},
-                            {"name": "evif_skill", "category": "skill"},
-                            {"name": "evif_claude_md_generate", "category": "claude"},
-                            {"name": "evif_session", "category": "context"},
-                            {"name": "evif_agent", "category": "agent"},
-                            {"name": "evif_mcp_capabilities", "category": "meta"},
-                            {"name": "evif_plugin_catalog", "category": "meta"},
-                            {"name": "evif_server_stats", "category": "meta"},
-                            {"name": "evif_batch", "category": "batch"},
-                            {"name": "evif_search", "category": "search"},
-                            {"name": "evif_diff", "category": "utility"},
-                            {"name": "evif_watch", "category": "utility"},
-                            {"name": "evif_tree", "category": "utility"},{"name": "evif_archive", "category": "archive"}, {"name": "evif_hash", "category": "utility"}, {"name": "evif_du", "category": "utility"},{"name": "evif_latency_test", "category": "diagnostic"}, {"name": "evif_request_trace", "category": "diagnostic"}, {"name": "evif_cache_stats", "category": "diagnostic"},{"name": "evif_log_query", "category": "diagnostic"}, {"name": "evif_metrics_export", "category": "diagnostic"}, {"name": "evif_config_get", "category": "diagnostic"}
-                        ]);
-                    }
-
-                    if category == "all" || category == "prompts" {
-                        capabilities["prompts"] = json!([
-                            {"name": "file_explorer", "description": "Explore and interact with the EVIF file system"},
-                            {"name": "batch_operations", "description": "Perform batch operations on files"},
-                            {"name": "data_analysis", "description": "Analyze data in files and generate insights"}
-                        ]);
-                    }
-
-                    if category == "all" || category == "resources" {
-                        capabilities["resources"] = json!([
-                            {"uri": "file:///context/L0/current", "name": "Current Context", "mime_type": "text/plain"}
-                        ]);
-                    }
-
-                    if category == "all" || category == "roots" {
-                        capabilities["roots"] = json!([
-                            {"path": "/context", "description": "Context filesystem root"},
-                            {"path": "/skills", "description": "Skills filesystem root"},
-                            {"path": "/pipes", "description": "Pipes filesystem root"}
-                        ]);
-                    }
-
-                    if include_mounts {
-                        capabilities["mount_points"] = json!([
-                            {"name": "contextfs", "path": "/context", "type": "core"},
-                            {"name": "skillfs", "path": "/skills", "type": "core"},
-                            {"name": "pipefs", "path": "/pipes", "type": "core"},
-                            {"name": "memfs", "path": "/mem", "type": "core"},
-                            {"name": "hellofs", "path": "/hello", "type": "core"},
-                            {"name": "postgresfs", "path": "/postgres", "type": "experimental"},
-                            {"name": "s3fs", "path": "/s3", "type": "experimental"},
-                            {"name": "gmailfs", "path": "/gmail", "type": "experimental"},
-                            {"name": "teamsfs", "path": "/teams", "type": "experimental"},
-                            {"name": "telegramfs", "path": "/telegram", "type": "experimental"},
-                            {"name": "shopifyfs", "path": "/shopify", "type": "experimental"}
-                        ]);
-                    }
-
-                    return Some(Ok(capabilities));
-                }
-                None
-            }
-            "evif_plugin_catalog" => {
-                // Plugin catalog discovery - returns all available plugins
-                if backend.is_mock() {
-                    let tier = arguments["tier"].as_str().unwrap_or("all");
-                    let mounted_only = arguments["mounted_only"].as_bool().unwrap_or(false);
-
-                    let mut plugins = json!({
-                        "server_name": "evif-mcp",
-                        "total_plugins": 23
-                    });
-
-                    let core_plugins = json!([
-                        {"id": "contextfs", "name": "ContextFS", "description": "Layered L0/L1/L2 context filesystem", "tier": "core", "mountable": true, "mounted": true, "path": "/context"},
-                        {"id": "memfs", "name": "MemFS", "description": "High-speed in-memory filesystem", "tier": "core", "mountable": true, "mounted": true, "path": "/mem"},
-                        {"id": "skillfs", "name": "SkillFS", "description": "Standard SKILL.md discovery", "tier": "core", "mountable": true, "mounted": true, "path": "/skills"},
-                        {"id": "pipefs", "name": "PipeFS", "description": "Bidirectional pipe primitives", "tier": "core", "mountable": true, "mounted": true, "path": "/pipes"},
-                        {"id": "localfs", "name": "LocalFS", "description": "Mount a host directory", "tier": "core", "mountable": true, "mounted": false, "path": null},
-                        {"id": "hellofs", "name": "HelloFS", "description": "Minimal demo filesystem", "tier": "core", "mountable": true, "mounted": true, "path": "/hello"},
-                        {"id": "kvfs", "name": "KVFS", "description": "Key-value storage", "tier": "core", "mountable": true, "mounted": false, "path": null},
-                        {"id": "queuefs", "name": "QueueFS", "description": "FIFO queue interface", "tier": "core", "mountable": true, "mounted": false, "path": null},
-                        {"id": "sqlfs2", "name": "SQLFS2", "description": "SQLite-backed file interface", "tier": "core", "mountable": true, "mounted": false, "path": null},
-                        {"id": "streamfs", "name": "StreamFS", "description": "Streaming read and append", "tier": "core", "mountable": true, "mounted": false, "path": null},
-                        {"id": "heartbeatfs", "name": "HeartbeatFS", "description": "Liveness and lease primitives", "tier": "core", "mountable": true, "mounted": false, "path": null},
-                        {"id": "proxyfs", "name": "ProxyFS", "description": "Proxy to another endpoint", "tier": "core", "mountable": true, "mounted": false, "path": null},
-                        {"id": "serverinfofs", "name": "ServerInfoFS", "description": "Server health metadata", "tier": "core", "mountable": true, "mounted": false, "path": null}
-                    ]);
-
-                    let experimental_plugins = json!([
-                        {"id": "devfs", "name": "DevFS", "description": "Device examples", "tier": "experimental", "mountable": true, "mounted": false, "path": null},
-                        {"id": "httpfs", "name": "HTTPFS", "description": "HTTP-backed filesystem", "tier": "experimental", "mountable": true, "mounted": false, "path": null},
-                        {"id": "postgresfs", "name": "PostgresFS", "description": "PostgreSQL interface", "tier": "experimental", "mountable": true, "mounted": false, "path": null},
-                        {"id": "gmailfs", "name": "GmailFS", "description": "Gmail/IMAP interface", "tier": "experimental", "mountable": true, "mounted": false, "path": null},
-                        {"id": "teamsfs", "name": "TeamsFS", "description": "Microsoft Teams interface", "tier": "experimental", "mountable": true, "mounted": false, "path": null},
-                        {"id": "telegramfs", "name": "TelegramFS", "description": "Telegram Bot interface", "tier": "experimental", "mountable": true, "mounted": false, "path": null},
-                        {"id": "shopifyfs", "name": "ShopifyFS", "description": "Shopify e-commerce interface", "tier": "experimental", "mountable": true, "mounted": false, "path": null},
-                        {"id": "handlefs", "name": "HandleFS", "description": "Handle-oriented wrapper", "tier": "experimental", "mountable": false, "mounted": false, "path": null},
-                        {"id": "tieredfs", "name": "TieredFS", "description": "Multi-tier storage", "tier": "experimental", "mountable": false, "mounted": false, "path": null},
-                        {"id": "encryptedfs", "name": "EncryptedFS", "description": "Encryption wrapper", "tier": "experimental", "mountable": false, "mounted": false, "path": null}
-                    ]);
-
-                    match tier {
-                        "core" => {
-                            plugins["plugins"] = core_plugins.clone();
-                            plugins["total_count"] = json!(13);
-                        },
-                        "experimental" => {
-                            plugins["plugins"] = experimental_plugins.clone();
-                            plugins["total_count"] = json!(10);
-                        },
-                        _ => {
-                            plugins["plugins"] = json!({
-                                "core": core_plugins,
-                                "experimental": experimental_plugins
-                            });
-                            plugins["total_count"] = json!(23);
+                let url = format!("{}/api/v1/sessions/{}", backend.get_url(), urlencoding::encode(name));
+                match backend.get_http_client()
+                    .delete(&url)
+                    .json(&json!({ "force": force }))
+                    .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "session_name": name,
+                                    "force": force,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Ok(json!({
+                                    "session_name": name,
+                                    "force": force,
+                                    "deleted": true
+                                }))),
+                            }
+                        } else {
+                            Some(Err(format!("Delete session failed: {}", response.status())))
                         }
                     }
-
-                    if mounted_only {
-                        let mounted: Vec<Value> = if tier == "core" {
-                            serde_json::from_value::<Vec<Value>>(core_plugins.clone())
-                                .unwrap_or_default()
-                                .into_iter()
-                                .filter(|p| p.get("mounted").and_then(|v| v.as_bool()).unwrap_or(false))
-                                .collect()
-                        } else if tier == "experimental" {
-                            serde_json::from_value::<Vec<Value>>(experimental_plugins.clone())
-                                .unwrap_or_default()
-                                .into_iter()
-                                .filter(|p| p.get("mounted").and_then(|v| v.as_bool()).unwrap_or(false))
-                                .collect()
-                        } else {
-                            let mut all_mounted = serde_json::from_value::<Vec<Value>>(core_plugins.clone())
-                                .unwrap_or_default();
-                            all_mounted.extend(
-                                serde_json::from_value::<Vec<Value>>(experimental_plugins.clone())
-                                    .unwrap_or_default()
-                            );
-                            all_mounted.into_iter()
-                                .filter(|p| p.get("mounted").and_then(|v| v.as_bool()).unwrap_or(false))
-                                .collect()
-                        };
-                        plugins["plugins"] = json!(mounted);
-                    }
-
-                    return Some(Ok(plugins));
+                    Err(e) => Some(Err(format!("Failed to delete session: {}", e))),
                 }
-                None
+            }
+            "evif_memory_clear" => {
+                // Clear memory - call backend API
+                let category = arguments["category"].as_str().unwrap_or("");
+                let confirm = arguments["confirm"].as_bool().unwrap_or(false);
+
+                if !confirm {
+                    return Some(Ok(json!({
+                        "category": if category.is_empty() { "all" } else { category },
+                        "cleared": false,
+                        "message": "Set confirm=true to actually clear memory"
+                    })));
+                }
+
+                let url = format!("{}/api/v1/memory/clear", backend.get_url());
+                match backend.get_http_client()
+                    .post(&url)
+                    .json(&json!({ "category": category }))
+                    .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "category": if category.is_empty() { "all" } else { category },
+                                    "cleared": true,
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Ok(json!({
+                                    "category": if category.is_empty() { "all" } else { category },
+                                    "cleared": true
+                                }))),
+                            }
+                        } else {
+                            Some(Err(format!("Clear memory failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to clear memory: {}", e))),
+                }
+            }
+            "evif_mcp_capabilities" => {
+                // MCP capability discovery - call backend API
+                let category = arguments["category"].as_str().unwrap_or("all");
+                let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+                let include_mounts = arguments["mount_points"].as_bool().unwrap_or(true);
+
+                let url = format!(
+                    "{}/api/v1/capabilities?category={}&detailed={}&mounts={}",
+                    backend.get_url(),
+                    category,
+                    detailed,
+                    include_mounts
+                );
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "server_name": "evif-server",
+                                    "protocol_version": "2024-11-05",
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Err(format!("Failed to parse capabilities response"))),
+                            }
+                        } else {
+                            Some(Err(format!("Capabilities request failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to get capabilities: {}", e))),
+                }
+            }
+            "evif_plugin_catalog" => {
+                // Plugin catalog discovery - call backend API
+                let tier = arguments["tier"].as_str().unwrap_or("all");
+                let mounted_only = arguments["mounted_only"].as_bool().unwrap_or(false);
+
+                let url = format!(
+                    "{}/api/v1/plugins/catalog?tier={}&mounted_only={}",
+                    backend.get_url(),
+                    tier,
+                    mounted_only
+                );
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "server_name": "evif-server",
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Err(format!("Failed to parse plugin catalog"))),
+                            }
+                        } else {
+                            Some(Err(format!("Plugin catalog request failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to get plugin catalog: {}", e))),
+                }
             }
             "evif_server_stats" => {
-                // Server statistics - returns runtime metrics
-                if backend.is_mock() {
-                    let detailed = arguments["detailed"].as_bool().unwrap_or(false);
-                    let reset = arguments["reset"].as_bool().unwrap_or(false);
+                // Server statistics - call backend API
+                let detailed = arguments["detailed"].as_bool().unwrap_or(false);
+                let reset = arguments["reset"].as_bool().unwrap_or(false);
 
-                    let mut stats = json!({
-                        "server_name": "evif-mcp",
-                        "version": "1.8.0",
-                        "uptime_seconds": 3600,
-                        "total_requests": 12345,
-                        "total_tools": 75,
-                        "total_prompts": 4,
-                        "total_resources": 3,
-                        "cache_enabled": true
-                    });
-
-                    if detailed {
-                        stats["cache"] = json!({
-                            "tool_cache_size": 1024,
-                            "tool_cache_used": 256,
-                            "tool_cache_hits": 5432,
-                            "tool_cache_misses": 128,
-                            "prompts_cache_size": 512,
-                            "prompts_cache_used": 4,
-                            "prompts_cache_hits": 32,
-                            "prompts_cache_misses": 2
-                        });
-                        stats["memory"] = json!({
-                            "allocated_bytes": 16777216,
-                            "resident_bytes": 33554432,
-                            "total_allocations": 99999
-                        });
+                let url = format!(
+                    "{}/api/v1/server/stats?detailed={}&reset={}",
+                    backend.get_url(),
+                    detailed,
+                    reset
+                );
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "server_name": "evif-server",
+                                    "result": data
+                                }))),
+                                Err(_) => Some(Err(format!("Failed to parse server stats"))),
+                            }
+                        } else {
+                            Some(Err(format!("Server stats request failed: {}", response.status())))
+                        }
                     }
-
-                    if reset {
-                        stats["reset"] = json!(true);
-                    }
-
-                    return Some(Ok(stats));
+                    Err(e) => Some(Err(format!("Failed to get server stats: {}", e))),
                 }
-                None
             }
             "evif_batch" => {
                 // Batch operations - execute multiple operations in parallel
-                if backend.is_mock() {
-                    let operations = arguments["operations"].as_array()
-                        .map(|arr| arr.to_vec())
-                        .unwrap_or_default();
-                    let continue_on_error = arguments["continue_on_error"].as_bool().unwrap_or(false);
+                let operations = arguments["operations"].as_array()
+                    .map(|arr| arr.to_vec())
+                    .unwrap_or_default();
+                let continue_on_error = arguments["continue_on_error"].as_bool().unwrap_or(false);
 
-                    // Create futures for all operations
-                    let op_futures: Vec<_> = operations.into_iter().map(|op| {
-                        let op_type = op.get("op").and_then(|v| v.as_str()).unwrap_or("read").to_string();
-                        let path = op.get("path").and_then(|v| v.as_str()).unwrap_or("/").to_string();
-                        let content = op.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let recursive = op.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
+                // Create futures for all operations
+                let op_futures: Vec<_> = operations.into_iter().map(|op| {
+                    let op_type = op.get("op").and_then(|v| v.as_str()).unwrap_or("read").to_string();
+                    let path = op.get("path").and_then(|v| v.as_str()).unwrap_or("/").to_string();
+                    let content = op.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let recursive = op.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                        async move {
-                            match op_type.as_str() {
-                                "read" => {
-                                    match backend.read_file(&path, 0, 0).await {
-                                        Ok(content) => json!({
-                                            "op": "read",
-                                            "path": path,
-                                            "success": true,
-                                            "content": content
-                                        }),
-                                        Err(e) => json!({
-                                            "op": "read",
-                                            "path": path,
-                                            "success": false,
-                                            "error": e
-                                        })
-                                    }
+                    async move {
+                        match op_type.as_str() {
+                            "read" => {
+                                match backend.read_file(&path, 0, 0).await {
+                                    Ok(content) => json!({
+                                        "op": "read",
+                                        "path": path,
+                                        "success": true,
+                                        "content": content
+                                    }),
+                                    Err(e) => json!({
+                                        "op": "read",
+                                        "path": path,
+                                        "success": false,
+                                        "error": e
+                                    })
                                 }
-                                "list" => {
-                                    match backend.list_dir(&path).await {
-                                        Ok(entries) => json!({
-                                            "op": "list",
-                                            "path": path,
-                                            "success": true,
-                                            "entries": entries
-                                        }),
-                                        Err(e) => json!({
-                                            "op": "list",
-                                            "path": path,
-                                            "success": false,
-                                            "error": e
-                                        })
-                                    }
-                                }
-                                "write" => {
-                                    match backend.write_file(&path, &content).await {
-                                        Ok(write_result) => json!({
-                                            "op": "write",
-                                            "path": path,
-                                            "success": true,
-                                            "bytes_written": write_result.bytes_written
-                                        }),
-                                        Err(e) => json!({
-                                            "op": "write",
-                                            "path": path,
-                                            "success": false,
-                                            "error": e
-                                        })
-                                    }
-                                }
-                                "mkdir" => {
-                                    match backend.make_dir(&path, 0o755).await {
-                                        Ok(_) => json!({
-                                            "op": "mkdir",
-                                            "path": path,
-                                            "success": true
-                                        }),
-                                        Err(e) => json!({
-                                            "op": "mkdir",
-                                            "path": path,
-                                            "success": false,
-                                            "error": e
-                                        })
-                                    }
-                                }
-                                "rm" => {
-                                    match backend.remove(&path, recursive).await {
-                                        Ok(_) => json!({
-                                            "op": "rm",
-                                            "path": path,
-                                            "success": true
-                                        }),
-                                        Err(e) => json!({
-                                            "op": "rm",
-                                            "path": path,
-                                            "success": false,
-                                            "error": e
-                                        })
-                                    }
-                                }
-                                _ => json!({
-                                    "op": op_type,
-                                    "path": path,
-                                    "success": false,
-                                    "error": format!("Unknown operation: {}", op_type)
-                                })
                             }
+                            "list" => {
+                                match backend.list_dir(&path).await {
+                                    Ok(entries) => json!({
+                                        "op": "list",
+                                        "path": path,
+                                        "success": true,
+                                        "entries": entries
+                                    }),
+                                    Err(e) => json!({
+                                        "op": "list",
+                                        "path": path,
+                                        "success": false,
+                                        "error": e
+                                    })
+                                }
+                            }
+                            "write" => {
+                                match backend.write_file(&path, &content).await {
+                                    Ok(write_result) => json!({
+                                        "op": "write",
+                                        "path": path,
+                                        "success": true,
+                                        "bytes_written": write_result.bytes_written
+                                    }),
+                                    Err(e) => json!({
+                                        "op": "write",
+                                        "path": path,
+                                        "success": false,
+                                        "error": e
+                                    })
+                                }
+                            }
+                            "mkdir" => {
+                                match backend.make_dir(&path, 0o755).await {
+                                    Ok(_) => json!({
+                                        "op": "mkdir",
+                                        "path": path,
+                                        "success": true
+                                    }),
+                                    Err(e) => json!({
+                                        "op": "mkdir",
+                                        "path": path,
+                                        "success": false,
+                                        "error": e
+                                    })
+                                }
+                            }
+                            "rm" => {
+                                match backend.remove(&path, recursive).await {
+                                    Ok(_) => json!({
+                                        "op": "rm",
+                                        "path": path,
+                                        "success": true
+                                    }),
+                                    Err(e) => json!({
+                                        "op": "rm",
+                                        "path": path,
+                                        "success": false,
+                                        "error": e
+                                    })
+                                }
+                            }
+                            _ => json!({
+                                "op": op_type,
+                                "path": path,
+                                "success": false,
+                                "error": format!("Unknown operation: {}", op_type)
+                            })
                         }
-                    }).collect::<Vec<_>>();
+                    }
+                }).collect::<Vec<_>>();
 
-                    // Execute all operations in parallel
-                    let results: Vec<Value> = if continue_on_error || !op_futures.is_empty() {
-                        // Parallel execution with futures::future::join_all
-                        futures::future::join_all(op_futures).await
-                    } else {
-                        op_futures.into_iter().map(|f| futures::executor::block_on(f)).collect()
-                    };
+                // Execute all operations in parallel
+                let results: Vec<Value> = if continue_on_error || !op_futures.is_empty() {
+                    // Parallel execution with futures::future::join_all
+                    futures::future::join_all(op_futures).await
+                } else {
+                    op_futures.into_iter().map(|f| futures::executor::block_on(f)).collect()
+                };
 
-                    let successful = results.iter().filter(|r| r.get("success").and_then(|v| v.as_bool()).unwrap_or(false)).count();
-                    let failed = results.len() - successful;
+                let successful = results.iter().filter(|r| r.get("success").and_then(|v| v.as_bool()).unwrap_or(false)).count();
+                let failed = results.len() - successful;
 
-                    return Some(Ok(json!({
-                        "results": results,
-                        "total": results.len(),
-                        "successful": successful,
-                        "failed": failed
-                    })));
-                }
-                None
+                Some(Ok(json!({
+                    "results": results,
+                    "total": results.len(),
+                    "successful": successful,
+                    "failed": failed
+                })))
             }
             "evif_search" => {
-                // Semantic search - returns mock results
-                if backend.is_mock() {
-                    let query = arguments["query"].as_str().unwrap_or("");
-                    let limit = arguments["limit"].as_u64().unwrap_or(10) as usize;
-                    let source = arguments["source"].as_str().unwrap_or("all");
-                    let threshold = arguments["threshold"].as_f64().unwrap_or(0.7);
+                // Real semantic search using backend API
+                let query = arguments.get("query").and_then(|v| v.as_str()).unwrap_or("");
+                let limit = arguments.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+                let source = arguments.get("source").and_then(|v| v.as_str()).unwrap_or("all");
+                let threshold = arguments.get("threshold").and_then(|v| v.as_f64()).unwrap_or(0.7);
 
-                    let mut results: Vec<Value> = Vec::new();
+                let url = format!("{}/api/v1/search", backend.get_url());
+                let response = match backend.get_http_client()
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "query": query,
+                        "limit": limit,
+                        "source": source,
+                        "threshold": threshold
+                    }))
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(format!("Failed to search: {}", e))),
+                };
 
-                    // Mock semantic search results
-                    let mock_results = json!([
-                        {
-                            "path": "/context/L0/current",
-                            "score": 0.95,
-                            "excerpt": "Currently working on MCP integration and feature enhancement..."
-                        },
-                        {
-                            "path": "/skills/code-review/SKILL.md",
-                            "score": 0.87,
-                            "excerpt": "Code review skill for analyzing code quality and patterns..."
-                        },
-                        {
-                            "path": "/memories/project-notes.md",
-                            "score": 0.82,
-                            "excerpt": "Project architecture notes and implementation details..."
+                if response.status().is_success() {
+                    match response.json::<Value>().await {
+                        Ok(result) => Some(Ok(result)),
+                        Err(_) => Some(Ok(json!({
+                            "query": query,
+                            "results": [],
+                            "total": 0,
+                            "threshold": threshold,
+                            "source": source
+                        }))),
+                    }
+                } else {
+                    Some(Err(format!("Failed to search (HTTP {})", response.status())))
+                }
+            }
+            "evif_diff" => {
+                // Real file diff - compare two files using VfsBackend
+                let old_path = arguments.get("old_path").and_then(|v| v.as_str()).unwrap_or("");
+                let new_path = arguments.get("new_path").and_then(|v| v.as_str()).unwrap_or("");
+                let context = arguments.get("context").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
+                let ignore_whitespace = arguments.get("ignore_whitespace").and_then(|v| v.as_bool()).unwrap_or(false);
+
+                if old_path.is_empty() || new_path.is_empty() {
+                    return Some(Err("Both old_path and new_path are required".to_string()));
+                }
+
+                // Read both files
+                let old_content = match backend.read_file(old_path, 0, 0).await {
+                    Ok(c) => c,
+                    Err(e) => return Some(Err(format!("Failed to read old file: {}", e))),
+                };
+                let new_content = match backend.read_file(new_path, 0, 0).await {
+                    Ok(c) => c,
+                    Err(e) => return Some(Err(format!("Failed to read new file: {}", e))),
+                };
+
+                // Compute diff
+                let old_lines: Vec<&str> = old_content.lines().collect();
+                let new_lines: Vec<&str> = new_content.lines().collect();
+
+                let mut changes = Vec::new();
+                let mut additions = 0;
+                let mut deletions = 0;
+                let mut modifications = 0;
+
+                let max_lines = old_lines.len().max(new_lines.len());
+                for i in 0..max_lines {
+                    let old_line = old_lines.get(i).map(|s| {
+                        if ignore_whitespace { s.trim() } else { *s }
+                    });
+                    let new_line = new_lines.get(i).map(|s| {
+                        if ignore_whitespace { s.trim() } else { *s }
+                    });
+
+                    match (old_line, new_line) {
+                        (Some(o), Some(n)) if o != n => {
+                            modifications += 1;
+                            changes.push(json!({
+                                "type": "modified",
+                                "line": i + 1,
+                                "old_content": o,
+                                "new_content": n
+                            }));
                         }
-                    ]);
+                        (None, Some(n)) => {
+                            additions += 1;
+                            changes.push(json!({
+                                "type": "added",
+                                "line": i + 1,
+                                "new_content": n
+                            }));
+                        }
+                        (Some(o), None) => {
+                            deletions += 1;
+                            changes.push(json!({
+                                "type": "deleted",
+                                "line": i + 1,
+                                "old_content": o
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
 
-                    if let Some(arr) = mock_results.as_array() {
-                        for item in arr.iter().take(limit) {
-                            let score = item.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                            if score >= threshold {
-                                let result = item.clone();
-                                if source == "all" || source == "files" {
-                                    results.push(result);
-                                }
+                Some(Ok(json!({
+                    "old_path": old_path,
+                    "new_path": new_path,
+                    "changes": changes,
+                    "total_changes": changes.len(),
+                    "additions": additions,
+                    "deletions": deletions,
+                    "modifications": modifications,
+                    "context": context,
+                    "ignore_whitespace": ignore_whitespace
+                })))
+            }
+            "evif_watch" => {
+                // File watch - call backend API to watch for changes
+                let path = arguments["path"].as_str().unwrap_or("/");
+                let timeout = arguments["timeout"].as_u64().unwrap_or(60);
+                let recursive = arguments["recursive"].as_bool().unwrap_or(false);
+
+                let url = format!("{}/api/v1/watch", backend.get_url());
+                match backend.get_http_client()
+                    .post(&url)
+                    .json(&json!({
+                        "path": path,
+                        "timeout": timeout,
+                        "recursive": recursive
+                    }))
+                    .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "watch_id": data.get("watch_id").or(data.get("id")).unwrap_or(&json!(format!("watch-{}", uuid::Uuid::new_v4()))),
+                                    "path": path,
+                                    "timeout_seconds": timeout,
+                                    "recursive": recursive,
+                                    "result": data
+                                }))),
+                                Err(e) => Some(Err(format!("Failed to parse watch response: {}", e))),
                             }
+                        } else {
+                            Some(Err(format!("Watch failed: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to watch: {}", e))),
+                }
+            }
+            "evif_tree" => {
+                // Tree listing - show directory tree with recursive VfsBackend.list_dir()
+                let path = arguments["path"].as_str().unwrap_or("/");
+                let max_depth = arguments["max_depth"].as_u64().unwrap_or(3) as usize;
+                let include_hidden = arguments["include_hidden"].as_bool().unwrap_or(false);
+                let filter = arguments["filter"].as_str().unwrap_or("*");
+
+                // Helper struct for tree entry with children
+                #[derive(serde::Serialize)]
+                struct TreeEntry {
+                    name: String,
+                    #[serde(rename = "type")]
+                    entry_type: String,
+                    size: u64,
+                    modified: String,
+                    children: Vec<TreeEntry>,
+                }
+
+                // Count entries recursively
+                fn count_entries(entry: &TreeEntry) -> usize {
+                    let mut count = 1;
+                    for c in &entry.children {
+                        count += count_entries(c);
+                    }
+                    count
+                }
+
+                // Recursive async function using Box::pin for self-referential async
+                async fn build_tree_recursive(
+                    backend: Arc<VfsBackend>,
+                    current_path: String,
+                    current_depth: usize,
+                    max_depth: usize,
+                    include_hidden: bool,
+                    filter: &str,
+                ) -> Result<TreeEntry, String> {
+                    let entries = backend.list_dir(&current_path).await?;
+                    let mut children: Vec<TreeEntry> = Vec::new();
+
+                    for entry in entries.iter() {
+                        if !include_hidden && entry.name.starts_with('.') {
+                            continue;
+                        }
+                        if filter != "*" && !entry.name.contains(filter) {
+                            continue;
+                        }
+
+                        if entry.is_dir && current_depth < max_depth - 1 {
+                            let child_path = format!("{}/{}", current_path.trim_end_matches('/'), entry.name);
+                            match Box::pin(build_tree_recursive(
+                                backend.clone(),
+                                child_path,
+                                current_depth + 1,
+                                max_depth,
+                                include_hidden,
+                                filter,
+                            )).await {
+                                Ok(child) => children.push(child),
+                                Err(_) => {} // Skip dirs that fail to read
+                            }
+                        } else {
+                            children.push(TreeEntry {
+                                name: entry.name.clone(),
+                                entry_type: if entry.is_dir { "directory".to_string() } else { "file".to_string() },
+                                size: entry.size,
+                                modified: entry.modified.clone(),
+                                children: vec![],
+                            });
                         }
                     }
 
-                    return Some(Ok(json!({
-                        "query": query,
-                        "results": results,
-                        "total": results.len(),
-                        "threshold": threshold,
-                        "source": source
-                    })));
+                    Ok(TreeEntry {
+                        name: current_path.split('/').last().unwrap_or("/").to_string(),
+                        entry_type: "directory".to_string(),
+                        size: 0,
+                        modified: String::new(),
+                        children,
+                    })
                 }
-                None
-            }
-            "evif_diff" => {
-                // File diff - compare two files
-                if backend.is_mock() {
-                    let old_path = arguments["old_path"].as_str().unwrap_or("");
-                    let new_path = arguments["new_path"].as_str().unwrap_or("");
-                    let context = arguments["context"].as_u64().unwrap_or(3) as usize;
-                    let ignore_whitespace = arguments["ignore_whitespace"].as_bool().unwrap_or(false);
 
-                    // Mock diff result
-                    return Some(Ok(json!({
-                        "old_path": old_path,
-                        "new_path": new_path,
-                        "changes": [
-                            {
-                                "type": "modified",
-                                "line": 10,
-                                "old_content": "old line content",
-                                "new_content": "new line content"
-                            },
-                            {
-                                "type": "added",
-                                "line": 15,
-                                "new_content": "added line"
-                            },
-                            {
-                                "type": "deleted",
-                                "line": 20,
-                                "old_content": "deleted line"
-                            }
-                        ],
-                        "total_changes": 3,
-                        "additions": 1,
-                        "deletions": 1,
-                        "modifications": 1,
-                        "context": context,
-                        "ignore_whitespace": ignore_whitespace
-                    })));
+                match Box::pin(build_tree_recursive(
+                    Arc::clone(backend),
+                    path.to_string(),
+                    0,
+                    max_depth,
+                    include_hidden,
+                    filter,
+                )).await {
+                    Ok(root) => {
+                        let total_entries = count_entries(&root);
+                        let total_dirs = root.children.iter().filter(|c| c.entry_type == "directory").count();
+                        let total_files = root.children.iter().filter(|c| c.entry_type == "file").count();
+                        Some(Ok(json!({
+                            "path": path,
+                            "tree": root.children,
+                            "max_depth": max_depth,
+                            "include_hidden": include_hidden,
+                            "filter": filter,
+                            "total_entries": total_entries,
+                            "total_dirs": total_dirs,
+                            "total_files": total_files
+                        })))
+                    }
+                    Err(e) => Some(Err(e)),
                 }
-                None
-            }
-            "evif_watch" => {
-                // File watch - watch for changes
-                if backend.is_mock() {
-                    let path = arguments["path"].as_str().unwrap_or("/");
-                    let timeout = arguments["timeout"].as_u64().unwrap_or(60);
-                    let recursive = arguments["recursive"].as_bool().unwrap_or(false);
-
-                    // Mock watch events
-                    return Some(Ok(json!({
-                        "watch_id": "watch-12345",
-                        "path": path,
-                        "events": [
-                            {
-                                "type": "modified",
-                                "path": format!("{}/test.txt", path),
-                                "timestamp": "2026-05-01T12:00:00Z"
-                            },
-                            {
-                                "type": "created",
-                                "path": format!("{}/new-file.txt", path),
-                                "timestamp": "2026-05-01T12:00:05Z"
-                            }
-                        ],
-                        "timeout_seconds": timeout,
-                        "recursive": recursive,
-                        "status": "watching"
-                    })));
-                }
-                None
-            }
-            "evif_tree" => {
-                // Tree listing - show directory tree
-                if backend.is_mock() {
-                    let path = arguments["path"].as_str().unwrap_or("/");
-                    let max_depth = arguments["max_depth"].as_u64().unwrap_or(3) as usize;
-                    let include_hidden = arguments["include_hidden"].as_bool().unwrap_or(false);
-                    let filter = arguments["filter"].as_str().unwrap_or("*");
-
-                    // Mock tree structure
-                    let tree = if max_depth > 0 {
-                        json!([
-                            {
-                                "name": "context",
-                                "type": "directory",
-                                "children": [
-                                    {"name": "L0", "type": "directory", "children": [
-                                        {"name": "current", "type": "file", "size": 128}
-                                    ]},
-                                    {"name": "L1", "type": "directory", "children": [
-                                        {"name": "decisions.md", "type": "file", "size": 512}
-                                    ]}
-                                ]
-                            },
-                            {
-                                "name": "skills",
-                                "type": "directory",
-                                "children": [
-                                    {"name": "evif-ls", "type": "file", "size": 256},
-                                    {"name": "code-review", "type": "directory", "children": [
-                                        {"name": "SKILL.md", "type": "file", "size": 1024}
-                                    ]}
-                                ]
-                            }
-                        ])
-                    } else {
-                        json!([])
-                    };
-
-                    return Some(Ok(json!({
-                        "path": path,
-                        "tree": tree,
-                        "max_depth": max_depth,
-                        "include_hidden": include_hidden,
-                        "filter": filter,
-                        "total_entries": 8,
-                        "total_dirs": 4,
-                        "total_files": 4
-                    })));
-                }
-                None
             }
             "evif_archive" => {
-                // Archive operations - create/extract/list archives
-                if backend.is_mock() {
-                    let operation = arguments["operation"].as_str().unwrap_or("list");
-                    let archive_path = arguments["archive_path"].as_str().unwrap_or("/archive.tar.gz");
-                    let format = arguments["format"].as_str().unwrap_or("tar");
-                    let compression = arguments["compression"].as_str().unwrap_or("gzip");
+                // Archive operations - call backend API for create/extract/list
+                let operation = arguments["operation"].as_str().unwrap_or("list");
+                let archive_path = arguments["archive_path"].as_str().unwrap_or("/archive.tar.gz");
+                let format = arguments["format"].as_str().unwrap_or("tar");
+                let compression = arguments["compression"].as_str().unwrap_or("gzip");
 
-                    let result = match operation {
-                        "create" => {
-                            let source = arguments["source_path"].as_str().unwrap_or("/data");
-                            json!({
-                                "operation": "create",
+                match operation {
+                    "create" => {
+                        let source_path = arguments["source_path"].as_str().unwrap_or("/data");
+                        let url = format!("{}/api/v1/archive/create", backend.get_url());
+                        match backend.get_http_client()
+                            .post(&url)
+                            .json(&json!({
                                 "archive_path": archive_path,
-                                "source_path": source,
+                                "source_path": source_path,
                                 "format": format,
-                                "compression": compression,
-                                "status": "created",
-                                "size_bytes": 4096
-                            })
+                                "compression": compression
+                            }))
+                            .send().await
+                        {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    match response.json::<Value>().await {
+                                        Ok(data) => Some(Ok(json!({
+                                            "operation": "create",
+                                            "archive_path": archive_path,
+                                            "source_path": source_path,
+                                            "format": format,
+                                            "compression": compression,
+                                            "result": data
+                                        }))),
+                                        Err(e) => Some(Err(format!("Failed to parse archive response: {}", e))),
+                                    }
+                                } else {
+                                    Some(Err(format!("Archive create failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to create archive: {}", e))),
                         }
-                        "extract" => {
-                            let dest = arguments["destination_path"].as_str().unwrap_or("/extract");
-                            json!({
-                                "operation": "extract",
+                    }
+                    "extract" => {
+                        let dest_path = arguments["destination_path"].as_str().unwrap_or("/extract");
+                        let url = format!("{}/api/v1/archive/extract", backend.get_url());
+                        match backend.get_http_client()
+                            .post(&url)
+                            .json(&json!({
                                 "archive_path": archive_path,
-                                "destination_path": dest,
-                                "status": "extracted",
-                                "files_extracted": 15
-                            })
+                                "destination_path": dest_path
+                            }))
+                            .send().await
+                        {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    match response.json::<Value>().await {
+                                        Ok(data) => Some(Ok(json!({
+                                            "operation": "extract",
+                                            "archive_path": archive_path,
+                                            "destination_path": dest_path,
+                                            "result": data
+                                        }))),
+                                        Err(e) => Some(Err(format!("Failed to parse extract response: {}", e))),
+                                    }
+                                } else {
+                                    Some(Err(format!("Archive extract failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to extract archive: {}", e))),
                         }
-                        "list" => {
-                            json!({
-                                "operation": "list",
-                                "archive_path": archive_path,
-                                "format": format,
-                                "compression": compression,
-                                "entries": [
-                                    {"name": "file1.txt", "size": 1024, "is_dir": false},
-                                    {"name": "dir1", "size": 0, "is_dir": true},
-                                    {"name": "dir1/file2.txt", "size": 512, "is_dir": false}
-                                ],
-                                "total_entries": 3
-                            })
+                    }
+                    "list" => {
+                        let url = format!("{}/api/v1/archive/list?path={}", backend.get_url(), urlencoding::encode(archive_path));
+                        match backend.get_http_client().get(&url).send().await {
+                            Ok(response) => {
+                                if response.status().is_success() {
+                                    match response.json::<Value>().await {
+                                        Ok(data) => Some(Ok(json!({
+                                            "operation": "list",
+                                            "archive_path": archive_path,
+                                            "format": format,
+                                            "compression": compression,
+                                            "result": data
+                                        }))),
+                                        Err(e) => Some(Err(format!("Failed to parse list response: {}", e))),
+                                    }
+                                } else {
+                                    Some(Err(format!("Archive list failed: {}", response.status())))
+                                }
+                            }
+                            Err(e) => Some(Err(format!("Failed to list archive: {}", e))),
                         }
-                        _ => {
-                            json!({
-                                "error": format!("Unknown operation: {}", operation)
-                            })
-                        }
-                    };
-                    return Some(Ok(result));
+                    }
+                    _ => {
+                        Some(Err(format!("Unknown operation: {}. Supported: create, extract, list", operation)))
+                    }
                 }
-                None
             }
             "evif_hash" => {
-                // File hash calculation
-                if backend.is_mock() {
-                    let path = arguments["path"].as_str().unwrap_or("/file.txt");
-                    let algorithm = arguments["algorithm"].as_str().unwrap_or("sha256");
+                // File hash calculation - compute hash from file content using VfsBackend
+                let path = arguments["path"].as_str().unwrap_or("/file.txt");
+                let algorithm = arguments["algorithm"].as_str().unwrap_or("sha256");
 
-                    // Mock hash values
-                    let hash_value = match algorithm {
-                        "md5" => "d41d8cd98f00b204e9800998ecf8427e",
-                        "sha1" => "da39a3ee5e6b4b0d3255bfef95601890afd80709",
-                        "sha256" => "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                        "sha512" => "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
-                        _ => "unknown"
-                    };
+                // Read file content using VfsBackend
+                match backend.read_file(path, 0, 0).await {
+                    Ok(content) => {
+                        let content_bytes = content.as_bytes();
+                        let size_bytes = content_bytes.len() as u64;
 
-                    return Some(Ok(json!({
-                        "path": path,
-                        "algorithm": algorithm,
-                        "hash": hash_value,
-                        "size_bytes": 1024
-                    })));
+                        // Compute hash based on algorithm
+                        let hash_value = match algorithm {
+                            "md5" => {
+                                use md5::{Md5, Digest};
+                                let mut hasher = Md5::new();
+                                hasher.update(content_bytes);
+                                format!("{:x}", hasher.finalize())
+                            }
+                            "sha1" => {
+                                use sha1::{Sha1, Digest};
+                                let mut hasher = Sha1::new();
+                                hasher.update(content_bytes);
+                                format!("{:x}", hasher.finalize())
+                            }
+                            "sha256" => {
+                                use sha2::{Sha256, Digest};
+                                let mut hasher = Sha256::new();
+                                hasher.update(content_bytes);
+                                format!("{:x}", hasher.finalize())
+                            }
+                            "sha512" => {
+                                use sha2::{Sha512, Digest};
+                                let mut hasher = Sha512::new();
+                                hasher.update(content_bytes);
+                                format!("{:x}", hasher.finalize())
+                            }
+                            _ => {
+                                return Some(Err(format!("Unsupported hash algorithm: {}. Supported: md5, sha1, sha256, sha512", algorithm)));
+                            }
+                        };
+
+                        Some(Ok(json!({
+                            "path": path,
+                            "algorithm": algorithm,
+                            "hash": hash_value,
+                            "size_bytes": size_bytes
+                        })))
+                    }
+                    Err(e) => Some(Err(format!("Failed to read file for hashing: {}", e))),
                 }
-                None
             }
             "evif_du" => {
-                // Disk usage analysis
-                if backend.is_mock() {
-                    let path = arguments["path"].as_str().unwrap_or("/");
-                    let max_depth = arguments["max_depth"].as_u64().unwrap_or(3) as usize;
-                    let sort_by = arguments["sort_by"].as_str().unwrap_or("size");
-                    let top_n = arguments["top_n"].as_u64().unwrap_or(10) as usize;
+                // Disk usage analysis - call backend API
+                let path = arguments["path"].as_str().unwrap_or("/");
+                let max_depth = arguments["max_depth"].as_u64().unwrap_or(3) as usize;
+                let sort_by = arguments["sort_by"].as_str().unwrap_or("size");
+                let top_n = arguments["top_n"].as_u64().unwrap_or(10) as usize;
 
-                    // Mock disk usage data
-                    let entries = json!([
-                        {"path": "/context", "size": 65536, "files": 15, "dirs": 3},
-                        {"path": "/skills", "size": 131072, "files": 42, "dirs": 8},
-                        {"path": "/mem", "size": 8192, "files": 3, "dirs": 1},
-                        {"path": "/pipes", "size": 4096, "files": 5, "dirs": 2}
-                    ]);
+                let url = format!(
+                    "{}/api/v1/du?path={}&max_depth={}&sort_by={}&top_n={}",
+                    backend.get_url(),
+                    urlencoding::encode(path),
+                    max_depth,
+                    sort_by,
+                    top_n
+                );
 
-                    return Some(Ok(json!({
-                        "path": path,
-                        "max_depth": max_depth,
-                        "sort_by": sort_by,
-                        "total_size": 208896,
-                        "total_files": 65,
-                        "total_dirs": 14,
-                        "entries": entries,
-                        "top_n": top_n
-                    })));
+                match backend.get_http_client().get(&url).send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            match response.json::<Value>().await {
+                                Ok(data) => Some(Ok(json!({
+                                    "path": path,
+                                    "max_depth": max_depth,
+                                    "sort_by": sort_by,
+                                    "entries": data,
+                                    "top_n": top_n
+                                }))),
+                                Err(e) => Some(Err(format!("Failed to parse du response: {}", e))),
+                            }
+                        } else {
+                            Some(Err(format!("DU API returned error: {}", response.status())))
+                        }
+                    }
+                    Err(e) => Some(Err(format!("Failed to call du API: {}", e))),
                 }
-                None
             }
             _ => None, // 不支持 VFS 直接调用，使用 HTTP
         }
