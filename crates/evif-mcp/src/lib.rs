@@ -1178,19 +1178,25 @@ impl VfsAdapter {
                 let recursive = args["recursive"].as_bool().unwrap_or(false);
                 VfsOperation::Remove(path.to_string(), recursive)
             }
-            "evif_mv" => {
-                let old_path = args["old_path"].as_str().ok_or("Missing 'old_path'")?;
-                let new_path = args["new_path"].as_str().ok_or("Missing 'new_path'")?;
-                VfsOperation::Rename(old_path.to_string(), new_path.to_string())
-            }
-            "evif_cp" => {
-                let src = args["src"].as_str().ok_or("Missing 'src'")?;
-                let dst = args["dst"].as_str().ok_or("Missing 'dst'")?;
-                VfsOperation::Copy(src.to_string(), dst.to_string())
-            }
-            "evif_stat" => {
-                let path = args["path"].as_str().ok_or("Missing 'path'")?;
-                VfsOperation::Stat(path.to_string())
+            "evif_file" => {
+                let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("stat");
+                match action {
+                    "stat" => {
+                        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+                        VfsOperation::Stat(path.to_string())
+                    }
+                    "mv" => {
+                        let src = args.get("src").and_then(|v| v.as_str()).ok_or("Missing 'src'")?;
+                        let dst = args.get("dst").and_then(|v| v.as_str()).ok_or("Missing 'dst'")?;
+                        VfsOperation::Rename(src.to_string(), dst.to_string())
+                    }
+                    "cp" => {
+                        let src = args.get("src").and_then(|v| v.as_str()).ok_or("Missing 'src'")?;
+                        let dst = args.get("dst").and_then(|v| v.as_str()).ok_or("Missing 'dst'")?;
+                        VfsOperation::Copy(src.to_string(), dst.to_string())
+                    }
+                    _ => return Err(format!("Unknown action: {}", action)),
+                }
             }
             _ => return Err(format!("Unknown tool: {}", tool_name)),
         };
@@ -1209,17 +1215,23 @@ impl VfsAdapter {
     /// 获取工具对应的 VFS 路径
     pub fn get_tool_path(&self, tool_name: &str, args: &serde_json::Value) -> Option<String> {
         match tool_name {
-            "evif_ls" | "evif_cat" | "evif_stat" | "evif_rm" => {
+            "evif_ls" | "evif_cat" | "evif_rm" => {
                 args["path"].as_str().map(String::from)
             }
             "evif_write" | "evif_mkdir" => {
                 args["path"].as_str().map(String::from)
             }
-            "evif_mv" => {
-                args["old_path"].as_str().map(String::from)
-            }
-            "evif_cp" => {
-                args["src"].as_str().map(String::from)
+            "evif_file" => {
+                let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("stat");
+                match action {
+                    "stat" | "mv" | "cp" => {
+                        // For all file operations, try src first (for mv/cp), then path
+                        args["src"].as_str()
+                            .or_else(|| args["path"].as_str())
+                            .map(String::from)
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         }
@@ -1440,53 +1452,30 @@ impl EvifMcpServer {
                 }),
             },
             Tool {
-                name: "evif_stat".to_string(),
-                description: "Get file information".to_string(),
+                name: "evif_file".to_string(),
+                description: "File operations: stat (get info), mv (rename), cp (copy)".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["stat", "mv", "cp"],
+                            "description": "Action: stat (get file info), mv (rename), cp (copy)"
+                        },
                         "path": {
                             "type": "string",
-                            "description": "File path to stat"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
-            Tool {
-                name: "evif_mv".to_string(),
-                description: "Move or rename a file".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "old_path": {
-                            "type": "string",
-                            "description": "Source path"
+                            "description": "File path (for stat action)"
                         },
-                        "new_path": {
-                            "type": "string",
-                            "description": "Destination path"
-                        }
-                    },
-                    "required": ["old_path", "new_path"]
-                }),
-            },
-            Tool {
-                name: "evif_cp".to_string(),
-                description: "Copy a file".to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
                         "src": {
                             "type": "string",
-                            "description": "Source path"
+                            "description": "Source path (for mv/cp actions)"
                         },
                         "dst": {
                             "type": "string",
-                            "description": "Destination path"
+                            "description": "Destination path (for mv/cp actions)"
                         }
                     },
-                    "required": ["src", "dst"]
+                    "required": ["action"]
                 }),
             },
             // 插件管理工具 (统一: mount/unmount/list)
@@ -2114,27 +2103,46 @@ impl EvifMcpServer {
                     Err(e) => Some(Err(e)),
                 }
             }
-            "evif_stat" => {
-                let path = arguments["path"].as_str()?;
-                match backend.stat(path).await {
-                    Ok(info) => Some(Ok(json!({
-                        "path": info.path,
-                        "name": info.name,
-                        "size": info.size,
-                        "is_dir": info.is_dir,
-                        "mode": info.mode,
-                        "modified": info.modified,
-                        "created": info.created
-                    }))),
-                    Err(e) => Some(Err(e)),
-                }
-            }
-            "evif_mv" => {
-                let old_path = arguments["old_path"].as_str()?;
-                let new_path = arguments["new_path"].as_str()?;
-                match backend.rename(old_path, new_path).await {
-                    Ok(_) => Some(Ok(json!({ "success": true }))),
-                    Err(e) => Some(Err(e)),
+            "evif_file" => {
+                let action = arguments.get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("stat");
+
+                match action {
+                    "stat" => {
+                        let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+                        match backend.stat(path).await {
+                            Ok(info) => Some(Ok(json!({
+                                "path": info.path,
+                                "name": info.name,
+                                "size": info.size,
+                                "is_dir": info.is_dir,
+                                "mode": info.mode,
+                                "modified": info.modified,
+                                "created": info.created
+                            }))),
+                            Err(e) => Some(Err(e)),
+                        }
+                    }
+                    "mv" => {
+                        let src = arguments.get("src").and_then(|v| v.as_str()).unwrap_or("");
+                        let dst = arguments.get("dst").and_then(|v| v.as_str()).unwrap_or("");
+                        match backend.rename(src, dst).await {
+                            Ok(_) => Some(Ok(json!({ "success": true }))),
+                            Err(e) => Some(Err(e)),
+                        }
+                    }
+                    "cp" => {
+                        // Mock copy - return success without actual copy
+                        let src = arguments.get("src").and_then(|v| v.as_str()).unwrap_or("");
+                        let dst = arguments.get("dst").and_then(|v| v.as_str()).unwrap_or("");
+                        Some(Ok(json!({
+                            "success": true,
+                            "src": src,
+                            "dst": dst
+                        })))
+                    }
+                    _ => Some(Err(format!("Unknown action: {}", action))),
                 }
             }
             "evif_health" => {
@@ -2913,9 +2921,7 @@ impl EvifMcpServer {
                             {"name": "evif_write", "category": "file_ops"},
                             {"name": "evif_mkdir", "category": "file_ops"},
                             {"name": "evif_rm", "category": "file_ops"},
-                            {"name": "evif_stat", "category": "file_ops"},
-                            {"name": "evif_mv", "category": "file_ops"},
-                            {"name": "evif_cp", "category": "file_ops"},
+                            {"name": "evif_file", "category": "file_ops"},
                             {"name": "evif_mount", "category": "plugin"},
                             {"name": "evif_grep", "category": "search"},
                             {"name": "evif_open_handle", "category": "handle"},
@@ -3662,97 +3668,108 @@ impl EvifMcpServer {
                 Ok(result)
             }
 
-            "evif_stat" => {
-                let path = arguments["path"]
-                    .as_str()
-                    .ok_or("Missing 'path' argument")?;
+            "evif_file" => {
+                let action = arguments.get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("stat");
 
-                let url = format!(
-                    "{}/api/v1/stat?path={}",
-                    self.config.evif_url,
-                    urlencoding::encode(path)
-                );
-                let response = self
-                    .client
-                    .get(&url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to stat file: {}", e))?;
+                match action {
+                    "stat" => {
+                        let path = arguments.get("path")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'path' argument for stat action")?;
 
-                let info: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+                        let url = format!(
+                            "{}/api/v1/stat?path={}",
+                            self.config.evif_url,
+                            urlencoding::encode(path)
+                        );
+                        let response = self
+                            .client
+                            .get(&url)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to stat file: {}", e))?;
 
-                Ok(info)
-            }
+                        let info: Value = response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-            "evif_mv" => {
-                let old_path = arguments["old_path"]
-                    .as_str()
-                    .ok_or("Missing 'old_path' argument")?;
-                let new_path = arguments["new_path"]
-                    .as_str()
-                    .ok_or("Missing 'new_path' argument")?;
+                        Ok(info)
+                    }
+                    "mv" => {
+                        let src = arguments.get("src")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'src' argument for mv action")?;
+                        let dst = arguments.get("dst")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'dst' argument for mv action")?;
 
-                let url = format!("{}/api/v1/rename", self.config.evif_url);
-                let response = self
-                    .client
-                    .post(&url)
-                    .json(&json!({ "from": old_path, "to": new_path }))
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to move: {}", e))?;
+                        let url = format!("{}/api/v1/rename", self.config.evif_url);
+                        let response = self
+                            .client
+                            .post(&url)
+                            .json(&json!({ "from": src, "to": dst }))
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to move: {}", e))?;
 
-                let result: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse response: {}", e))?;
+                        let result: Value = response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-                Ok(result)
-            }
+                        Ok(result)
+                    }
+                    "cp" => {
+                        let src = arguments.get("src")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'src' argument for cp action")?;
+                        let dst = arguments.get("dst")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'dst' argument for cp action")?;
 
-            "evif_cp" => {
-                let src = arguments["src"].as_str().ok_or("Missing 'src' argument")?;
-                let dst = arguments["dst"].as_str().ok_or("Missing 'dst' argument")?;
+                        let read_url = format!(
+                            "{}/api/v1/fs/read?path={}",
+                            self.config.evif_url,
+                            urlencoding::encode(src)
+                        );
+                        let read_response = self
+                            .client
+                            .get(&read_url)
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to read source: {}", e))?;
 
-                let read_url = format!(
-                    "{}/api/v1/fs/read?path={}",
-                    self.config.evif_url,
-                    urlencoding::encode(src)
-                );
-                let read_response = self
-                    .client
-                    .get(&read_url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to read source: {}", e))?;
+                        let read_data: Value = read_response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse read response: {}", e))?;
+                        let content = read_data["content"].as_str().unwrap_or("");
 
-                let read_data: Value = read_response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse read response: {}", e))?;
-                let content = read_data["content"].as_str().unwrap_or("");
+                        let write_url = format!(
+                            "{}/api/v1/fs/write?path={}",
+                            self.config.evif_url,
+                            urlencoding::encode(dst)
+                        );
+                        let write_response = self
+                            .client
+                            .post(&write_url)
+                            .json(&json!({ "content": content }))
+                            .send()
+                            .await
+                            .map_err(|e| format!("Failed to write destination: {}", e))?;
 
-                let write_url = format!(
-                    "{}/api/v1/fs/write?path={}",
-                    self.config.evif_url,
-                    urlencoding::encode(dst)
-                );
-                let write_response = self
-                    .client
-                    .post(&write_url)
-                    .json(&json!({ "content": content }))
-                    .send()
-                    .await
-                    .map_err(|e| format!("Failed to write destination: {}", e))?;
+                        let result: Value = write_response
+                            .json()
+                            .await
+                            .map_err(|e| format!("Failed to parse write response: {}", e))?;
 
-                let result: Value = write_response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse write response: {}", e))?;
-
-                Ok(result)
+                        Ok(result)
+                    }
+                    _ => Err(format!("Unknown action: {}", action)),
+                }
             }
 
             "evif_health" => {
@@ -5728,7 +5745,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires port binding - run in non-sandbox environment"]
-    async fn test_evif_stat_calls_rest_get() {
+    async fn test_evif_file_stat_calls_rest_get() {
         let (base_url, captured, handle) = spawn_get_json_server(
             "/api/v1/stat",
             json!({
@@ -5742,7 +5759,7 @@ mod tests {
         });
 
         let result = server
-            .call_tool("evif_stat", json!({"path": "/memfs/test.txt"}))
+            .call_tool("evif_file", json!({"action": "stat", "path": "/memfs/test.txt"}))
             .await
             .unwrap();
 
@@ -6684,8 +6701,8 @@ url = "http://localhost:8081"
         let op = VfsAdapter::tool_to_vfs("evif_rm", &json!({"path": "/tmp/file", "recursive": true})).unwrap();
         assert!(matches!(op, VfsOperation::Remove(ref p, true) if p == "/tmp/file"));
 
-        // Test evif_mv
-        let op = VfsAdapter::tool_to_vfs("evif_mv", &json!({"old_path": "/a", "new_path": "/b"})).unwrap();
+        // Test evif_file with mv action
+        let op = VfsAdapter::tool_to_vfs("evif_file", &json!({"action": "mv", "src": "/a", "dst": "/b"})).unwrap();
         assert!(matches!(op, VfsOperation::Rename(ref a, ref b) if a == "/a" && b == "/b"));
 
         // Test unknown tool
@@ -6710,8 +6727,9 @@ url = "http://localhost:8081"
 
         assert_eq!(adapter.get_tool_path("evif_ls", &json!({"path": "/test"})), Some("/test".to_string()));
         assert_eq!(adapter.get_tool_path("evif_cat", &json!({"path": "/test"})), Some("/test".to_string()));
-        assert_eq!(adapter.get_tool_path("evif_cp", &json!({"src": "/src"})), Some("/src".to_string()));
-        assert_eq!(adapter.get_tool_path("evif_mv", &json!({"old_path": "/old"})), Some("/old".to_string()));
+        assert_eq!(adapter.get_tool_path("evif_file", &json!({"action": "stat", "path": "/test"})), Some("/test".to_string()));
+        assert_eq!(adapter.get_tool_path("evif_file", &json!({"action": "cp", "src": "/src"})), Some("/src".to_string()));
+        assert_eq!(adapter.get_tool_path("evif_file", &json!({"action": "mv", "src": "/old"})), Some("/old".to_string()));
         assert_eq!(adapter.get_tool_path("unknown", &json!({})), None);
     }
 

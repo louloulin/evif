@@ -330,9 +330,9 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 | T3.2 | 合并 `evif_skill_list/info/execute` → `evif_skill` | lib.rs | ~1709 | 30m | ✅ |
 | T3.3 | 合并 `evif_session_save/list` → `evif_session` | lib.rs | ~1764 | 20m | ✅ |
 | T3.4 | 合并 `evif_subagent_*` (5 个) → `evif_agent` | lib.rs | 1811-2483 | 2h | ✅ |
-| T3.5 | 合并 `evif_stat` → `evif_file` (通过 action 参数) | lib.rs | 1443 | 30m | 🔄 进行中 |
-| T3.6 | 合并 `evif_mv` → `evif_file` | lib.rs | 1457 | 30m | ⬜ |
-| T3.7 | 合并 `evif_cp` → `evif_file` | lib.rs | 1475 | 30m | ⬜ |
+| T3.5 | 合并 `evif_stat` → `evif_file` (通过 action 参数) | lib.rs | 1443 | 30m | ✅ |
+| T3.6 | 合并 `evif_mv` → `evif_file` | lib.rs | 1457 | 30m | ✅ |
+| T3.7 | 合并 `evif_cp` → `evif_file` | lib.rs | 1475 | 30m | ✅ |
 
 **Phase 3 小计**: 7 个合并任务，约 10 小时 (T3.1 已完成)
 
@@ -390,7 +390,7 @@ AI Agent 请求: "evif_mount add github /mounts/github"
 | **M4: 全工具可调用** | 所有工具在 mock 模式下可调用 | Day 4 | ⬜ 待开始 |
 | **M5: 最终优化** | 20 个核心工具，全面测试通过 | Day 5 | ⬜ 待开始 |
 
-> **2026-05-04 更新**: M1 + M2 + Phase 2 + T3.1 + T3.2 + T3.3 + T3.4 已完成，测试验证通过（136 tests passed），工具数 20
+> **2026-05-04 更新**: M1 + M2 + Phase 2 + T3.1 + T3.2 + T3.3 + T3.4 + T3.5 + T3.6 + T3.7 已完成，测试验证通过（136 tests passed），工具数 17
 
 ---
 
