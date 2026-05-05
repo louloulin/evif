@@ -218,19 +218,19 @@ pub struct SqlitePersistence {
 
 #[cfg(feature = "sqlfs")]
 impl SqlitePersistence {
-    pub fn new(db_path: &str) -> Self {
+    pub fn new(db_path: &str) -> Result<Self, EvifError> {
         let conn = rusqlite::Connection::open(db_path)
-            .expect("failed to open SQLite database for ContextFS persistence");
+            .map_err(|e| EvifError::InvalidArgument(format!("ContextFS: failed to open SQLite database '{}': {}", db_path, e)))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS contextfs_kv (
                 path  TEXT PRIMARY KEY,
                 data  BLOB NOT NULL
             );",
         )
-        .expect("failed to create contextfs_kv table");
-        Self {
+        .map_err(|e| EvifError::InvalidArgument(format!("ContextFS: failed to create contextfs_kv table: {}", e)))?;
+        Ok(Self {
             conn: std::sync::Mutex::new(conn),
-        }
+        })
     }
 }
 
@@ -326,16 +326,16 @@ impl ContextFsPlugin {
     /// restored into the in-memory filesystem (seed content is used only when
     /// the database has no persisted data).
     #[cfg(feature = "sqlfs")]
-    pub fn new_with_persistence(db_path: &str) -> Self {
-        let backend = Arc::new(SqlitePersistence::new(db_path));
-        Self {
+    pub fn new_with_persistence(db_path: &str) -> Result<Self, EvifError> {
+        let backend = Arc::new(SqlitePersistence::new(db_path)?);
+        Ok(Self {
             inner: Arc::new(MemFsPlugin::new()),
             initialized: OnceCell::const_new(),
             max_file_size: DEFAULT_MAX_FILE_SIZE,
             max_recent_ops: DEFAULT_MAX_RECENT_OPS,
             persistence: Some(backend),
             budget_limit: DEFAULT_BUDGET_LIMIT,
-        }
+        })
     }
 
     fn readme_text(&self) -> String {

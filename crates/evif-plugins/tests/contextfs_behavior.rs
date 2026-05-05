@@ -657,7 +657,7 @@ mod sqlite_persistence_tests {
         let db_path = dir.path().join("context.db");
         let db_str = db_path.to_str().expect("valid utf8 path");
 
-        let plugin = ContextFsPlugin::new_with_persistence(db_str);
+        let plugin = ContextFsPlugin::new_with_persistence(db_str).expect("create contextfs with persistence");
 
         // Write to L0.
         plugin
@@ -678,7 +678,7 @@ mod sqlite_persistence_tests {
         assert_eq!(data, b"persisted task state");
 
         // Create a new instance with the same DB path to verify persistence.
-        let plugin2 = ContextFsPlugin::new_with_persistence(db_str);
+        let plugin2 = ContextFsPlugin::new_with_persistence(db_str).expect("create contextfs with persistence");
         let restored = plugin2
             .read("/L0/current", 0, 0)
             .await
@@ -697,7 +697,7 @@ mod sqlite_persistence_tests {
 
         // Instance 1: write L0 and L1 data.
         {
-            let plugin = ContextFsPlugin::new_with_persistence(db_str);
+            let plugin = ContextFsPlugin::new_with_persistence(db_str).expect("create contextfs with persistence");
             plugin
                 .write(
                     "/L0/current",
@@ -720,7 +720,7 @@ mod sqlite_persistence_tests {
         }
 
         // Instance 2: create a new plugin pointing at the same database.
-        let plugin2 = ContextFsPlugin::new_with_persistence(db_str);
+        let plugin2 = ContextFsPlugin::new_with_persistence(db_str).expect("create contextfs with persistence");
 
         let l0_data = plugin2
             .read("/L0/current", 0, 0)
@@ -748,7 +748,7 @@ mod sqlite_persistence_tests {
         let db_path = dir.path().join("context3.db");
         let db_str = db_path.to_str().expect("valid utf8 path");
 
-        let plugin = ContextFsPlugin::new_with_persistence(db_str);
+        let plugin = ContextFsPlugin::new_with_persistence(db_str).expect("create contextfs with persistence");
 
         let meta_raw = plugin.read("/.meta", 0, 0).await.expect("read .meta");
         let meta: serde_json::Value =
