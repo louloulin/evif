@@ -812,7 +812,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 
 | # | 任务 | 说明 | 状态 | 预估 |
 |---|------|------|------|------|
-| 16 | **evif 命令统一** | 所有命令统一为 `evif` 前缀 | ⚠️ 待实现 | 2 天 |
+| 16 | **evif 命令统一** | 所有命令统一为 `evif` 前缀 | ✅ 已实现 | 所有子命令：skill, memory, context, pipe, mcp, config |
 | 17 | **MCP Server** | `evif mcp serve` 启动 MCP Server | ✅ 已实现 | - |
 | 18 | **Skill 自动发现** | 扫描 /skills/*.md 生成 Prompts | ✅ 部分实现 | 2 天 | 添加 `skill_discovery` MCP prompt，支持 category 和 task 参数筛选。commit `latest` |
 | 19 | **Memory 集成** | 向量存储 + MCP Tools | ✅ 部分实现 | 3 天 |
