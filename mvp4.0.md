@@ -766,7 +766,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | # | 问题 | 范围 | 说明 |
 |---|------|------|------|
 | 5 | ~~**257 个编译警告**~~ | evif-rest, evif-mcp, evif-plugins 等 | ✅ 已修复 | 94→0 警告。移除未使用 imports，`#[allow(dead_code)]` API 反序列化结构体。commit `e7b059d` |
-| 6 | ~~**公共 API 文档不足**~~ | evif-rest, evif-client | ✅ 已修复（client） | evif-client 添加 655 行文档注释，0 警告。evif-rest 待完成。commit `1ce481e` |
+| 6 | ~~**公共 API 文档不足**~~ | evif-rest, evif-client | ✅ 已修复 | evif-client 添加 655 行文档注释。evif-rest 添加模块级文档（lib.rs, main.rs, server.rs, fs_handlers.rs, memory_handlers.rs, context_handlers.rs, batch_handlers.rs, sync_handlers.rs）。commit `latest` |
 | 7 | ~~**硬编码 URL**~~ | evif-cli, evif-client | ✅ 已审查 | 唯一的非测试硬编码是 CLI `--server` 默认值（合理设计），其余均为测试代码中的 mock 地址 |
 | 8 | ~~**evif-cli 无 lib target**~~ | `evif-cli/Cargo.toml` | ✅ 已修复 | 新增 `[lib]` target + `src/lib.rs`，main.rs 改用库引用。commit `e7b059d` |
 | 9 | **E2E 测试套件为空** | `tests/e2e/src/lib.rs` | 只有占位符，100 bytes |
@@ -855,11 +855,11 @@ Phase 4（1 周）：发布准备
 | 维度 | 完成度 | 说明 |
 |------|--------|------|
 | **核心功能** | 85% | MCP Server 完成，Skill/Memory 部分完成 |
-| **代码质量** | 85% | evif-client 100% 文档覆盖，evif-rest 待补 |
+| **代码质量** | 90% | evif-client + evif-rest 文档覆盖完成 |
 | **测试覆盖** | 70% | evif-client 46 tests, evif-metrics 67 tests, 741+ total |
 | **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **82%** | P0 全部完成，CI 测试已启用，767+ 测试，Homebrew 已就绪 |
+| **综合评估** | **83%** | P0 全部完成，CI 测试已启用，767+ 测试，Homebrew 已就绪 |
 
 ---
 

@@ -1,7 +1,32 @@
-// REST API 服务器
-//
-// Phase 7.2: 支持从配置文件或环境变量 EVIF_CONFIG / EVIF_MOUNTS 读取挂载列表
-// Phase 7.3: 支持动态 .so 插件加载（对标 AGFS PluginFactory）
+//! REST API Server Core
+//!
+//! This module contains the [`EvifServer`] struct which is the main entry point
+//! for the EVIF REST API server.
+//!
+//! ## Server Initialization
+//!
+//! The server initializes with:
+//! 1. Plugin loading from config or environment
+//! 2. Memory backend initialization
+//! 3. Middleware setup (logging, timeout, concurrency limits)
+//! 4. Route registration
+//! 5. TCP listener binding
+//!
+//! ## Plugin Architecture
+//!
+//! EVIF uses a plugin-based architecture for filesystem operations.
+//! Plugins are loaded dynamically and registered via a [`RadixMountTable`].
+//!
+//! ## Built-in Plugins
+//!
+//! - `localfs` - Local filesystem access
+//! - `memfs` - In-memory filesystem
+//! - `contextfs` - Session context (L0/L1/L2)
+//! - `skillfs` - Skill discovery and execution
+//! - `pipefs` - Multi-agent coordination
+//! - `kvfs` - Key-value storage
+//! - `httpfs` - HTTP(S) filesystem
+//! - `proxyfs` - Proxy filesystem
 
 use crate::{
     create_memory_state_from_env, validate_memory_for_production, RestAuthState, RestError,

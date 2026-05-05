@@ -1,4 +1,56 @@
-// EVIF REST API - HTTP/JSON 接口
+//! EVIF REST API - HTTP/JSON Interface
+//!
+//! This crate provides the HTTP/REST API layer for EVIF, exposing VFS operations,
+//! memory management, collaboration, and real-time features via JSON endpoints.
+//!
+//! ## Architecture
+//!
+//! The REST API is built on [Axum](https://crates.io/crates/axum) with:
+//! - **JSON serialization** via `serde_json`
+//! - **Error handling** via `thiserror` with `IntoResponse` implementation
+//! - **Async runtime** via `tokio`
+//!
+//! ## Key Modules
+//!
+//! - [`fs_handlers`] - Filesystem operations (ls, cat, write, mkdir, rm)
+//! - [`memory_handlers`] - Vector memory operations (search, memorize)
+//! - [`context_handlers`] - Session context management (L0/L1/L2)
+//! - [`batch_handlers`] - Batch operations for bulk file processing
+//! - [`collab_handlers`] - Real-time collaboration features
+//! - [`sync_handlers`] - Delta sync and conflict resolution
+//! - [`tenant_handlers`] - Multi-tenant support
+//!
+//! ## Error Handling
+//!
+//! All handlers return [`RestResult<T>`] which is `Result<T, RestError>`.
+//!
+//! [`RestError`] maps to HTTP status codes:
+//! - `NotFound` → 404
+//! - `BadRequest` → 400
+//! - `Conflict` → 409
+//! - `Internal` → 500
+//!
+//! ## Example
+//!
+//! ```rust,no_run
+//! use evif_rest::{create_routes, ServerConfig};
+//! use axum::Server;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let config = ServerConfig::default();
+//!     let app = create_routes(config);
+//!     let addr = "0.0.0.0:8081".parse().unwrap();
+//!     Server::bind(&addr).serve(app.into_make_service()).await;
+//! }
+//! ```
+//!
+//! ## Authentication
+//!
+//! The REST API supports authentication via middleware:
+//! - [`TenantMiddleware`] - Extracts tenant ID from `X-Tenant-ID` header
+//! - [`AuthMiddleware`] - Validates API keys or JWT tokens
+//! - [`LoggingMiddleware`] - Logs all requests with timing
 
 mod batch_handlers;
 mod collab_handlers;

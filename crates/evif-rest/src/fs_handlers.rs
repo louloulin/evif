@@ -1,7 +1,34 @@
-// EVIF File System REST API Handlers
-//
-// 完整对标 AGFS REST API
-// 提供文件系统操作的完整 HTTP 接口
+//! EVIF Filesystem REST API Handlers
+//!
+//! This module provides HTTP handlers for filesystem operations, fully compatible
+//! with the AGFS REST API specification.
+//!
+//! ## Endpoints
+//!
+//! | Method | Path | Description |
+//! |--------|------|-------------|
+//! | GET | /fs/ls | List directory contents |
+//! | GET | /fs/cat | Read file contents |
+//! | POST | /fs/write | Write file contents |
+//! | POST | /fs/mkdir | Create directory |
+//! | POST | /fs/rm | Remove file or directory |
+//! | POST | /fs/stat | Get file/directory info |
+//!
+//! ## State Management
+//!
+//! Handlers use [`FsState`] which contains the global [`MountTable`] for
+//! routing filesystem operations to the appropriate plugin.
+//!
+//! ## Query Parameters
+//!
+//! File read operations support:
+//! - `path` - VFS path (required)
+//! - `offset` - Byte offset for partial reads
+//! - `size` - Maximum bytes to read
+//!
+//! ## Responses
+//!
+//! All responses are JSON-encoded with consistent error handling via [`RestError`].
 
 use axum::{
     extract::{Query, State},

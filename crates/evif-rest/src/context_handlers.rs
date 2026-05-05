@@ -1,4 +1,25 @@
-// Context API Handlers - Semantic search and summarization endpoints
+//! Context API Handlers
+//!
+//! This module provides HTTP handlers for session context management,
+//! including semantic search and summarization endpoints.
+//!
+//! ## Context Layers
+//!
+//! EVIF maintains three layers of context:
+//! - **L0 (Current)** - Immediate task state (ephemeral)
+//! - **L1 (Decisions)** - Session decisions with reasoning (durable)
+//! - **L2 (Knowledge)** - Project knowledge and patterns (persistent)
+//!
+//! ## Endpoints
+//!
+//! | Method | Path | Description |
+//! |--------|------|-------------|
+//! | POST | /context/search | Semantic search across all context layers |
+//! | POST | /context/summarize | Generate L1 decision summary from L0 |
+//!
+//! ## State Management
+//!
+//! Handlers use [`ContextState`] which contains the [`ContextManager`] instance.
 
 use crate::{RestError, RestResult};
 use axum::{extract::State, Json};

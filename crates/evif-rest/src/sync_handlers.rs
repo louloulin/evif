@@ -1,6 +1,35 @@
-// Phase 17.3: Incremental Sync Protocol
-//
-// 提供增量同步功能 - delta sync, version tracking, watch events
+//! Sync Handlers
+//!
+//! This module provides HTTP endpoints for incremental synchronization,
+//! including delta sync, version tracking, and file watching.
+//!
+//! ## Sync Protocol
+//!
+//! The sync protocol maintains version state for tracked paths and provides
+//! delta updates for efficient synchronization.
+//!
+//! ## Key Concepts
+//!
+//! - **Delta Change** - Represents a single change (create, modify, delete)
+//! - **Version Tracking** - Each path has a monotonically increasing version
+//! - **Watch Events** - Real-time notifications for file changes
+//!
+//! ## Endpoints
+//!
+//! | Method | Path | Description |
+//! |--------|------|-------------|
+//! | GET | /sync/status | Get sync status |
+//! | POST | /sync/delta | Apply delta changes |
+//! | GET | /sync/delta | Get pending delta changes |
+//! | WS | /sync/watch | Real-time file watching |
+//!
+//! ## Conflict Resolution
+//!
+//! The sync system detects conflicts when two agents modify the same file
+//! concurrently. Conflicts can be resolved by:
+//! - Keeping local version
+//! - Keeping remote version
+//! - Manual merge
 
 use crate::{RestError, RestResult};
 use axum::{extract::State, response::IntoResponse, Json};

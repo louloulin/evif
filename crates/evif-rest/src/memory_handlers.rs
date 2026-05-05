@@ -1,7 +1,34 @@
-// EVIF Memory REST API Handlers
-//
-// Memory management HTTP interfaces
-// Implements mem.md API design
+//! EVIF Memory REST API Handlers
+//!
+//! This module provides HTTP handlers for vector memory operations,
+//! implementing the memory API design specified in `mem.md`.
+//!
+//! ## Memory Backend
+//!
+//! The memory system supports multiple storage backends:
+//! - **SQLite** - Local file-based storage (default)
+//! - **PostgreSQL** - Production-ready distributed storage
+//!
+//! ## Data Model
+//!
+//! - [`MemoryItem`] - Individual memory entries with content, category, and metadata
+//! - [`MemoryCategory`] - Hierarchical categories for organizing memories
+//! - [`MemoryType`] - Types of memories (semantic, episodic, procedural, declarative)
+//!
+//! ## State Management
+//!
+//! Handlers use [`MemoryState`] which contains the configured storage backend.
+//!
+//! ## Configuration
+//!
+//! Memory state can be created from:
+//! - Environment variables: `MEMORY_BACKEND`, `DATABASE_URL`
+//! - Configuration file: `memory.toml`
+//!
+//! ## Production Readiness
+//!
+//! Use [`validate_memory_for_production()`] to verify memory system is production-ready
+//! before deploying.
 
 use async_trait::async_trait;
 use axum::{

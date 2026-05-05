@@ -1,4 +1,36 @@
-// EVIF REST Server
+//! EVIF REST Server
+//!
+//! HTTP/REST API server for EVIF (Everything Is a File) - AI Agent Context Filesystem.
+//!
+//! ## Usage
+//!
+//! ```bash
+//! # Basic startup
+//! evif-rest
+//!
+//! # With custom port
+//! evif-rest --port 9090
+//!
+//! # Production mode
+//! evif-rest --production
+//!
+//! # With TLS
+//! evif-rest --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+//! ```
+//!
+//! ## Environment Variables
+//!
+//! | Variable | Description | Default |
+//! |----------|-------------|---------|
+//! | EVIF_REST_HOST | Bind address | 0.0.0.0 |
+//! | EVIF_REST_PORT | Port | 8081 |
+//! | EVIF_REST_PRODUCTION_MODE | Enable strict validation | false |
+//! | EVIF_CORS_ENABLED | Enable CORS | false |
+//!
+//! ## Endpoints
+//!
+//! The REST API exposes filesystem, memory, and context operations via JSON.
+//! See [`evif_rest`](crate) for detailed API documentation.
 
 use clap::Parser;
 use evif_rest::{EvifServer, ServerConfig};

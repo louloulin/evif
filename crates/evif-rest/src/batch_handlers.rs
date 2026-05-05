@@ -1,13 +1,29 @@
-// Batch Operations Handlers
-//
-// 提供 REST API 端点用于批量文件操作
-//
-// 端点：
-// - POST /api/v1/batch/copy - 批量复制文件
-// - POST /api/v1/batch/delete - 批量删除文件
-// - GET /api/v1/batch/progress/<id> - 获取操作进度
-// - GET /api/v1/batch/operations - 列出所有操作
-// - DELETE /api/v1/batch/operation/<id> - 取消操作
+//! Batch Operations Handlers
+//!
+//! This module provides HTTP endpoints for bulk file operations,
+//! enabling efficient processing of multiple files in a single request.
+//!
+//! ## Endpoints
+//!
+//! | Method | Path | Description |
+//! |--------|------|-------------|
+//! | POST | /api/v1/batch/copy | Bulk copy files |
+//! | POST | /api/v1/batch/delete | Bulk delete files |
+//! | GET | /api/v1/batch/progress/\<id\> | Get operation progress |
+//! | GET | /api/v1/batch/operations | List all operations |
+//! | DELETE | /api/v1/batch/operation/\<id\> | Cancel operation |
+//!
+//! ## Operation Tracking
+//!
+//! Each batch operation is assigned a unique ID that can be used to:
+//! - Track progress (percentage complete)
+//! - Get operation status (pending, running, completed, failed, cancelled)
+//! - Retrieve results or errors
+//!
+//! ## Performance
+//!
+//! Batch operations are executed asynchronously and don't block the HTTP request.
+//! Use the progress endpoint to monitor long-running operations.
 
 use axum::{
     extract::{Path, State},
