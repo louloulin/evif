@@ -278,3 +278,169 @@ impl PrometheusMetricsRegistry {
         Ok(String::new())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_registry_creation() {
+        let registry = PrometheusMetricsRegistry::new();
+        assert!(registry.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_register_counter() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let result = registry
+            .register_counter("test_counter", "A test counter", &["method"])
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_register_gauge() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let result = registry
+            .register_gauge("test_gauge", "A test gauge", &["path"])
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_register_histogram() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let result = registry
+            .register_histogram("test_histogram", "A test histogram", &["endpoint"], None)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_register_histogram_custom_buckets() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let result = registry
+            .register_histogram(
+                "test_histogram_buckets",
+                "Histogram with custom buckets",
+                &["status"],
+                Some(vec![0.1, 0.5, 1.0, 5.0]),
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_counter_inc_nonexistent() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let result = registry.counter_inc("nonexistent", &[]).await;
+        assert!(result.is_err());
+        if let Err(e) = result {
+            let msg = format!("{}", e);
+            assert!(msg.contains("nonexistent") || msg.contains("Metric not found"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gauge_set_nonexistent() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let result = registry.gauge_set("nonexistent", &[], 1.0).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_counter_increment_and_export() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        registry
+            .register_counter("export_test_counter", "Counter for export test", &["method"])
+            .await
+            .unwrap();
+
+        registry
+            .counter_inc("export_test_counter", &["GET"])
+            .await
+            .unwrap();
+        registry
+            .counter_inc("export_test_counter", &["GET"])
+            .await
+            .unwrap();
+        registry
+            .counter_inc_by("export_test_counter", &["POST"], 5.0)
+            .await
+            .unwrap();
+
+        let output = registry.export().unwrap();
+        assert!(output.contains("export_test_counter"));
+    }
+
+    #[tokio::test]
+    async fn test_gauge_operations_and_export() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        registry
+            .register_gauge("export_test_gauge", "Gauge for export test", &["label"])
+            .await
+            .unwrap();
+
+        registry
+            .gauge_set("export_test_gauge", &["a"], 100.0)
+            .await
+            .unwrap();
+        registry
+            .gauge_inc("export_test_gauge", &["a"])
+            .await
+            .unwrap();
+        registry
+            .gauge_dec("export_test_gauge", &["a"])
+            .await
+            .unwrap();
+
+        let output = registry.export().unwrap();
+        assert!(output.contains("export_test_gauge"));
+    }
+
+    #[tokio::test]
+    async fn test_histogram_observe_and_export() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        registry
+            .register_histogram(
+                "export_test_histogram",
+                "Histogram for export test",
+                &["endpoint"],
+                None,
+            )
+            .await
+            .unwrap();
+
+        for val in [0.01, 0.1, 0.5, 1.0, 2.5] {
+            registry
+                .histogram_observe("export_test_histogram", &["/api/test"], val)
+                .await
+                .unwrap();
+        }
+
+        let output = registry.export().unwrap();
+        assert!(output.contains("export_test_histogram"));
+    }
+
+    #[tokio::test]
+    async fn test_export_empty_registry() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let output = registry.export().unwrap();
+        // Empty registry should produce an empty or minimal output
+        assert!(output.len() <= 1 || output.trim().is_empty() || !output.contains("HELP"));
+    }
+
+    #[tokio::test]
+    async fn test_histogram_observe_nonexistent() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        let result = registry.histogram_observe("missing", &[], 1.0).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_gauge_inc_dec_nonexistent() {
+        let registry = PrometheusMetricsRegistry::new().unwrap();
+        assert!(registry.gauge_inc("nope", &[]).await.is_err());
+        assert!(registry.gauge_dec("nope", &[]).await.is_err());
+    }
+}

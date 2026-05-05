@@ -389,4 +389,92 @@ mod tests {
     fn test_invalid_num_buckets() {
         TrafficMonitor::new(60, 0);
     }
+
+    #[test]
+    #[should_panic]
+    fn test_window_less_than_buckets() {
+        TrafficMonitor::new(5, 10);
+    }
+
+    #[test]
+    fn test_default_trait_impl() {
+        let monitor = TrafficMonitor::default();
+        assert_eq!(monitor.window_secs, 60);
+        assert_eq!(monitor.num_buckets, 60);
+    }
+
+    #[test]
+    fn test_traffic_stats_debug_and_clone() {
+        let stats = TrafficStats {
+            qps: 10.0,
+            rps: 10.0,
+            bandwidth: 1024.0,
+            bandwidth_human: "1.00 KB/s".to_string(),
+            requests_in_window: 100,
+            bytes_in_window: 10240,
+            total_requests: 500,
+            total_bytes: 512000,
+        };
+        let cloned = stats.clone();
+        assert!((cloned.qps - 10.0).abs() < f64::EPSILON);
+        assert_eq!(cloned.requests_in_window, 100);
+
+        let debug = format!("{:?}", stats);
+        assert!(debug.contains("qps"));
+        assert!(debug.contains("requests_in_window"));
+    }
+
+    #[test]
+    fn test_rps_equals_qps() {
+        let monitor = TrafficMonitor::new(10, 10);
+        monitor.record_request(100);
+        let qps = monitor.qps();
+        let rps = monitor.rps();
+        assert!((qps - rps).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_multiple_resets() {
+        let monitor = TrafficMonitor::new(10, 10);
+        for i in 0..3 {
+            monitor.record_request(100 * (i + 1));
+        }
+        assert_eq!(monitor.total_requests(), 3);
+
+        monitor.reset();
+        assert_eq!(monitor.total_requests(), 0);
+        assert_eq!(monitor.total_bytes(), 0);
+
+        monitor.record_request(50);
+        assert_eq!(monitor.total_requests(), 1);
+        assert_eq!(monitor.total_bytes(), 50);
+
+        monitor.reset();
+        assert_eq!(monitor.total_requests(), 0);
+    }
+
+    #[test]
+    fn test_zero_byte_request() {
+        let monitor = TrafficMonitor::new(10, 10);
+        monitor.record_request(0);
+        assert_eq!(monitor.total_requests(), 1);
+        assert_eq!(monitor.total_bytes(), 0);
+    }
+
+    #[test]
+    fn test_large_byte_values() {
+        let monitor = TrafficMonitor::new(10, 10);
+        let gb: u64 = 1024 * 1024 * 1024;
+        monitor.record_request(gb);
+        monitor.record_request(gb);
+        assert_eq!(monitor.total_bytes(), gb * 2);
+    }
+
+    #[test]
+    fn test_custom_window_and_buckets() {
+        let monitor = TrafficMonitor::new(120, 12);
+        assert_eq!(monitor.window_secs, 120);
+        assert_eq!(monitor.num_buckets, 12);
+        assert_eq!(monitor.bucket_duration_secs, 10);
+    }
 }
