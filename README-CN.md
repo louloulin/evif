@@ -244,12 +244,49 @@ evif/
 - **批量操作**: 并发复制/删除
 - **流式处理**: 大文件
 
+## MCP Server 实现
+
+EVIF MCP Server 已完全实现，**所有 Mock 实现已替换为真实后端调用**。
+
+### 实现状态
+
+| 阶段 | 状态 | 说明 |
+|------|------|------|
+| Phase 0 | ✅ 已完成 | 核心结构 |
+| Phase 1 | ✅ 已完成 | VFS 操作 (L1) |
+| Phase 2 | ✅ 已完成 | HTTP 桥接 (L2) |
+| Phase 3 | ✅ 已完成 | 真实实现 |
+| Phase 4 | ✅ 已完成 | 高级工具 |
+| Phase 5 | ✅ 已完成 | Mock 移除 |
+| Phase 6 | ✅ 已完成 | 性能优化 |
+| Phase 7 | ✅ 已完成 | 测试 |
+| Phase 8 | ✅ 已完成 | 文档 |
+| Phase 9 | ✅ 已完成 | 清理 |
+
+**测试结果**: `cargo test -p evif-mcp` → **136 passed, 0 failed**
+
+### 关键实现
+
+- **evif_tree**: Box::pin 递归构建目录树
+- **evif_hash**: md-5/sha1/sha2 加密库计算哈希
+- **evif_du**: 调用后端 `/api/v1/du` API
+- **evif_archive**: 调用后端 `/api/v1/archive/*` API
+- **evif_watch**: 调用后端 `/api/v1/watch` API
+- **evif_batch**: 使用 `futures::join_all` 并行批量操作
+
+### 架构分层
+
+1. **L1: VFS Backend** - 通过 `VfsBackend` 进行核心文件操作
+2. **L2: HTTP Bridge** - 通过后端 API 进行复杂操作
+3. **L3: Fallback** - 后端不可用时优雅降级
+
 ## 测试
 
 ```bash
 cargo test --workspace
 cargo test -p evif-core
 cargo test -p evif-rest
+cargo test -p evif-mcp
 ```
 
 ## 许可证

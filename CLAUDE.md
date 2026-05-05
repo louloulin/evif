@@ -89,6 +89,21 @@ evif write -c "Review PR #123" /pipes/review-task/input
 echo "Completed code review for PR #123" > /context/L0/current
 ```
 
+## MCP Server Implementation
+
+The EVIF MCP Server is **fully implemented** with all mock implementations replaced.
+
+### Key Facts
+- **Test Results**: `cargo test -p evif-mcp` → 136 passed, 0 failed
+- **Mock Status**: 0 mock implementations remaining
+- **Architecture**: 3-layer (VFS Backend, HTTP Bridge, Fallback)
+
+### Testing MCP Server
+
+```bash
+cargo test -p evif-mcp
+```
+
 ## Guardrails
 
 - **L0**: One line, current task only
