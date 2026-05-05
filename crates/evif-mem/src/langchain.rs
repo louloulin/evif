@@ -282,6 +282,7 @@ impl BufferMemory {
 pub struct ConversationTokenBuffer {
     inner: EvifMemory,
     token_budget: crate::token::TokenBudget,
+    #[allow(dead_code)]
     storage: Arc<MemoryStorage>,
 }
 

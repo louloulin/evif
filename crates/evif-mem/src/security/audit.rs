@@ -9,8 +9,6 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::error::{MemError, MemResult};
-
 /// Audit event types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuditEvent {

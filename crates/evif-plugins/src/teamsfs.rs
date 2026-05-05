@@ -48,6 +48,7 @@ impl Default for TeamsConfig {
 }
 
 /// Microsoft Graph API 响应类型 (使用 serde_json::Value 避免 Default 约束)
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphListResponse {
     #[serde(default)]
@@ -57,12 +58,14 @@ struct GraphListResponse {
     error: Option<GraphError>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphError {
     code: Option<String>,
     message: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphTeam {
     id: String,
@@ -71,6 +74,7 @@ struct GraphTeam {
     mail: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphChannel {
     id: String,
@@ -78,6 +82,7 @@ struct GraphChannel {
     description: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphChannelMessage {
     id: String,
@@ -86,12 +91,14 @@ struct GraphChannelMessage {
     body: Option<GraphMessageBody>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphMessageSender {
     user: Option<GraphUser>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphUser {
     id: Option<String>,
@@ -99,12 +106,14 @@ struct GraphUser {
     email: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphMessageBody {
     content_type: Option<String>,
     content: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphDriveItem {
     id: String,
@@ -116,16 +125,19 @@ struct GraphDriveItem {
     web_url: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphFileInfo {
     mime_type: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphFolderInfo {
     child_count: Option<i32>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphConversationMember {
     id: Option<String>,
@@ -140,6 +152,7 @@ pub struct TeamsFsPlugin {
     /// 连接状态
     connected: Arc<RwLock<bool>>,
     /// 内部状态
+    #[allow(dead_code)]
     state: Arc<RwLock<HashMap<String, String>>>,
     /// HTTP 客户端
     http_client: reqwest::Client,
@@ -190,6 +203,7 @@ impl TeamsFsPlugin {
             .map_err(|e| EvifError::InvalidInput(format!("Failed to get access token: {}", e)))?;
 
         #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
         struct TokenResponse {
             access_token: Option<String>,
             token_type: Option<String>,
@@ -403,6 +417,7 @@ impl TeamsFsPlugin {
     }
 
     /// 调用 Microsoft Graph API: 获取聊天消息
+    #[allow(dead_code)]
     async fn api_list_chat_messages(&self, chat_id: &str) -> EvifResult<Vec<GraphChatMessage>> {
         let token = self.get_token().await.ok();
         let url = format!("{}/chats/{}/messages", self.api_base(), chat_id);
@@ -425,6 +440,7 @@ impl TeamsFsPlugin {
     }
 
     /// 提取消息文本
+    #[allow(dead_code)]
     fn extract_message_text(message: &GraphChannelMessage) -> String {
         message.body.as_ref()
             .and_then(|b| b.content.clone())
@@ -432,6 +448,7 @@ impl TeamsFsPlugin {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GraphChatMessage {
     id: String,
@@ -440,6 +457,7 @@ struct GraphChatMessage {
     body: Option<GraphMessageBody>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphChatMessageSender {
@@ -481,7 +499,7 @@ impl EvifPlugin for TeamsFsPlugin {
             "/" | "" => {
                 Self::standard_directories()
                     .into_iter()
-                    .map(|(id, name)| Self::make_file_info(name, true, 0))
+                    .map(|(_id, name)| Self::make_file_info(name, true, 0))
                     .collect()
             }
             "/Teams" | "Teams" | "/teams" | "teams" => {
@@ -564,7 +582,7 @@ impl EvifPlugin for TeamsFsPlugin {
                         }
                     }
                 } else if parts.len() == 3 && parts[0] == "Teams" {
-                    let team_name = parts[1];
+                    let _team_name = parts[1];
                     let channel_name = parts[2];
 
                     // Channel 内容
@@ -685,7 +703,7 @@ impl EvifPlugin for TeamsFsPlugin {
                         }
                     }
                 } else if parts.len() >= 3 && parts[0] == "Chats" {
-                    let chat_name = parts[1];
+                    let _chat_name = parts[1];
                     let category = parts[2];
 
                     match category {

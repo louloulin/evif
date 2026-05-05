@@ -8,6 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 description = "Command-line tool for EVIF"
 
+[lib]
+name = "evif_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "evif"
 path = "src/main.rs"

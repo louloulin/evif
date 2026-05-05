@@ -1,17 +1,8 @@
 // EVIF CLI - Main entry point
 
-mod cli;
-mod commands;
-mod completer;
-mod connect;
-mod control_flow;
-mod redirection;
-mod repl;
-mod script;
-
 use anyhow::Result;
 use clap::Parser;
-use cli::EvifCli;
+use evif_cli::cli::EvifCli;
 use tracing::Level;
 
 #[tokio::main]

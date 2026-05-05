@@ -8,6 +8,7 @@ use std::collections::HashMap;
 /// 脚本执行器
 pub struct ScriptExecutor {
     variables: HashMap<String, String>,
+    #[allow(dead_code)]
     server: String,
     client: Option<EvifCommand>,
 }

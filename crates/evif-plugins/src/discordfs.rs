@@ -163,6 +163,7 @@ pub struct DiscordGuildMember {
 // ── DiscordFs Plugin ─────────────────────────────────────────────────
 
 /// DiscordFs 插件 - 真实 Discord API 集成
+#[allow(dead_code)]
 pub struct DiscordFsPlugin {
     config: DiscordConfig,
     /// HTTP 客户端
@@ -271,6 +272,7 @@ impl DiscordFsPlugin {
     }
 
     /// 获取服务器信息
+    #[allow(dead_code)]
     async fn api_get_guild(&self, guild_id: &str) -> EvifResult<DiscordGuild> {
         let url = format!("{}/guilds/{}", self.config.api_endpoint.as_deref().unwrap_or(DISCORD_API_BASE), guild_id);
         let resp = self
@@ -352,6 +354,7 @@ impl DiscordFsPlugin {
     }
 
     /// 获取频道信息
+    #[allow(dead_code)]
     async fn api_get_channel(&self, channel_id: &str) -> EvifResult<DiscordChannel> {
         let url = format!("{}/channels/{}", self.config.api_endpoint.as_deref().unwrap_or(DISCORD_API_BASE), channel_id);
         let resp = self
@@ -372,6 +375,7 @@ impl DiscordFsPlugin {
     }
 
     /// 获取用户信息
+    #[allow(dead_code)]
     async fn api_get_user(&self, user_id: &str) -> EvifResult<DiscordUser> {
         let url = format!("{}/users/{}", self.config.api_endpoint.as_deref().unwrap_or(DISCORD_API_BASE), user_id);
         let resp = self
@@ -462,7 +466,7 @@ impl EvifPlugin for DiscordFsPlugin {
                 let parts: Vec<&str> = rest.split('/').collect();
 
                 match parts.as_slice() {
-                    [guild_name] => {
+                    [_guild_name] => {
                         // 列出服务器内容
                         Ok(vec![
                             Self::make_file_info("categories", true, 0),
@@ -522,7 +526,7 @@ impl EvifPlugin for DiscordFsPlugin {
                             Self::make_file_info("random", true, 0),
                         ])
                     }
-                    [guild_name, "text-channels", channel_name] => {
+                    [_guild_name, "text-channels", _channel_name] => {
                         // 频道内容
                         Ok(vec![
                             Self::make_file_info("messages", true, 0),
@@ -559,7 +563,7 @@ impl EvifPlugin for DiscordFsPlugin {
                             Self::make_file_info("msg_002", false, 512),
                         ])
                     }
-                    [guild_name, "members"] => {
+                    [_guild_name, "members"] => {
                         Ok(vec![
                             Self::make_file_info("user_001", false, 128),
                             Self::make_file_info("user_002", false, 128),

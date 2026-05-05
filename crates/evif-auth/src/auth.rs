@@ -69,6 +69,7 @@ pub struct JwtValidator {
     /// 验证密钥（用于 HS256）
     secret: Option<String>,
     /// JWKS URL（用于 RS256）
+    #[allow(dead_code)]
     jwks_url: Option<String>,
     /// 期望的 issuer
     expected_issuer: Option<String>,

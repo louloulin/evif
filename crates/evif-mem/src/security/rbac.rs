@@ -2,7 +2,6 @@
 //!
 //! Provides fine-grained access control for memory resources.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -99,7 +98,7 @@ impl Permission {
     pub fn allows(&self, resource: &Resource, action: &Action) -> bool {
         // Check resource match (exact or custom wildcard)
         let resource_matches = match (&self.resource, resource) {
-            (Resource::Custom(wildcard), r) if wildcard == "*" => true,
+            (Resource::Custom(wildcard), _r) if wildcard == "*" => true,
             (Resource::Custom(_), _) => false, // Custom requires exact match
             _ => &self.resource == resource,
         };

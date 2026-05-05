@@ -140,6 +140,7 @@ pub struct GitHubSearchResult {
 }
 
 /// GitHub FS Plugin
+#[allow(dead_code)]
 pub struct GitHubFs {
     /// HTTP 客户端
     client: Client,
@@ -468,7 +469,7 @@ impl EvifPlugin for GitHubFs {
                     is_dir: true,
                 }).collect())
             }
-            ["repos", owner, repo] => {
+            ["repos", _owner, _repo] => {
                 // 仓库根目录
                 Ok(vec![
                     FileInfo {

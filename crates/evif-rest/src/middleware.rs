@@ -62,6 +62,7 @@ struct RestAuthInner {
     enforce: bool,
     api_key_max_concurrent_requests: Option<usize>,
     api_key_limiters: Mutex<HashMap<Uuid, Arc<Semaphore>>>,
+    #[allow(dead_code)]
     jwt_validator: Option<JwtValidator>,
 }
 

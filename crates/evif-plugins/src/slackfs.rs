@@ -43,6 +43,7 @@ impl Default for SlackConfig {
 }
 
 /// SlackFs 插件
+#[allow(dead_code)]
 pub struct SlackFsPlugin {
     config: SlackConfig,
     /// 连接状态
@@ -130,7 +131,7 @@ impl EvifPlugin for SlackFsPlugin {
                 // 根目录: 列出所有标准目录
                 Self::standard_directories()
                     .into_iter()
-                    .map(|(id, name)| Self::make_file_info(name, true, 0))
+                    .map(|(_id, name)| Self::make_file_info(name, true, 0))
                     .collect()
             }
             "/Workspaces" | "Workspaces" | "/workspaces" | "workspaces" => {
@@ -365,7 +366,7 @@ impl EvifPlugin for SlackFsPlugin {
 
 impl SlackFsPlugin {
     /// 获取消息内容
-    async fn get_message_content(&self, msg_id: &str) -> EvifResult<String> {
+    async fn get_message_content(&self, _msg_id: &str) -> EvifResult<String> {
         Ok(format!(
             "{{\"type\":\"message\",\"ts\":\"{}\",\"user\":\"@alice\",\"text\":\"Sample Slack message content\",\"channel\":\"#general\",\"reactions\":[],\"thread_ts\":null}}",
             Utc::now().timestamp_millis()

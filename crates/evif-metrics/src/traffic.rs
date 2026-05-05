@@ -7,8 +7,7 @@
 //! and sliding window statistics.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Sliding window bucket
 struct WindowBucket {
@@ -173,7 +172,7 @@ impl TrafficMonitor {
 
     /// Get the number of requests in the sliding window
     pub fn requests_in_window(&self) -> u64 {
-        let elapsed = self.last_update.lock().elapsed().as_secs();
+        let _elapsed = self.last_update.lock().elapsed().as_secs();
         let current_time = Instant::now().elapsed().as_secs();
         let current_bucket_idx = self.get_bucket_index(current_time);
         let stored_bucket_idx = self.current_bucket.load(Ordering::Relaxed);

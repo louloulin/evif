@@ -2974,6 +2974,7 @@ dependencies = [
  "lru",
  "md-5",
  "notify",
+ "parking_lot",
  "regex-lite",
  "reqwest 0.12.28",
  "serde",

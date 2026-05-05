@@ -42,6 +42,7 @@ impl Default for TelegramConfig {
 }
 
 /// Telegram Bot API 响应类型
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramResponse<T> {
     ok: bool,
@@ -49,6 +50,7 @@ struct TelegramResponse<T> {
     description: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramUser {
     id: i64,
@@ -59,6 +61,7 @@ struct TelegramUser {
     language_code: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramChat {
     id: i64,
@@ -73,6 +76,7 @@ struct TelegramChat {
     member_count: Option<i64>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramMessage {
     message_id: i64,
@@ -86,6 +90,7 @@ struct TelegramMessage {
     document: Option<TelegramDocument>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramPhotoSize {
     file_id: String,
@@ -95,6 +100,7 @@ struct TelegramPhotoSize {
     file_size: Option<i64>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramVideo {
     file_id: String,
@@ -106,6 +112,7 @@ struct TelegramVideo {
     mime_type: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramDocument {
     file_id: String,
@@ -115,6 +122,7 @@ struct TelegramDocument {
     file_size: Option<i64>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramUpdate {
     update_id: i64,
@@ -124,6 +132,7 @@ struct TelegramUpdate {
 }
 
 /// TelegramFs 插件
+#[allow(dead_code)]
 pub struct TelegramFsPlugin {
     config: TelegramConfig,
     /// 连接状态
@@ -187,6 +196,7 @@ impl TelegramFsPlugin {
     }
 
     /// 获取认证头 (Telegram 不需要特殊的认证头, token 已在 URL 中)
+    #[allow(dead_code)]
     fn auth_headers(&self) -> reqwest::header::HeaderMap {
         reqwest::header::HeaderMap::new()
     }
@@ -290,6 +300,7 @@ impl TelegramFsPlugin {
     }
 
     /// 调用 Telegram Bot API: getFile
+    #[allow(dead_code)]
     async fn api_get_file(&self, file_id: &str) -> EvifResult<TelegramFile> {
         let url = format!("{}/getFile", self.api_base());
         let resp = self.http_client
@@ -346,12 +357,14 @@ impl TelegramFsPlugin {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramChatMember {
     user: TelegramUser,
     status: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramFile {
     file_id: String,
@@ -360,6 +373,7 @@ struct TelegramFile {
     file_path: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TelegramWebhookInfo {
     url: String,
@@ -546,7 +560,7 @@ impl EvifPlugin for TelegramFsPlugin {
                 let parts: Vec<&str> = path_clean.split('/').collect();
 
                 if parts.len() >= 2 {
-                    let category = parts[0];
+                    let _category = parts[0];
                     let id = parts[1];
 
                     if let Some(chat_id) = id.strip_prefix("chat_") {
@@ -609,14 +623,14 @@ impl EvifPlugin for TelegramFsPlugin {
                                                 for update in &updates {
                                                     if let Some(message) = &update.message {
                                                         if message.chat.id.to_string() == chat_id {
-                                                            if let Some(photo) = &message.photo {
+                                                            if let Some(_photo) = &message.photo {
                                                                 media.push(Self::make_file_info(
                                                                     &format!("photo_{}.jpg", message.message_id),
                                                                     false,
                                                                     102400,
                                                                 ));
                                                             }
-                                                            if let Some(video) = &message.video {
+                                                            if let Some(_video) = &message.video {
                                                                 media.push(Self::make_file_info(
                                                                     &format!("video_{}.mp4", message.message_id),
                                                                     false,

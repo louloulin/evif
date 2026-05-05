@@ -133,6 +133,7 @@ pub struct NotionErrorResponse {
 // ── NotionFs Plugin ─────────────────────────────────────────────────
 
 /// NotionFs 插件 - 真实 Notion API 集成
+#[allow(dead_code)]
 pub struct NotionFsPlugin {
     config: NotionConfig,
     /// HTTP 客户端
@@ -537,7 +538,7 @@ impl EvifPlugin for NotionFsPlugin {
             p if p.starts_with("pages/") => {
                 let parts: Vec<&str> = p.split('/').collect();
                 if parts.len() >= 2 {
-                    let page_id = parts[1].trim_end_matches(".md").trim_end_matches(".json");
+                    let _page_id = parts[1].trim_end_matches(".md").trim_end_matches(".json");
                     // Show page contents
                     Ok(vec![
                         Self::make_file_info("content.md", false, 100),
@@ -551,7 +552,7 @@ impl EvifPlugin for NotionFsPlugin {
             p if p.starts_with("blocks/") => {
                 let parts: Vec<&str> = p.split('/').collect();
                 if parts.len() >= 2 {
-                    let block_id = parts[1].trim_end_matches(".md").trim_end_matches(".json");
+                    let _block_id = parts[1].trim_end_matches(".md").trim_end_matches(".json");
                     Ok(vec![
                         Self::make_file_info("content.md", false, 100),
                         Self::make_file_info("children", true, 0),

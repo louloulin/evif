@@ -45,11 +45,13 @@ impl Default for ShopifyConfig {
 }
 
 /// Shopify API 响应类型
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyProductsResponse {
     products: Option<Vec<ShopifyProduct>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyProduct {
     id: i64,
@@ -65,6 +67,7 @@ struct ShopifyProduct {
     images: Option<Vec<ShopifyImage>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyVariant {
     id: i64,
@@ -75,6 +78,7 @@ struct ShopifyVariant {
     inventory_quantity: Option<i64>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyImage {
     id: i64,
@@ -85,11 +89,13 @@ struct ShopifyImage {
     alt: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyOrdersResponse {
     orders: Option<Vec<ShopifyOrder>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyOrder {
     id: i64,
@@ -104,6 +110,7 @@ struct ShopifyOrder {
     line_items: Option<Vec<ShopifyLineItem>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyLineItem {
     id: i64,
@@ -113,11 +120,13 @@ struct ShopifyLineItem {
     sku: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyCustomersResponse {
     customers: Option<Vec<ShopifyCustomer>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyCustomer {
     id: i64,
@@ -129,12 +138,14 @@ struct ShopifyCustomer {
     total_spent: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyCollectionsResponse {
     custom_collections: Option<Vec<ShopifyCollection>>,
     smart_collections: Option<Vec<ShopifyCollection>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyCollection {
     id: i64,
@@ -144,11 +155,13 @@ struct ShopifyCollection {
     published_at: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyPagesResponse {
     pages: Option<Vec<ShopifyPage>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyPage {
     id: i64,
@@ -159,11 +172,13 @@ struct ShopifyPage {
     updated_at: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyInventoryLevelsResponse {
     inventory_levels: Option<Vec<ShopifyInventoryLevel>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ShopifyInventoryLevel {
     inventory_item_id: i64,
@@ -172,6 +187,7 @@ struct ShopifyInventoryLevel {
 }
 
 /// ShopifyFs 插件
+#[allow(dead_code)]
 pub struct ShopifyFsPlugin {
     config: ShopifyConfig,
     /// 连接状态
@@ -636,7 +652,7 @@ impl EvifPlugin for ShopifyFsPlugin {
                             }
                         }
                         "Orders" | "orders" => {
-                            if let Some(order_id) = id.strip_prefix("order_") {
+                            if let Some(_order_id) = id.strip_prefix("order_") {
                                 match parts.len() {
                                     2 => {
                                         vec![
@@ -668,7 +684,7 @@ impl EvifPlugin for ShopifyFsPlugin {
                             }
                         }
                         "Customers" | "customers" => {
-                            if let Some(customer_id) = id.strip_prefix("cust_") {
+                            if let Some(_customer_id) = id.strip_prefix("cust_") {
                                 match parts.len() {
                                     2 => {
                                         vec![

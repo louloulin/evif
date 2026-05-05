@@ -6,7 +6,6 @@
 // 这是 Plan 9 风格的文件接口，用于 Email 访问
 
 use async_trait::async_trait;
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,6 +17,7 @@ use evif_core::{
 };
 
 /// Gmail API response types
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailMessageList {
     messages: Option<Vec<GmailMessageId>>,
@@ -27,6 +27,7 @@ struct GmailMessageList {
     next_page_token: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailMessageId {
     id: String,
@@ -34,6 +35,7 @@ struct GmailMessageId {
     thread_id: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailMessage {
     id: String,
@@ -45,6 +47,7 @@ struct GmailMessage {
     label_ids: Option<Vec<String>>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailMessagePart {
     headers: Option<Vec<GmailHeader>>,
@@ -57,12 +60,14 @@ struct GmailMessagePart {
     part_id: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailHeader {
     name: String,
     value: String,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailBody {
     data: Option<String>,
@@ -71,11 +76,13 @@ struct GmailBody {
     attachment_id: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailLabelList {
     labels: Option<Vec<GmailLabel>>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailLabel {
     id: String,
@@ -88,6 +95,7 @@ struct GmailLabel {
     messages_unread: Option<i64>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 struct GmailProfile {
     #[serde(rename = "emailAddress")]
@@ -148,6 +156,7 @@ pub struct GmailFsPlugin {
     /// 连接状态
     connected: Arc<RwLock<bool>>,
     /// 内部状态
+    #[allow(dead_code)]
     state: Arc<RwLock<HashMap<String, String>>>,
 }
 
@@ -321,19 +330,19 @@ impl EvifPlugin for GmailFsPlugin {
                 // 根目录: 列出所有标准文件夹
                 Self::standard_folders()
                     .into_iter()
-                    .map(|(id, name)| Self::make_file_info(&name, true, 0))
+                    .map(|(_id, name)| Self::make_file_info(&name, true, 0))
                     .collect()
             }
             folder_path => {
                 // 检查是否是标准文件夹
                 let folder = Self::standard_folders()
                     .into_iter()
-                    .find(|(id, name)| {
+                    .find(|(_id, name)| {
                         let folder_name_with_slash = format!("/{}", name);
                         folder_path == folder_name_with_slash || folder_path == *name
                     });
 
-                if let Some((folder_id, folder_name)) = folder {
+                if let Some((folder_id, _folder_name)) = folder {
                     // 列出该文件夹下的邮件 (模拟)
                     // 实际实现需要连接 IMAP 服务器
                     let count = self.get_message_count(folder_id).await.unwrap_or(0);
@@ -514,8 +523,8 @@ impl GmailFsPlugin {
             return Ok(0);
         }
 
-        let label_id = Self::folder_to_label_id(folder)?;
-        let params = [
+        let _label_id = Self::folder_to_label_id(folder)?;
+        let _params = [
             ("labelIds", "UNREAD"),
         ];
 
@@ -535,7 +544,7 @@ impl GmailFsPlugin {
     }
 
     /// 获取邮件头部
-    async fn get_message_headers(&self, folder: &str, msg_id: &str) -> EvifResult<String> {
+    async fn get_message_headers(&self, _folder: &str, msg_id: &str) -> EvifResult<String> {
         if self.access_token.is_none() {
             return Ok(format!(
                 "Message-ID: <{}>\nFrom: user@example.com\nTo: {}@gmail.com\nSubject: Sample Email\nDate: {}\n",
@@ -571,7 +580,7 @@ impl GmailFsPlugin {
     }
 
     /// 获取邮件正文
-    async fn get_message_body(&self, folder: &str, msg_id: &str, html: bool) -> EvifResult<String> {
+    async fn get_message_body(&self, _folder: &str, msg_id: &str, html: bool) -> EvifResult<String> {
         if self.access_token.is_none() {
             if html {
                 return Ok("<html><body><h1>Sample Email</h1><p>This is a sample email body.</p></body></html>".to_string());
@@ -691,6 +700,7 @@ impl GmailFsPlugin {
     }
 
     /// 列出邮件 ID 列表
+    #[allow(dead_code)]
     async fn list_message_ids(&self, folder: &str, max_results: i64) -> EvifResult<Vec<String>> {
         if self.access_token.is_none() {
             return Ok(vec![]);
