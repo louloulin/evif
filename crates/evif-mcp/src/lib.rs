@@ -19,6 +19,67 @@ pub mod mcp_auth;
 
 use crate::mcp_router::McpRouter;
 
+/// Apply line-based truncation to file content for token optimization.
+///
+/// Modes:
+/// - "head": First N lines (default)
+/// - "tail": Last N lines
+/// - "snippet": First half + last half with omitted marker
+/// - "full" or max_lines=0: No truncation
+fn apply_line_truncation(content: &str, max_lines: usize, mode: &str) -> String {
+    if max_lines == 0 || mode == "full" {
+        return content.to_string();
+    }
+
+    let lines: Vec<&str> = content.lines().collect();
+    let total = lines.len();
+
+    if total <= max_lines {
+        return content.to_string();
+    }
+
+    match mode {
+        "head" => {
+            let mut result: String = lines.iter().take(max_lines).fold(String::new(), |mut acc, l| {
+                acc.push_str(l);
+                acc.push('\n');
+                acc
+            });
+            result.push_str(&format!(
+                "[truncated: showing {} of {} lines. Use offset/size or mode=full for more]",
+                max_lines, total
+            ));
+            result
+        }
+        "tail" => {
+            let skip = total.saturating_sub(max_lines);
+            let mut result: String = lines.iter().skip(skip).fold(String::new(), |mut acc, l| {
+                acc.push_str(l);
+                acc.push('\n');
+                acc
+            });
+            result.push_str(&format!(
+                "[truncated: showing last {} of {} lines]",
+                max_lines, total
+            ));
+            result
+        }
+        "snippet" => {
+            let half = max_lines / 2;
+            let head: Vec<&str> = lines.iter().take(half).copied().collect();
+            let tail: Vec<&str> = lines.iter().skip(total.saturating_sub(half)).copied().collect();
+            let mut result = head.join("\n");
+            result.push_str(&format!(
+                "\n\n... [{} lines omitted] ...\n\n",
+                total - max_lines
+            ));
+            result.push_str(&tail.join("\n").as_str());
+            result
+        }
+        _ => content.to_string(),
+    }
+}
+
 /// 模板渲染器
 mod template {
     use serde_json::Value;
@@ -1586,6 +1647,14 @@ impl EvifMcpServer {
                         "size": {
                             "type": "number",
                             "description": "Number of bytes to read"
+                        },
+                        "max_lines": {
+                            "type": "number",
+                            "description": "Max lines to return (default: 100, use 0 for unlimited)"
+                        },
+                        "mode": {
+                            "type": "string",
+                            "description": "Truncation mode: head (first N lines), tail (last N lines), snippet (first+last), full (no truncation). Default: head"
                         }
                     },
                     "required": ["path"]
@@ -1769,11 +1838,15 @@ impl EvifMcpServer {
                         },
                         "limit": {
                             "type": "number",
-                            "description": "Maximum results"
+                            "description": "Maximum results (default: 3)"
                         },
                         "filter": {
                             "type": "string",
                             "description": "Filter by memory type"
+                        },
+                        "compact": {
+                            "type": "boolean",
+                            "description": "Compact mode: return only id+score+first 100 chars (default: true)"
                         }
                     },
                     "required": ["query"]
@@ -2201,8 +2274,13 @@ impl EvifMcpServer {
                 let path = arguments["path"].as_str()?;
                 let offset = arguments["offset"].as_u64().unwrap_or(0);
                 let size = arguments["size"].as_u64().unwrap_or(0);
+                let max_lines = arguments["max_lines"].as_u64().unwrap_or(100) as usize;
+                let mode = arguments["mode"].as_str().unwrap_or("head");
                 match backend.read_file(path, offset, size).await {
-                    Ok(content) => Some(Ok(json!({ "content": content }))),
+                    Ok(content) => {
+                        let truncated = apply_line_truncation(&content, max_lines, mode);
+                        Some(Ok(json!({ "content": truncated })))
+                    }
                     Err(e) => Some(Err(e)),
                 }
             }
@@ -3134,27 +3212,42 @@ impl EvifMcpServer {
             "evif_memory_search" => {
                 // 真实记忆搜索 (使用 VfsBackend 的内存存储)
                 let query = arguments["query"].as_str().unwrap_or("");
-                let limit = arguments["limit"].as_u64().unwrap_or(10) as usize;
+                let limit = arguments["limit"].as_u64().unwrap_or(3) as usize;
                 let filter = arguments["filter"].as_str().unwrap_or("all");
+                let compact = arguments["compact"].as_bool().unwrap_or(true);
 
                 match backend.search_memories(query, limit).await {
                     Ok(result) => {
                         // Apply filter if specified and collect to JSON
                         let results_json: Vec<_> = result.results.iter()
                             .filter(|r| filter == "all" || r.modality == filter)
-                            .map(|r| json!({
-                                "id": r.id,
-                                "score": r.score,
-                                "content": r.content,
-                                "modality": r.modality
-                            }))
+                            .take(limit)
+                            .map(|r| {
+                                if compact {
+                                    let truncated: String = r.content.chars().take(100).collect();
+                                    json!({
+                                        "id": r.id,
+                                        "score": r.score,
+                                        "content": if r.content.len() > 100 { format!("{}...", truncated) } else { r.content.clone() },
+                                        "modality": r.modality
+                                    })
+                                } else {
+                                    json!({
+                                        "id": r.id,
+                                        "score": r.score,
+                                        "content": r.content,
+                                        "modality": r.modality
+                                    })
+                                }
+                            })
                             .collect();
 
                         Some(Ok(json!({
                             "query": result.query,
                             "results": results_json,
                             "total": results_json.len(),
-                            "filter": filter
+                            "filter": filter,
+                            "compact": compact
                         })))
                     }
                     Err(e) => Some(Err(e)),
@@ -4402,6 +4495,8 @@ impl EvifMcpServer {
                 let path = arguments["path"]
                     .as_str()
                     .ok_or("Missing 'path' argument")?;
+                let max_lines = arguments["max_lines"].as_u64().unwrap_or(100) as usize;
+                let mode = arguments["mode"].as_str().unwrap_or("head");
 
                 let url = format!(
                     "{}/api/v1/fs/read?path={}",
@@ -4415,10 +4510,16 @@ impl EvifMcpServer {
                     .await
                     .map_err(|e| format!("Failed to read file: {}", e))?;
 
-                let data: Value = response
+                let mut data: Value = response
                     .json()
                     .await
                     .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+                // Apply truncation to content field if present
+                if let Some(content) = data.get("content").and_then(|v| v.as_str()) {
+                    let truncated = apply_line_truncation(content, max_lines, mode);
+                    data["content"] = json!(truncated);
+                }
 
                 Ok(data)
             }
@@ -5080,8 +5181,9 @@ impl EvifMcpServer {
                 let query = arguments["query"]
                     .as_str()
                     .ok_or("Missing 'query' argument")?;
-                let limit = arguments["limit"].as_u64().unwrap_or(10) as usize;
+                let limit = arguments["limit"].as_u64().unwrap_or(3) as usize;
                 let filter = arguments["filter"].as_str().unwrap_or("all");
+                let compact = arguments["compact"].as_bool().unwrap_or(true);
 
                 let url = format!("{}/api/v1/memories/search", self.config.evif_url);
                 let response = self
@@ -5096,10 +5198,28 @@ impl EvifMcpServer {
                     .await
                     .map_err(|e| format!("Failed to search memories: {}", e))?;
 
-                let result: Value = response
+                let mut result: Value = response
                     .json()
                     .await
                     .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+                // Apply compact mode if requested
+                if compact {
+                    if let Some(results) = result.get_mut("results").and_then(|r| r.as_array_mut()) {
+                        for entry in results.iter_mut() {
+                            if let Some(content) = entry.get("content").and_then(|v| v.as_str()) {
+                                let truncated: String = content.chars().take(100).collect();
+                                *entry = json!({
+                                    "id": entry["id"],
+                                    "score": entry["score"],
+                                    "content": if content.len() > 100 { format!("{}...", truncated) } else { content.to_string() },
+                                    "modality": entry["modality"]
+                                });
+                            }
+                        }
+                    }
+                    result["compact"] = json!(true);
+                }
 
                 Ok(result)
             }
@@ -6329,6 +6449,61 @@ mod tests {
     use axum::{extract::State, routing::post, Json, Router};
     use std::sync::Arc;
     use tokio::{net::TcpListener, sync::Mutex, task::JoinHandle};
+
+    // Token optimization tests
+    #[test]
+    fn test_apply_line_truncation_head() {
+        let content = "line1\nline2\nline3\nline4\nline5";
+        let result = apply_line_truncation(content, 3, "head");
+        assert!(result.contains("line1"));
+        assert!(result.contains("line2"));
+        assert!(result.contains("line3"));
+        assert!(!result.contains("line4"));
+        assert!(result.contains("[truncated"));
+    }
+
+    #[test]
+    fn test_apply_line_truncation_tail() {
+        let content = "line1\nline2\nline3\nline4\nline5";
+        let result = apply_line_truncation(content, 3, "tail");
+        assert!(!result.contains("line1"));
+        assert!(result.contains("line3"));
+        assert!(result.contains("line4"));
+        assert!(result.contains("line5"));
+        assert!(result.contains("[truncated"));
+    }
+
+    #[test]
+    fn test_apply_line_truncation_snippet() {
+        let content = (1..=10).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        let result = apply_line_truncation(&content, 4, "snippet");
+        assert!(result.contains("line1"));
+        assert!(result.contains("line2"));
+        assert!(result.contains("line9"));
+        assert!(result.contains("line10"));
+        assert!(result.contains("omitted"));
+    }
+
+    #[test]
+    fn test_apply_line_truncation_full() {
+        let content = "line1\nline2\nline3";
+        let result = apply_line_truncation(content, 1, "full");
+        assert_eq!(result, content);
+    }
+
+    #[test]
+    fn test_apply_line_truncation_unlimited() {
+        let content = "line1\nline2\nline3";
+        let result = apply_line_truncation(content, 0, "head");
+        assert_eq!(result, content);
+    }
+
+    #[test]
+    fn test_apply_line_truncation_short_content() {
+        let content = "line1\nline2";
+        let result = apply_line_truncation(content, 100, "head");
+        assert_eq!(result, content); // No truncation needed
+    }
 
     async fn wait_for_tools(server: &Arc<EvifMcpServer>) -> Vec<Tool> {
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
