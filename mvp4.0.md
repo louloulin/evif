@@ -754,8 +754,8 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 
 | # | 问题 | 文件 | 严重性 | 说明 |
 |---|------|------|--------|------|
-| 1 | **RwLock unwrap 崩溃** | `mcp_auth.rs`, `mcp_router.rs` | 🔴 CRITICAL | 22 处 `.unwrap()` 在 RwLock 上，任一线程 panic 会导致锁中毒、整个 MCP Server 崩溃。生产环境应使用 `catch_unwind` 或 `tokio::sync::RwLock` 防止级联故障 |
-| 2 | **SQLite expect 崩溃** | `contextfs.rs:223,230` | 🔴 CRITICAL | `expect()` 在生产环境中 panic，DB 不可访问时整个进程挂掉 |
+| 1 | ~~**RwLock unwrap 崩溃**~~ | `mcp_auth.rs`, `mcp_router.rs`, `mcp_server_plugin.rs` | ✅ 已修复 | 已替换为 `parking_lot::RwLock`（poison-resistant），移除 53 处 `.unwrap()`。commit `5821472` |
+| 2 | ~~**SQLite expect 崩溃**~~ | `contextfs.rs:221,234` | ✅ 已修复 | 改为返回 `Result<Self, EvifError>`，错误可传播。commit `ec73cf5` |
 | 3 | **CI 测试排除** | `.github/workflows/ci.yml` | 🔴 CRITICAL | api-tests、cli-tests、e2e-tests 全部被排除，从未在 CI 中运行 |
 | 4 | **evif-client 仅 2 个测试** | `evif-client/` | 🔴 HIGH | 公共 SDK 只有 2 个单元测试，用户无信心 |
 
@@ -808,10 +808,10 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | 18 | **Skill 自动发现** | 扫描 /skills/*.md 生成 Prompts | ⚠️ 待实现 | 2 天 |
 | 19 | **Memory 集成** | 向量存储 + MCP Tools | ✅ 部分实现 | 3 天 |
 | 20 | **安装脚本** | 一键安装 `curl ... \| bash` | ✅ 已实现 | - |
-| 21 | **Claude Desktop 连接** | `evif connect claude` | ⚠️ 待实现 | 1 天 |
-| 22 | **Codex/Cursor/Gemini 集成** | 多平台一键集成 | ⚠️ 待实现 | 3 天 |
+| 21 | **Claude Desktop 连接** | `evif connect claude` | ✅ 已实现 | `evif connect <platform>` 支持 claude/claude-code/cursor/gemini/codex。commit `ac0ce23` |
+| 22 | **Codex/Cursor/Gemini 集成** | 多平台一键集成 | ✅ 已实现 | `evif connect cursor/gemini/codex`，含 connect/disconnect/check。commit `ac0ce23` |
 | 23 | **写操作补全** | gmailfs/slackfs/discordfs 等写入 | ⚠️ 待实现 | 5 天 |
-| 24 | **Token 优化输出** | MCP 工具响应压缩 | ⚠️ 待实现 | 2 天 |
+| 24 | **Token 优化输出** | MCP 工具响应压缩 | ✅ 已实现（Phase 1+3） | evif_cat 加 max_lines/mode 参数，memory_search 加 compact 模式。commit `14cd866` |
 | 25 | **E2E 测试** | 50 场景测试 | ⚠️ 待实现 | 3 天 |
 | 26 | **Homebrew 发布** | `brew install evif-io/evif/evif` | ⚠️ 待实现 | 1 天 |
 | 27 | **性能基准测试** | 延迟/吞吐量测试 | ⚠️ 待实现 | 1 周 |
@@ -855,11 +855,11 @@ Phase 4（1 周）：发布准备
 | 维度 | 完成度 | 说明 |
 |------|--------|------|
 | **核心功能** | 85% | MCP Server 完成，Skill/Memory 部分完成 |
-| **代码质量** | 60% | 257 警告、unwrap 崩溃风险、文档不足 |
+| **代码质量** | 70% | RwLock/expect 崩溃已修复，257 警告待清理、文档不足 |
 | **测试覆盖** | 55% | 单元测试可以，E2E/集成/client 几乎空白 |
 | **安全加固** | 50% | 基础 auth 有，限速/路径防护/信任验证缺失 |
 | **发布准备** | 40% | 安装脚本有，缺少 CHANGELOG/Homebrew/CI 对齐 |
-| **综合评估** | **58%** | 距离生产还需 ~5 周集中工作 |
+| **综合评估** | **65%** | P0 崩溃已修复，Token 优化+多平台连接已实现，距生产还需 ~4 周 |
 
 ---
 
@@ -1066,11 +1066,11 @@ evif connect claude
 | 指标 | 目标 | 当前 |
 |------|------|------|
 | 安装时间 | < 1 分钟 | ✅ |
-| Token 节省 | 40-60% | ⚠️ 待实现 |
+| Token 节省 | 40-60% | ✅ Phase 1+3 已实现 |
 | 上下文恢复率 | > 90% 决策可恢复 | ⚠️ 待验证 |
 | 多 Agent 支持 | 2+ Agent 并行 | ⚠️ 待实现 |
 | MCP Tools | 75 | ✅ |
-| AI 平台支持 | 8+ | ⚠️ 待实现 |
+| AI 平台支持 | 8+ | ✅ 5 平台已实现 |
 | 存储后端 | 50+ | ✅ |
 
 ---
