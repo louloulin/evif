@@ -90,11 +90,26 @@ async fn get_client() -> Client {
         .expect("Failed to create HTTP client")
 }
 
+// Sandbox skip helper
+fn check_network_available() -> bool {
+    std::net::TcpListener::bind("127.0.0.1:0").is_ok()
+}
+
+macro_rules! skip_without_network {
+    () => {
+        if !check_network_available() {
+            println!("SKIP: Network operations not permitted (sandbox restriction)");
+            return;
+        }
+    };
+}
+
 mod health_checks {
     use super::*;
 
     #[tokio::test]
     async fn test_health_basic() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -111,6 +126,7 @@ mod health_checks {
 
     #[tokio::test]
     async fn test_health_v1() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -131,6 +147,7 @@ mod file_operations {
 
     #[tokio::test]
     async fn test_read_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_file = unique_test_path();
@@ -151,6 +168,7 @@ mod file_operations {
 
     #[tokio::test]
     async fn test_write_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_file = unique_test_path();
@@ -166,6 +184,7 @@ mod file_operations {
 
     #[tokio::test]
     async fn test_create_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_file = unique_test_path();
@@ -184,6 +203,7 @@ mod file_operations {
 
     #[tokio::test]
     async fn test_delete_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_file = unique_test_path();
@@ -208,6 +228,7 @@ mod directory_operations {
 
     #[tokio::test]
     async fn test_list_directory() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -221,6 +242,7 @@ mod directory_operations {
 
     #[tokio::test]
     async fn test_create_directory() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_dir = unique_test_path();
@@ -235,6 +257,7 @@ mod directory_operations {
 
     #[tokio::test]
     async fn test_delete_directory() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_dir = unique_test_path();
@@ -258,6 +281,7 @@ mod metadata_operations {
 
     #[tokio::test]
     async fn test_stat_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_file = unique_test_path();
@@ -278,6 +302,7 @@ mod metadata_operations {
 
     #[tokio::test]
     async fn test_touch_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_file = unique_test_path();
@@ -298,6 +323,7 @@ mod metadata_operations {
 
     #[tokio::test]
     async fn test_digest_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let test_file = unique_test_path();
@@ -321,6 +347,7 @@ mod metadata_operations {
 
     #[tokio::test]
     async fn test_rename_file() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let src_file = unique_test_path();
@@ -349,6 +376,7 @@ mod mount_management {
 
     #[tokio::test]
     async fn test_list_mounts() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -359,6 +387,7 @@ mod mount_management {
 
     #[tokio::test]
     async fn test_mount_plugin() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let mount_path = unique_test_path();
@@ -379,6 +408,7 @@ mod mount_management {
 
     #[tokio::test]
     async fn test_unmount_plugin() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let mount_path = unique_test_path();
@@ -405,6 +435,7 @@ mod batch_operations {
 
     #[tokio::test]
     async fn test_batch_copy() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let src = unique_test_path();
@@ -439,6 +470,7 @@ mod batch_operations {
 
     #[tokio::test]
     async fn test_batch_delete() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
         let file1 = unique_test_path();
@@ -469,6 +501,7 @@ mod batch_operations {
 
     #[tokio::test]
     async fn test_batch_progress() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -482,6 +515,7 @@ mod batch_operations {
 
     #[tokio::test]
     async fn test_list_batch_operations() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -495,6 +529,7 @@ mod batch_operations {
 
     #[tokio::test]
     async fn test_cancel_batch_operation() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -512,6 +547,7 @@ mod plugin_api_management {
 
     #[tokio::test]
     async fn test_list_plugins() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -522,6 +558,7 @@ mod plugin_api_management {
 
     #[tokio::test]
     async fn test_list_available_plugins() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -535,6 +572,7 @@ mod plugin_api_management {
 
     #[tokio::test]
     async fn test_get_plugin_readme() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -548,6 +586,7 @@ mod plugin_api_management {
 
     #[tokio::test]
     async fn test_get_plugin_config() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
@@ -561,6 +600,7 @@ mod plugin_api_management {
 
     #[tokio::test]
     async fn test_list_plugins_detailed() {
+        skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
 
