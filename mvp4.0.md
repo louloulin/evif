@@ -652,7 +652,7 @@ max_string_length = 10000  # 单个字符串最大长度
 
 #### Phase 5: 分层工具加载（P2）
 
-✅ **部分实现** - 为所有工具添加 `category` 字段区分 core/extended：
+✅ **已实现** - 为所有工具添加 `category` 字段区分 core/extended，并支持 `tools/list` 的 `category` 筛选参数：
 ```rust
 // Tool 结构体新增字段
 pub struct Tool {
@@ -665,9 +665,12 @@ pub struct Tool {
 // 核心工具 (始终加载): evif_ls, evif_cat, evif_write, evif_mkdir,
 // evif_rm, evif_file, evif_health, evif_mount
 // 扩展工具 (按需): evif_grep, evif_memory_search, evif_memorize, etc.
-```
 
-待实现：添加 `tools/list` 的 category 过滤参数或单独的 `tools/list_core` 端点。
+// tools/list 支持 category 参数筛选
+// {"method": "tools/list", "params": {"category": "core"}}  → 仅返回 8 个核心工具
+// {"method": "tools/list", "params": {"category": "extended"}} → 仅返回扩展工具
+// {"method": "tools/list"} → 返回全部工具
+```
 
 - 核心 8 工具 ~600 tokens
 - 按需加载减少 ~2,000 tokens 初始开销
@@ -746,7 +749,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 |-------|--------|--------|--------|----------|
 | evif-core | 32 | 61 | 11,258 | 少量 |
 | evif-rest | 22 | 51 | 13,858 | 86 个 |
-| evif-mcp | 7 | 136 | 12,361 | 90 个 |
+| evif-mcp | 7 | 143 | 12,361 | 0 |
 | evif-cli | 8 | 36 | 5,944 | - |
 | evif-plugins | 47 | 66 | 27,905 | 74 个 |
 | evif-mem | 31 | 155 | 20,881 | 少量 |
@@ -754,7 +757,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | evif-fuse | 5 | 28 | 2,543 | 少量 |
 | evif-client | 3 | **46** | 698 | - |
 | evif-metrics | 5 | **67** | 860 | - |
-| **总计** | **~166** | **~741** | **~113,757** | **0** |
+| **总计** | **~166** | **~748** | **~113,757** | **0** |
 
 ### 6.1 P0 - 严重问题（生产会崩溃）
 
@@ -862,10 +865,10 @@ Phase 4（1 周）：发布准备
 |------|--------|------|
 | **核心功能** | 85% | MCP Server 完成，Skill/Memory 部分完成 |
 | **代码质量** | 90% | evif-client + evif-rest 文档覆盖完成 |
-| **测试覆盖** | 70% | evif-client 46 tests, evif-metrics 67 tests, 741+ total |
+| **测试覆盖** | 70% | evif-client 46 tests, evif-metrics 67 tests, evif-mcp 143 tests, 748+ total |
 | **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **83%** | P0 全部完成，CI 测试已启用，767+ 测试，Homebrew 已就绪 |
+| **综合评估** | **84%** | P0 全部完成，CI 测试已启用，748+ 测试，Phase 5 工具分层已实现，Homebrew 已就绪 |
 
 ---
 
@@ -918,7 +921,7 @@ Phase 4（1 周）：发布准备
 
 | 测试类型 | 测试数 | 当前状态 |
 |----------|--------|----------|
-| Rust 单元测试 | 767+ | ✅ 通过 |
+| Rust 单元测试 | 748+ | ✅ 通过 |
 | MCP 协议测试 | 81 | ✅ 通过 |
 | CLI 集成测试 | 56 | ✅ 通过 |
 | E2E 场景测试 | 50 | ⚠️ 待实现 |

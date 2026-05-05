@@ -5699,7 +5699,10 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
 
                 // 工具列表
                 "tools/list" => {
-                    let tools = self.list_tools().await;
+                    // 支持 category 筛选参数: "core" | "extended"
+                    let category = params.and_then(|p| p.get("category"))
+                        .and_then(|v| v.as_str());
+                    let tools = self.list_tools_filtered(category).await;
                     json!({
                         "jsonrpc": "2.0",
                         "result": {
@@ -6398,19 +6401,35 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
 
     /// 获取工具列表 (带缓存)
     pub async fn list_tools(&self) -> Vec<Tool> {
-        // 先尝试从缓存获取 (write lock 以支持 LRU 更新)
-        {
+        self.list_tools_filtered(None).await
+    }
+
+    /// 获取工具列表 (可按分类筛选)
+    ///
+    /// # Arguments
+    /// * `category` - 可选，筛选 "core" 或 "extended"，None 表示返回全部
+    pub async fn list_tools_filtered(&self, category: Option<&str>) -> Vec<Tool> {
+        let all_tools = {
+            // 先尝试从缓存获取 (write lock 以支持 LRU 更新)
             let mut cache = self.tool_cache.write().await;
             if let Some(tools) = cache.get_tools() {
                 tracing::debug!("工具列表缓存命中，返回 {} 个工具", tools.len());
-                return tools;
+                tools.clone()
+            } else {
+                // 缓存未命中，从源获取
+                let tools = self.tools.read().await.clone();
+                // 更新缓存
+                cache.put_tools(tools.clone());
+                tracing::debug!("工具列表已缓存，共 {} 个工具", tools.len());
+                tools
             }
-            // 缓存未命中，从源获取
-            let tools = self.tools.read().await.clone();
-            // 更新缓存
-            cache.put_tools(tools.clone());
-            tracing::debug!("工具列表已缓存，共 {} 个工具", tools.len());
-            return tools;
+        };
+
+        // 按分类筛选
+        match category {
+            Some("core") => all_tools.into_iter().filter(|t| t.category == "core").collect(),
+            Some("extended") => all_tools.into_iter().filter(|t| t.category == "extended").collect(),
+            _ => all_tools,
         }
     }
 
@@ -7788,7 +7807,6 @@ url = "http://localhost:8081"
     #[test]
     fn test_path_matches_pattern() {
         // 测试通配符匹配
-        let config = McpConfig::default();
 
         // /context/* 模式
         assert!(McpConfig::path_matches_pattern("/context/L0/current", "/context/*"));
@@ -7847,6 +7865,43 @@ url = "http://localhost:8081"
         assert!(tool_count >= 15);
         assert!(prompt_count >= 3);
         assert!(resource_count >= 1);
+    }
+
+    #[tokio::test]
+    async fn test_tool_category_filtering() {
+        let server = EvifMcpServer::new(McpServerConfig::default());
+
+        // Wait for initialization
+        tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+
+        // All tools
+        let all = server.list_tools_filtered(None).await;
+        let all_count = all.len();
+        assert!(all_count >= 15, "Should have at least 15 tools total");
+
+        // Core tools only
+        let core = server.list_tools_filtered(Some("core")).await;
+        assert!(!core.is_empty(), "Should have core tools");
+        assert!(core.iter().all(|t| t.category == "core"), "All should be core");
+        // Verify core tools include the expected ones
+        let core_names: Vec<&str> = core.iter().map(|t| t.name.as_str()).collect();
+        assert!(core_names.contains(&"evif_ls"), "evif_ls should be core");
+        assert!(core_names.contains(&"evif_cat"), "evif_cat should be core");
+        assert!(core_names.contains(&"evif_write"), "evif_write should be core");
+        assert!(core_names.contains(&"evif_health"), "evif_health should be core");
+
+        // Extended tools only
+        let extended = server.list_tools_filtered(Some("extended")).await;
+        assert!(!extended.is_empty(), "Should have extended tools");
+        assert!(extended.iter().all(|t| t.category == "extended"), "All should be extended");
+
+        // Core + Extended = All
+        assert_eq!(core.len() + extended.len(), all_count,
+            "Core + Extended should equal total");
+
+        // Unknown category returns all
+        let unknown = server.list_tools_filtered(Some("nonexistent")).await;
+        assert_eq!(unknown.len(), all_count, "Unknown category returns all");
     }
 
     #[tokio::test]
