@@ -41,6 +41,9 @@ serde_yaml = "0.9"
 toml = "0.8"
 chrono = { workspace = true }
 
+# Concurrency (parking_lot RwLock is poison-resistant)
+parking_lot = "0.12"
+
 # Error handling
 thiserror = { workspace = true }
 

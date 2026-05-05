@@ -7,7 +7,7 @@ use regex_lite::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::RwLock;
+use parking_lot::RwLock;
 use thiserror::Error;
 
 /// 路由错误
@@ -114,7 +114,7 @@ impl McpRouter {
 
     /// 注册默认前缀映射
     fn register_default_prefixes(&self) {
-        let mut prefixes = self.default_prefixes.write().unwrap();
+        let mut prefixes = self.default_prefixes.write();
 
         // EVIF 内部路径
         prefixes.insert("file:///context".to_string(), "/context".to_string());
@@ -134,8 +134,8 @@ impl McpRouter {
     /// 添加路由规则
     pub fn add_rule(&self, rule: RouteRule) {
         let mut rules = match rule.direction {
-            RouteDirection::UriToPath => self.uri_to_path_rules.write().unwrap(),
-            RouteDirection::PathToUri => self.path_to_uri_rules.write().unwrap(),
+            RouteDirection::UriToPath => self.uri_to_path_rules.write(),
+            RouteDirection::PathToUri => self.path_to_uri_rules.write(),
         };
 
         rules.push(rule);
@@ -167,7 +167,7 @@ impl McpRouter {
         }
 
         // 尝试规则匹配
-        let rules = self.uri_to_path_rules.read().unwrap();
+        let rules = self.uri_to_path_rules.read();
         for rule in rules.iter() {
             if !rule.enabled {
                 continue;
@@ -197,7 +197,7 @@ impl McpRouter {
         }
 
         // 尝试规则匹配
-        let rules = self.path_to_uri_rules.read().unwrap();
+        let rules = self.path_to_uri_rules.read();
         for rule in rules.iter() {
             if !rule.enabled {
                 continue;
@@ -214,7 +214,7 @@ impl McpRouter {
 
     /// 尝试前缀匹配
     fn try_prefix_match(&self, uri: &str) -> Option<String> {
-        let prefixes = self.default_prefixes.read().unwrap();
+        let prefixes = self.default_prefixes.read();
 
         // 按长度降序排序，优先匹配最长前缀
         let mut sorted: Vec<_> = prefixes.iter().collect();
@@ -240,7 +240,7 @@ impl McpRouter {
 
     /// 尝试反向前缀匹配
     fn try_reverse_prefix_match(&self, path: &str) -> Option<String> {
-        let prefixes = self.default_prefixes.read().unwrap();
+        let prefixes = self.default_prefixes.read();
 
         // 按长度降序排序
         let mut sorted: Vec<_> = prefixes.iter().collect();
@@ -321,7 +321,7 @@ impl McpRouter {
     fn get_or_compile_regex(&self, pattern: &str) -> Result<Regex, RouterError> {
         // 检查缓存
         {
-            let cache = self.regex_cache.read().unwrap();
+            let cache = self.regex_cache.read();
             if let Some(regex) = cache.get(pattern) {
                 return Ok(regex.clone());
             }
@@ -333,7 +333,7 @@ impl McpRouter {
 
         // 缓存
         {
-            let mut cache = self.regex_cache.write().unwrap();
+            let mut cache = self.regex_cache.write();
             cache.insert(pattern.to_string(), regex.clone());
         }
 
@@ -344,7 +344,6 @@ impl McpRouter {
     pub fn list_uri_to_path_rules(&self) -> Vec<RouteRule> {
         self.uri_to_path_rules
             .read()
-            .unwrap()
             .iter()
             .filter(|r| r.enabled)
             .cloned()
@@ -355,7 +354,6 @@ impl McpRouter {
     pub fn list_path_to_uri_rules(&self) -> Vec<RouteRule> {
         self.path_to_uri_rules
             .read()
-            .unwrap()
             .iter()
             .filter(|r| r.enabled)
             .cloned()
@@ -364,26 +362,26 @@ impl McpRouter {
 
     /// 列出所有前缀映射
     pub fn list_prefixes(&self) -> HashMap<String, String> {
-        self.default_prefixes.read().unwrap().clone()
+        self.default_prefixes.read().clone()
     }
 
     /// 添加前缀映射
     pub fn add_prefix(&self, uri_prefix: impl Into<String>, path_prefix: impl Into<String>) {
-        let mut prefixes = self.default_prefixes.write().unwrap();
+        let mut prefixes = self.default_prefixes.write();
         prefixes.insert(uri_prefix.into(), path_prefix.into());
     }
 
     /// 移除前缀映射
     pub fn remove_prefix(&self, uri_prefix: &str) {
-        let mut prefixes = self.default_prefixes.write().unwrap();
+        let mut prefixes = self.default_prefixes.write();
         prefixes.remove(uri_prefix);
     }
 
     /// 清除所有规则
     pub fn clear_rules(&self) {
-        self.uri_to_path_rules.write().unwrap().clear();
-        self.path_to_uri_rules.write().unwrap().clear();
-        self.regex_cache.write().unwrap().clear();
+        self.uri_to_path_rules.write().clear();
+        self.path_to_uri_rules.write().clear();
+        self.regex_cache.write().clear();
     }
 
     /// 从配置加载规则
@@ -475,10 +473,10 @@ impl McpRouter {
     /// 获取路由统计
     pub fn stats(&self) -> RouterStats {
         RouterStats {
-            uri_to_path_count: self.uri_to_path_rules.read().unwrap().len(),
-            path_to_uri_count: self.path_to_uri_rules.read().unwrap().len(),
-            prefix_count: self.default_prefixes.read().unwrap().len(),
-            regex_cache_size: self.regex_cache.read().unwrap().len(),
+            uri_to_path_count: self.uri_to_path_rules.read().len(),
+            path_to_uri_count: self.path_to_uri_rules.read().len(),
+            prefix_count: self.default_prefixes.read().len(),
+            regex_cache_size: self.regex_cache.read().len(),
         }
     }
 }
@@ -556,7 +554,7 @@ mod tests {
         let router = McpRouter::new();
 
         // 清除默认前缀
-        router.default_prefixes.write().unwrap().clear();
+        router.default_prefixes.write().clear();
 
         let result = router.uri_to_path("unknown://something");
         assert!(result.is_err());

@@ -5,7 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use thiserror::Error;
 use chrono::{DateTime, Utc, Duration};
 
@@ -247,25 +248,25 @@ impl McpAuth {
 
     /// 注册 Token
     pub fn register_token(&self, token: McpToken) {
-        let mut tokens = self.tokens.write().unwrap();
+        let mut tokens = self.tokens.write();
         tokens.insert(token.id.clone(), token);
     }
 
     /// 移除 Token
     pub fn remove_token(&self, token_id: &str) -> Option<McpToken> {
-        let mut tokens = self.tokens.write().unwrap();
+        let mut tokens = self.tokens.write();
         tokens.remove(token_id)
     }
 
     /// 获取 Token
     pub fn get_token(&self, token_id: &str) -> Option<McpToken> {
-        let tokens = self.tokens.read().unwrap();
+        let tokens = self.tokens.read();
         tokens.get(token_id).cloned()
     }
 
     /// 验证 Token 有效性
     pub fn validate_token(&self, token_id: &str, secret: Option<&str>) -> Result<McpToken, AuthError> {
-        let tokens = self.tokens.read().unwrap();
+        let tokens = self.tokens.read();
 
         let token = tokens.get(token_id)
             .ok_or_else(|| AuthError::InvalidToken("Token not found".to_string()))?
@@ -311,7 +312,7 @@ impl McpAuth {
         session.server_name = token.server.unwrap_or_default();
         session.scopes = token.scopes.clone();
 
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write();
         sessions.insert(session.id.clone(), session.clone());
 
         Ok(session)
@@ -319,13 +320,13 @@ impl McpAuth {
 
     /// 获取会话
     pub fn get_session(&self, session_id: &str) -> Option<McpSession> {
-        let sessions = self.sessions.read().unwrap();
+        let sessions = self.sessions.read();
         sessions.get(session_id).cloned()
     }
 
     /// 更新会话活动时间
     pub fn touch_session(&self, session_id: &str) -> Result<(), AuthError> {
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write();
 
         if let Some(session) = sessions.get_mut(session_id) {
             session.touch();
@@ -337,7 +338,7 @@ impl McpAuth {
 
     /// 销毁会话
     pub fn destroy_session(&self, session_id: &str) -> Result<(), AuthError> {
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write();
 
         if let Some(session) = sessions.get_mut(session_id) {
             session.deactivate();
@@ -350,7 +351,7 @@ impl McpAuth {
 
     /// 验证会话权限
     pub fn check_session_scope(&self, session_id: &str, scope: &str) -> Result<(), AuthError> {
-        let sessions = self.sessions.read().unwrap();
+        let sessions = self.sessions.read();
 
         let session = sessions.get(session_id)
             .ok_or_else(|| AuthError::InvalidToken("Session not found".to_string()))?;
@@ -368,20 +369,20 @@ impl McpAuth {
 
     /// 列出所有 Token
     pub fn list_tokens(&self) -> Vec<McpToken> {
-        let tokens = self.tokens.read().unwrap();
+        let tokens = self.tokens.read();
         tokens.values().cloned().collect()
     }
 
     /// 列出所有会话
     pub fn list_sessions(&self) -> Vec<McpSession> {
-        let sessions = self.sessions.read().unwrap();
+        let sessions = self.sessions.read();
         sessions.values().cloned().collect()
     }
 
     /// 清理过期会话
     pub fn cleanup_expired_sessions(&self, max_idle: Duration) -> usize {
         let now = Utc::now();
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write();
         let mut removed = 0;
 
         sessions.retain(|_, session| {
@@ -735,7 +736,7 @@ mod tests {
 
         // 手动标记为非活跃而不是销毁
         {
-            let mut sessions = auth.sessions.write().unwrap();
+            let mut sessions = auth.sessions.write();
             if let Some(s) = sessions.get_mut(&session_id) {
                 s.active = false;
             }

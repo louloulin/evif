@@ -8,7 +8,7 @@ use evif_core::{EvifPlugin, FileInfo, WriteFlags, EvifResult, EvifError};
 use reqwest::{Client, header::{HeaderMap, HeaderName, HeaderValue}};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::sync::RwLock;
+use parking_lot::RwLock;
 use chrono::Utc;
 
 use super::mcp_client::McpClient;
@@ -167,46 +167,46 @@ impl McpServerPlugin {
 
     /// 设置连接状态
     pub fn set_connected(&self, connected: bool) {
-        let mut status = self.connected.write().unwrap();
+        let mut status = self.connected.write();
         *status = connected;
     }
 
     /// 检查是否已连接
     pub fn is_connected(&self) -> bool {
-        *self.connected.read().unwrap()
+        *self.connected.read()
     }
 
     /// 更新工具列表
     pub fn update_tools(&self, tools: Vec<ExternalTool>) {
-        let mut t = self.tools.write().unwrap();
+        let mut t = self.tools.write();
         *t = tools;
     }
 
     /// 更新资源列表
     pub fn update_resources(&self, resources: Vec<ExternalResource>) {
-        let mut r = self.resources.write().unwrap();
+        let mut r = self.resources.write();
         *r = resources;
     }
 
     /// 列出所有工具
     pub fn list_tools(&self) -> Vec<ExternalTool> {
-        self.tools.read().unwrap().clone()
+        self.tools.read().clone()
     }
 
     /// 列出所有资源
     pub fn list_resources(&self) -> Vec<ExternalResource> {
-        self.resources.read().unwrap().clone()
+        self.resources.read().clone()
     }
 
     /// 获取工具详细信息
     pub fn get_tool(&self, name: &str) -> Option<ExternalTool> {
-        let tools = self.tools.read().unwrap();
+        let tools = self.tools.read();
         tools.iter().find(|t| t.name == name).cloned()
     }
 
     /// 获取资源详细信息
     pub fn get_resource(&self, uri: &str) -> Option<ExternalResource> {
-        let resources = self.resources.read().unwrap();
+        let resources = self.resources.read();
         resources.iter().find(|r| r.uri == uri).cloned()
     }
 
@@ -761,9 +761,9 @@ impl EvifPlugin for McpServerPlugin {
 "#,
             self.name,
             self.name,
-            self.capabilities.read().unwrap().tools,
-            self.capabilities.read().unwrap().resources,
-            self.capabilities.read().unwrap().prompts,
+            self.capabilities.read().tools,
+            self.capabilities.read().resources,
+            self.capabilities.read().prompts,
             self.config.auth_token_env.as_deref().unwrap_or("N/A"),
             self.config.command,
         )
@@ -796,10 +796,10 @@ impl EvifPlugin for McpServerPlugin {
     }
 
     async fn read(&self, path: &str, _offset: u64, _size: u64) -> EvifResult<Vec<u8>> {
-        let tools = self.tools.read().unwrap();
-        let resources = self.resources.read().unwrap();
-        let capabilities = self.capabilities.read().unwrap();
-        let connected = *self.connected.read().unwrap();
+        let tools = self.tools.read();
+        let resources = self.resources.read();
+        let capabilities = self.capabilities.read();
+        let connected = *self.connected.read();
 
         match path {
             p if p == format!("/mcp/{}", self.name) || p == format!("/mcp/{}/", self.name) => {
@@ -936,8 +936,8 @@ impl EvifPlugin for McpServerPlugin {
     }
 
     async fn readdir(&self, path: &str) -> EvifResult<Vec<FileInfo>> {
-        let tools = self.tools.read().unwrap();
-        let resources = self.resources.read().unwrap();
+        let tools = self.tools.read();
+        let resources = self.resources.read();
         let now = Utc::now();
 
         match path {
@@ -1034,7 +1034,7 @@ impl EvifPlugin for McpServerPlugin {
     }
 
     async fn stat(&self, path: &str) -> EvifResult<FileInfo> {
-        let tools = self.tools.read().unwrap();
+        let tools = self.tools.read();
         let now = Utc::now();
 
         match path {
