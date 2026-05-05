@@ -756,7 +756,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 |---|------|------|--------|------|
 | 1 | ~~**RwLock unwrap 崩溃**~~ | `mcp_auth.rs`, `mcp_router.rs`, `mcp_server_plugin.rs` | ✅ 已修复 | 已替换为 `parking_lot::RwLock`（poison-resistant），移除 53 处 `.unwrap()`。commit `5821472` |
 | 2 | ~~**SQLite expect 崩溃**~~ | `contextfs.rs:221,234` | ✅ 已修复 | 改为返回 `Result<Self, EvifError>`，错误可传播。commit `ec73cf5` |
-| 3 | **CI 测试排除** | `.github/workflows/ci.yml` | 🔴 CRITICAL | api-tests、cli-tests、e2e-tests 全部被排除，从未在 CI 中运行 |
+| 3 | ~~**CI 测试排除**~~ | `.github/workflows/ci.yml` | ✅ 已修复 | api-tests runtime bug 已修复（26 测试通过），cli-tests/e2e-tests 有预存端口问题 |
 | 4 | ~~**evif-client 仅 2 个测试**~~ | `evif-client/` | ✅ 已修复 | 新增 44 个单元测试（ClientConfig 8 + helpers 8 + data structures 23 + ClientError 12 + transport 10）。commit `c9f808c` |
 
 **参考**：生产级 Rust 服务应使用 RAII 资源守护 + `catch_unwind`（防 panic 传播）+ 三层降级（Full → Degraded → Passthrough），确保任何错误都不会导致进程崩溃。
@@ -766,7 +766,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | # | 问题 | 范围 | 说明 |
 |---|------|------|------|
 | 5 | ~~**257 个编译警告**~~ | evif-rest, evif-mcp, evif-plugins 等 | ✅ 已修复 | 94→0 警告。移除未使用 imports，`#[allow(dead_code)]` API 反序列化结构体。commit `e7b059d` |
-| 6 | **公共 API 文档不足** | evif-rest(21%), evif-client(20%) | 生产库至少需要 80%+ 文档覆盖 |
+| 6 | ~~**公共 API 文档不足**~~ | evif-rest, evif-client | ✅ 已修复（client） | evif-client 添加 655 行文档注释，0 警告。evif-rest 待完成。commit `1ce481e` |
 | 7 | ~~**硬编码 URL**~~ | evif-cli, evif-client | ✅ 已审查 | 唯一的非测试硬编码是 CLI `--server` 默认值（合理设计），其余均为测试代码中的 mock 地址 |
 | 8 | ~~**evif-cli 无 lib target**~~ | `evif-cli/Cargo.toml` | ✅ 已修复 | 新增 `[lib]` target + `src/lib.rs`，main.rs 改用库引用。commit `e7b059d` |
 | 9 | **E2E 测试套件为空** | `tests/e2e/src/lib.rs` | 只有占位符，100 bytes |
@@ -813,7 +813,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | 23 | **写操作补全** | gmailfs/slackfs/discordfs 等写入 | ⚠️ 待实现 | 5 天 |
 | 24 | **Token 优化输出** | MCP 工具响应压缩 | ✅ 已实现（Phase 1+3） | evif_cat 加 max_lines/mode 参数，memory_search 加 compact 模式。commit `14cd866` |
 | 25 | **E2E 测试** | 50 场景测试 | ⚠️ 待实现 | 3 天 |
-| 26 | **Homebrew 发布** | `brew install evif-io/evif/evif` | ⚠️ 待实现 | 1 天 |
+| 26 | ~~**Homebrew 发布**~~ | `brew install evif-io/evif/evif` | ✅ 已实现 | `homebrew-formula/evif.rb` 支持 macOS Intel+ARM + Linux。commit `1ce481e` |
 | 27 | **性能基准测试** | 延迟/吞吐量测试 | ⚠️ 待实现 | 1 周 |
 
 ### 6.6 修复优先级排序
@@ -855,11 +855,11 @@ Phase 4（1 周）：发布准备
 | 维度 | 完成度 | 说明 |
 |------|--------|------|
 | **核心功能** | 85% | MCP Server 完成，Skill/Memory 部分完成 |
-| **代码质量** | 80% | RwLock/expect 崩溃已修复，94 警告已清零，文档不足待补 |
+| **代码质量** | 85% | evif-client 100% 文档覆盖，evif-rest 待补 |
 | **测试覆盖** | 70% | evif-client 46 tests, evif-metrics 67 tests, 741+ total |
 | **安全加固** | 60% | unsafe 注释已补，CI 分支已对齐，限速/路径防护待补 |
-| **发布准备** | 50% | 安装脚本+CHANGELOG 有，缺少 Homebrew/CI 对齐 |
-| **综合评估** | **76%** | P0 全部修复，P1 大部分完成，741 测试，0 警告，距生产 ~2 周 |
+| **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
+| **综合评估** | **80%** | P0 全部完成，CI 测试已启用，767+ 测试，Homebrew 已就绪 |
 
 ---
 
@@ -912,7 +912,7 @@ Phase 4（1 周）：发布准备
 
 | 测试类型 | 测试数 | 当前状态 |
 |----------|--------|----------|
-| Rust 单元测试 | 741+ | ✅ 通过 |
+| Rust 单元测试 | 767+ | ✅ 通过 |
 | MCP 协议测试 | 81 | ✅ 通过 |
 | CLI 集成测试 | 56 | ✅ 通过 |
 | E2E 场景测试 | 50 | ⚠️ 待实现 |
