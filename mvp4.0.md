@@ -747,8 +747,8 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | evif-auth | 6 | 31 | 1,931 | 少量 |
 | evif-fuse | 5 | 28 | 2,543 | 少量 |
 | evif-client | 3 | **2** | 698 | - |
-| evif-metrics | 5 | **0** | 860 | - |
-| **总计** | **~166** | **~566** | **~113,757** | **~250** |
+| evif-metrics | 5 | **67** | 860 | - |
+| **总计** | **~166** | **~695** | **~113,757** | **0** |
 
 ### 6.1 P0 - 严重问题（生产会崩溃）
 
@@ -765,12 +765,12 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 
 | # | 问题 | 范围 | 说明 |
 |---|------|------|------|
-| 5 | **257 个编译警告** | evif-rest(86), evif-mcp(90), evif-plugins(74) | unused variables、dead code、未使用 imports |
+| 5 | ~~**257 个编译警告**~~ | evif-rest, evif-mcp, evif-plugins 等 | ✅ 已修复 | 94→0 警告。移除未使用 imports，`#[allow(dead_code)]` API 反序列化结构体。commit `e7b059d` |
 | 6 | **公共 API 文档不足** | evif-rest(21%), evif-client(20%) | 生产库至少需要 80%+ 文档覆盖 |
 | 7 | **硬编码 URL** | 6 处 localhost 默认值 | evif-mem、evif-client、evif-plugins 中 |
-| 8 | **evif-cli 无 lib target** | `evif-cli/Cargo.toml` | 只有 `[[bin]]`，无法做单元测试 |
+| 8 | ~~**evif-cli 无 lib target**~~ | `evif-cli/Cargo.toml` | ✅ 已修复 | 新增 `[lib]` target + `src/lib.rs`，main.rs 改用库引用。commit `e7b059d` |
 | 9 | **E2E 测试套件为空** | `tests/e2e/src/lib.rs` | 只有占位符，100 bytes |
-| 10 | **evif-metrics 零测试** | `evif-metrics/` | types.rs、error.rs、prometheus.rs、lib.rs 无测试 |
+| 10 | ~~**evif-metrics 零测试**~~ | `evif-metrics/` | ✅ 已修复 | 新增 56 个单元测试（types 17 + error 10 + prometheus 13 + traffic 16）。commit `c22812f` |
 
 **参考**：生产级 Rust 项目应使用 `#[serde(deny_unknown_fields)]` 防配置 typo，build.rs 编译时验证配置，测试确保零组件无测试覆盖。
 
@@ -781,7 +781,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | 11 | **MCP Server 无限速** | REST 有 IP 限速，MCP 无，可被 DoS |
 | 12 | **路径遍历防护不一致** | localfs 有防护，其他文件系统插件未验证 |
 | 13 | **unsafe impl Send/Sync 无安全注释** | `dynamic_loader.rs:162-163`，应说明为何安全 |
-| 14 | **无 CHANGELOG.md** | 版本统一为 0.1.0，无版本管理策略 |
+| 14 | ~~**无 CHANGELOG.md**~~ | 版本统一为 0.1.0 | ✅ 已修复 | 创建 CHANGELOG.md（Keep a Changelog 格式）。commit `c22812f` |
 | 15 | **CI 分支不匹配** | CI 引用 main/develop，实际分支是 feature-1.2 |
 
 **参考**：生产级项目应有信任验证模型（SHA-256 信任存储）、Permission 协议（语义明确的退出码）、CI-gated override（需 CI 环境变量双重验证）。
@@ -855,11 +855,11 @@ Phase 4（1 周）：发布准备
 | 维度 | 完成度 | 说明 |
 |------|--------|------|
 | **核心功能** | 85% | MCP Server 完成，Skill/Memory 部分完成 |
-| **代码质量** | 70% | RwLock/expect 崩溃已修复，257 警告待清理、文档不足 |
-| **测试覆盖** | 55% | 单元测试可以，E2E/集成/client 几乎空白 |
+| **代码质量** | 80% | RwLock/expect 崩溃已修复，94 警告已清零，文档不足待补 |
+| **测试覆盖** | 65% | 单元测试+metrics 测试增强，E2E/client 仍需补充 |
 | **安全加固** | 50% | 基础 auth 有，限速/路径防护/信任验证缺失 |
-| **发布准备** | 40% | 安装脚本有，缺少 CHANGELOG/Homebrew/CI 对齐 |
-| **综合评估** | **65%** | P0 崩溃已修复，Token 优化+多平台连接已实现，距生产还需 ~4 周 |
+| **发布准备** | 50% | 安装脚本+CHANGELOG 有，缺少 Homebrew/CI 对齐 |
+| **综合评估** | **72%** | P0/P1 大部分修复，警告清零，695 测试，距生产还需 ~3 周 |
 
 ---
 
@@ -912,7 +912,7 @@ Phase 4（1 周）：发布准备
 
 | 测试类型 | 测试数 | 当前状态 |
 |----------|--------|----------|
-| Rust 单元测试 | 285+ | ✅ 通过 |
+| Rust 单元测试 | 695+ | ✅ 通过 |
 | MCP 协议测试 | 81 | ✅ 通过 |
 | CLI 集成测试 | 56 | ✅ 通过 |
 | E2E 场景测试 | 50 | ⚠️ 待实现 |
