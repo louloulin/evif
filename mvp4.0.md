@@ -868,7 +868,7 @@ Phase 4（1 周）：发布准备
 | **测试覆盖** | 70% | evif-client 46 tests, evif-metrics 67 tests, evif-mcp 143 tests, 748+ total |
 | **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **84%** | P0 全部完成，CI 测试已启用，748+ 测试，Phase 5 工具分层已实现，Homebrew 已就绪 |
+| **综合评估** | **86%** | P0 全部完成，CI 测试已启用，748+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Homebrew 已就绪 |
 
 ---
 
