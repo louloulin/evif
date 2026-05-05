@@ -814,8 +814,8 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 |---|------|------|------|------|
 | 16 | **evif 命令统一** | 所有命令统一为 `evif` 前缀 | ✅ 已实现 | 所有子命令：skill, memory, context, pipe, mcp, config |
 | 17 | **MCP Server** | `evif mcp serve` 启动 MCP Server | ✅ 已实现 | - |
-| 18 | **Skill 自动发现** | 扫描 /skills/*.md 生成 Prompts | ✅ 部分实现 | 2 天 | 添加 `skill_discovery` MCP prompt，支持 category 和 task 参数筛选。commit `latest` |
-| 19 | **Memory 集成** | 向量存储 + MCP Tools | ✅ 部分实现 | 3 天 |
+| 18 | **Skill 自动发现** | 扫描 /skills/*.md 生成 Prompts | ✅ 已实现 | `evif_skill` 统一工具（list/info/run/create/delete） + `skill_discovery` MCP prompt |
+| 19 | **Memory 集成** | 向量存储 + MCP Tools | ✅ 已实现 | `evif_memory_search`, `evif_memorize`, `evif_retrieve`, `evif_memory_stats` + SQLite/PostgreSQL 存储 |
 | 20 | **安装脚本** | 一键安装 `curl ... \| bash` | ✅ 已实现 | - |
 | 21 | **Claude Desktop 连接** | `evif connect claude` | ✅ 已实现 | `evif connect <platform>` 支持 claude/claude-code/cursor/gemini/codex。commit `ac0ce23` |
 | 22 | **Codex/Cursor/Gemini 集成** | 多平台一键集成 | ✅ 已实现 | `evif connect cursor/gemini/codex`，含 connect/disconnect/check。commit `ac0ce23` |
@@ -863,12 +863,12 @@ Phase 4（1 周）：发布准备
 
 | 维度 | 完成度 | 说明 |
 |------|--------|------|
-| **核心功能** | 85% | MCP Server 完成，Skill/Memory 部分完成 |
+| **核心功能** | 88% | MCP Server 完成，Skill/Memory 完全实现，命令统一完成 |
 | **代码质量** | 90% | evif-client + evif-rest 文档覆盖完成 |
 | **测试覆盖** | 70% | evif-client 46 tests, evif-metrics 67 tests, evif-mcp 143 tests, 748+ total |
 | **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **86%** | P0 全部完成，CI 测试已启用，748+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Homebrew 已就绪 |
+| **综合评估** | **88%** | P0 全部完成，CI 测试已启用，748+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Skill/Memory 集成完成，Homebrew 已就绪 |
 
 ---
 
