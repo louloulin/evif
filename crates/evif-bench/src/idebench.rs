@@ -8,6 +8,20 @@ use evif_core::RadixMountTable;
 use evif_rest::create_routes;
 use std::sync::Arc;
 
+// Sandbox skip helper
+fn is_network_available() -> bool {
+    std::net::TcpListener::bind("127.0.0.1:0").is_ok()
+}
+
+macro_rules! skip_if_sandboxed {
+    () => {
+        if !is_network_available() {
+            println!("SKIP: Network operations not permitted (sandbox restriction)");
+            return;
+        }
+    };
+}
+
 async fn setup_server() -> (Arc<RadixMountTable>, String) {
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table.clone());
@@ -41,6 +55,7 @@ async fn setup_server() -> (Arc<RadixMountTable>, String) {
 /// IDE-01: 文件读取任务
 #[tokio::test]
 async fn idebench_read_file() {
+    skip_if_sandboxed!();
     let (_mount_table, base) = setup_server().await;
     let client = reqwest::Client::new();
 
@@ -85,6 +100,7 @@ async fn idebench_read_file() {
 /// IDE-02: 目录导航任务
 #[tokio::test]
 async fn idebench_directory_navigation() {
+    skip_if_sandboxed!();
     let (_mount_table, base) = setup_server().await;
     let client = reqwest::Client::new();
 
@@ -121,6 +137,7 @@ async fn idebench_directory_navigation() {
 /// IDE-03: 文件搜索任务
 #[tokio::test]
 async fn idebench_file_search() {
+    skip_if_sandboxed!();
     let (_mount_table, base) = setup_server().await;
     let client = reqwest::Client::new();
 
@@ -162,6 +179,7 @@ async fn idebench_file_search() {
 /// IDE-04: 多文件编辑任务
 #[tokio::test]
 async fn idebench_multi_file_edit() {
+    skip_if_sandboxed!();
     let (_mount_table, base) = setup_server().await;
     let client = reqwest::Client::new();
 
@@ -194,6 +212,7 @@ async fn idebench_multi_file_edit() {
 /// IDE-05: 大文件读写性能 (<100ms)
 #[tokio::test]
 async fn idebench_large_file_performance() {
+    skip_if_sandboxed!();
     let (_mount_table, base) = setup_server().await;
     let client = reqwest::Client::new();
 
