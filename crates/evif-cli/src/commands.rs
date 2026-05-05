@@ -5,6 +5,8 @@ use anyhow::Result;
 use base64::Engine;
 use chrono::Utc;
 use evif_client::EvifClient;
+use reqwest::Client;
+use serde_json::{json, Value};
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -13,6 +15,7 @@ pub struct EvifCommand {
     server: String,
     verbose: bool,
     client: EvifClient,
+    http_client: Option<Client>,
     cwd: Arc<Mutex<String>>,
     env_vars: Arc<Mutex<std::collections::HashMap<String, String>>>,
 }
@@ -38,10 +41,16 @@ impl EvifCommand {
 
         // 使用同步方法创建客户端
         let client = evif_client::EvifClient::new_sync(config);
+        // HTTP client may fail in restricted environments (e.g., sandbox)
+        let http_client = match std::panic::catch_unwind(|| Client::new()) {
+            Ok(client) => Some(client),
+            Err(_) => None,
+        };
         Self {
             server,
             verbose,
             client,
+            http_client,
             cwd: Arc::new(Mutex::new("/".to_string())),
             env_vars: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
@@ -1730,6 +1739,248 @@ impl EvifCommand {
     pub fn list_variables(&self) -> std::collections::HashMap<String, String> {
         let env = self.env_vars.lock().unwrap();
         env.clone()
+    }
+
+    // ========== Skill 系统 ==========
+
+    /// List available skills (via MCP)
+    pub async fn skill_ls(&self) -> Result<()> {
+        // Use MCP evif_skill tool with action=list
+        let response = self
+            .send_mcp_request("evif_skill", json!({"action": "list"}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Show skill details
+    pub async fn skill_info(&self, name: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_skill", json!({"action": "info", "name": name}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Execute a skill
+    pub async fn skill_run(&self, name: &str, args: &[String]) -> Result<()> {
+        let response = self
+            .send_mcp_request(
+                "evif_skill",
+                json!({
+                    "action": "run",
+                    "name": name,
+                    "args": args
+                }),
+            )
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Create a new skill
+    pub async fn skill_create(&self, name: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_skill", json!({"action": "create", "name": name}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Delete a skill
+    pub async fn skill_delete(&self, name: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_skill", json!({"action": "delete", "name": name}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    // ========== Memory 系统 ==========
+
+    /// Store a memory
+    pub async fn memory_memorize(&self, text: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_memorize", json!({"content": text}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Retrieve memories by query
+    pub async fn memory_retrieve(&self, query: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_retrieve", json!({"query": query}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Search memories semantically
+    pub async fn memory_search(&self, query: &str, limit: Option<usize>) -> Result<()> {
+        let mut req = json!({"query": query});
+        if let Some(l) = limit {
+            req["limit"] = json!(l);
+        }
+        let response = self.send_mcp_request("evif_memory_search", req).await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Show memory statistics
+    pub async fn memory_stats(&self) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_memory_stats", json!({}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    // ========== Context 系统 ==========
+
+    /// List context layers
+    pub async fn context_ls(&self) -> Result<()> {
+        // List L0, L1, L2 directories
+        let layers = ["L0", "L1", "L2"];
+        let mut output = String::from("Context layers:\n");
+        for layer in layers {
+            output.push_str(&format!("  {} - ", layer));
+            // Try to cat the layer content
+            let path = format!("/context/{}/current", layer);
+            match self.cat_output(path.clone()).await {
+                Ok(content) => {
+                    let preview = content.lines().next().unwrap_or("(empty)");
+                    output.push_str(&format!("{}\n", preview.chars().take(50).collect::<String>()));
+                }
+                Err(_) => {
+                    output.push_str("N/A\n");
+                }
+            }
+        }
+        println!("{}", output);
+        Ok(())
+    }
+
+    /// Read context layer content
+    pub async fn context_read(&self, layer: &str) -> Result<()> {
+        let path = format!("/context/{}/current", layer.to_uppercase());
+        self.cat(path).await
+    }
+
+    /// Write to context layer
+    pub async fn context_write(&self, layer: &str, content: &str) -> Result<()> {
+        let path = format!("/context/{}/current", layer.to_uppercase());
+        self.write(path, content.to_string(), false).await
+    }
+
+    // ========== Pipe 系统 ==========
+
+    /// List pipes
+    pub async fn pipe_ls(&self) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_pipe_list", json!({}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Create a pipe
+    pub async fn pipe_create(&self, name: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_pipe_create", json!({"name": name}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Send message to pipe
+    pub async fn pipe_send(&self, name: &str, message: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request(
+                "evif_pipe_send",
+                json!({"name": name, "content": message}),
+            )
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Receive message from pipe
+    pub async fn pipe_recv(&self, name: &str) -> Result<()> {
+        let response = self
+            .send_mcp_request("evif_pipe_receive", json!({"name": name}))
+            .await?;
+        println!("{}", serde_json::to_string_pretty(&response).unwrap_or_default());
+        Ok(())
+    }
+
+    // ========== MCP 系统 ==========
+
+    /// List MCP servers
+    pub async fn mcp_ls(&self) -> Result<()> {
+        let client = self.http_client.as_ref().ok_or_else(|| anyhow::anyhow!("HTTP client unavailable"))?;
+        let url = format!("http://{}/api/v1/mcp/servers", self.server);
+        let response = client.get(&url).send().await?;
+        let body = response.text().await?;
+        println!("{}", serde_json::to_string_pretty(&serde_json::from_str::<Value>(&body).unwrap_or(json!({"raw": body}))).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Add an MCP server
+    pub async fn mcp_add(&self, name: &str, command: &str) -> Result<()> {
+        let client = self.http_client.as_ref().ok_or_else(|| anyhow::anyhow!("HTTP client unavailable"))?;
+        let url = format!("http://{}/api/v1/mcp/servers", self.server);
+        let body = json!({"name": name, "command": command});
+        let response = client.post(&url).json(&body).send().await?;
+        let text = response.text().await?;
+        println!("{}", text);
+        Ok(())
+    }
+
+    /// Remove an MCP server
+    pub async fn mcp_remove(&self, name: &str) -> Result<()> {
+        let client = self.http_client.as_ref().ok_or_else(|| anyhow::anyhow!("HTTP client unavailable"))?;
+        let url = format!("http://{}/api/v1/mcp/servers/{}", self.server, name);
+        let response = client.delete(&url).send().await?;
+        let text = response.text().await?;
+        println!("{}", text);
+        Ok(())
+    }
+
+    // ========== Config 系统 ==========
+
+    /// Get config value
+    pub async fn config_get(&self, key: &str) -> Result<()> {
+        let client = self.http_client.as_ref().ok_or_else(|| anyhow::anyhow!("HTTP client unavailable"))?;
+        let url = format!("http://{}/api/v1/config/{}", self.server, key);
+        let response = client.get(&url).send().await?;
+        let body = response.text().await?;
+        println!("{}", serde_json::to_string_pretty(&serde_json::from_str::<Value>(&body).unwrap_or(json!({"raw": body}))).unwrap_or_default());
+        Ok(())
+    }
+
+    /// Set config value
+    pub async fn config_set(&self, key: &str, value: &str) -> Result<()> {
+        let client = self.http_client.as_ref().ok_or_else(|| anyhow::anyhow!("HTTP client unavailable"))?;
+        let url = format!("http://{}/api/v1/config/{}", self.server, key);
+        let body = json!({"value": value});
+        let response = client.post(&url).json(&body).send().await?;
+        let text = response.text().await?;
+        println!("{}", text);
+        Ok(())
+    }
+
+    // ========== Helper ==========
+
+    /// Send MCP tool request
+    async fn send_mcp_request(&self, tool: &str, args: Value) -> Result<Value> {
+        let client = self.http_client.as_ref().ok_or_else(|| anyhow::anyhow!("HTTP client unavailable"))?;
+        // For now, use REST API as fallback
+        // In full implementation, this would use MCP protocol
+        let url = format!("http://{}/api/v1/{}", self.server, tool.replace('_', "/"));
+        let response = client.post(&url).json(&args).send().await?;
+        let text = response.text().await?;
+        serde_json::from_str(&text).map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))
     }
 }
 

@@ -514,6 +514,140 @@ pub enum Commands {
         #[arg(short, long)]
         disconnect: bool,
     },
+
+    // ========== Skill 系统 ==========
+    /// List available skills
+    SkillLs,
+
+    /// Show skill details
+    SkillInfo {
+        /// Skill name
+        name: String,
+    },
+
+    /// Execute a skill
+    SkillRun {
+        /// Skill name
+        name: String,
+        /// Arguments
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+
+    /// Create a new skill
+    SkillCreate {
+        /// Skill name
+        name: String,
+    },
+
+    /// Delete a skill
+    SkillDelete {
+        /// Skill name
+        name: String,
+    },
+
+    // ========== Memory 系统 ==========
+    /// Store a memory
+    MemoryMemorize {
+        /// Content to memorize
+        #[arg(last = true)]
+        text: String,
+    },
+
+    /// Retrieve memories by query
+    MemoryRetrieve {
+        /// Query text
+        query: String,
+    },
+
+    /// Search memories semantically
+    MemorySearch {
+        /// Search query
+        query: String,
+        /// Max results
+        #[arg(short, long)]
+        limit: Option<usize>,
+    },
+
+    /// Show memory statistics
+    MemoryStats,
+
+    // ========== Context 系统 ==========
+    /// List context layers
+    ContextLs,
+
+    /// Read context layer content
+    ContextRead {
+        /// Layer: L0, L1, or L2
+        layer: String,
+    },
+
+    /// Write to context layer
+    ContextWrite {
+        /// Layer: L0 or L1
+        layer: String,
+        /// Content to write
+        #[arg(last = true)]
+        content: String,
+    },
+
+    // ========== Pipe 系统 ==========
+    /// List pipes
+    PipeLs,
+
+    /// Create a pipe
+    PipeCreate {
+        /// Pipe name
+        name: String,
+    },
+
+    /// Send message to pipe
+    PipeSend {
+        /// Pipe name
+        name: String,
+        /// Message content
+        #[arg(last = true)]
+        message: String,
+    },
+
+    /// Receive message from pipe
+    PipeRecv {
+        /// Pipe name
+        name: String,
+    },
+
+    // ========== MCP 系统 ==========
+    /// List MCP servers
+    McpLs,
+
+    /// Add an MCP server
+    McpAdd {
+        /// Server name
+        name: String,
+        /// Command
+        command: String,
+    },
+
+    /// Remove an MCP server
+    McpRemove {
+        /// Server name
+        name: String,
+    },
+
+    // ========== Config 系统 ==========
+    /// Get config value
+    ConfigGet {
+        /// Key
+        key: String,
+    },
+
+    /// Set config value
+    ConfigSet {
+        /// Key
+        key: String,
+        /// Value
+        value: String,
+    },
 }
 
 impl EvifCli {
@@ -786,6 +920,81 @@ impl EvifCli {
                 disconnect,
             } => {
                 crate::connect::handle_connect(platform.as_deref(), *list, *check, *disconnect)?;
+            }
+
+            // Skill commands
+            Commands::SkillLs => {
+                command.skill_ls().await?;
+            }
+            Commands::SkillInfo { name } => {
+                command.skill_info(name).await?;
+            }
+            Commands::SkillRun { name, args } => {
+                command.skill_run(name, &args).await?;
+            }
+            Commands::SkillCreate { name } => {
+                command.skill_create(name).await?;
+            }
+            Commands::SkillDelete { name } => {
+                command.skill_delete(name).await?;
+            }
+
+            // Memory commands
+            Commands::MemoryMemorize { text } => {
+                command.memory_memorize(text).await?;
+            }
+            Commands::MemoryRetrieve { query } => {
+                command.memory_retrieve(&query).await?;
+            }
+            Commands::MemorySearch { query, limit } => {
+                command.memory_search(&query, limit.clone()).await?;
+            }
+            Commands::MemoryStats => {
+                command.memory_stats().await?;
+            }
+
+            // Context commands
+            Commands::ContextLs => {
+                command.context_ls().await?;
+            }
+            Commands::ContextRead { layer } => {
+                command.context_read(&layer).await?;
+            }
+            Commands::ContextWrite { layer, content } => {
+                command.context_write(&layer, &content).await?;
+            }
+
+            // Pipe commands
+            Commands::PipeLs => {
+                command.pipe_ls().await?;
+            }
+            Commands::PipeCreate { name } => {
+                command.pipe_create(&name).await?;
+            }
+            Commands::PipeSend { name, message } => {
+                command.pipe_send(&name, &message).await?;
+            }
+            Commands::PipeRecv { name } => {
+                command.pipe_recv(&name).await?;
+            }
+
+            // MCP commands
+            Commands::McpLs => {
+                command.mcp_ls().await?;
+            }
+            Commands::McpAdd { name, command: cmd } => {
+                command.mcp_add(&name, &cmd).await?;
+            }
+            Commands::McpRemove { name } => {
+                command.mcp_remove(&name).await?;
+            }
+
+            // Config commands
+            Commands::ConfigGet { key } => {
+                command.config_get(&key).await?;
+            }
+            Commands::ConfigSet { key, value } => {
+                command.config_set(&key, &value).await?;
             }
         }
 
