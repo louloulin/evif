@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [feature-1.2, feat/mcp-simplify, feature/mvp-4.0-impl]
   pull_request:
-    branches: [main]
+    branches: [feature-1.2]
 
 env:
   CARGO_TERM_COLOR: always
@@ -66,7 +66,7 @@ jobs:
     name: Build Release
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/feature-1.2' || github.ref == 'refs/heads/feat/mcp-simplify')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
     name: Docker
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature-1.2'
     needs: [test]
     steps:
       - name: Checkout repository

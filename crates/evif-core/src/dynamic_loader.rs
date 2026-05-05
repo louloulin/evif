@@ -159,6 +159,11 @@ impl Default for NameBuffer {
     }
 }
 
+// SAFETY: EvifPluginWrapper holds a raw pointer to an Arc<dyn EvifPlugin> and a vtable
+// of function pointers. The plugin lifecycle is managed exclusively by DynamicPluginLoader,
+// which ensures the underlying Arc remains alive as long as any wrapper exists. The vtable
+// function pointers are immutable after creation. Access is synchronized through the loader's
+// internal state, so concurrent access from multiple threads is safe.
 unsafe impl Send for EvifPluginWrapper {}
 unsafe impl Sync for EvifPluginWrapper {}
 

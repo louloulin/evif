@@ -564,6 +564,8 @@ pub struct GrepMatch {
 mod tests {
     use super::*;
 
+    // ==================== ClientConfig Tests ====================
+
     #[test]
     fn test_client_config_default() {
         let config = ClientConfig::default();
@@ -581,5 +583,298 @@ mod tests {
 
         assert_eq!(config.request_timeout, 60);
         assert_eq!(config.base_url, "http://localhost:8080");
+    }
+
+    #[test]
+    fn test_client_config_default_timeout() {
+        let config = ClientConfig::default();
+        assert_eq!(config.timeout, std::time::Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_client_config_custom_timeout() {
+        let config = ClientConfig {
+            request_timeout: 120,
+            base_url: "http://example.com:9090".to_string(),
+            timeout: std::time::Duration::from_secs(120),
+        };
+        assert_eq!(config.timeout, std::time::Duration::from_secs(120));
+    }
+
+    #[test]
+    fn test_client_config_zero_timeout() {
+        let config = ClientConfig {
+            request_timeout: 0,
+            base_url: "http://localhost:8081".to_string(),
+            timeout: std::time::Duration::from_secs(0),
+        };
+        assert_eq!(config.request_timeout, 0);
+        assert!(config.timeout.is_zero());
+    }
+
+    #[test]
+    fn test_client_config_clone() {
+        let config = ClientConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.base_url, cloned.base_url);
+        assert_eq!(config.request_timeout, cloned.request_timeout);
+        assert_eq!(config.timeout, cloned.timeout);
+    }
+
+    #[test]
+    fn test_client_config_debug() {
+        let config = ClientConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("http://localhost:8081"));
+        assert!(debug_str.contains("30"));
+    }
+
+    #[test]
+    fn test_client_config_https_url() {
+        let config = ClientConfig {
+            request_timeout: 30,
+            base_url: "https://secure.example.com:443".to_string(),
+            timeout: std::time::Duration::from_secs(30),
+        };
+        assert!(config.base_url.starts_with("https://"));
+    }
+
+    // ==================== EvifClient Construction Tests ====================
+
+    #[test]
+    fn test_client_new_sync() {
+        let config = ClientConfig::default();
+        let _client = EvifClient::new_sync(config);
+    }
+
+    #[tokio::test]
+    async fn test_client_new_async() {
+        let config = ClientConfig::default();
+        let result = EvifClient::new(config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_client_new_async_custom_config() {
+        let config = ClientConfig {
+            request_timeout: 10,
+            base_url: "http://custom-host:9999".to_string(),
+            timeout: std::time::Duration::from_secs(10),
+        };
+        let result = EvifClient::new(config).await;
+        assert!(result.is_ok());
+    }
+
+    // ==================== Helper Function Tests ====================
+
+    #[test]
+    fn test_parse_modified_valid_rfc3339() {
+        let ts = "2024-01-15T10:30:00Z";
+        let result = parse_modified(ts);
+        assert!(result.is_ok());
+        let dt = result.unwrap();
+        assert_eq!(dt.format("%Y-%m-%d").to_string(), "2024-01-15");
+    }
+
+    #[test]
+    fn test_parse_modified_valid_with_timezone() {
+        let ts = "2024-06-15T14:30:00+08:00";
+        let result = parse_modified(ts);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_modified_invalid() {
+        let ts = "not-a-date";
+        let result = parse_modified(ts);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            ClientError::Protocol(msg) => {
+                assert!(msg.contains("Invalid timestamp"));
+                assert!(msg.contains("not-a-date"));
+            }
+            _ => panic!("Expected Protocol error"),
+        }
+    }
+
+    #[test]
+    fn test_parse_modified_empty_string() {
+        let result = parse_modified("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_file_name_from_path_regular() {
+        assert_eq!(file_name_from_path("/foo/bar/baz.txt"), "baz.txt");
+    }
+
+    #[test]
+    fn test_file_name_from_path_single_component() {
+        assert_eq!(file_name_from_path("file.txt"), "file.txt");
+    }
+
+    #[test]
+    fn test_file_name_from_path_root() {
+        assert_eq!(file_name_from_path("/"), "/");
+    }
+
+    #[test]
+    fn test_file_name_from_path_trailing_slash() {
+        assert_eq!(file_name_from_path("/foo/bar/"), "bar");
+    }
+
+    #[test]
+    fn test_file_name_from_path_deeply_nested() {
+        assert_eq!(
+            file_name_from_path("/a/b/c/d/e/f/g/deep_file.rs"),
+            "deep_file.rs"
+        );
+    }
+
+    #[test]
+    fn test_file_name_from_path_empty_string() {
+        assert_eq!(file_name_from_path(""), "/");
+    }
+
+    // ==================== Data Structure Tests ====================
+
+    #[test]
+    fn test_health_info_construction() {
+        let info = HealthInfo {
+            status: "ok".to_string(),
+            version: "1.0.0".to_string(),
+            uptime: 3600,
+        };
+        assert_eq!(info.status, "ok");
+        assert_eq!(info.version, "1.0.0");
+        assert_eq!(info.uptime, 3600);
+    }
+
+    #[test]
+    fn test_health_info_debug() {
+        let info = HealthInfo {
+            status: "ok".to_string(),
+            version: "0.1.0".to_string(),
+            uptime: 0,
+        };
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("ok"));
+        assert!(debug_str.contains("0.1.0"));
+    }
+
+    #[test]
+    fn test_health_info_clone() {
+        let info = HealthInfo {
+            status: "healthy".to_string(),
+            version: "2.0".to_string(),
+            uptime: 999,
+        };
+        let cloned = info.clone();
+        assert_eq!(info.status, cloned.status);
+        assert_eq!(info.version, cloned.version);
+        assert_eq!(info.uptime, cloned.uptime);
+    }
+
+    #[test]
+    fn test_mount_info_serde_roundtrip() {
+        let info = MountInfo {
+            plugin: "memory".to_string(),
+            path: "/tmp/test".to_string(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let deserialized: MountInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.plugin, "memory");
+        assert_eq!(deserialized.path, "/tmp/test");
+    }
+
+    #[test]
+    fn test_mount_info_debug() {
+        let info = MountInfo {
+            plugin: "test_plugin".to_string(),
+            path: "/mnt/data".to_string(),
+        };
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("test_plugin"));
+        assert!(debug_str.contains("/mnt/data"));
+    }
+
+    #[test]
+    fn test_mount_info_clone() {
+        let info = MountInfo {
+            plugin: "plugin".to_string(),
+            path: "/path".to_string(),
+        };
+        let cloned = info.clone();
+        assert_eq!(info.plugin, cloned.plugin);
+        assert_eq!(info.path, cloned.path);
+    }
+
+    #[test]
+    fn test_grep_match_serde_roundtrip() {
+        let m = GrepMatch {
+            path: "/foo/bar.txt".to_string(),
+            line: 42,
+            content: "hello world".to_string(),
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        let deserialized: GrepMatch = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.path, "/foo/bar.txt");
+        assert_eq!(deserialized.line, 42);
+        assert_eq!(deserialized.content, "hello world");
+    }
+
+    #[test]
+    fn test_grep_match_debug() {
+        let m = GrepMatch {
+            path: "/test".to_string(),
+            line: 1,
+            content: "match".to_string(),
+        };
+        let debug_str = format!("{:?}", m);
+        assert!(debug_str.contains("/test"));
+        assert!(debug_str.contains("match"));
+    }
+
+    #[test]
+    fn test_grep_match_clone() {
+        let m = GrepMatch {
+            path: "/a/b".to_string(),
+            line: 10,
+            content: "found it".to_string(),
+        };
+        let cloned = m.clone();
+        assert_eq!(m.path, cloned.path);
+        assert_eq!(m.line, cloned.line);
+        assert_eq!(m.content, cloned.content);
+    }
+
+    #[test]
+    fn test_mount_info_deserialize_from_json() {
+        let json = r#"{"plugin":"disk","path":"/data"}"#;
+        let info: MountInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.plugin, "disk");
+        assert_eq!(info.path, "/data");
+    }
+
+    #[test]
+    fn test_grep_match_deserialize_from_json() {
+        let json = r#"{"path":"/log.txt","line":5,"content":"error found"}"#;
+        let m: GrepMatch = serde_json::from_str(json).unwrap();
+        assert_eq!(m.path, "/log.txt");
+        assert_eq!(m.line, 5);
+        assert_eq!(m.content, "error found");
+    }
+
+    #[test]
+    fn test_grep_match_array_deserialize() {
+        let json = r#"[
+            {"path":"/a.txt","line":1,"content":"foo"},
+            {"path":"/b.txt","line":2,"content":"bar"}
+        ]"#;
+        let matches: Vec<GrepMatch> = serde_json::from_str(json).unwrap();
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].path, "/a.txt");
+        assert_eq!(matches[1].content, "bar");
     }
 }

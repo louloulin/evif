@@ -72,6 +72,96 @@ mod tests {
         let transport = create_transport(addr).await;
         assert!(transport.is_ok());
     }
+
+    #[tokio::test]
+    async fn test_create_transport_various_addresses() {
+        let addresses = vec![
+            "localhost:50051",
+            "127.0.0.1:8080",
+            "0.0.0.0:3000",
+            "example.com:443",
+            "[::1]:50051",
+        ];
+        for addr in addresses {
+            let transport = create_transport(addr).await;
+            assert!(transport.is_ok(), "Failed for address: {}", addr);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_transport_returns_arc() {
+        let transport = create_transport("localhost:50051").await.unwrap();
+        let _arc_clone = transport.clone();
+    }
+
+    // ==================== TransportError Tests ====================
+
+    #[test]
+    fn test_transport_error_connection_failed() {
+        let err = TransportError::ConnectionFailed("refused".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("connection failed"));
+        assert!(msg.contains("refused"));
+    }
+
+    #[test]
+    fn test_transport_error_send_failed() {
+        let err = TransportError::SendFailed("timeout".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("send failed"));
+        assert!(msg.contains("timeout"));
+    }
+
+    #[test]
+    fn test_transport_error_receive_failed() {
+        let err = TransportError::ReceiveFailed("closed".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("receive failed"));
+        assert!(msg.contains("closed"));
+    }
+
+    #[test]
+    fn test_transport_error_invalid_message() {
+        let err = TransportError::InvalidMessage("bad frame".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("invalid message"));
+        assert!(msg.contains("bad frame"));
+    }
+
+    #[test]
+    fn test_transport_error_debug() {
+        let err = TransportError::ConnectionFailed("test".to_string());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("ConnectionFailed"));
+    }
+
+    // ==================== MockTransport Tests ====================
+
+    #[test]
+    fn test_mock_transport_debug() {
+        let mock = MockTransport::new("localhost:8080".to_string());
+        let debug = format!("{:?}", mock);
+        assert!(debug.contains("MockTransport"));
+    }
+
+    // ==================== DummyTransport Tests ====================
+
+    #[tokio::test]
+    async fn test_dummy_transport_returns_error() {
+        let dummy = DummyTransport;
+        let request = evif_protocol::Request {
+            id: "test-id".to_string(),
+            ..Default::default()
+        };
+        let result = dummy.send(Message::Request(request)).await;
+        assert!(result.is_err());
+        match result {
+            Err(TransportError::ConnectionFailed(msg)) => {
+                assert!(msg.contains("Dummy transport not implemented"));
+            }
+            _ => panic!("Expected ConnectionFailed error"),
+        }
+    }
 }
 
 // Dummy Transport for blocking client
