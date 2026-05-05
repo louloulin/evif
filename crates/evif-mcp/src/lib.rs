@@ -1517,6 +1517,31 @@ pub struct Tool {
     pub name: String,
     pub description: String,
     pub input_schema: Value,
+    /// Tool category: "core" (always loaded) or "extended" (on-demand)
+    #[serde(default = "default_tool_category")]
+    pub category: String,
+}
+
+/// Default tool category
+fn default_tool_category() -> String {
+    "core".to_string()
+}
+
+/// Core tools that should always be available
+pub const CORE_TOOLS: &[&str] = &[
+    "evif_ls",
+    "evif_cat",
+    "evif_write",
+    "evif_mkdir",
+    "evif_rm",
+    "evif_file",
+    "evif_health",
+    "evif_mount",
+];
+
+/// Check if a tool is a core tool
+pub fn is_core_tool(name: &str) -> bool {
+    CORE_TOOLS.contains(&name)
 }
 
 /// MCP 资源定义
@@ -1629,7 +1654,7 @@ impl EvifMcpServer {
     /// 初始化所有工具
     async fn initialize_tools(self: Arc<Self>) {
         let tools = vec![
-            // 文件操作工具
+            // Core 文件操作工具 (Tier 1 - always loaded)
             Tool {
                 name: "evif_ls".to_string(),
                 description: "List files in a directory".to_string(),
@@ -1647,6 +1672,7 @@ impl EvifMcpServer {
                     },
                     "required": ["path"]
                 }),
+                category: "core".to_string(),
             },
             Tool {
                 name: "evif_cat".to_string(),
@@ -1677,6 +1703,7 @@ impl EvifMcpServer {
                     },
                     "required": ["path"]
                 }),
+                category: "core".to_string(),
             },
             Tool {
                 name: "evif_write".to_string(),
@@ -1703,6 +1730,7 @@ impl EvifMcpServer {
                     },
                     "required": ["path", "content"]
                 }),
+                category: "core".to_string(),
             },
             Tool {
                 name: "evif_mkdir".to_string(),
@@ -1721,6 +1749,7 @@ impl EvifMcpServer {
                     },
                     "required": ["path"]
                 }),
+                category: "core".to_string(),
             },
             Tool {
                 name: "evif_rm".to_string(),
@@ -1739,6 +1768,7 @@ impl EvifMcpServer {
                     },
                     "required": ["path"]
                 }),
+                category: "core".to_string(),
             },
             Tool {
                 name: "evif_file".to_string(),
@@ -1766,6 +1796,7 @@ impl EvifMcpServer {
                     },
                     "required": ["action"]
                 }),
+                category: "core".to_string(),
             },
             // 插件管理工具 (统一: mount/unmount/list)
             Tool {
@@ -1794,8 +1825,9 @@ impl EvifMcpServer {
                     },
                     "required": ["action"]
                 }),
+                category: "core".to_string(),
             },
-            // 高级工具
+            // 高级工具 (Extended - on-demand)
             Tool {
                 name: "evif_grep".to_string(),
                 description: "Search for text in files".to_string(),
@@ -1817,6 +1849,7 @@ impl EvifMcpServer {
                     },
                     "required": ["path", "pattern"]
                 }),
+                category: "extended".to_string(),
             },
             Tool {
                 name: "evif_health".to_string(),
@@ -1826,6 +1859,7 @@ impl EvifMcpServer {
                     "properties": {},
                     "required": []
                 }),
+                category: "core".to_string(),
             },
             
             
@@ -1869,6 +1903,7 @@ impl EvifMcpServer {
                     },
                     "required": ["query"]
                 }),
+                category: "extended".to_string(),
             },
             
             
@@ -1917,6 +1952,7 @@ impl EvifMcpServer {
                     },
                     "required": ["path"]
                 }),
+                category: "extended".to_string(),
             },
             Tool {
                 name: "evif_close_handle".to_string(),
@@ -1931,6 +1967,7 @@ impl EvifMcpServer {
                     },
                     "required": ["handle_id"]
                 }),
+                category: "extended".to_string(),
             },
             // Memory tools
             Tool {
@@ -1961,6 +1998,7 @@ impl EvifMcpServer {
                         { "required": ["text"] }
                     ]
                 }),
+                category: "extended".to_string(),
             },
             Tool {
                 name: "evif_retrieve".to_string(),
@@ -1987,6 +2025,7 @@ impl EvifMcpServer {
                     },
                     "required": ["query"]
                 }),
+                category: "extended".to_string(),
             },
             // SkillFS tools (统一: list/info/execute/create/delete)
             Tool {
@@ -2027,6 +2066,7 @@ impl EvifMcpServer {
                     },
                     "required": ["action"]
                 }),
+                category: "extended".to_string(),
             },
             // Phase 15: Claude Code 集成工具
             // ── CLAUDE.md 自动生成 ────────────────────────────────────────
@@ -2053,6 +2093,7 @@ impl EvifMcpServer {
                     },
                     "required": []
                 }),
+                category: "extended".to_string(),
             },
             // ── Session management (统一: save/list) ─────────────────────
             Tool {
@@ -2085,6 +2126,7 @@ impl EvifMcpServer {
                     },
                     "required": ["action"]
                 }),
+                category: "extended".to_string(),
             },
             // ── Subagent 协调 (统一: create/send/list) ─────────────────
             Tool {
@@ -2117,6 +2159,7 @@ impl EvifMcpServer {
                     },
                     "required": ["action"]
                 }),
+                category: "extended".to_string(),
             },
             // MCP Capability Discovery Tool
             
@@ -7817,6 +7860,7 @@ url = "http://localhost:8081"
             name: "new_custom_tool".to_string(),
             description: "A newly registered tool".to_string(),
             input_schema: json!({}),
+            category: "core".to_string(),
         }).await;
 
         let new_count = server.tool_count().await;
@@ -7838,6 +7882,7 @@ url = "http://localhost:8081"
             name: "temp_tool".to_string(),
             description: "Temporary tool".to_string(),
             input_schema: json!({}),
+            category: "core".to_string(),
         }).await;
 
         assert!(server.has_tool("temp_tool").await);
@@ -8071,6 +8116,7 @@ url = "http://localhost:8081"
                 name: "test_tool".to_string(),
                 description: "A test tool".to_string(),
                 input_schema: json!({}),
+                category: "core".to_string(),
             }
         ];
         cache.put_tools(tools.clone());
@@ -8095,6 +8141,7 @@ url = "http://localhost:8081"
                 name: "test".to_string(),
                 description: "test".to_string(),
                 input_schema: json!({}),
+                category: "core".to_string(),
             }
         ]);
 

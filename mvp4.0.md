@@ -652,16 +652,22 @@ max_string_length = 10000  # 单个字符串最大长度
 
 #### Phase 5: 分层工具加载（P2）
 
-当前 37 个工具一次性加载到 context。改为按需加载：
-
+✅ **部分实现** - 为所有工具添加 `category` 字段区分 core/extended：
 ```rust
-// 核心 8 个工具始终加载
-const CORE_TOOLS = ["evif_ls", "evif_cat", "evif_write", "evif_mkdir",
-                     "evif_rm", "evif_health", "evif_mount", "evif_stat"];
+// Tool 结构体新增字段
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: Value,
+    pub category: String,  // "core" 或 "extended"
+}
 
-// 按需工具（通过 evif_tool_enable 启用）
-// evif_memorize, evif_retrieve, evif_skill, evif_batch, etc.
+// 核心工具 (始终加载): evif_ls, evif_cat, evif_write, evif_mkdir,
+// evif_rm, evif_file, evif_health, evif_mount
+// 扩展工具 (按需): evif_grep, evif_memory_search, evif_memorize, etc.
 ```
+
+待实现：添加 `tools/list` 的 category 过滤参数或单独的 `tools/list_core` 端点。
 
 - 核心 8 工具 ~600 tokens
 - 按需加载减少 ~2,000 tokens 初始开销
