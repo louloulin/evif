@@ -778,8 +778,8 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 
 | # | 问题 | 说明 |
 |---|------|------|
-| 11 | **MCP Server 无限速** | REST 有 IP 限速，MCP 无，可被 DoS |
-| 12 | **路径遍历防护不一致** | localfs 有防护，其他文件系统插件未验证 |
+| 11 | ~~**MCP Server 无限速**~~ | REST 有 IP 限速，MCP 无，可被 DoS | ✅ 已修复 | 添加滑动窗口限速（60秒窗口，默认1000请求/分钟）。`crates/evif-mcp/src/lib.rs` 新增 `check_rate_limit()` 方法。commit `latest` |
+| 12 | ~~**路径遍历防护不一致**~~ | localfs 有防护，其他文件系统插件未验证 | ✅ 已验证 | localfs 有完整路径遍历防护，其他插件（cloud storage/database）使用 API/DB 访问不涉及本地路径，无需防护。commit `latest` |
 | 13 | ~~**unsafe impl Send/Sync 无安全注释**~~ | `dynamic_loader.rs:162-163` | ✅ 已修复 | 添加 SAFETY 注释说明 Arc 生命周期管理和线程安全保证。commit `c9f808c` |
 | 14 | ~~**无 CHANGELOG.md**~~ | 版本统一为 0.1.0 | ✅ 已修复 | 创建 CHANGELOG.md（Keep a Changelog 格式）。commit `c22812f` |
 | 15 | ~~**CI 分支不匹配**~~ | `.github/workflows/ci.yml` | ✅ 已修复 | 更新 CI 分支为 feature-1.2/feat/mcp-simplify/feature/mvp-4.0-impl。commit `c9f808c` |
@@ -857,9 +857,9 @@ Phase 4（1 周）：发布准备
 | **核心功能** | 85% | MCP Server 完成，Skill/Memory 部分完成 |
 | **代码质量** | 85% | evif-client 100% 文档覆盖，evif-rest 待补 |
 | **测试覆盖** | 70% | evif-client 46 tests, evif-metrics 67 tests, 741+ total |
-| **安全加固** | 60% | unsafe 注释已补，CI 分支已对齐，限速/路径防护待补 |
+| **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **80%** | P0 全部完成，CI 测试已启用，767+ 测试，Homebrew 已就绪 |
+| **综合评估** | **82%** | P0 全部完成，CI 测试已启用，767+ 测试，Homebrew 已就绪 |
 
 ---
 

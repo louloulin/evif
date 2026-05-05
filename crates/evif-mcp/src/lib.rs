@@ -5,6 +5,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -850,6 +851,8 @@ pub struct McpServerConfig {
     pub evif_url: String,
     pub server_name: String,
     pub version: String,
+    /// Rate limit: max requests per minute per client
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 impl Default for McpServerConfig {
@@ -859,6 +862,7 @@ impl Default for McpServerConfig {
                 .unwrap_or_else(|_| "http://localhost:8081".to_string()),
             server_name: "evif-mcp".to_string(),
             version: "1.8.0".to_string(),
+            rate_limit: None,
         }
     }
 }
@@ -915,6 +919,10 @@ pub struct McpConfig {
     /// 多租户配置
     #[serde(default)]
     pub tenants: std::collections::HashMap<String, TenantMcpConfig>,
+
+    /// Rate limiting configuration
+    #[serde(default)]
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 fn default_protocol_version() -> String { "2024-11-05".to_string() }
@@ -1142,6 +1150,7 @@ impl McpConfig {
             evif_url: self.evif.url.clone(),
             server_name: self.server_name.clone(),
             version: self.version.clone(),
+            rate_limit: self.rate_limit.clone(),
         }
     }
 
@@ -1253,6 +1262,7 @@ impl Default for McpConfig {
                 tools: std::collections::HashMap::new(),
             },
             tenants: std::collections::HashMap::new(),
+            rate_limit: None,
         }
     }
 }
@@ -1550,6 +1560,10 @@ pub struct EvifMcpServer {
     vfs_backend: Option<Arc<VfsBackend>>,
     /// 路由系统 (用于 URI ↔ Path 转换)
     router: Arc<McpRouter>,
+    /// Rate limiting: request counts per caller (client_id -> (count, window_start))
+    rate_limit: Arc<Mutex<HashMap<String, (u64, std::time::Instant)>>>,
+    /// Max requests per window (default: 1000 per minute)
+    rate_limit_max: u64,
 }
 
 impl EvifMcpServer {
@@ -1577,6 +1591,8 @@ impl EvifMcpServer {
             .unwrap_or_else(|_| Client::new());
         let tool_cache = ToolCache::new(cache_size);
         let router = Arc::new(McpRouter::new());
+        // Extract rate limit config before moving
+        let rate_limit_max = config.rate_limit.as_ref().map(|r| r.requests_per_minute).unwrap_or(1000);
         let server = Arc::new(Self {
             config,
             client,
@@ -1587,6 +1603,8 @@ impl EvifMcpServer {
             cache_size,
             vfs_backend,
             router,
+            rate_limit: Arc::new(Mutex::new(HashMap::new())),
+            rate_limit_max,
         });
 
         // 初始化工具和提示
@@ -5517,8 +5535,64 @@ Auto-generated CLAUDE.md for EVIF context filesystem.
         Ok(())
     }
 
+    /// Rate limit check for incoming requests.
+    /// Returns None if allowed, Some(error_response) if rate limited.
+    fn check_rate_limit(&self, request: &Value) -> Option<Value> {
+        // Extract client identifier from request
+        let client_id = request
+            .get("_meta")
+            .and_then(|m| m.get("clientSessionId"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("default");
+
+        let now = std::time::Instant::now();
+        const WINDOW_SECS: u64 = 60;
+
+        let mut rate_map = self.rate_limit.lock().unwrap();
+
+        // Check if we need to reset the window
+        if let Some((_count, start)) = rate_map.get(client_id) {
+            let elapsed = now.duration_since(*start).as_secs();
+            if elapsed >= WINDOW_SECS {
+                // Window expired, reset
+                rate_map.insert(client_id.to_string(), (1, now));
+                return None;
+            }
+        }
+
+        // Increment or insert
+        let (count, _) = rate_map
+            .entry(client_id.to_string())
+            .or_insert((0, now));
+        *count += 1;
+
+        // Check limit
+        if *count > self.rate_limit_max {
+            let retry_after = rate_map.get(client_id)
+                .map(|(_, s)| WINDOW_SECS.saturating_sub(now.duration_since(*s).as_secs()))
+                .unwrap_or(WINDOW_SECS);
+            Some(json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32000,
+                    "message": format!("Rate limit exceeded. Max {} requests per minute.", self.rate_limit_max),
+                    "data": {
+                        "retryAfter": retry_after
+                    }
+                }
+            }))
+        } else {
+            None
+        }
+    }
+
     /// 处理 JSON-RPC 请求
     async fn handle_request(&self, request: Value) -> Value {
+        // Rate limit check - return early if exceeded
+        if let Some(error_response) = self.check_rate_limit(&request) {
+            return error_response;
+        }
+
         // 标准 MCP 协议方法处理
         if let Some(method) = request.get("method").and_then(|m| m.as_str()) {
             let id = request.get("id");
@@ -7459,8 +7533,6 @@ url = "http://localhost:8081"
 
     #[tokio::test]
     async fn test_config_watcher_reload() {
-        use std::io::Write;
-
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         let config_path = temp_dir.path().join("mcp.toml");
 
@@ -7674,6 +7746,7 @@ url = "http://localhost:8081"
             evif_url: "http://test:8081".to_string(),
             server_name: "test-server".to_string(),
             version: "1.0.0".to_string(),
+            rate_limit: None,
         };
         let server = EvifMcpServer::new(config);
 
@@ -8202,8 +8275,6 @@ url = "http://localhost:8081"
 
     #[tokio::test]
     async fn test_prompts_get_with_template_args() {
-        use std::collections::HashMap;
-
         let server = EvifMcpServer::new(McpServerConfig::default());
 
         // Wait for prompts to initialize
