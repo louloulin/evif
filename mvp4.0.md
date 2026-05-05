@@ -823,7 +823,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | 24 | **Token 优化输出** | MCP 工具响应压缩 | ✅ 已实现（Phase 1+3） | evif_cat 加 max_lines/mode 参数，memory_search 加 compact 模式。commit `14cd866` |
 | 25 | **E2E 测试** | 50 场景测试 | ✅ 已实现（基础设施） | 26 个集成测试，sandbox 兼容，Mutex 懒加载。commit `latest` |
 | 26 | ~~**Homebrew 发布**~~ | `brew install evif-io/evif/evif` | ✅ 已实现 | `homebrew-formula/evif.rb` 支持 macOS Intel+ARM + Linux。commit `1ce481e` |
-| 27 | **性能基准测试** | 延迟/吞吐量测试 | ⚠️ 待实现 | 1 周 |
+| 27 | **性能基准测试** | 延迟/吞吐量测试 | ✅ 已实现 | 6 个 benchmark 文件：auth, graph, performance, storage, vector。commit `e4f8ec6` |
 
 ### 6.6 修复优先级排序
 
@@ -865,10 +865,10 @@ Phase 4（1 周）：发布准备
 |------|--------|------|
 | **核心功能** | 88% | MCP Server 完成，Skill/Memory 完全实现，命令统一完成 |
 | **代码质量** | 90% | evif-client + evif-rest 文档覆盖完成 |
-| **测试覆盖** | 72% | api-tests 26 tests, evif-client 46 tests, evif-metrics 67 tests, evif-mcp 143 tests, 774+ total |
+| **测试覆盖** | 74% | e2e-tests 27, api-tests 26, evif-client 46, evif-metrics 67, evif-mcp 143, 797+ total |
 | **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **88%** | P0 全部完成，CI 测试已启用，774+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Skill/Memory 集成完成，Homebrew 已就绪 |
+| **综合评估** | **90%** | P0 全部完成，CI 测试已启用，797+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Skill/Memory 集成完成，Homebrew 已就绪，E2E 27 tests 通过，性能 Benchmarks 就绪 |
 
 ---
 
@@ -924,7 +924,7 @@ Phase 4（1 周）：发布准备
 | Rust 单元测试 | 748+ | ✅ 通过 |
 | MCP 协议测试 | 81 | ✅ 通过 |
 | CLI 集成测试 | 56 | ✅ 通过 |
-| E2E 场景测试 | 50 | ✅ 基础设施就绪（26 tests） |
+| E2E 场景测试 | 50 | ✅ 已实现（27 tests） |
 | 安装测试 | 5 | ⚠️ 待实现 |
 | 多平台集成测试 | 6 | ⚠️ 待实现 |
 
