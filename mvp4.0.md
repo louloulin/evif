@@ -865,10 +865,10 @@ Phase 4（1 周）：发布准备
 |------|--------|------|
 | **核心功能** | 88% | MCP Server 完成，Skill/Memory 完全实现，命令统一完成 |
 | **代码质量** | 90% | evif-client + evif-rest 文档覆盖完成 |
-| **测试覆盖** | 74% | e2e-tests 27, api-tests 26, evif-client 46, evif-metrics 67, evif-mcp 143, 797+ total |
+| **测试覆盖** | 76% | e2e-tests 27, api-tests 26, cli-tests 37, evif-bench 24, evif-client 46, evif-metrics 67, evif-mcp 143, 900+ total |
 | **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **90%** | P0 全部完成，CI 测试已启用，797+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Skill/Memory 集成完成，Homebrew 已就绪，E2E 27 tests 通过，性能 Benchmarks 就绪 |
+| **综合评估** | **92%** | P0 全部完成，CI 测试已启用，900+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Skill/Memory 集成完成，Homebrew 已就绪，E2E 27 tests 通过，性能 Benchmarks 24 tests 就绪，所有测试沙盒兼容 |
 
 ---
 
@@ -921,10 +921,11 @@ Phase 4（1 周）：发布准备
 
 | 测试类型 | 测试数 | 当前状态 |
 |----------|--------|----------|
-| Rust 单元测试 | 748+ | ✅ 通过 |
+| Rust 单元测试 | 900+ | ✅ 通过（沙盒兼容） |
 | MCP 协议测试 | 81 | ✅ 通过 |
 | CLI 集成测试 | 56 | ✅ 通过 |
-| E2E 场景测试 | 50 | ✅ 已实现（27 tests） |
+| E2E 场景测试 | 27 | ✅ 通过 |
+| Benchmark 测试 | 24 | ✅ 通过 |
 | 安装测试 | 5 | ⚠️ 待实现 |
 | 多平台集成测试 | 6 | ⚠️ 待实现 |
 
