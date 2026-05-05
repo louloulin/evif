@@ -58,22 +58,20 @@ impl TestServerState {
     }
 }
 
-fn ensure_server() -> Arc<TestServerState> {
+async fn ensure_server() -> Arc<TestServerState> {
     let mut guard = SERVER_STATE.lock().unwrap();
     if let Some(ref state) = *guard {
         return Arc::clone(state);
     }
 
-    // Create new runtime for spawning the server
-    let runtime = tokio::runtime::Runtime::new().expect("create runtime");
-    let state = runtime.block_on(TestServerState::start());
+    let state = TestServerState::start().await;
     let arc_state = Arc::new(state);
     *guard = Some(Arc::clone(&arc_state));
     arc_state
 }
 
-fn get_api_base() -> String {
-    ensure_server().base_url.clone()
+async fn get_api_base() -> String {
+    ensure_server().await.base_url.clone()
 }
 
 fn unique_test_path() -> String {
@@ -87,6 +85,7 @@ fn unique_test_path() -> String {
 async fn get_client() -> Client {
     Client::builder()
         .timeout(std::time::Duration::from_secs(10))
+        .no_proxy()
         .build()
         .expect("Failed to create HTTP client")
 }
@@ -97,7 +96,7 @@ mod health_checks {
     #[tokio::test]
     async fn test_health_basic() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client.get(&format!("{}/health", base)).send().await;
 
@@ -113,7 +112,7 @@ mod health_checks {
     #[tokio::test]
     async fn test_health_v1() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client.get(&format!("{}/api/v1/health", base)).send().await;
 
@@ -133,7 +132,7 @@ mod file_operations {
     #[tokio::test]
     async fn test_read_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_file = unique_test_path();
 
         let _ = client
@@ -153,7 +152,7 @@ mod file_operations {
     #[tokio::test]
     async fn test_write_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_file = unique_test_path();
 
         let response = client
@@ -168,7 +167,7 @@ mod file_operations {
     #[tokio::test]
     async fn test_create_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_file = unique_test_path();
 
         let response = client
@@ -186,7 +185,7 @@ mod file_operations {
     #[tokio::test]
     async fn test_delete_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_file = unique_test_path();
 
         let _ = client
@@ -210,7 +209,7 @@ mod directory_operations {
     #[tokio::test]
     async fn test_list_directory() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .get(&format!("{}/api/v1/directories?path=/", base))
@@ -223,7 +222,7 @@ mod directory_operations {
     #[tokio::test]
     async fn test_create_directory() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_dir = unique_test_path();
 
         let response = client
@@ -237,7 +236,7 @@ mod directory_operations {
     #[tokio::test]
     async fn test_delete_directory() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_dir = unique_test_path();
 
         let _ = client
@@ -260,7 +259,7 @@ mod metadata_operations {
     #[tokio::test]
     async fn test_stat_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_file = unique_test_path();
 
         let _ = client
@@ -280,7 +279,7 @@ mod metadata_operations {
     #[tokio::test]
     async fn test_touch_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_file = unique_test_path();
 
         let _ = client
@@ -300,7 +299,7 @@ mod metadata_operations {
     #[tokio::test]
     async fn test_digest_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let test_file = unique_test_path();
 
         let _ = client
@@ -323,7 +322,7 @@ mod metadata_operations {
     #[tokio::test]
     async fn test_rename_file() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let src_file = unique_test_path();
         let dst_file = format!("{}_renamed", src_file);
 
@@ -351,7 +350,7 @@ mod mount_management {
     #[tokio::test]
     async fn test_list_mounts() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client.get(&format!("{}/api/v1/mounts", base)).send().await;
 
@@ -361,7 +360,7 @@ mod mount_management {
     #[tokio::test]
     async fn test_mount_plugin() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let mount_path = unique_test_path();
 
         let response = client
@@ -381,7 +380,7 @@ mod mount_management {
     #[tokio::test]
     async fn test_unmount_plugin() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let mount_path = unique_test_path();
 
         let _ = client
@@ -407,7 +406,7 @@ mod batch_operations {
     #[tokio::test]
     async fn test_batch_copy() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let src = unique_test_path();
         let dst = format!("{}_copy_dest", unique_test_path());
 
@@ -441,7 +440,7 @@ mod batch_operations {
     #[tokio::test]
     async fn test_batch_delete() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
         let file1 = unique_test_path();
         let file2 = unique_test_path();
 
@@ -471,7 +470,7 @@ mod batch_operations {
     #[tokio::test]
     async fn test_batch_progress() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .get(&format!("{}/api/v1/batch/progress/nonexistent-id", base))
@@ -484,7 +483,7 @@ mod batch_operations {
     #[tokio::test]
     async fn test_list_batch_operations() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .get(&format!("{}/api/v1/batch/operations", base))
@@ -497,7 +496,7 @@ mod batch_operations {
     #[tokio::test]
     async fn test_cancel_batch_operation() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .delete(&format!("{}/api/v1/batch/operation/nonexistent-id", base))
@@ -514,7 +513,7 @@ mod plugin_api_management {
     #[tokio::test]
     async fn test_list_plugins() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client.get(&format!("{}/api/v1/plugins", base)).send().await;
 
@@ -524,7 +523,7 @@ mod plugin_api_management {
     #[tokio::test]
     async fn test_list_available_plugins() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .get(&format!("{}/api/v1/plugins/available", base))
@@ -537,7 +536,7 @@ mod plugin_api_management {
     #[tokio::test]
     async fn test_get_plugin_readme() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .get(&format!("{}/api/v1/plugins/memfs/readme", base))
@@ -550,7 +549,7 @@ mod plugin_api_management {
     #[tokio::test]
     async fn test_get_plugin_config() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .get(&format!("{}/api/v1/plugins/memfs/config", base))
@@ -563,7 +562,7 @@ mod plugin_api_management {
     #[tokio::test]
     async fn test_list_plugins_detailed() {
         let client = get_client().await;
-        let base = get_api_base();
+        let base = get_api_base().await;
 
         let response = client
             .get(&format!("{}/api/v1/plugins/list", base))

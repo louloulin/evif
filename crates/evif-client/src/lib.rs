@@ -1,28 +1,107 @@
-// EVIF 客户端 SDK
+//! EVIF Client SDK
+//!
+//! This crate provides a Rust client library for interacting with the EVIF
+//! (Everything Is a File) virtual filesystem backend via HTTP REST API.
+//!
+//! # Overview
+//!
+//! The `EvifClient` is the main entry point for all operations. It communicates
+//! with the EVIF backend over HTTP, providing a type-safe interface for:
+//!
+//! - File operations: read, write, list, delete, rename, stat
+//! - Directory operations: create, remove recursively
+//! - Plugin mounts: attach filesystem plugins
+//! - Advanced operations: digest/checksum, grep search, permissions
+//!
+//! # Example
+//!
+//! ```ignore
+//! use evif_client::{ClientConfig, EvifClient};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let config = ClientConfig::default();
+//!     let client = EvifClient::new(config).await?;
+//!
+//!     // List files
+//!     let files = client.ls("/").await?;
+//!     for f in files {
+//!         println!("{}: {} bytes", f.name, f.size);
+//!     }
+//!
+//!     // Health check
+//!     let health = client.health().await?;
+//!     println!("Status: {} v{}", health.status, health.version);
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Error Handling
+//!
+//! All operations return `ClientResult<T>` which is `Result<T, ClientError>`.
+//! See [`ClientError`] for the list of possible error variants.
 
 mod client;
 
 pub use client::{ClientConfig, EvifClient, GrepMatch, HealthInfo, MountInfo};
 
-/// 客户端错误类型
+/// Errors that can occur when using the EVIF client.
+///
+/// This enum captures all failure modes from network transport to protocol
+/// violations and authentication failures.
+///
+/// # Variants
+///
+/// - [`Transport`](ClientError::Transport) — Network-level failures (connection refused, DNS errors, etc.)
+/// - [`Protocol`](ClientError::Protocol) — Invalid server responses or data corruption
+/// - [`AuthFailed`](ClientError::AuthFailed) — Authentication rejected by the server
+/// - [`Timeout`](ClientError::Timeout) — Operation exceeded its time limit
+/// - [`Io`](ClientError::Io) — Underlying I/O errors (file system, etc.)
+///
+/// # Example
+///
+/// ```ignore
+/// match client.ls("/").await {
+///     Ok(files) => println!("{} files", files.len()),
+///     Err(ClientError::Transport(msg)) => eprintln!("Network error: {}", msg),
+///     Err(ClientError::Protocol(msg)) => eprintln!("Server said: {}", msg),
+///     Err(ClientError::Timeout) => eprintln!("Request timed out"),
+///     Err(ClientError::Io(e)) => eprintln!("IO error: {}", e),
+///     Err(ClientError::AuthFailed(msg)) => eprintln!("Auth rejected: {}", msg),
+/// }
+/// ```
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
+    /// Network-level failure — e.g., connection refused, DNS lookup failed,
+    /// connection reset, or other transport-layer errors.
     #[error("transport error: {0}")]
     Transport(String),
 
+    /// Server returned a response that is malformed, unreadable, or violates
+    /// the expected protocol (e.g., missing fields, wrong type, bad timestamp).
     #[error("protocol error: {0}")]
     Protocol(String),
 
+    /// The server rejected our credentials or authentication token.
     #[error("authentication failed: {0}")]
     AuthFailed(String),
 
+    /// The operation did not complete within the configured timeout.
     #[error("timeout: operation took too long")]
     Timeout,
 
+    /// An underlying I/O error from the standard library.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
 
+/// A shorthand for `Result<T, ClientError>`, used throughout the SDK.
+///
+/// # Type Parameters
+///
+/// - `T` — The success value type.
+#[allow(dead_code)]
 pub type ClientResult<T> = Result<T, ClientError>;
 
 #[cfg(test)]

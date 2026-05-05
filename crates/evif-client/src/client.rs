@@ -8,16 +8,47 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
 
-/// 客户端配置
+/// Configuration for the EVIF client.
+///
+/// Contains all settings needed to connect to the EVIF backend server,
+/// including connection timeout and the base URL of the REST API.
+///
+/// # Default
+///
+/// The default instance connects to `http://localhost:8081` with a
+/// 30-second request timeout.
+///
+/// # Example
+///
+/// ```
+/// use evif_client::ClientConfig;
+///
+/// let config = ClientConfig::default();
+/// assert_eq!(config.base_url, "http://localhost:8081");
+/// assert_eq!(config.request_timeout, 30);
+/// ```
+///
+/// Custom configuration:
+///
+/// ```
+/// use evif_client::ClientConfig;
+/// use std::time::Duration;
+///
+/// let config = ClientConfig {
+///     request_timeout: 60,
+///     base_url: "http://my-evif-host:9090".to_string(),
+///     timeout: Duration::from_secs(60),
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
-    /// 请求超时（秒）
+    /// Request timeout in seconds. Used as a hint when building the HTTP client.
     pub request_timeout: u64,
 
-    /// HTTP基础URL (用于REST API)
+    /// Base URL for the EVIF REST API (e.g., `http://localhost:8081`).
     pub base_url: String,
 
-    /// 超时时间
+    /// Timeout duration for HTTP requests.
     pub timeout: std::time::Duration,
 }
 
@@ -31,7 +62,40 @@ impl Default for ClientConfig {
     }
 }
 
-/// EVIF 客户端
+/// The main EVIF client for interacting with the virtual filesystem.
+///
+/// `EvifClient` communicates with the EVIF backend over HTTP REST API.
+/// Construct it with [`new`](EvifClient::new) (async) or [`new_sync`](EvifClient::new_sync) (sync),
+/// then call methods like [`ls`](EvifClient::ls), [`cat`](EvifClient::cat), or [`write`](EvifClient::write).
+///
+/// # Example
+///
+/// ```ignore
+/// use evif_client::{ClientConfig, EvifClient};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config = ClientConfig::default();
+///     let client = EvifClient::new(config).await?;
+///
+///     // List root directory
+///     for entry in client.ls("/").await? {
+///         println!("{}", entry.name);
+///     }
+///
+///     // Read a file
+///     let content = client.cat("/path/to/file.txt").await?;
+///     println!("{}", content);
+///
+///     Ok(())
+/// }
+/// ```
+///
+/// # Thread Safety
+///
+/// `EvifClient` holds internal mutable state (the HTTP client) and must not
+/// be shared across threads simultaneously. Clone `ClientConfig` and construct
+/// separate instances per thread, or use a mutex if you must share one.
 pub struct EvifClient {
     config: ClientConfig,
     http_client: HttpClient,
@@ -75,7 +139,23 @@ fn file_name_from_path(path: &str) -> String {
 }
 
 impl EvifClient {
-    /// 创建新客户端(异步)
+    /// Constructs a new `EvifClient` asynchronously.
+    ///
+    /// Builds an HTTP client with `no_proxy` configured and returns the client
+    /// wrapped in `Ok`. If the underlying HTTP client construction fails, returns
+    /// `Err`.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` — Connection and timeout settings. See [`ClientConfig::default`]
+    ///   for sensible defaults.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let config = ClientConfig::default();
+    /// let client = EvifClient::new(config).await?;
+    /// ```
     pub async fn new(config: ClientConfig) -> ClientResult<Self> {
         Ok(Self {
             config,
@@ -83,7 +163,21 @@ impl EvifClient {
         })
     }
 
-    /// 创建新客户端(同步,用于CLI)
+    /// Constructs a new `EvifClient` synchronously.
+    ///
+    /// Identical to [`new`](EvifClient::new) but does not require `async` context,
+    /// making it suitable for CLI tools and synchronous entry points.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` — Connection and timeout settings.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let config = ClientConfig::default();
+    /// let client = EvifClient::new_sync(config);
+    /// ```
     pub fn new_sync(config: ClientConfig) -> Self {
         Self {
             config: config.clone(),
@@ -91,14 +185,57 @@ impl EvifClient {
         }
     }
 
-    /// 读取文件
+    /// Reads a file and returns its contents as a byte vector.
+    ///
+    /// Convenience wrapper around [`cat_bytes`](EvifClient::cat_bytes) that accepts
+    /// a [`Path`] instead of `&str`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Path to the file to read.
+    ///
+    /// # Returns
+    ///
+    /// Raw file bytes on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ClientError::Transport`] on network failure,
+    /// [`ClientError::Protocol`] if the response is malformed, or
+    /// [`ClientError::Io`] on underlying I/O errors.
     pub async fn read_file(&self, path: &Path) -> ClientResult<Vec<u8>> {
         self.cat_bytes(path.to_string_lossy().as_ref()).await
     }
 
     // ==================== HTTP REST API 方法 ====================
 
-    /// 列出文件
+    /// Lists the contents of a directory.
+    ///
+    /// Sends a `GET /api/v1/directories?path=<path>` request and returns an
+    /// ordered list of [`FileInfo`] entries for each child.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the directory. Use `/` for the root.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<FileInfo>)` on success — an empty vector if the directory is empty.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success status or
+    ///   the response body is missing the expected `files` array.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let entries = client.ls("/some/dir").await?;
+    /// for entry in entries {
+    ///     println!("{} (dir={})", entry.name, entry.is_dir);
+    /// }
+    /// ```
     pub async fn ls(&self, path: &str) -> ClientResult<Vec<FileInfo>> {
         let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
         let response = self
@@ -142,13 +279,56 @@ impl EvifClient {
             .collect()
     }
 
-    /// 读取文件
+    /// Reads a file and returns its contents as a UTF-8 string.
+    ///
+    /// Internally fetches raw bytes via [`cat_bytes`](EvifClient::cat_bytes) and
+    /// converts them to a `String`. Returns an error if the file contains invalid
+    /// UTF-8 sequences.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the file to read.
+    ///
+    /// # Returns
+    ///
+    /// File contents as a UTF-8 string.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`cat_bytes`](EvifClient::cat_bytes), plus
+    /// [`ClientError::Protocol`] with message `"Invalid UTF-8"` if the content
+    /// is not valid UTF-8.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let text = client.cat("/path/to/file.txt").await?;
+    /// println!("{}", text);
+    /// ```
     pub async fn cat(&self, path: &str) -> ClientResult<String> {
         let bytes = self.cat_bytes(path).await?;
         String::from_utf8(bytes).map_err(|e| ClientError::Protocol(format!("Invalid UTF-8: {}", e)))
     }
 
-    /// 读取文件字节
+    /// Reads a file and returns its raw bytes.
+    ///
+    /// Sends a `GET /api/v1/files?path=<path>` request. The response body is expected
+    /// to contain a base64-encoded string under the `data` key, which is decoded and
+    /// returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the file to read.
+    ///
+    /// # Returns
+    ///
+    /// Raw file bytes on success.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success status or the
+    ///   response is missing the expected `data` field.
     pub async fn cat_bytes(&self, path: &str) -> ClientResult<Vec<u8>> {
         let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
         let response = self
@@ -180,7 +360,35 @@ impl EvifClient {
             .map_err(|e| ClientError::Protocol(e.to_string()))
     }
 
-    /// 写入文件（与 evif-rest 契约一致：JSON body data + encoding=base64）
+    /// Writes content to a file, creating it if necessary.
+    ///
+    /// If `append` is `false`, the file is overwritten with `content`. If `append`
+    /// is `true`, `content` is appended to the existing file content (creating it
+    /// with an empty initial content if it does not yet exist).
+    ///
+    /// The content is sent as a base64-encoded string in the request body, matching
+    /// the `evif-rest` contract: `{ "data": "<base64>", "encoding": "base64" }`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the target file.
+    /// * `content` — Text content to write. Binary content should be encoded first.
+    /// * `append` — If `true`, append to the file instead of overwriting.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success HTTP status.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Overwrite
+    /// client.write("/path/to/file.txt", "hello world", false).await?;
+    ///
+    /// // Append
+    /// client.write("/path/to/log.txt", "new entry\n", true).await?;
+    /// ```
     pub async fn write(&self, path: &str, content: &str, append: bool) -> ClientResult<()> {
         let payload = if append {
             match self.cat(path).await {
@@ -227,7 +435,30 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 创建目录
+    /// Creates a directory, optionally creating all intermediate parent directories.
+    ///
+    /// Sends a `POST /api/v1/directories` with `{ "path": <path>, "parents": <parents> }`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path of the directory to create.
+    /// * `parents` — If `true`, all missing parent directories are created recursively.
+    ///               If `false`, returns an error if a parent does not exist.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success status.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Create a single directory (fails if parent doesn't exist)
+    /// client.mkdir("/data/logs", false).await?;
+    ///
+    /// // Create nested directories
+    /// client.mkdir("/data/logs/archive/2024", true).await?;
+    /// ```
     pub async fn mkdir(&self, path: &str, parents: bool) -> ClientResult<()> {
         let url = format!("{}/api/v1/directories", self.config.base_url);
         let body = serde_json::json!({ "path": path, "parents": parents });
@@ -247,7 +478,23 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 删除文件
+    /// Deletes a single file (not a directory).
+    ///
+    /// Sends a `DELETE /api/v1/files?path=<path>` request.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the file to delete.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// client.remove("/tmp/cache/file.tmp").await?;
+    /// ```
     pub async fn remove(&self, path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/files?path={}", self.config.base_url, path);
         self.http_client
@@ -258,7 +505,30 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 递归删除
+    /// Recursively deletes a directory and all of its contents.
+    ///
+    /// Sends a `DELETE /api/v1/directories?path=<path>` request. Use this instead
+    /// of [`remove`](EvifClient::remove) when you need to delete a directory
+    /// regardless of whether it contains files or subdirectories.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the directory to delete.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    ///
+    /// # Safety Warning
+    ///
+    /// This operation is destructive and irreversible. Ensure `path` points to
+    /// the intended target.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// client.remove_all("/tmp/old-build").await?;
+    /// ```
     pub async fn remove_all(&self, path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/directories?path={}", self.config.base_url, path);
         self.http_client
@@ -269,7 +539,25 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 重命名文件
+    /// Renames (moves) a file or directory from `old_path` to `new_path`.
+    ///
+    /// Sends a `POST /api/v1/rename` with `{ "from": <old_path>, "to": <new_path> }`.
+    ///
+    /// # Arguments
+    ///
+    /// * `old_path` — Current absolute path of the file or directory.
+    /// * `new_path` — Desired new absolute path.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success status.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// client.rename("/old/name.txt", "/new/name.txt").await?;
+    /// ```
     pub async fn rename(&self, old_path: &str, new_path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/rename", self.config.base_url);
         let body = serde_json::json!({"from": old_path, "to": new_path});
@@ -290,7 +578,31 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 获取文件信息
+    /// Retrieves metadata for a single file or directory without reading its content.
+    ///
+    /// Sends a `GET /api/v1/stat?path=<path>` request and returns a [`FileInfo`]
+    /// struct containing name, size, modification time, and file type.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the file or directory.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(FileInfo)` with the file's metadata.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success status or
+    ///   the response body is malformed.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let info = client.stat("/path/to/file.txt").await?;
+    /// println!("{} bytes, modified at {}", info.size, info.modified);
+    /// ```
     pub async fn stat(&self, path: &str) -> ClientResult<FileInfo> {
         let url = format!("{}/api/v1/stat?path={}", self.config.base_url, path);
         let response = self
@@ -323,7 +635,28 @@ impl EvifClient {
         })
     }
 
-    /// 健康检查
+    /// Performs a health check against the EVIF backend.
+    ///
+    /// Sends a `GET /api/v1/health` request and returns basic server status,
+    /// version, and uptime information.
+    ///
+    /// # Returns
+    ///
+    /// [`HealthInfo`] containing the server's current status, version string,
+    /// and uptime in seconds.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned an invalid response body.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let health = client.health().await?;
+    /// println!("EVIF {} — status: {}, uptime: {}s",
+    ///     health.version, health.status, health.uptime);
+    /// ```
     pub async fn health(&self) -> ClientResult<HealthInfo> {
         let url = format!("{}/api/v1/health", self.config.base_url);
         let response = self
@@ -345,7 +678,29 @@ impl EvifClient {
         })
     }
 
-    /// 挂载插件（与 evif-rest POST /api/v1/mount 契约一致）
+    /// Mounts a filesystem plugin at a given path.
+    ///
+    /// Attaches a plugin (e.g., `"memory"`, `"disk"`) to the virtual filesystem
+    /// at `path`, optionally providing plugin-specific configuration as JSON.
+    ///
+    /// Sends a `POST /api/v1/mount` with `{ "plugin": <plugin>, "path": <path>,
+    /// "config": <config> }`. The `config` field is omitted if `config` is `None`.
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin` — Name of the plugin to mount (e.g., `"memory"`, `"disk"`).
+    /// * `path` — Absolute virtual path where the plugin will be attached.
+    /// * `config` — Optional JSON configuration string passed to the plugin.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// client.mount("memory", "/mem", None).await?;
+    /// ```
     pub async fn mount(&self, plugin: &str, path: &str, config: Option<&str>) -> ClientResult<()> {
         let url = format!("{}/api/v1/mount", self.config.base_url);
         let mut body = serde_json::json!({"plugin": plugin, "path": path});
@@ -362,7 +717,23 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 卸载插件（与 evif-rest POST /api/v1/unmount 契约一致）
+    /// Unmounts the plugin currently attached at `path`.
+    ///
+    /// Sends a `POST /api/v1/unmount` with `{ "path": <path> }`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute virtual path where a plugin is currently mounted.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// client.unmount("/mem").await?;
+    /// ```
     pub async fn unmount(&self, path: &str) -> ClientResult<()> {
         let url = format!("{}/api/v1/unmount", self.config.base_url);
         let body = serde_json::json!({"path": path});
@@ -375,7 +746,27 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 列出挂载点
+    /// Lists all currently active plugin mounts.
+    ///
+    /// Sends a `GET /api/v1/mounts` request. The server may return either a JSON
+    /// object with a `"mounts"` array or a plain array — both formats are accepted.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<MountInfo>)` — one entry per active mount. Empty if no plugins are mounted.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Response is neither an object with `mounts` nor an array.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// for mount in client.mounts().await? {
+    ///     println!("{} mounted at {}", mount.plugin, mount.path);
+    /// }
+    /// ```
     pub async fn mounts(&self) -> ClientResult<Vec<MountInfo>> {
         let url = format!("{}/api/v1/mounts", self.config.base_url);
         let response = self
@@ -418,7 +809,32 @@ impl EvifClient {
             .collect()
     }
 
-    /// 计算文件摘要（Phase 10.1：POST /api/v1/digest）
+    /// Computes a cryptographic digest (checksum) of a file.
+    ///
+    /// Sends a `POST /api/v1/digest` with `{ "path": <path>, "algorithm": <algo> }`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the file to digest.
+    /// * `algorithm` — Hash algorithm name (e.g., `"sha256"`, `"md5"`). If `None`,
+    ///   defaults to `"sha256"`.
+    ///
+    /// # Returns
+    ///
+    /// `Ok((algorithm, hash))` — a tuple of the algorithm actually used and the
+    /// lowercase hexadecimal digest string.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Response is missing the `hash` field.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let (algo, hash) = client.digest("/my/file.txt", Some("sha256")).await?;
+    /// println!("{}({}) = {}", algo, path, hash);
+    /// ```
     pub async fn digest(
         &self,
         path: &str,
@@ -448,7 +864,25 @@ impl EvifClient {
         Ok((algo, hash))
     }
 
-    /// 修改文件权限（POST /api/v1/fs/chmod）
+    /// Changes the permission bits of a file or directory.
+    ///
+    /// Sends a `POST /api/v1/fs/chmod` with `{ "path": <path>, "mode": <mode> }`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the target file or directory.
+    /// * `mode` — New permission bits (e.g., `0o755` for rwxr-xr-x).
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success status.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// client.chmod("/script.sh", 0o755).await?;
+    /// ```
     pub async fn chmod(&self, path: &str, mode: u32) -> ClientResult<()> {
         let url = format!("{}/api/v1/fs/chmod", self.config.base_url);
         let body = serde_json::json!({ "path": path, "mode": mode });
@@ -471,7 +905,27 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 修改文件所有者（POST /api/v1/fs/chown）
+    /// Changes the owner (and optionally group) of a file or directory.
+    ///
+    /// Sends a `POST /api/v1/fs/chown` with `{ "path": <path>, "owner": <owner>,
+    /// "group": <group> }`. The `group` field is omitted if `group` is `None`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — Absolute path to the target file or directory.
+    /// * `owner` — New owner user name or ID as a string.
+    /// * `group` — New group name or ID as a string. If `None`, the group is unchanged.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Server returned a non-success status.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// client.chown("/shared.txt", "alice", Some("admins")).await?;
+    /// ```
     pub async fn chown(
         &self,
         path: &str,
@@ -502,7 +956,38 @@ impl EvifClient {
         Ok(())
     }
 
-    /// 正则搜索（Phase 10.1：POST /api/v1/grep）
+    /// Searches a file or directory tree for lines matching a regex pattern.
+    ///
+    /// Sends a `POST /api/v1/grep` with `{ "path": <path>, "pattern": <pattern>,
+    /// "recursive": <recursive> }`.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` — File path or directory to search. If a directory, `recursive`
+    ///   controls whether subdirectories are included.
+    /// * `pattern` — A valid regex pattern to match against each line.
+    /// * `recursive` — If `Some(true)`, descend into subdirectories. If `Some(false)`,
+    ///   only search the given path. If `None`, the server's default applies.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<GrepMatch>)` — each match includes the file `path`, line number,
+    /// and the full line content. Results are ordered by file path and line number.
+    ///
+    /// # Errors
+    ///
+    /// - [`ClientError::Transport`] — Network failure.
+    /// - [`ClientError::Protocol`] — Response is missing the `matches` array or
+    ///   individual match entries are malformed.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let matches = client.grep("/src", r"fn \w+", Some(true)).await?;
+    /// for m in matches {
+    ///     println!("{}:{}: {}", m.path, m.line, m.content);
+    /// }
+    /// ```
     pub async fn grep(
         &self,
         path: &str,
@@ -537,26 +1022,57 @@ impl EvifClient {
     }
 }
 
-/// 健康信息
+/// Server health and version information returned by [`EvifClient::health`].
+///
+/// # Example
+///
+/// ```
+/// use evif_client::HealthInfo;
+///
+/// let info = HealthInfo {
+///     status: "ok".to_string(),
+///     version: "1.0.0".to_string(),
+///     uptime: 3600,
+/// };
+/// assert_eq!(info.status, "ok");
+/// ```
 #[derive(Debug, Clone)]
 pub struct HealthInfo {
+    /// Server-reported operational status (e.g., `"ok"`, `"degraded"`).
     pub status: String,
+
+    /// Server version string (e.g., `"1.0.0"`).
     pub version: String,
+
+    /// Server uptime in seconds since the last startup.
     pub uptime: u64,
 }
 
-/// 挂载信息
+/// Information about an active filesystem plugin mount.
+///
+/// Returned by [`EvifClient::mounts`] and used to construct mount requests
+/// with [`EvifClient::mount`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MountInfo {
+    /// Name of the mounted plugin (e.g., `"memory"`, `"disk"`, `"git"`).
     pub plugin: String,
+
+    /// Absolute virtual path where the plugin is attached.
     pub path: String,
 }
 
-/// Grep 匹配结果（Phase 10.1，与 evif-rest GrepMatch 一致）
+/// A single line match returned by [`EvifClient::grep`].
+///
+/// Each `GrepMatch` represents one line in one file that matched the search pattern.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GrepMatch {
+    /// Absolute path to the file that contained the match.
     pub path: String,
+
+    /// 1-based line number within the file.
     pub line: usize,
+
+    /// Full text of the matching line.
     pub content: String,
 }
 
