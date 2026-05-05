@@ -811,7 +811,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 |---|------|------|------|------|
 | 16 | **evif 命令统一** | 所有命令统一为 `evif` 前缀 | ⚠️ 待实现 | 2 天 |
 | 17 | **MCP Server** | `evif mcp serve` 启动 MCP Server | ✅ 已实现 | - |
-| 18 | **Skill 自动发现** | 扫描 /skills/*.md 生成 Prompts | ⚠️ 待实现 | 2 天 |
+| 18 | **Skill 自动发现** | 扫描 /skills/*.md 生成 Prompts | ✅ 部分实现 | 2 天 | 添加 `skill_discovery` MCP prompt，支持 category 和 task 参数筛选。commit `latest` |
 | 19 | **Memory 集成** | 向量存储 + MCP Tools | ✅ 部分实现 | 3 天 |
 | 20 | **安装脚本** | 一键安装 `curl ... \| bash` | ✅ 已实现 | - |
 | 21 | **Claude Desktop 连接** | `evif connect claude` | ✅ 已实现 | `evif connect <platform>` 支持 claude/claude-code/cursor/gemini/codex。commit `ac0ce23` |

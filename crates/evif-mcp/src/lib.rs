@@ -2257,6 +2257,25 @@ impl EvifMcpServer {
                     },
                 ],
             },
+            // Skill Auto-Discovery Prompt
+            Prompt {
+                name: "skill_discovery".to_string(),
+                description: "Discover and explore available EVIF skills for task automation".to_string(),
+                arguments: vec![
+                    PromptArgument {
+                        name: "category".to_string(),
+                        description: "Filter skills by category: file, memory, context, agent, all".to_string(),
+                        required: false,
+                        argument_type: "string".to_string(),
+                    },
+                    PromptArgument {
+                        name: "task".to_string(),
+                        description: "Describe your task to find matching skills".to_string(),
+                        required: false,
+                        argument_type: "string".to_string(),
+                    },
+                ],
+            },
         ];
 
         *self.prompts.write().await = prompts;
@@ -6749,7 +6768,7 @@ mod tests {
         );
 
         let prompts = server.list_prompts().await;
-        assert_eq!(prompts.len(), 4);
+        assert_eq!(prompts.len(), 5);
     }
 
     #[tokio::test]
