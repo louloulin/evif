@@ -496,6 +496,24 @@ pub enum Commands {
         /// File path
         path: String,
     },
+
+    /// Connect EVIF to an AI platform (claude, cursor, gemini, codex)
+    Connect {
+        /// Platform name (claude, claude-code, cursor, gemini, codex)
+        platform: Option<String>,
+
+        /// List supported platforms
+        #[arg(short, long)]
+        list: bool,
+
+        /// Check connection status
+        #[arg(short, long)]
+        check: bool,
+
+        /// Disconnect from platform
+        #[arg(short, long)]
+        disconnect: bool,
+    },
 }
 
 impl EvifCli {
@@ -760,6 +778,14 @@ impl EvifCli {
             }
             Commands::File { path } => {
                 command.file(path.clone()).await?;
+            }
+            Commands::Connect {
+                platform,
+                list,
+                check,
+                disconnect,
+            } => {
+                crate::connect::handle_connect(platform.as_deref(), *list, *check, *disconnect)?;
             }
         }
 

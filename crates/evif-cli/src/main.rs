@@ -3,6 +3,7 @@
 mod cli;
 mod commands;
 mod completer;
+mod connect;
 mod control_flow;
 mod redirection;
 mod repl;
