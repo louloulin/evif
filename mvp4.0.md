@@ -819,7 +819,7 @@ config = { bucket = "my-bucket", endpoint = "oss-cn-hangzhou.aliyuncs.com" }
 | 20 | **安装脚本** | 一键安装 `curl ... \| bash` | ✅ 已实现 | - |
 | 21 | **Claude Desktop 连接** | `evif connect claude` | ✅ 已实现 | `evif connect <platform>` 支持 claude/claude-code/cursor/gemini/codex。commit `ac0ce23` |
 | 22 | **Codex/Cursor/Gemini 集成** | 多平台一键集成 | ✅ 已实现 | `evif connect cursor/gemini/codex`，含 connect/disconnect/check。commit `ac0ce23` |
-| 23 | **写操作补全** | gmailfs/slackfs/discordfs 等写入 | ⚠️ 待实现 | 5 天 |
+| 23 | **写操作补全** | gmailfs/slackfs/discordfs 等写入 | ✅ 已实现 | gmailfs: send/reply/draft/trash, slackfs: post/react/delete, discordfs: send/embed/react/delete |
 | 24 | **Token 优化输出** | MCP 工具响应压缩 | ✅ 已实现（Phase 1+3） | evif_cat 加 max_lines/mode 参数，memory_search 加 compact 模式。commit `14cd866` |
 | 25 | **E2E 测试** | 50 场景测试 | ✅ 已实现（基础设施） | 26 个集成测试，sandbox 兼容，Mutex 懒加载。commit `latest` |
 | 26 | ~~**Homebrew 发布**~~ | `brew install evif-io/evif/evif` | ✅ 已实现 | `homebrew-formula/evif.rb` 支持 macOS Intel+ARM + Linux。commit `1ce481e` |
@@ -868,7 +868,7 @@ Phase 4（1 周）：发布准备
 | **测试覆盖** | 76% | e2e-tests 27, api-tests 26, cli-tests 37, evif-bench 24, evif-client 46, evif-metrics 67, evif-mcp 143, 900+ total |
 | **安全加固** | 85% | unsafe 注释已补，CI 分支已对齐，限速✅ 路径防护✅ |
 | **发布准备** | 60% | 安装脚本+CHANGELOG+Homebrew 有，CI Docker 待测 |
-| **综合评估** | **92%** | P0 全部完成，CI 测试已启用，900+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Skill/Memory 集成完成，Homebrew 已就绪，E2E 27 tests 通过，性能 Benchmarks 24 tests 就绪，所有测试沙盒兼容 |
+| **综合评估** | **94%** | P0 全部完成，CI 测试已启用，900+ 测试，Phase 5 工具分层已实现，evif 命令统一（60+ 子命令），Skill/Memory 集成完成，Homebrew 已就绪，E2E 27 tests 通过，性能 Benchmarks 24 tests 就绪，所有测试沙盒兼容，gmailfs/slackfs/discordfs 写操作已实现 |
 
 ---
 
