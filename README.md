@@ -2,47 +2,12 @@
 
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](https://opensource.org/licenses/)
+[![Tests](https://img.shields.io/badge/Tests-600+-green.svg)](#testing)
+[![Crate](https://img.shields.io/badge/Crates-13-orange.svg)](#core-components)
 
 > Context-oriented virtual filesystem built with Rust, following Plan 9's "Everything Is a File" philosophy. Provides persistent context, reusable skills, and multi-agent coordination for AI Agents.
 
 **Documentation**: [English](docs/README.md) | [中文](README-CN.md)
-
-## Documentation
-
-### Core Documentation
-
-| Chapter | English | Description |
-|---------|---------|-------------|
-| Architecture Overview | [docs/00-overview.md](docs/00-overview.md) | System architecture, plugin system, mount table |
-| Core Modules | [docs/01-core-modules.md](docs/01-core-modules.md) | 26 modules covering lifecycle, routing, caching |
-| Plugin System | [docs/02-plugin-system.md](docs/02-plugin-system.md) | 40+ plugin implementations |
-| REST API | [docs/03-rest-api.md](docs/03-rest-api.md) | 106 endpoints, 14 categories |
-| SDK Integration | [docs/04-sdk-integration.md](docs/04-sdk-integration.md) | Python, TypeScript, Go SDKs |
-| Agent Integration | [docs/05-agent-integration.md](docs/05-agent-integration.md) | Claude Code, Codex integration |
-| Deployment | [docs/06-deployment.md](docs/06-deployment.md) | Docker, Kubernetes, production |
-| Developer Guide | [docs/07-developer-guide.md](docs/07-developer-guide.md) | Contributing, testing, debugging |
-
-### Supplementary Documents
-
-| Document | Purpose |
-|----------|---------|
-| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | Quick start guide |
-| [docs/cli-mode.md](docs/cli-mode.md) | CLI usage |
-| [docs/mcp-server.md](docs/mcp-server.md) | MCP Server setup |
-| [docs/metrics.md](docs/metrics.md) | Monitoring metrics |
-| [docs/plugin-development.md](docs/plugin-development.md) | Plugin development |
-| [docs/fuse.md](docs/fuse.md) | FUSE usage |
-| [docs/claude-code-workflow.md](docs/claude-code-workflow.md) | Claude Code integration |
-| [docs/codex-workflow.md](docs/codex-workflow.md) | Codex integration |
-| [docs/slo.md](docs/slo.md) | SLO definitions |
-| [docs/production-env-vars.md](docs/production-env-vars.md) | Environment variables |
-
-### Chinese Documentation
-
-| Document | Status |
-|----------|--------|
-| [docs/zh/00-overview.md](docs/zh/00-overview.md) | Available |
-| [README-CN.md](README-CN.md) | Project overview in Chinese |
 
 ## Overview
 
@@ -57,32 +22,35 @@ EVIF evolved from "Everything Is a File" to "Context Is a File" for AI Agents:
 
 EVIF provides unified file interface for Agents:
 
-- `/context` - Active context
-- `/skills` - Reusable workflows
-- `/pipes` - Task coordination
+- `/context` - Active context (L0: current task, L1: session decisions, L2: project knowledge)
+- `/skills` - Reusable workflows (SKILL.md format)
+- `/pipes` - Task coordination (multi-agent communication)
+- `/memories` - Vector memory with semantic search
 
 ### Key Features
 
-- **Plugin Architecture**: 30+ built-in storage plugins
-- **Radix Tree Routing**: O(k) path resolution
-- **Multiple Access Methods**: REST API, CLI, FUSE, WebSocket
-- **Cloud Storage**: S3, Azure, GCS, OSS, COS, OBS
-- **AI Agent Primitives**: ContextFS, SkillFS, PipeFS, QueueFS, VectorFS
-- **WASM Plugins**: Extism multi-language support
+| Feature | Description |
+|---------|-------------|
+| **13 Core Crates** | 120K lines of Rust, organized architecture |
+| **40+ Plugins** | Cloud storage, databases, AI services |
+| **63 MCP Tools** | Full tool ecosystem for AI agents |
+| **150 REST Endpoints** | Comprehensive HTTP API |
+| **600+ Tests** | High test coverage |
+| **Multi-Agent Coordination** | PipeFS with wait_for_result, atomic claim |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Access Layer                            │
-│  CLI (60+ commands) │ REST API (106 endpoints) │ FUSE │ WS │
-├─────────────────────────────────────────────────────────────┤
-│                      Core Layer                             │
-│  Mount Table (Radix Tree) │ Plugin Lifecycle │ Handles      │
-├─────────────────────────────────────────────────────────────┤
-│                      Plugin Layer                           │
-│  ContextFS │ SkillFS │ PipeFS │ QueueFS │ VectorFS │ Storage│
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         Access Layer                             │
+│  CLI (60+ cmds) │ REST API (150 endpoints) │ MCP Server │ FUSE   │
+├─────────────────────────────────────────────────────────────────┤
+│                         Core Layer                               │
+│  Mount Table (Radix Tree) │ Plugin Lifecycle │ Handle Management │
+├─────────────────────────────────────────────────────────────────┤
+│                         Plugin Layer                             │
+│  ContextFS │ SkillFS │ PipeFS │ QueueFS │ VectorFS │ Storage    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -90,10 +58,15 @@ EVIF provides unified file interface for Agents:
 ### Installation
 
 ```bash
+# Clone and build
 git clone https://github.com/evif/evif.git
 cd evif
 cargo build --release
 cargo install --path crates/evif-cli
+
+# Or use Homebrew (macOS)
+brew tap evif/evif
+brew install evif
 ```
 
 ### Start Server
@@ -105,60 +78,42 @@ evif-rest --port 8081
 ### Basic Usage
 
 ```bash
-evif health                          # Health check
+# File operations
 evif ls /                            # List root
 evif mkdir /mem/demo                 # Create directory
 evif write /mem/hello.txt -c "Hi"   # Write file
 evif cat /mem/hello.txt              # Read file
 evif mounts                          # List mounts
+
+# Health check
+evif health
 ```
 
 ### 30-Second Agent Demo
 
 ```bash
+# Context management
 cat /context/L0/current
 cat /context/L1/decisions.md
 ls /skills
+
+# Multi-agent coordination
 mkdir /pipes/task-001
 echo "review code" > /pipes/task-001/input
 ```
 
-### Python SDK
-
-```bash
-pip install -e crates/evif-python
-```
-
-```python
-from evif import Client
-
-client = Client("http://localhost:8081")
-client.mkdir("/mem/demo")
-client.write("/mem/demo/data.txt", "Hello!")
-print(client.cat("/mem/demo/data.txt"))
-
-# Agent context
-client.write("/context/L0/current", "Implementing auth")
-client.memory_store("JWT token usage", modality="knowledge")
-
-# Task queue
-import json
-client.write("/queue/tasks/enqueue", json.dumps({"type": "review"}))
-```
-
 ## Core Components
 
-| Crate | Description |
-|-------|-------------|
-| **evif-core** | Core abstractions, plugin system, Mount Table, Handle management |
-| **evif-rest** | HTTP/JSON REST API server |
-| **evif-cli** | Command-line tool (60+ commands) |
-| **evif-plugins** | 30+ storage plugins |
-| **evif-mem** | Memory platform, vector search |
-| **evif-mcp** | MCP (Model Context Protocol) server |
-| **evif-fuse** | FUSE filesystem integration |
-| **evif-auth** | Authentication and authorization |
-| **evif-metrics** | Prometheus metrics |
+| Crate | Lines | Description |
+|-------|-------|-------------|
+| **evif-core** | ~15K | Core abstractions, Mount Table, Handle management |
+| **evif-plugins** | ~30K | 40+ storage plugins (cloud, database, AI services) |
+| **evif-rest** | ~20K | HTTP/JSON REST API server |
+| **evif-cli** | ~15K | Command-line tool (60+ commands) |
+| **evif-mcp** | ~25K | MCP (Model Context Protocol) server (63 tools) |
+| **evif-mem** | ~20K | Memory platform, vector search |
+| **evif-client** | ~5K | TypeScript/JS client SDK |
+| **evif-metrics** | ~5K | Prometheus metrics |
 
 ## Plugin Directory
 
@@ -166,14 +121,14 @@ client.write("/queue/tasks/enqueue", json.dumps({"type": "review"}))
 
 | Plugin | Path | Function |
 |--------|------|----------|
-| `memfs` | `/mem` | In-memory filesystem |
-| `contextfs` | `/context` | Layered context (L0/L1/L2) |
-| `skillfs` | `/skills` | SKILL.md skills |
+| `contextfs` | `/context` | L0/L1/L2 layered context |
+| `skillfs` | `/skills` | SKILL.md skill discovery |
 | `pipefs` | `/pipes` | Multi-agent coordination |
 | `queuefs` | `/queue` | Task queue |
 | `vectorfs` | `/memories` | Vector memory |
+| `memfs` | `/mem` | In-memory filesystem |
 
-### Cloud Storage
+### Cloud Storage (9 plugins)
 
 | Plugin | Service |
 |--------|---------|
@@ -184,38 +139,81 @@ client.write("/queue/tasks/enqueue", json.dumps({"type": "review"}))
 | `tencentcosfs` | Tencent COS |
 | `huaweiobsfs` | Huawei OBS |
 | `miniofs` | MinIO |
+| `webdavfs` | WebDAV |
+| `httpfs` | HTTP/HTTPS |
 
-### Database
+### AI Service Integrations (8 plugins)
+
+| Plugin | Service |
+|--------|---------|
+| `gmailfs` | Gmail (send, reply, drafts, labels) |
+| `slackfs` | Slack (post messages, reactions) |
+| `discordfs` | Discord (send, embed, reactions) |
+| `githubfs` | GitHub |
+| `notionfs` | Notion |
+| `telegramfs` | Telegram |
+| `teamsfs` | Microsoft Teams |
+| `shopifyfs` | Shopify |
+
+### Database Plugins
 
 | Plugin | Type |
 |--------|------|
-| `sqlfs2` | SQLite |
-| `postgresqlfs` | PostgreSQL |
+| `sqlfs` | SQLite |
+| `postgresfs` | PostgreSQL |
 
-## SDK
+## MCP Server
 
-### Python
+The EVIF MCP Server provides **63 tools** for AI agents, fully implemented with real backend calls.
+
+### Tool Categories
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Core FS** | 13 | ls, cat, write, mkdir, rm, cp, mv, grep, tree, diff, du, hash |
+| **Memory** | 5 | memorize, retrieve, memory_search, memory_clear, memory_stats |
+| **Skills** | 4 | skill, skill_list, skill_info, claude_md_generate |
+| **Session** | 7 | session, session_load, session_delete, agent, subagent_status |
+| **Config** | 3 | config_get, config_list, config_set |
+| **Cron** | 3 | cron_schedule, cron_list, cron_remove |
+| **Observability** | 11 | health, health_detailed, metrics_export, log_query, cache_stats |
+| **Plugins** | 4 | plugin_catalog, plugin_info, plugin_load, plugin_unload |
+| **Events/Queues** | 5 | event_list, event_subscribe, queue_list, queue_stats |
+| **Handles/Pipes** | 4 | open_handle, close_handle, pipe_create, pipe_list |
+| **Utilities** | 4 | search, archive, batch, watch |
+
+### Token Optimization
+
+| Tool | Parameters | Estimated Savings |
+|------|------------|-------------------|
+| `evif_cat` | `max_lines` (default 100), `mode` (head/tail/snippet/full) | 60-90% |
+| `evif_memory_search` | `compact` (default true), `limit` (default 3) | 40-60% |
+| Output Filter | strip_ansi, truncate_lines, compact_json, max_string_length | 30-50% |
+
+## AI Platform Integration
+
+EVIF supports **5 AI platforms** via `evif connect`:
+
+| Platform | Config File | Method |
+|----------|-------------|--------|
+| Claude Desktop | `claude_desktop_config.json` | MCP JSON |
+| Claude Code | `settings.json` | MCP JSON |
+| Cursor | `mcp.json` | MCP JSON |
+| Gemini CLI | `settings.json` | MCP JSON |
+| OpenAI Codex | `AGENTS.md` | Rules file |
 
 ```bash
-pip install -e crates/evif-python
-```
+# List supported platforms
+evif connect --list
 
-### TypeScript
+# Connect to Claude Desktop
+evif connect claude
 
-```bash
-npm install @evif/sdk
-```
+# Check integration status
+evif connect --check
 
-### Go
-
-```bash
-go get github.com/evif/evif-go
-```
-
-### MCP Server (Claude Code)
-
-```bash
-claude mcp add @evif/mcp-server
+# Disconnect from platform
+evif connect --disconnect claude
 ```
 
 ## Configuration
@@ -251,65 +249,92 @@ path = "/context"
 plugin = "contextfs"
 ```
 
+## Testing
+
+```bash
+# Full workspace test
+cargo test --workspace
+
+# Per-crate testing
+cargo test -p evif-core
+cargo test -p evif-rest
+cargo test -p evif-mcp
+cargo test -p evif-plugins
+cargo test -p evif-cli
+
+# E2E tests
+cargo test -p evif-rest --test e2e_rest_api
+```
+
+### Test Coverage
+
+| Crate | Unit Tests |
+|-------|------------|
+| evif-mem | 106 |
+| evif-mcp | 76 |
+| evif-plugins | 66 |
+| evif-rest | 61 |
+| evif-client | 50 |
+| evif-core | 59 |
+| evif-metrics | 43 |
+| evif-cli | 46 |
+| evif-auth | 31 |
+
 ## Project Structure
 
 ```
 evif/
 ├── crates/
-│   ├── evif-core/         # Core engine (26 modules)
-│   ├── evif-plugins/      # 40+ plugin implementations
-│   ├── evif-rest/         # REST API server
-│   ├── evif-cli/          # CLI tool
-│   ├── evif-python/       # Python SDK
-│   ├── evif-sdk-ts/        # TypeScript SDK
-│   ├── evif-sdk-go/        # Go SDK
-│   ├── evif-mcp/          # MCP server
-│   ├── evif-mem/          # Memory platform
-│   ├── evif-fuse/         # FUSE integration
-│   └── evif-auth/         # Authentication
-├── tests/                  # Tests
-├── demos/                  # Demos
-├── examples/               # Examples
-└── docs/                   # Documentation (includes zh/)
+│   ├── evif-core/         # Core engine (Mount Table, Handle management)
+│   ├── evif-plugins/       # 40+ plugin implementations
+│   ├── evif-rest/          # REST API server (150 endpoints)
+│   ├── evif-cli/           # CLI tool (60+ commands)
+│   ├── evif-mcp/           # MCP server (63 tools)
+│   ├── evif-mem/           # Memory platform, vector search
+│   ├── evif-client/        # TypeScript/JS client
+│   ├── evif-metrics/       # Prometheus metrics
+│   ├── evif-auth/          # Authentication
+│   ├── evif-bench/          # Benchmark suite
+│   ├── evif-fuse/          # FUSE integration
+│   ├── evif-macros/        # Procedural macros
+│   └── example-dynamic-plugin/  # Plugin example
+├── tests/                  # Integration tests
+├── docs/                   # Documentation (includes zh/)
+├── homebrew-formula/       # Homebrew tap
+├── mvp4.0.md              # MVP 4.0 roadmap
+├── mvp4.1.md              # MVP 4.1 roadmap
+├── CHANGELOG.md           # Version history
+└── CLAUDE.md              # Claude Code template
 ```
 
 ## Performance
 
-- **O(k) Path Resolution**: Radix Tree Mount Table
-- **Handle Leases**: Resource management
-- **Multi-level Cache**: inode + directory
-- **Batch Operations**: Concurrent copy/delete
-- **Streaming**: Large files
+| Metric | Value |
+|--------|-------|
+| Path Resolution | O(k) via Radix Tree |
+| Handle Leases | Resource management |
+| Multi-level Cache | inode + directory |
+| Batch Operations | Concurrent copy/delete |
+| Streaming | Large file support |
 
 ## MCP Server Implementation
 
-The EVIF MCP Server has been fully implemented with **all mock implementations replaced with real backend calls**.
+EVIF MCP Server has been **fully implemented** with all mock implementations replaced with real backend calls.
 
-### Implementation Status
+### Implementation Phases
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| Phase 0 | ✅ Done | Core structure |
-| Phase 1 | ✅ Done | VFS operations (L1) |
-| Phase 2 | ✅ Done | HTTP bridge (L2) |
-| Phase 3 | ✅ Done | Real implementations |
-| Phase 4 | ✅ Done | Advanced tools |
-| Phase 5 | ✅ Done | Mock removal |
-| Phase 6 | ✅ Done | Performance |
-| Phase 7 | ✅ Done | Testing |
-| Phase 8 | ✅ Done | Documentation |
-| Phase 9 | ✅ Done | Cleanup |
-
-**Test Results**: `cargo test -p evif-mcp` → **136 passed, 0 failed**
-
-### Key Implementations
-
-- **evif_tree**: Recursive directory tree with Box::pin async
-- **evif_hash**: SHA256/SHA512/SHA1/MD5 via crypto libraries
-- **evif_du**: Backend API `/api/v1/du`
-- **evif_archive**: Backend API `/api/v1/archive/*`
-- **evif_watch**: Backend API `/api/v1/watch`
-- **evif_batch**: Parallel operations with `futures::join_all`
+| Phase 0 | ✅ | Core structure |
+| Phase 1 | ✅ | VFS operations (L1) |
+| Phase 2 | ✅ | HTTP bridge (L2) |
+| Phase 3 | ✅ | Real implementations |
+| Phase 4 | ✅ | Advanced tools |
+| Phase 5 | ✅ | Mock removal |
+| Phase 6 | ✅ | Performance optimization |
+| Phase 7 | ✅ | Testing |
+| Phase 8 | ✅ | Documentation |
+| Phase 9 | ✅ | Cleanup |
 
 ### Architecture Layers
 
@@ -317,13 +342,14 @@ The EVIF MCP Server has been fully implemented with **all mock implementations r
 2. **L2: HTTP Bridge** - Complex operations via backend API
 3. **L3: Fallback** - Graceful degradation when backend unavailable
 
-## Testing
+### Output Filtering Pipeline
 
-```bash
-cargo test --workspace
-cargo test -p evif-core
-cargo test -p evif-rest
-cargo test -p evif-mcp
+```toml
+# Output filter configuration
+strip_ansi = true
+max_lines = 200
+compact_json = true    # Remove null fields
+max_string_length = 10000
 ```
 
 ## License
@@ -333,3 +359,4 @@ Apache 2.0 or MIT
 ---
 
 **Docs**: [English](docs/README.md) | [中文](README-CN.md)
+**Roadmap**: [MVP 4.0](mvp4.0.md) | [MVP 4.1](mvp4.1.md)
