@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The REST API provides 106 endpoints across 14 handler modules. Built with Axum framework.
+The REST API provides 150 endpoints across 14 handler modules. Built with Axum framework.
 
 **Base URL**: `http://localhost:8081/api/v1`
 

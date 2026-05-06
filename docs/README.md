@@ -46,10 +46,10 @@ EVIF Core engine internals — 26 modules covering:
 **Includes SKILL.md format specification** for reusable workflows.
 
 ### [4. REST API Reference](03-rest-api.md)
-106 endpoints across 14 categories:
+150 endpoints across categories:
 - File operations, Handle operations, Mount management
 - Memory operations, Context operations, Skill operations
-- System operations, Monitoring, Encryption, Collaboration
+- System operations, Monitoring, Encryption, Collaboration, Batching
 
 **API Reference** for developers integrating with EVIF.
 
@@ -57,7 +57,7 @@ EVIF Core engine internals — 26 modules covering:
 - **Python SDK**: Full async/sync client, Memory/Queue mixins
 - **TypeScript SDK**: Type-safe client
 - **Go SDK**: Idiomatic Go interface
-- **MCP Server**: 13 tools for Claude Code native integration
+- **MCP Server**: 63 tools for AI agent native integration
 
 **Start here** for SDK development.
 
@@ -135,7 +135,7 @@ http://localhost:8081/api/v1
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
 │  │  CLI     │  │   SDK    │  │  MCP     │  │   REST   │    │
 │  │  evif    │  │ Python   │  │ Server   │  │   API    │    │
-│  └──────────┘  │ TypeScript│  │          │  │  (106)   │    │
+│  └──────────┘  │ TypeScript│  │          │  │  (150)   │    │
 │                │ Go       │  │ Claude   │  │          │    │
 │                └──────────┘  │ Code     │  │          │    │
 │                              └──────────┘  └──────────┘    │

@@ -2,7 +2,22 @@
 
 ## 1. Overview
 
-EVIF provides persistent context, reusable skills, and multi-agent coordination for AI agents. This guide covers integration with Claude Code, Codex, and OpenClaw.
+EVIF provides persistent context, reusable skills, and multi-agent coordination for AI agents. This guide covers integration with 5 AI platforms via `evif connect`:
+
+| Platform | Method | Config File |
+|----------|--------|-------------|
+| Claude Desktop | MCP JSON | `claude_desktop_config.json` |
+| Claude Code | MCP JSON | `settings.json` |
+| Cursor | MCP JSON | `mcp.json` |
+| Gemini CLI | MCP JSON | `settings.json` |
+| OpenAI Codex | Rules file | `AGENTS.md` |
+
+Quick connect:
+```bash
+evif connect --list     # Show supported platforms
+evif connect claude     # Connect to Claude Desktop
+evif connect --check    # Check integration status
+```
 
 ## 2. Claude Code Integration
 

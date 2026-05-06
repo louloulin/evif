@@ -29,7 +29,7 @@
          │            │            │            │            │
          ▼            ▼            ▼            ▼            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         API Layer (106 endpoints)                        │
+│                         API Layer (150 endpoints)                        │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │                     REST API (Axum)                              │   │
@@ -311,7 +311,7 @@ pub struct VectorStore {
 
 ## 7. API Layer
 
-### 7.1 REST Endpoints (106 total)
+### 7.1 REST Endpoints (150 total)
 
 | Category | Count | Key Endpoints |
 |----------|-------|---------------|
@@ -442,7 +442,7 @@ evif ps                 # List running
 | Total Rust LOC | ~45,000+ |
 | Core modules | 26 |
 | Plugin implementations | 40+ |
-| REST endpoints | 106 |
+| REST endpoints | 150 |
 | CLI commands | 60+ |
 | Test files | 50+ |
 | SDKs | 3 (Python, TypeScript, Go) |
