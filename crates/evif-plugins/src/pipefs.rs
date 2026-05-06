@@ -5,9 +5,28 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use chrono::Utc;
 use evif_core::{EvifError, EvifPlugin, EvifResult, FileInfo, PluginConfigParam, WriteFlags};
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 
 use crate::queuefs::QueueBackend;
+
+/// Valid pipe states for the state machine.
+const STATE_PENDING: &str = "pending";
+const STATE_RUNNING: &str = "running";
+const STATE_COMPLETED: &str = "completed";
+const STATE_ERROR: &str = "error";
+const STATE_TIMEOUT: &str = "timeout";
+
+/// Valid state transitions: from -> set of valid next states.
+fn valid_next_states(current: &str) -> &'static [&'static str] {
+    match current {
+        STATE_PENDING => &[STATE_RUNNING, STATE_ERROR, STATE_TIMEOUT],
+        STATE_RUNNING => &[STATE_COMPLETED, STATE_ERROR, STATE_TIMEOUT],
+        STATE_COMPLETED => &[STATE_RUNNING], // allow re-use
+        STATE_ERROR => &[STATE_PENDING],      // allow retry
+        STATE_TIMEOUT => &[STATE_PENDING],    // allow retry
+        _ => &[],
+    }
+}
 
 #[derive(Clone)]
 struct PipeRecord {
@@ -39,7 +58,20 @@ impl PipeRecord {
 pub struct PipeFsPlugin {
     pipes: RwLock<HashMap<String, PipeRecord>>,
     subscribers: RwLock<HashMap<String, Vec<u8>>>,
+    /// Per-pipe notification signal. Writers notify when output is written.
+    notifiers: RwLock<HashMap<String, Arc<Notify>>>,
     backend: Option<Arc<dyn QueueBackend>>,
+}
+
+impl Clone for PipeFsPlugin {
+    fn clone(&self) -> Self {
+        Self {
+            pipes: RwLock::new(HashMap::new()),
+            subscribers: RwLock::new(HashMap::new()),
+            notifiers: RwLock::new(HashMap::new()),
+            backend: self.backend.clone(),
+        }
+    }
 }
 
 impl PipeFsPlugin {
@@ -47,6 +79,7 @@ impl PipeFsPlugin {
         Self {
             pipes: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
+            notifiers: RwLock::new(HashMap::new()),
             backend: None,
         }
     }
@@ -59,6 +92,7 @@ impl PipeFsPlugin {
         Self {
             pipes: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
+            notifiers: RwLock::new(HashMap::new()),
             backend: Some(backend),
         }
     }
@@ -74,8 +108,109 @@ Directories created at the root become bidirectional pipes:
 - timeout
 
 Broadcast channels live under /broadcast/subscribers/<name>/output
+
+State machine: pending -> running -> completed
+               pending -> error / timeout
+               error/timeout -> pending (retry)
+               completed -> running (re-use)
+
+Atomic claim: write to /<pipe>/claim only succeeds if assignee is empty.
+Wait for result: use wait_for_result() to block until output is written.
 "#
         .to_string()
+    }
+
+    /// Get or create a Notify for a pipe name.
+    async fn get_notifier(&self, name: &str) -> Arc<Notify> {
+        let notifiers = self.notifiers.read().await;
+        if let Some(notify) = notifiers.get(name) {
+            return Arc::clone(notify);
+        }
+        drop(notifiers);
+        let mut notifiers = self.notifiers.write().await;
+        Arc::clone(notifiers.entry(name.to_string()).or_insert_with(|| Arc::new(Notify::new())))
+    }
+
+    /// Atomically claim a pipe. Only succeeds if the pipe has no assignee.
+    ///
+    /// Returns Ok(()) if the claim succeeded, or an error if already claimed.
+    /// This prevents two agents from claiming the same pipe simultaneously.
+    pub async fn try_claim(&self, pipe_name: &str, agent_id: &str) -> EvifResult<()> {
+        let mut pipes = self.pipes.write().await;
+        let pipe = pipes
+            .get_mut(pipe_name)
+            .ok_or_else(|| EvifError::NotFound(pipe_name.to_string()))?;
+
+        if !pipe.assignee.is_empty() && pipe.assignee != agent_id {
+            return Err(EvifError::InvalidInput(format!(
+                "Pipe '{}' already claimed by '{}'",
+                pipe_name, pipe.assignee
+            )));
+        }
+
+        pipe.assignee = agent_id.to_string();
+        pipe.updated_at = Instant::now();
+        Ok(())
+    }
+
+    /// Wait for a pipe to have output written. Blocks until the pipe reaches
+    /// "completed", "error", or "timeout" state, or until the timeout expires.
+    ///
+    /// Returns the pipe's output bytes, or an error on timeout.
+    pub async fn wait_for_result(
+        &self,
+        pipe_name: &str,
+        timeout: Duration,
+    ) -> EvifResult<Vec<u8>> {
+        // First check if already completed
+        {
+            let pipes = self.pipes.read().await;
+            if let Some(pipe) = pipes.get(pipe_name) {
+                if pipe.status == STATE_COMPLETED {
+                    return Ok(pipe.output.clone());
+                }
+                if pipe.status == STATE_ERROR || pipe.status == STATE_TIMEOUT {
+                    return Err(EvifError::InvalidInput(format!(
+                        "Pipe '{}' in {} state",
+                        pipe_name, pipe.status
+                    )));
+                }
+            } else {
+                return Err(EvifError::NotFound(pipe_name.to_string()));
+            }
+        }
+
+        // Wait for notification with timeout
+        let notify = self.get_notifier(pipe_name).await;
+        match tokio::time::timeout(timeout, notify.notified()).await {
+            Ok(()) => {
+                let pipes = self.pipes.read().await;
+                let pipe = pipes
+                    .get(pipe_name)
+                    .ok_or_else(|| EvifError::NotFound(pipe_name.to_string()))?;
+                if pipe.status == STATE_COMPLETED {
+                    Ok(pipe.output.clone())
+                } else {
+                    Err(EvifError::InvalidInput(format!(
+                        "Pipe '{}' in {} state after notification",
+                        pipe_name, pipe.status
+                    )))
+                }
+            }
+            Err(_) => {
+                // Timeout - update pipe state
+                let mut pipes = self.pipes.write().await;
+                if let Some(pipe) = pipes.get_mut(pipe_name) {
+                    if pipe.status == STATE_RUNNING {
+                        pipe.status = STATE_TIMEOUT.to_string();
+                    }
+                }
+                Err(EvifError::InvalidInput(format!(
+                    "Pipe '{}' timed out after {:?}",
+                    pipe_name, timeout
+                )))
+            }
+        }
     }
 
     async fn cleanup_expired(&self) {
@@ -277,8 +412,8 @@ impl EvifPlugin for PipeFsPlugin {
                 match *field {
                     "input" => {
                         pipe.input = data.clone();
-                        if pipe.status == "pending" {
-                            pipe.status = "running".to_string();
+                        if pipe.status == STATE_PENDING {
+                            pipe.status = STATE_RUNNING.to_string();
                         }
                         // Persist to backend
                         if let Some(ref backend) = self.backend {
@@ -287,15 +422,33 @@ impl EvifPlugin for PipeFsPlugin {
                     }
                     "output" => {
                         pipe.output = data.clone();
-                        pipe.status = "completed".to_string();
+                        pipe.status = STATE_COMPLETED.to_string();
                         // Persist to backend
                         if let Some(ref backend) = self.backend {
                             let _ = backend.enqueue(&format!("pipe:{}:output", pipe_name), data.clone()).await;
                         }
+                        // Drop write lock before notifying
+                        drop(pipes);
+                        // Notify waiters that output is ready
+                        let notify = {
+                            let notifiers = self.notifiers.read().await;
+                            notifiers.get(*pipe_name).cloned()
+                        };
+                        if let Some(notify) = notify {
+                            notify.notify_waiters();
+                        }
                     }
                     "status" => {
-                        pipe.status = String::from_utf8(data.clone())
+                        let new_status = String::from_utf8(data.clone())
                             .map_err(|err| EvifError::InvalidInput(err.to_string()))?;
+                        // Validate state transition
+                        if !valid_next_states(&pipe.status).contains(&new_status.as_str()) {
+                            return Err(EvifError::InvalidInput(format!(
+                                "Invalid state transition from '{}' to '{}'",
+                                pipe.status, new_status
+                            )));
+                        }
+                        pipe.status = new_status;
                     }
                     "assignee" => {
                         pipe.assignee = String::from_utf8(data.clone())
