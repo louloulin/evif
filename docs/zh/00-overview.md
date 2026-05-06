@@ -180,7 +180,7 @@ struct Lease {
 
 ## 7. REST API
 
-106 个端点覆盖所有操作：
+150 个端点覆盖所有操作：
 
 | 类别 | 端点数 | 主要操作 |
 |------|--------|----------|
@@ -253,7 +253,7 @@ claude mcp add @evif/mcp-server
 | Crate 数量 | 12 |
 | 核心模块 | 26 |
 | 插件数量 | 40+ |
-| REST 端点 | 106 |
+| REST 端点 | 150 |
 | SDK 语言 | Python, TypeScript, Go |
 
 ### 目录结构

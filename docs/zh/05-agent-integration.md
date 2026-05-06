@@ -2,7 +2,22 @@
 
 ## 1. 概览
 
-EVIF 为 AI 智能体提供持久化上下文、可复用技能和多智能体协同。本指南涵盖与 Claude Code、Codex 和 OpenClaw 的集成。
+EVIF 为 AI 智能体提供持久化上下文、可复用技能和多智能体协同。本指南涵盖通过 `evif connect` 与 5 个 AI 平台的集成：
+
+| 平台 | 方法 | 配置文件 |
+|------|------|----------|
+| Claude Desktop | MCP JSON | `claude_desktop_config.json` |
+| Claude Code | MCP JSON | `settings.json` |
+| Cursor | MCP JSON | `mcp.json` |
+| Gemini CLI | MCP JSON | `settings.json` |
+| OpenAI Codex | 规则文件 | `AGENTS.md` |
+
+快速连接：
+```bash
+evif connect --list     # 显示支持的平台
+evif connect claude     # 连接到 Claude Desktop
+evif connect --check    # 检查集成状态
+```
 
 ## 2. Claude Code 集成
 
