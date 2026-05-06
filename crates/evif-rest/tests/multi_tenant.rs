@@ -9,9 +9,25 @@ use evif_rest::{
 };
 use std::sync::Arc;
 
+// Sandbox skip helper
+fn is_network_available() -> bool {
+    std::net::TcpListener::bind("127.0.0.1:0").is_ok()
+}
+
+macro_rules! skip_if_sandboxed {
+    () => {
+        if !is_network_available() {
+            println!("SKIP: Network operations not permitted (sandbox restriction)");
+            return;
+        }
+    };
+}
+
+
 /// P17.1-01: List Tenants Endpoint
 #[tokio::test]
 async fn tenant_list_endpoint() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -52,6 +68,7 @@ async fn tenant_list_endpoint() {
 /// P17.1-02: Create Tenant
 #[tokio::test]
 async fn tenant_create() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -97,6 +114,7 @@ async fn tenant_create() {
 /// P17.1-03: Get Current Tenant
 #[tokio::test]
 async fn tenant_get_current() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -140,6 +158,7 @@ async fn tenant_get_current() {
 /// P17.1-04: Get Tenant By ID
 #[tokio::test]
 async fn tenant_get_by_id() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -202,6 +221,7 @@ async fn tenant_get_by_id() {
 /// P17.1-05: Create Tenant With Empty Name Error
 #[tokio::test]
 async fn tenant_create_empty_name_error() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -244,6 +264,7 @@ async fn tenant_create_empty_name_error() {
 /// P17.1-06: Delete Non-default Tenant
 #[tokio::test]
 async fn tenant_delete_non_default() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -296,6 +317,7 @@ async fn tenant_delete_non_default() {
 /// P17.1-07: Cannot Delete Default Tenant
 #[tokio::test]
 async fn tenant_cannot_delete_default() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -335,6 +357,7 @@ async fn tenant_cannot_delete_default() {
 /// P17.1-08: Tenant Persistence Survives Restart
 #[tokio::test]
 async fn tenant_persistence_survives_restart() {
+    skip_if_sandboxed!();
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let state_path = temp_dir.path().join("tenant-state.json");
 
@@ -428,6 +451,7 @@ async fn tenant_persistence_survives_restart() {
 /// P17.1-08: Tenant Storage Quota PATCH Endpoint
 #[tokio::test]
 async fn tenant_quota_patch_endpoint() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = evif_rest::create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -477,6 +501,7 @@ async fn tenant_quota_patch_endpoint() {
 /// P17.1-09: Tenant Quota Patch NonExistent Tenant Returns 404
 #[tokio::test]
 async fn tenant_quota_patch_nonexistent_tenant() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = evif_rest::create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -517,6 +542,7 @@ async fn tenant_quota_patch_nonexistent_tenant() {
 /// P17.1-10: Write fails when storage quota is exceeded
 #[tokio::test]
 async fn tenant_write_rejected_when_quota_exceeded() {
+    skip_if_sandboxed!();
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let state_path = temp_dir.path().join("quota-enforcement-state.json");
 
@@ -615,6 +641,7 @@ async fn tenant_write_rejected_when_quota_exceeded() {
 /// P17.1-11: Storage usage is tracked after successful writes
 #[tokio::test]
 async fn tenant_storage_used_tracked_after_writes() {
+    skip_if_sandboxed!();
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let state_path = temp_dir.path().join("storage-tracking-state.json");
 
@@ -686,6 +713,7 @@ async fn tenant_storage_used_tracked_after_writes() {
 /// P17.1-13: REST write respects X-Tenant-ID header for quota isolation
 #[tokio::test]
 async fn tenant_write_respects_x_tenant_id_header() {
+    skip_if_sandboxed!();
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let state_path = temp_dir.path().join("x-tenant-isolation-state.json");
 

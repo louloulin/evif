@@ -5,6 +5,20 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::net::TcpListener;
 
+// Sandbox skip helper
+fn is_network_available() -> bool {
+    std::net::TcpListener::bind("127.0.0.1:0").is_ok()
+}
+
+macro_rules! skip_if_sandboxed {
+    () => {
+        if !is_network_available() {
+            println!("SKIP: Network operations not permitted (sandbox restriction)");
+            return;
+        }
+    };
+}
+
 fn env_lock() -> &'static Mutex<()> {
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     ENV_LOCK.get_or_init(|| Mutex::new(()))
@@ -36,6 +50,7 @@ async fn spawn_server(app: axum::Router) -> String {
 
 #[tokio::test]
 async fn test_protected_write_route_requires_api_key() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
     mount_table.mount("/mem".to_string(), mem).await.unwrap();
@@ -66,6 +81,7 @@ async fn test_protected_write_route_requires_api_key() {
 
 #[tokio::test]
 async fn test_write_api_key_can_write_protected_route() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let mem = Arc::new(MemFsPlugin::new());
     mount_table
@@ -111,6 +127,7 @@ async fn test_write_api_key_can_write_protected_route() {
 
 #[tokio::test]
 async fn test_admin_route_rejects_write_key_and_accepts_admin_key() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let auth_state = Arc::new(RestAuthState::from_api_keys(
         vec!["write-key".to_string()],
@@ -150,6 +167,7 @@ async fn test_admin_route_rejects_write_key_and_accepts_admin_key() {
 
 #[tokio::test]
 async fn test_encryption_enable_requires_admin_scope() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let auth_state = Arc::new(RestAuthState::from_api_keys(
         vec!["write-key".to_string()],
@@ -205,6 +223,7 @@ async fn test_encryption_enable_requires_admin_scope() {
 
 #[tokio::test]
 async fn test_tenant_management_requires_admin_scope() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let auth_state = Arc::new(RestAuthState::from_api_keys(
         vec!["write-key".to_string()],
@@ -252,6 +271,7 @@ async fn test_tenant_management_requires_admin_scope() {
 
 #[tokio::test]
 async fn test_encryption_metadata_requires_admin_scope() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let auth_state = Arc::new(RestAuthState::from_api_keys(
         vec!["write-key".to_string()],
@@ -307,6 +327,7 @@ async fn test_encryption_metadata_requires_admin_scope() {
 
 #[tokio::test]
 async fn test_auth_from_env_writes_audit_log_file_for_denied_and_granted_requests() {
+    skip_if_sandboxed!();
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let audit_log_path = temp_dir
         .path()
@@ -367,6 +388,7 @@ async fn test_auth_from_env_writes_audit_log_file_for_denied_and_granted_request
 
 #[tokio::test]
 async fn test_auth_from_env_accepts_sha256_hashed_api_keys() {
+    skip_if_sandboxed!();
     let write_key = "write-hashed-key";
     let admin_key = "admin-hashed-key";
     let write_hash = Sha256::digest(write_key.as_bytes())

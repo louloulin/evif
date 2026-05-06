@@ -2,6 +2,21 @@ use evif_core::RadixMountTable;
 use evif_rest::create_routes;
 use std::sync::Arc;
 
+// Sandbox skip helper
+fn is_network_available() -> bool {
+    std::net::TcpListener::bind("127.0.0.1:0").is_ok()
+}
+
+macro_rules! skip_if_sandboxed {
+    () => {
+        if !is_network_available() {
+            println!("SKIP: Network operations not permitted (sandbox restriction)");
+            return;
+        }
+    };
+}
+
+
 async fn spawn_app() -> (String, reqwest::Client) {
     let app = create_routes(Arc::new(RadixMountTable::new()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -30,6 +45,7 @@ async fn spawn_app() -> (String, reqwest::Client) {
 
 #[tokio::test]
 async fn request_identity_generates_headers_when_missing() {
+    skip_if_sandboxed!();
     let (base, client) = spawn_app().await;
 
     let response = client
@@ -66,6 +82,7 @@ async fn request_identity_generates_headers_when_missing() {
 
 #[tokio::test]
 async fn request_identity_preserves_client_supplied_headers() {
+    skip_if_sandboxed!();
     let (base, client) = spawn_app().await;
 
     let response = client

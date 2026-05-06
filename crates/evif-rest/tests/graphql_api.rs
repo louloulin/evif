@@ -7,9 +7,25 @@ use evif_plugins::{HelloFsPlugin, MemFsPlugin};
 use evif_rest::create_routes;
 use std::sync::Arc;
 
+// Sandbox skip helper
+fn is_network_available() -> bool {
+    std::net::TcpListener::bind("127.0.0.1:0").is_ok()
+}
+
+macro_rules! skip_if_sandboxed {
+    () => {
+        if !is_network_available() {
+            println!("SKIP: Network operations not permitted (sandbox restriction)");
+            return;
+        }
+    };
+}
+
+
 /// P17.4-01: GraphQL Status Query
 #[tokio::test]
 async fn graphql_status_query() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -53,6 +69,7 @@ async fn graphql_status_query() {
 /// P17.4-01b: GraphQL Status Matches REST v1 Health Contract
 #[tokio::test]
 async fn graphql_status_matches_rest_health_contract() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -114,6 +131,7 @@ async fn graphql_status_matches_rest_health_contract() {
 /// P17.4-02: GraphQL Health Query
 #[tokio::test]
 async fn graphql_health_query() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -157,6 +175,7 @@ async fn graphql_health_query() {
 /// P17.4-03: GraphQL Echo Mutation
 #[tokio::test]
 async fn graphql_echo_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -197,6 +216,7 @@ async fn graphql_echo_mutation() {
 /// P17.4-04: GraphQL GraphiQL IDE Endpoint
 #[tokio::test]
 async fn graphql_graphiql_endpoint() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -237,6 +257,7 @@ async fn graphql_graphiql_endpoint() {
 /// P17.4-05: GraphQL Mounts Query - returns real mount table data
 #[tokio::test]
 async fn graphql_mounts_query_returns_mounted_plugins() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     // Mount a few plugins so the table is non-empty
     let mem_plugin: Arc<dyn EvifPlugin> = Arc::new(MemFsPlugin::new());
@@ -325,6 +346,7 @@ async fn graphql_mounts_query_returns_mounted_plugins() {
 /// P17.4-06: GraphQL Traffic Query - returns traffic metrics
 #[tokio::test]
 async fn graphql_traffic_query_returns_traffic_stats() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -390,6 +412,7 @@ async fn graphql_traffic_query_returns_traffic_stats() {
 /// P17.4-07: GraphQL Tenants Query - returns tenant list
 #[tokio::test]
 async fn graphql_tenants_query_returns_tenant_list() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -450,6 +473,7 @@ async fn graphql_tenants_query_returns_tenant_list() {
 /// P17.4-08: GraphQL Encryption Query - returns encryption status
 #[tokio::test]
 async fn graphql_encryption_query_returns_status() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -506,6 +530,7 @@ async fn graphql_encryption_query_returns_status() {
 /// P17.4-09: GraphQL SyncStatus Query - returns sync state
 #[tokio::test]
 async fn graphql_sync_status_query_returns_sync_state() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -565,6 +590,7 @@ async fn graphql_sync_status_query_returns_sync_state() {
 /// P17.4-10: GraphQL ResolveSyncConflicts Mutation
 #[tokio::test]
 async fn graphql_resolve_sync_conflicts_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -620,6 +646,7 @@ async fn graphql_resolve_sync_conflicts_mutation() {
 /// P17.4-11: GraphQL fileRead mutation — reads file content from a mounted plugin
 #[tokio::test]
 async fn graphql_file_read_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let mem_plugin: Arc<dyn EvifPlugin> = Arc::new(MemFsPlugin::new());
     mount_table
@@ -703,6 +730,7 @@ async fn graphql_file_read_mutation() {
 /// P17.4-12: GraphQL fileWrite mutation — writes content to a file
 #[tokio::test]
 async fn graphql_file_write_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let mem_plugin: Arc<dyn EvifPlugin> = Arc::new(MemFsPlugin::new());
     mount_table
@@ -768,6 +796,7 @@ async fn graphql_file_write_mutation() {
 /// P17.4-13: GraphQL fileList mutation — lists directory entries
 #[tokio::test]
 async fn graphql_file_list_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let mem_plugin: Arc<dyn EvifPlugin> = Arc::new(MemFsPlugin::new());
     mount_table
@@ -845,6 +874,7 @@ async fn graphql_file_list_mutation() {
 /// P17.4-14: GraphQL fileRead Latency Benchmark
 #[tokio::test]
 async fn graphql_file_read_latency_benchmark() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let plugin = MemFsPlugin::default();
     mount_table
@@ -920,6 +950,7 @@ async fn graphql_file_read_latency_benchmark() {
 /// P17.4-16: GraphQL fileDelete mutation
 #[tokio::test]
 async fn graphql_file_delete_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let plugin = MemFsPlugin::default();
     mount_table
@@ -999,6 +1030,7 @@ async fn graphql_file_delete_mutation() {
 /// P17.4-17: GraphQL encryption query exposes key versions
 #[tokio::test]
 async fn graphql_encryption_versions_query() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1057,6 +1089,7 @@ async fn graphql_encryption_versions_query() {
 /// P17.4-18: GraphQL fileCreate mutation
 #[tokio::test]
 async fn graphql_file_create_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let plugin = MemFsPlugin::default();
     mount_table
@@ -1110,6 +1143,7 @@ async fn graphql_file_create_mutation() {
 /// P17.4-19: GraphQL directoryDelete mutation
 #[tokio::test]
 async fn graphql_directory_delete_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let plugin = MemFsPlugin::default();
     mount_table
@@ -1210,6 +1244,7 @@ async fn graphql_directory_delete_mutation() {
 /// P17.4-20: GraphQL enableEncryption mutation
 #[tokio::test]
 async fn graphql_enable_encryption_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1273,6 +1308,7 @@ async fn graphql_enable_encryption_mutation() {
 /// P17.4-21: GraphQL disableEncryption mutation
 #[tokio::test]
 async fn graphql_disable_encryption_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1342,6 +1378,7 @@ async fn graphql_disable_encryption_mutation() {
 /// P17.4-22: GraphQL rotateEncryptionKey mutation
 #[tokio::test]
 async fn graphql_rotate_encryption_key_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1440,6 +1477,7 @@ async fn graphql_rotate_encryption_key_mutation() {
 /// P17.4-23: GraphQL applyDelta mutation
 #[tokio::test]
 async fn graphql_apply_delta_mutation() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

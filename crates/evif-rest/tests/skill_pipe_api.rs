@@ -3,8 +3,24 @@ use evif_rest::create_routes;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
+// Sandbox skip helper
+fn is_network_available() -> bool {
+    std::net::TcpListener::bind("127.0.0.1:0").is_ok()
+}
+
+macro_rules! skip_if_sandboxed {
+    () => {
+        if !is_network_available() {
+            println!("SKIP: Network operations not permitted (sandbox restriction)");
+            return;
+        }
+    };
+}
+
+
 #[tokio::test]
 async fn skill_and_pipe_plugins_can_be_mounted_via_rest() {
+    skip_if_sandboxed!();
     let mount_table = Arc::new(RadixMountTable::new());
     let app = create_routes(mount_table);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
