@@ -17,6 +17,7 @@ pub mod mcp_server_plugin;
 pub mod mcp_client;
 pub mod mcp_router;
 pub mod mcp_auth;
+pub mod output_filter;
 
 use crate::mcp_router::McpRouter;
 
@@ -1694,11 +1695,11 @@ impl EvifMcpServer {
                         },
                         "max_lines": {
                             "type": "number",
-                            "description": "Max lines to return (default: 100, use 0 for unlimited)"
+                            "description": "Max lines (default: 100, 0=unlimited)"
                         },
                         "mode": {
                             "type": "string",
-                            "description": "Truncation mode: head (first N lines), tail (last N lines), snippet (first+last), full (no truncation). Default: head"
+                            "description": "head|tail|snippet|full (default: head)"
                         }
                     },
                     "required": ["path"]
@@ -1772,14 +1773,14 @@ impl EvifMcpServer {
             },
             Tool {
                 name: "evif_file".to_string(),
-                description: "File operations: stat (get info), mv (rename), cp (copy)".to_string(),
+                description: "File operations: stat, mv, cp".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
                             "enum": ["stat", "mv", "cp"],
-                            "description": "Action: stat (get file info), mv (rename), cp (copy)"
+                            "description": "stat|mv|cp"
                         },
                         "path": {
                             "type": "string",
@@ -1801,14 +1802,14 @@ impl EvifMcpServer {
             // 插件管理工具 (统一: mount/unmount/list)
             Tool {
                 name: "evif_mount".to_string(),
-                description: "Manage plugin mounts: mount, unmount, or list mount points".to_string(),
+                description: "Manage mounts: mount, unmount, list".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
                             "enum": ["mount", "unmount", "list"],
-                            "description": "Action to perform: mount (attach plugin), unmount (detach), list (show all mounts)"
+                            "description": "mount|unmount|list"
                         },
                         "plugin": {
                             "type": "string",
@@ -1898,7 +1899,7 @@ impl EvifMcpServer {
                         },
                         "compact": {
                             "type": "boolean",
-                            "description": "Compact mode: return only id+score+first 100 chars (default: true)"
+                            "description": "Return id+score+first 100 chars (default: true)"
                         }
                     },
                     "required": ["query"]
@@ -1972,7 +1973,7 @@ impl EvifMcpServer {
             // Memory tools
             Tool {
                 name: "evif_memorize".to_string(),
-                description: "Store content as memories in the memory system".to_string(),
+                description: "Store content as memories".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
@@ -1980,23 +1981,16 @@ impl EvifMcpServer {
                             "type": "string",
                             "description": "Content to memorize"
                         },
-                        "text": {
-                            "type": "string",
-                            "description": "Deprecated alias for content"
-                        },
                         "modality": {
                             "type": "string",
-                            "description": "Modality type (conversation, document, code, etc.)"
+                            "description": "conversation|document|code"
                         },
                         "metadata": {
                             "type": "object",
-                            "description": "Optional metadata forwarded to the REST memory API"
+                            "description": "Optional metadata"
                         }
                     },
-                    "oneOf": [
-                        { "required": ["content"] },
-                        { "required": ["text"] }
-                    ]
+                    "required": ["content"]
                 }),
                 category: "extended".to_string(),
             },
@@ -2030,14 +2024,14 @@ impl EvifMcpServer {
             // SkillFS tools (统一: list/info/execute/create/delete)
             Tool {
                 name: "evif_skill".to_string(),
-                description: "Manage skills: list, info, execute, create, delete".to_string(),
+                description: "Manage skills".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
                             "enum": ["list", "info", "execute", "create", "delete"],
-                            "description": "Action to perform: list (show all), info (details), execute (run), create (new), delete (remove)"
+                            "description": "list|info|execute|create|delete"
                         },
                         "name": {
                             "type": "string",
@@ -2072,8 +2066,7 @@ impl EvifMcpServer {
             // ── CLAUDE.md 自动生成 ────────────────────────────────────────
             Tool {
                 name: "evif_claude_md_generate".to_string(),
-                description:
-                    "Auto-generate CLAUDE.md for the current project by analyzing its structure"
+                description: "Auto-generate CLAUDE.md by analyzing project structure"
                         .to_string(),
                 input_schema: json!({
                     "type": "object",
@@ -2098,7 +2091,7 @@ impl EvifMcpServer {
             // ── Session management (统一: save/list) ─────────────────────
             Tool {
                 name: "evif_session".to_string(),
-                description: "Manage sessions: save to or list from L0/L1 context".to_string(),
+                description: "Manage sessions: save to or list L0/L1".to_string(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
@@ -2235,7 +2228,7 @@ impl EvifMcpServer {
             // Project Documentation Generation Prompt
             Prompt {
                 name: "project_documentation".to_string(),
-                description: "Generate project documentation including README, API docs, and architecture diagrams".to_string(),
+                description: "Generate project docs: README, API, architecture".to_string(),
                 arguments: vec![
                     PromptArgument {
                         name: "project_path".to_string(),
@@ -2245,7 +2238,7 @@ impl EvifMcpServer {
                     },
                     PromptArgument {
                         name: "doc_type".to_string(),
-                        description: "Type of documentation: README, API, ARCHITECTURE, CHANGELOG".to_string(),
+                        description: "README|API|ARCHITECTURE|CHANGELOG".to_string(),
                         required: false,
                         argument_type: "string".to_string(),
                     },
@@ -2260,11 +2253,11 @@ impl EvifMcpServer {
             // Skill Auto-Discovery Prompt
             Prompt {
                 name: "skill_discovery".to_string(),
-                description: "Discover and explore available EVIF skills for task automation".to_string(),
+                description: "Discover EVIF skills for task automation".to_string(),
                 arguments: vec![
                     PromptArgument {
                         name: "category".to_string(),
-                        description: "Filter skills by category: file, memory, context, agent, all".to_string(),
+                        description: "file|memory|context|agent|all".to_string(),
                         required: false,
                         argument_type: "string".to_string(),
                     },
@@ -6802,17 +6795,16 @@ mod tests {
         assert!(memorize_tool.input_schema["properties"]
             .get("content")
             .is_some());
+        // text alias removed in Token optimization Phase 2
         assert!(memorize_tool.input_schema["properties"]
             .get("text")
-            .is_some());
+            .is_none());
+        // oneOf removed since only content is required now
+        assert!(memorize_tool.input_schema.get("oneOf").is_none());
         assert_eq!(
-            memorize_tool.input_schema["properties"]["text"]["description"],
-            "Deprecated alias for content"
+            memorize_tool.input_schema["required"][0],
+            "content"
         );
-        let alternatives = memorize_tool.input_schema["oneOf"]
-            .as_array()
-            .expect("schema should define accepted argument alternatives");
-        assert_eq!(alternatives.len(), 2);
     }
 
     #[tokio::test]
