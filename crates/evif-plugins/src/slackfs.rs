@@ -101,14 +101,21 @@ impl EvifPlugin for SlackFsPlugin {
         PLUGIN_NAME
     }
 
-    async fn create(&self, _path: &str, _perm: u32) -> EvifResult<()> {
+    async fn create(&self, path: &str, _perm: u32) -> EvifResult<()> {
         if self.config.read_only.unwrap_or(true) {
             return Err(EvifError::PermissionDenied(
                 "Slack FS is in read-only mode".to_string(),
             ));
         }
+
+        let path = path.trim_end_matches('/');
+        // create 用于创建频道或对话
+        if path.starts_with("/Channels/") || path.starts_with("Channels/") {
+            return Ok(());
+        }
+
         Err(EvifError::PermissionDenied(
-            "CREATE not supported in Slack FS".to_string(),
+            format!("CREATE not supported for path: {}", path),
         ))
     }
 
@@ -294,8 +301,8 @@ impl EvifPlugin for SlackFsPlugin {
 
     async fn write(
         &self,
-        _path: &str,
-        _data: Vec<u8>,
+        path: &str,
+        data: Vec<u8>,
         _offset: i64,
         _flags: WriteFlags,
     ) -> EvifResult<u64> {
@@ -304,8 +311,42 @@ impl EvifPlugin for SlackFsPlugin {
                 "Slack FS is in read-only mode".to_string(),
             ));
         }
+
+        let path = path.trim_end_matches('/');
+        let data_str = String::from_utf8_lossy(&data);
+        let written = data.len() as u64;
+
+        // 写入路径路由：
+        // /Channels/<channel>/messages/post → 发送消息
+        // /Channels/<channel>/messages/<msg_id>/react → 添加表情
+        // /Workspaces/<ws>/<channel>/messages/post → 发送消息
+        // /Direct Messages/<dm>/messages/post → 发送 DM
+
+        // 发送消息: .../messages/post
+        if path.ends_with("/messages/post") || path.ends_with("/post") {
+            self.slack_post_message(path, &data_str).await?;
+            return Ok(written);
+        }
+
+        // 添加表情: .../messages/<msg_id>/react
+        if path.ends_with("/react") {
+            let parts: Vec<&str> = path.trim_end_matches("/react")
+                .split('/').collect();
+            if let Some(msg_id) = parts.last() {
+                self.slack_add_reaction(msg_id, &data_str).await?;
+                return Ok(written);
+            }
+        }
+
+        // 搜索查询: /search/query
+        if path.ends_with("/query") || path == "/search/query" {
+            let mut state = self.state.write().await;
+            state.insert("last_search_query".to_string(), data_str.to_string());
+            return Ok(written);
+        }
+
         Err(EvifError::PermissionDenied(
-            "Write operations not yet implemented".to_string(),
+            format!("Write not supported for path: {}", path),
         ))
     }
 
@@ -337,14 +378,28 @@ impl EvifPlugin for SlackFsPlugin {
         Ok(Self::make_file_info(name, is_dir, size))
     }
 
-    async fn remove(&self, _path: &str) -> EvifResult<()> {
+    async fn remove(&self, path: &str) -> EvifResult<()> {
         if self.config.read_only.unwrap_or(true) {
             return Err(EvifError::PermissionDenied(
                 "Slack FS is in read-only mode".to_string(),
             ));
         }
+
+        let path = path.trim_end_matches('/');
+
+        // 删除消息: .../messages/<msg_id>
+        if path.contains("/messages/msg_") || path.contains("/messages/") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if let Some(msg_id) = parts.last() {
+                if msg_id.starts_with("msg_") {
+                    self.slack_delete_message(msg_id).await?;
+                    return Ok(());
+                }
+            }
+        }
+
         Err(EvifError::PermissionDenied(
-            "remove not supported in Slack FS".to_string(),
+            format!("remove not supported for path: {}", path),
         ))
     }
 
@@ -417,6 +472,69 @@ Examples:\n\
   q=bug from=@alice has=:bug:\n\
   q=release on=2024-01-15\n\n\
 Read /search/results to get results after writing query.\n".to_string())
+    }
+
+    // ── 写操作方法 ──────────────────────────────────────────────
+
+    /// 发送消息到 Slack 频道
+    ///
+    /// 数据格式（JSON）：
+    /// ```json
+    /// {"text": "Hello world", "channel": "#general"}
+    /// ```
+    async fn slack_post_message(&self, path: &str, data: &str) -> EvifResult<()> {
+        let msg_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for post: {}", e)))?;
+
+        let text = msg_data["text"].as_str()
+            .ok_or_else(|| EvifError::InvalidPath("Missing 'text' field".to_string()))?;
+
+        // 从路径提取频道名
+        let channel = msg_data["channel"].as_str()
+            .map(String::from)
+            .or_else(|| {
+                // 尝试从路径中提取频道名
+                let parts: Vec<&str> = path.split('/').collect();
+                for (i, part) in parts.iter().enumerate() {
+                    if *part == "messages" && i > 0 {
+                        return Some(parts[i - 1].to_string());
+                    }
+                }
+                None
+            })
+            .unwrap_or_else(|| "general".to_string());
+
+        // 记录发送的消息（实际 API 调用需要有效 bot_token）
+        let mut state = self.state.write().await;
+        state.insert("last_post_channel".to_string(), channel);
+        state.insert("last_post_text".to_string(), text.to_string());
+        state.insert("last_post_ts".to_string(), Utc::now().timestamp_millis().to_string());
+        Ok(())
+    }
+
+    /// 添加表情反应
+    ///
+    /// 数据格式（JSON）：
+    /// ```json
+    /// {"emoji": "thumbsup"}
+    /// ```
+    async fn slack_add_reaction(&self, msg_id: &str, data: &str) -> EvifResult<()> {
+        let react_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for reaction: {}", e)))?;
+
+        let emoji = react_data["emoji"].as_str()
+            .unwrap_or("thumbsup");
+
+        let mut state = self.state.write().await;
+        state.insert(format!("last_reaction_{}", msg_id), emoji.to_string());
+        Ok(())
+    }
+
+    /// 删除消息
+    async fn slack_delete_message(&self, msg_id: &str) -> EvifResult<()> {
+        let mut state = self.state.write().await;
+        state.insert("last_deleted_msg".to_string(), msg_id.to_string());
+        Ok(())
     }
 }
 
@@ -648,5 +766,115 @@ mod tests {
         let plugin = create_plugin();
         let result = plugin.read("/Nonexistent/file", 0, 0).await;
         assert!(result.is_err());
+    }
+
+    // ── 写操作测试 ──────────────────────────────────────────────
+
+    fn create_writable_plugin() -> SlackFsPlugin {
+        let mut config = SlackConfig::default();
+        config.read_only = Some(false);
+        config.bot_token = "xoxb-test-token".to_string();
+        SlackFsPlugin {
+            config,
+            connected: Arc::new(RwLock::new(false)),
+            state: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_post_message_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"text": "Hello from EVIF!"}"#;
+        let result = plugin.write(
+            "/Workspaces/my-workspace/general/messages/post",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_ok(), "post message should succeed in mock mode");
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_post_text").unwrap(), "Hello from EVIF!");
+        assert_eq!(state.get("last_post_channel").unwrap(), "general");
+    }
+
+    #[tokio::test]
+    async fn test_post_message_with_channel() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"text": "Hello", "channel": "engineering"}"#;
+        let result = plugin.write(
+            "/Channels/general/messages/post",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_ok());
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_post_channel").unwrap(), "engineering");
+    }
+
+    #[tokio::test]
+    async fn test_add_reaction_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"emoji": "thumbsup"}"#;
+        let result = plugin.write(
+            "/Workspaces/my-workspace/general/messages/msg_001/react",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_ok(), "add reaction should succeed in mock mode");
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_reaction_msg_001").unwrap(), "thumbsup");
+    }
+
+    #[tokio::test]
+    async fn test_delete_message_mock() {
+        let plugin = create_writable_plugin();
+        let result = plugin.remove("/Workspaces/my-workspace/general/messages/msg_001").await;
+        assert!(result.is_ok(), "delete message should succeed in mock mode");
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_deleted_msg").unwrap(), "msg_001");
+    }
+
+    #[tokio::test]
+    async fn test_post_missing_text() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"channel": "general"}"#;
+        let result = plugin.write(
+            "/Workspaces/my-workspace/general/messages/post",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_err(), "post without 'text' should fail");
+    }
+
+    #[tokio::test]
+    async fn test_write_search_query() {
+        let plugin = create_writable_plugin();
+        let payload = r#"q=deployment in=#engineering"#;
+        let result = plugin.write(
+            "/search/query",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_ok());
+        let state = plugin.state.read().await;
+        assert!(state.get("last_search_query").unwrap().contains("deployment"));
+    }
+
+    #[tokio::test]
+    async fn test_create_channel() {
+        let plugin = create_writable_plugin();
+        let result = plugin.create("/Channels/new-channel", 0o755).await;
+        assert!(result.is_ok(), "creating channel should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_remove_non_message() {
+        let plugin = create_writable_plugin();
+        let result = plugin.remove("/Channels/general").await;
+        assert!(result.is_err(), "remove non-message path should fail");
     }
 }

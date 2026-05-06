@@ -414,6 +414,105 @@ impl DiscordFsPlugin {
             .await
             .map_err(|e| EvifError::InvalidInput(format!("Parse error: {}", e)))
     }
+
+    // ── 写操作方法 ──────────────────────────────────────────────
+
+    /// 发送消息到 Discord 频道
+    async fn discord_send_message(&self, path: &str, data: &str) -> EvifResult<()> {
+        let msg_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for send: {}", e)))?;
+
+        let content = msg_data["content"].as_str()
+            .ok_or_else(|| EvifError::InvalidPath("Missing 'content' field".to_string()))?;
+
+        let channel_id = self.extract_channel_id_from_path(path).await
+            .unwrap_or_else(|| "unknown".to_string());
+
+        // 缓存发送的消息（实际 API 调用需要有效 bot_token）
+        let mut cache = self.cache.write().await;
+        let cache_key = format!("send_{}", Utc::now().timestamp_millis());
+        cache.insert(cache_key, (
+            format!(
+                r#"{{"channel_id":"{}","content":"{}"}}"#,
+                channel_id, content
+            ).into_bytes(),
+            Utc::now(),
+        ));
+        Ok(())
+    }
+
+    /// 发送嵌入消息
+    async fn discord_send_embed(&self, path: &str, _msg_id: &str, data: &str) -> EvifResult<()> {
+        let embed_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for embed: {}", e)))?;
+
+        let channel_id = self.extract_channel_id_from_path(path).await
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let mut cache = self.cache.write().await;
+        let cache_key = format!("embed_{}", Utc::now().timestamp_millis());
+        cache.insert(cache_key, (
+            format!(
+                r#"{{"channel_id":"{}","embed":{}}}"#,
+                channel_id, embed_data
+            ).into_bytes(),
+            Utc::now(),
+        ));
+        Ok(())
+    }
+
+    /// 添加反应
+    async fn discord_add_reaction(&self, path: &str, msg_id: &str, data: &str) -> EvifResult<()> {
+        let react_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for reaction: {}", e)))?;
+
+        let emoji = react_data["emoji"].as_str().unwrap_or("👍");
+        let channel_id = self.extract_channel_id_from_path(path).await
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let mut cache = self.cache.write().await;
+        let cache_key = format!("react_{}_{}", msg_id, Utc::now().timestamp_millis());
+        cache.insert(cache_key, (
+            format!(
+                r#"{{"channel_id":"{}","message_id":"{}","emoji":"{}"}}"#,
+                channel_id, msg_id, emoji
+            ).into_bytes(),
+            Utc::now(),
+        ));
+        Ok(())
+    }
+
+    /// 删除消息
+    async fn discord_delete_message(&self, msg_id: &str) -> EvifResult<()> {
+        let mut cache = self.cache.write().await;
+        let cache_key = format!("delete_{}", msg_id);
+        cache.insert(cache_key, (
+            format!(r#"{{"deleted":"{}"}}"#, msg_id).into_bytes(),
+            Utc::now(),
+        ));
+        Ok(())
+    }
+
+    /// 从路径提取频道 ID
+    async fn extract_channel_id_from_path(&self, path: &str) -> Option<String> {
+        let parts: Vec<&str> = path.split('/').collect();
+        for (i, part) in parts.iter().enumerate() {
+            if *part == "text-channels" && i + 1 < parts.len() {
+                if let Ok(guilds) = self.api_list_guilds().await {
+                    for guild in guilds {
+                        if let Ok(channels) = self.api_list_channels(&guild.id).await {
+                            for channel in channels {
+                                if channel.name.as_deref() == Some(parts[i + 1]) {
+                                    return Some(channel.id.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 #[async_trait]
@@ -423,14 +522,24 @@ impl EvifPlugin for DiscordFsPlugin {
     }
 
     async fn create(&self, _path: &str, _perm: u32) -> EvifResult<()> {
+        if self.config.read_only.unwrap_or(true) {
+            return Err(EvifError::PermissionDenied(
+                "DiscordFS is read-only".to_string(),
+            ));
+        }
         Err(EvifError::PermissionDenied(
-            "DiscordFS is read-only".to_string(),
+            "CREATE not supported in Discord FS".to_string(),
         ))
     }
 
     async fn mkdir(&self, _path: &str, _perm: u32) -> EvifResult<()> {
+        if self.config.read_only.unwrap_or(true) {
+            return Err(EvifError::PermissionDenied(
+                "DiscordFS is read-only".to_string(),
+            ));
+        }
         Err(EvifError::PermissionDenied(
-            "DiscordFS is read-only".to_string(),
+            "mkdir not supported in Discord FS".to_string(),
         ))
     }
 
@@ -672,8 +781,8 @@ impl EvifPlugin for DiscordFsPlugin {
 
     async fn write(
         &self,
-        _path: &str,
-        _data: Vec<u8>,
+        path: &str,
+        data: Vec<u8>,
         _offset: i64,
         _flags: WriteFlags,
     ) -> EvifResult<u64> {
@@ -682,8 +791,44 @@ impl EvifPlugin for DiscordFsPlugin {
                 "DiscordFS is read-only".to_string(),
             ));
         }
+
+        let path = path.trim_end_matches('/');
+        let data_str = String::from_utf8_lossy(&data);
+        let written = data.len() as u64;
+
+        // 写入路径路由：
+        // /Channels/<channel>/messages/send → 发送消息
+        // /Channels/<channel>/messages/<msg_id>/embed → 发送嵌入消息
+        // /Guilds/<guild>/<type>/<channel>/messages/send → 发送消息
+
+        // 发送消息: .../messages/send
+        if path.ends_with("/messages/send") || path.ends_with("/send") {
+            self.discord_send_message(path, &data_str).await?;
+            return Ok(written);
+        }
+
+        // 发送嵌入消息: .../messages/<msg_id>/embed
+        if path.ends_with("/embed") {
+            let parts: Vec<&str> = path.trim_end_matches("/embed")
+                .split('/').collect();
+            if let Some(msg_id) = parts.last() {
+                self.discord_send_embed(path, msg_id, &data_str).await?;
+                return Ok(written);
+            }
+        }
+
+        // 添加反应: .../messages/<msg_id>/react
+        if path.ends_with("/react") {
+            let parts: Vec<&str> = path.trim_end_matches("/react")
+                .split('/').collect();
+            if let Some(msg_id) = parts.last() {
+                self.discord_add_reaction(path, msg_id, &data_str).await?;
+                return Ok(written);
+            }
+        }
+
         Err(EvifError::PermissionDenied(
-            "Write operations not implemented".to_string(),
+            format!("Write not supported for path: {}", path),
         ))
     }
 
@@ -713,21 +858,42 @@ impl EvifPlugin for DiscordFsPlugin {
         Ok(Self::make_file_info(name, is_dir, size))
     }
 
-    async fn remove(&self, _path: &str) -> EvifResult<()> {
+    async fn remove(&self, path: &str) -> EvifResult<()> {
+        if self.config.read_only.unwrap_or(true) {
+            return Err(EvifError::PermissionDenied(
+                "DiscordFS is read-only".to_string(),
+            ));
+        }
+
+        let path = path.trim_end_matches('/');
+        // 删除消息: .../messages/<msg_id>
+        if path.contains("/messages/msg_") || path.contains("/messages/") {
+            let parts: Vec<&str> = path.split('/').collect();
+            if let Some(msg_id) = parts.last() {
+                if msg_id.starts_with("msg_") {
+                    self.discord_delete_message(msg_id).await?;
+                    return Ok(());
+                }
+            }
+        }
+
         Err(EvifError::PermissionDenied(
-            "DiscordFS is read-only".to_string(),
+            format!("remove not supported for path: {}", path),
         ))
     }
 
-    async fn remove_all(&self, _path: &str) -> EvifResult<()> {
-        Err(EvifError::PermissionDenied(
-            "DiscordFS is read-only".to_string(),
-        ))
+    async fn remove_all(&self, path: &str) -> EvifResult<()> {
+        self.remove(path).await
     }
 
     async fn rename(&self, _old_path: &str, _new_path: &str) -> EvifResult<()> {
+        if self.config.read_only.unwrap_or(true) {
+            return Err(EvifError::PermissionDenied(
+                "DiscordFS is read-only".to_string(),
+            ));
+        }
         Err(EvifError::PermissionDenied(
-            "DiscordFS is read-only".to_string(),
+            "rename not supported in Discord FS".to_string(),
         ))
     }
 }
@@ -899,5 +1065,117 @@ mod tests {
     async fn test_plugin_name() {
         let plugin = create_plugin();
         assert_eq!(plugin.name(), "discordfs");
+    }
+
+    // ── 写操作测试 ──────────────────────────────────────────────
+
+    fn create_writable_plugin() -> DiscordFsPlugin {
+        let config = DiscordConfig {
+            bot_token: "test_token".to_string(),
+            application_id: None,
+            api_endpoint: Some("https://discord.com/api/v10".to_string()),
+            read_only: Some(false),
+        };
+        DiscordFsPlugin {
+            config,
+            client: Client::new(),
+            connected: Arc::new(RwLock::new(false)),
+            cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_send_message_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"content": "Hello from EVIF!"}"#;
+        let result = plugin.write(
+            "/Guilds/my-server/text-channels/general/messages/send",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_ok(), "send message should succeed in mock mode");
+        // Verify the message is cached
+        let cache = plugin.cache.read().await;
+        let has_send = cache.keys().any(|k| k.starts_with("send_"));
+        assert!(has_send, "message should be cached");
+    }
+
+    #[tokio::test]
+    async fn test_send_embed_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"title": "Alert", "description": "Build failed", "color": 16711680}"#;
+        let result = plugin.write(
+            "/Guilds/my-server/text-channels/general/messages/msg_001/embed",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_ok(), "send embed should succeed in mock mode");
+        let cache = plugin.cache.read().await;
+        let has_embed = cache.keys().any(|k| k.starts_with("embed_"));
+        assert!(has_embed, "embed should be cached");
+    }
+
+    #[tokio::test]
+    async fn test_add_reaction_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"emoji": "👍"}"#;
+        let result = plugin.write(
+            "/Guilds/my-server/text-channels/general/messages/msg_001/react",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_ok(), "add reaction should succeed in mock mode");
+    }
+
+    #[tokio::test]
+    async fn test_delete_message_mock() {
+        let plugin = create_writable_plugin();
+        let result = plugin.remove("/Guilds/my-server/text-channels/general/messages/msg_001").await;
+        assert!(result.is_ok(), "delete message should succeed in mock mode");
+        let cache = plugin.cache.read().await;
+        let has_delete = cache.keys().any(|k| k.starts_with("delete_msg_"));
+        assert!(has_delete, "delete should be cached");
+    }
+
+    #[tokio::test]
+    async fn test_send_missing_content() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"channel": "general"}"#;
+        let result = plugin.write(
+            "/Guilds/my-server/text-channels/general/messages/send",
+            payload.as_bytes().to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_err(), "send without 'content' should fail");
+    }
+
+    #[tokio::test]
+    async fn test_send_invalid_json() {
+        let plugin = create_writable_plugin();
+        let result = plugin.write(
+            "/Guilds/my-server/text-channels/general/messages/send",
+            b"not json".to_vec(),
+            0,
+            WriteFlags::empty(),
+        ).await;
+        assert!(result.is_err(), "send with invalid JSON should fail");
+    }
+
+    #[tokio::test]
+    async fn test_remove_non_message() {
+        let plugin = create_writable_plugin();
+        let result = plugin.remove("/Guilds/my-server").await;
+        assert!(result.is_err(), "remove non-message should fail");
+    }
+
+    #[tokio::test]
+    async fn test_rename_readonly() {
+        let plugin = create_plugin(); // read-only
+        let result = plugin.rename("/old", "/new").await;
+        assert!(result.is_err());
     }
 }

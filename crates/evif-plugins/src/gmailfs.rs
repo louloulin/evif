@@ -300,14 +300,21 @@ impl EvifPlugin for GmailFsPlugin {
         PLUGIN_NAME
     }
 
-    async fn create(&self, _path: &str, _perm: u32) -> EvifResult<()> {
+    async fn create(&self, path: &str, _perm: u32) -> EvifResult<()> {
         if self.config.read_only.unwrap_or(true) {
             return Err(EvifError::PermissionDenied(
                 "Gmail FS is in read-only mode".to_string(),
             ));
         }
+
+        let path = path.trim_end_matches('/');
+        // create 用于创建草稿
+        if path == "/drafts" || path == "drafts" || path.ends_with("/drafts") {
+            return Ok(()); // 草稿目录已存在
+        }
+
         Err(EvifError::PermissionDenied(
-            "CREATE not supported in Gmail FS".to_string(),
+            format!("CREATE not supported for path: {}", path),
         ))
     }
 
@@ -424,8 +431,8 @@ impl EvifPlugin for GmailFsPlugin {
 
     async fn write(
         &self,
-        _path: &str,
-        _data: Vec<u8>,
+        path: &str,
+        data: Vec<u8>,
         _offset: i64,
         _flags: WriteFlags,
     ) -> EvifResult<u64> {
@@ -434,8 +441,54 @@ impl EvifPlugin for GmailFsPlugin {
                 "Gmail FS is in read-only mode".to_string(),
             ));
         }
+
+        let path = path.trim_end_matches('/');
+        let data_str = String::from_utf8_lossy(&data);
+        let written = data.len() as u64;
+
+        // 写入路径路由：
+        // /send → 发送新邮件
+        // /<folder>/<msg_id>/reply → 回复邮件
+        // /drafts → 创建草稿
+        if path == "/send" || path == "send" {
+            self.gmail_send(&data_str).await?;
+            return Ok(written);
+        }
+
+        // 回复邮件: /<folder>/<msg_id>/reply
+        if path.ends_with("/reply") {
+            let parts: Vec<&str> = path.trim_end_matches("/reply")
+                .trim_start_matches('/')
+                .split('/')
+                .collect();
+            if parts.len() >= 2 {
+                let msg_id = parts[1];
+                self.gmail_reply(msg_id, &data_str).await?;
+                return Ok(written);
+            }
+        }
+
+        // 创建草稿: /drafts
+        if path == "/drafts" || path.ends_with("/drafts") {
+            self.gmail_create_draft(&data_str).await?;
+            return Ok(written);
+        }
+
+        // 修改标签: /<folder>/<msg_id>/labels
+        if path.ends_with("/labels") {
+            let parts: Vec<&str> = path.trim_end_matches("/labels")
+                .trim_start_matches('/')
+                .split('/')
+                .collect();
+            if parts.len() >= 2 {
+                let msg_id = parts[1];
+                self.gmail_modify_labels(msg_id, &data_str).await?;
+                return Ok(written);
+            }
+        }
+
         Err(EvifError::PermissionDenied(
-            "Write operations not yet implemented".to_string(),
+            format!("Write not supported for path: {}", path),
         ))
     }
 
@@ -466,14 +519,25 @@ impl EvifPlugin for GmailFsPlugin {
         Ok(Self::make_file_info(name, is_dir, size))
     }
 
-    async fn remove(&self, _path: &str) -> EvifResult<()> {
+    async fn remove(&self, path: &str) -> EvifResult<()> {
         if self.config.read_only.unwrap_or(true) {
             return Err(EvifError::PermissionDenied(
                 "Gmail FS is in read-only mode".to_string(),
             ));
         }
+
+        let path = path.trim_end_matches('/');
+        let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+
+        // 删除邮件: /<folder>/<msg_id> → 移到垃圾箱
+        if parts.len() >= 2 && parts[1].starts_with("msg_") {
+            let msg_id = parts[1];
+            self.gmail_trash(msg_id).await?;
+            return Ok(());
+        }
+
         Err(EvifError::PermissionDenied(
-            "remove not supported in Gmail FS".to_string(),
+            format!("remove not supported for path: {}", path),
         ))
     }
 
@@ -725,6 +789,229 @@ impl GmailFsPlugin {
             Err(_) => Ok(vec![]),
         }
     }
+
+    // ── 写操作方法 ──────────────────────────────────────────────
+
+    /// 发送邮件
+    ///
+    /// 数据格式（JSON）：
+    /// ```json
+    /// {"to": "user@example.com", "subject": "Hello", "body": "Content"}
+    /// ```
+    async fn gmail_send(&self, data: &str) -> EvifResult<()> {
+        let send_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for send: {}", e)))?;
+
+        let to = send_data["to"].as_str()
+            .ok_or_else(|| EvifError::InvalidPath("Missing 'to' field".to_string()))?;
+        let subject = send_data["subject"].as_str().unwrap_or("(no subject)");
+        let body = send_data["body"].as_str().unwrap_or("");
+
+        if self.access_token.is_none() {
+            // 无 OAuth token，模拟发送
+            let mut state = self.state.write().await;
+            state.insert("last_send_to".to_string(), to.to_string());
+            state.insert("last_send_subject".to_string(), subject.to_string());
+            state.insert("last_send_body".to_string(), body.to_string());
+            return Ok(());
+        }
+
+        // 构建 MIME 消息
+        let mime_message = format!(
+            "From: {}\r\nTo: {}\r\nSubject: =?utf-8?B?{}?=\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}",
+            self.config.username,
+            to,
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, subject.as_bytes()),
+            body
+        );
+
+        let raw = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            mime_message.as_bytes(),
+        );
+
+        let payload = serde_json::json!({ "raw": raw });
+
+        self.gmail_api_send("POST", "/messages/send", &payload).await
+    }
+
+    /// 回复邮件
+    ///
+    /// 数据格式（JSON）：
+    /// ```json
+    /// {"body": "Reply content"}
+    /// ```
+    async fn gmail_reply(&self, msg_id: &str, data: &str) -> EvifResult<()> {
+        let reply_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for reply: {}", e)))?;
+
+        let body = reply_data["body"].as_str().unwrap_or("");
+
+        if self.access_token.is_none() {
+            let mut state = self.state.write().await;
+            state.insert("last_reply_to".to_string(), msg_id.to_string());
+            state.insert("last_reply_body".to_string(), body.to_string());
+            return Ok(());
+        }
+
+        // 先获取原始邮件以获取回复头
+        let original = self.gmail_api_request::<GmailMessage>(
+            reqwest::Method::GET,
+            &format!("/messages/{}", msg_id),
+            Some(&[("format", "metadata"), ("metadataHeaders", "Subject"), ("metadataHeaders", "From")]),
+        ).await.ok();
+
+        let (from_addr, subject) = if let Some(ref orig) = original {
+            let mut from = String::new();
+            let mut subj = String::new();
+            if let Some(payload) = &orig.payload {
+                if let Some(headers) = &payload.headers {
+                    for h in headers {
+                        match h.name.as_str() {
+                            "From" => from = h.value.clone(),
+                            "Subject" => {
+                                subj = if h.value.starts_with("Re: ") {
+                                    h.value.clone()
+                                } else {
+                                    format!("Re: {}", h.value)
+                                };
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            (from, subj)
+        } else {
+            (String::new(), "Re: (no subject)".to_string())
+        };
+
+        let mime_message = format!(
+            "From: {}\r\nTo: {}\r\nSubject: =?utf-8?B?{}?=\r\nIn-Reply-To: <{}>\r\nReferences: <{}>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}",
+            self.config.username,
+            from_addr,
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, subject.as_bytes()),
+            msg_id, msg_id, body
+        );
+
+        let raw = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            mime_message.as_bytes(),
+        );
+
+        let payload = serde_json::json!({
+            "raw": raw,
+            "threadId": original.as_ref().and_then(|o| o.id.parse::<serde_json::Value>().ok())
+        });
+
+        self.gmail_api_send("POST", "/messages/send", &payload).await
+    }
+
+    /// 创建草稿
+    async fn gmail_create_draft(&self, data: &str) -> EvifResult<()> {
+        let draft_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for draft: {}", e)))?;
+
+        let to = draft_data["to"].as_str().unwrap_or("");
+        let subject = draft_data["subject"].as_str().unwrap_or("(no subject)");
+        let body = draft_data["body"].as_str().unwrap_or("");
+
+        if self.access_token.is_none() {
+            let mut state = self.state.write().await;
+            state.insert("last_draft_subject".to_string(), subject.to_string());
+            return Ok(());
+        }
+
+        let mime_message = format!(
+            "From: {}\r\nTo: {}\r\nSubject: =?utf-8?B?{}?=\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}",
+            self.config.username, to,
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, subject.as_bytes()),
+            body
+        );
+
+        let raw = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            mime_message.as_bytes(),
+        );
+
+        let payload = serde_json::json!({ "message": { "raw": raw } });
+
+        self.gmail_api_send("POST", "/drafts", &payload).await
+    }
+
+    /// 修改邮件标签
+    async fn gmail_modify_labels(&self, msg_id: &str, data: &str) -> EvifResult<()> {
+        if self.access_token.is_none() {
+            return Ok(());
+        }
+
+        let label_data: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| EvifError::InvalidPath(format!("Invalid JSON for labels: {}", e)))?;
+
+        let add_labels: Vec<String> = label_data["add"]
+            .as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+
+        let remove_labels: Vec<String> = label_data["remove"]
+            .as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+
+        let payload = serde_json::json!({
+            "addLabelIds": add_labels,
+            "removeLabelIds": remove_labels,
+        });
+
+        self.gmail_api_send("POST", &format!("/messages/{}/modify", msg_id), &payload).await
+    }
+
+    /// 删除邮件（移到垃圾箱）
+    async fn gmail_trash(&self, msg_id: &str) -> EvifResult<()> {
+        if self.access_token.is_none() {
+            let mut state = self.state.write().await;
+            state.insert("last_trash_msg".to_string(), msg_id.to_string());
+            return Ok(());
+        }
+
+        self.gmail_api_send("POST", &format!("/messages/{}/trash", msg_id), &serde_json::json!({})).await
+    }
+
+    /// 通用 Gmail API 写入请求
+    async fn gmail_api_send(&self, method: &str, path: &str, payload: &serde_json::Value) -> EvifResult<()> {
+        let client = self.client.as_ref()
+            .ok_or_else(|| EvifError::Internal("HTTP client not initialized".to_string()))?;
+
+        let url = format!("https://www.googleapis.com/gmail/v1/users/me{}", path);
+        let auth = self.auth_header()?;
+
+        let http_method = match method {
+            "POST" => reqwest::Method::POST,
+            "PUT" => reqwest::Method::PUT,
+            "PATCH" => reqwest::Method::PATCH,
+            "DELETE" => reqwest::Method::DELETE,
+            _ => reqwest::Method::POST,
+        };
+
+        let response = client
+            .request(http_method, &url)
+            .header("Authorization", auth)
+            .header("Content-Type", "application/json")
+            .json(payload)
+            .send()
+            .await
+            .map_err(|e| EvifError::Internal(format!("Gmail API write request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(EvifError::Internal(format!(
+                "Gmail API write error: {} - {}", status, body
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 /// GmailFs 配置选项 (用于配置文件)
@@ -960,5 +1247,103 @@ mod tests {
         let plugin_with_auth = create_plugin_with_token("valid_token");
         // test_connection 会尝试 API 调用，可能失败但不会 panic
         let _ = plugin_with_auth.test_connection().await;
+    }
+
+    // ── 写操作测试 ──────────────────────────────────────────────
+
+    fn create_writable_plugin() -> GmailFsPlugin {
+        let mut config = GmailConfig::default();
+        config.read_only = Some(false);
+        GmailFsPlugin {
+            config,
+            client: Some(reqwest::Client::new()),
+            access_token: None,
+            connected: Arc::new(RwLock::new(false)),
+            state: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_send_email_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"to": "test@example.com", "subject": "Hello", "body": "World"}"#;
+        let result = plugin.write("/send", payload.as_bytes().to_vec(), 0, WriteFlags::empty()).await;
+        assert!(result.is_ok(), "send should succeed in mock mode");
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_send_to").unwrap(), "test@example.com");
+        assert_eq!(state.get("last_send_subject").unwrap(), "Hello");
+        assert_eq!(state.get("last_send_body").unwrap(), "World");
+    }
+
+    #[tokio::test]
+    async fn test_reply_email_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"body": "Reply content"}"#;
+        let result = plugin.write("/Inbox/msg_000001/reply", payload.as_bytes().to_vec(), 0, WriteFlags::empty()).await;
+        assert!(result.is_ok(), "reply should succeed in mock mode");
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_reply_to").unwrap(), "msg_000001");
+    }
+
+    #[tokio::test]
+    async fn test_create_draft_mock() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"to": "test@example.com", "subject": "Draft", "body": "Draft body"}"#;
+        let result = plugin.write("/drafts", payload.as_bytes().to_vec(), 0, WriteFlags::empty()).await;
+        assert!(result.is_ok(), "create draft should succeed in mock mode");
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_draft_subject").unwrap(), "Draft");
+    }
+
+    #[tokio::test]
+    async fn test_trash_email_mock() {
+        let plugin = create_writable_plugin();
+        let result = plugin.remove("/Inbox/msg_000001").await;
+        assert!(result.is_ok(), "trash should succeed in mock mode");
+        let state = plugin.state.read().await;
+        assert_eq!(state.get("last_trash_msg").unwrap(), "msg_000001");
+    }
+
+    #[tokio::test]
+    async fn test_send_missing_to_field() {
+        let plugin = create_writable_plugin();
+        let payload = r#"{"subject": "Hello"}"#;
+        let result = plugin.write("/send", payload.as_bytes().to_vec(), 0, WriteFlags::empty()).await;
+        assert!(result.is_err(), "send without 'to' should fail");
+    }
+
+    #[tokio::test]
+    async fn test_send_invalid_json() {
+        let plugin = create_writable_plugin();
+        let result = plugin.write("/send", b"not json".to_vec(), 0, WriteFlags::empty()).await;
+        assert!(result.is_err(), "send with invalid JSON should fail");
+    }
+
+    #[tokio::test]
+    async fn test_write_unsupported_path() {
+        let plugin = create_writable_plugin();
+        let result = plugin.write("/unsupported/path", b"data".to_vec(), 0, WriteFlags::empty()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_remove_unsupported_path() {
+        let plugin = create_writable_plugin();
+        let result = plugin.remove("/Inbox").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_drafts_dir() {
+        let plugin = create_writable_plugin();
+        let result = plugin.create("/drafts", 0o755).await;
+        assert!(result.is_ok(), "creating drafts dir should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_create_unsupported_path() {
+        let plugin = create_writable_plugin();
+        let result = plugin.create("/other", 0o755).await;
+        assert!(result.is_err());
     }
 }
