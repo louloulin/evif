@@ -20,6 +20,52 @@
 
 ---
 
+## 零、CRITICAL 问题（必须在生产前修复）
+
+### 0.1 PluginPool 内存泄漏 🔴 CRITICAL
+
+**文件**：`crates/evif-core/src/plugin_pool.rs:296-304`
+
+**问题**：`return_plugin()` 只减少计数器，不将插件返回到空闲池。插件使用后无法复用，导致持续重新创建和内存增长。
+
+**影响**：长期运行时内存持续增长，最终 OOM。
+
+**修复**：实现真正的连接池回收逻辑。
+
+### 0.2 MCP Token 明文比较 🔴 CRITICAL
+
+**文件**：`crates/evif-mcp/src/mcp_auth.rs`
+
+**问题**：Token 密钥使用明文比较（`secret == hash`），注释明确标注"生产应使用 bcrypt 或 argon2"。
+
+**影响**：凭证泄露风险。
+
+**修复**：使用 `argon2` crate 实现密码哈希验证。
+
+### 0.3 动态插件加载无签名验证 🔴 HIGH
+
+**文件**：`crates/evif-core/src/dynamic_loader.rs:304-442`
+
+**问题**：通过 `dlopen` 加载 `.so/.dylib` 文件，仅检查 ABI 版本，无密码学签名验证。搜索路径包括 `$HOME/.evif/plugins`。
+
+**影响**：恶意插件可被加载执行。
+
+**修复**：添加 Ed25519 签名验证或 SHA256 完整性校验。
+
+---
+
+## 零点五、HIGH 问题（应尽快修复）
+
+| # | 问题 | 文件 | 影响 |
+|---|------|------|------|
+| 1 | SQLite `std::sync::Mutex` 阻塞 async runtime | `evif-mem/src/storage/sqlite.rs` | 高负载时性能严重下降 |
+| 2 | API Key 明文存储在配置文件 | `evif-core/src/config.rs:178` | 凭证泄露 |
+| 3 | 无优雅关闭协调 (no JoinSet) | `evif-rest/src/server.rs` | 请求中断 |
+| 4 | Circuit Breaker 未集成外部调用 | 多个文件 | 级联故障 |
+| 5 | CORS 生产环境默认允许所有来源 | `evif-rest/src/server.rs` | 跨域攻击 |
+
+---
+
 ## 一、技术债务分析
 
 ### 1.1 代码质量现状
@@ -27,10 +73,21 @@
 | 指标 | 当前状态 | 目标 |
 |------|----------|------|
 | `panic!()` 在非测试代码 | 20+ 处 | 0 处 |
-| `unwrap()` 在非测试代码 | 40+ 处 | <5 处 |
+| `unwrap()` 在非测试代码 | 100+ 处 | <5 处 |
+| `expect()` 在非测试代码 | 50+ 处 | <10 处 |
 | `#[allow(dead_code)]` 数量 | 100+ 处 | <20 处 |
 | 无测试的源文件 | 49 个 (27%) | <15 个 |
 | 公开 API 缺少文档 | 大量 | 完成核心 API 文档 |
+
+### 1.2 错误处理详细问题
+
+| 文件 | 问题数 | 说明 |
+|------|--------|------|
+| `evif-mem/src/storage/sqlite.rs` | 16 | `Mutex::lock().unwrap()` 阻塞式互斥锁 |
+| `evif-plugins/src/sqlfs.rs` | 23 | `spawn_blocking` 错误映射过多 |
+| `evif-mem/src/pipeline.rs` | 12 | `.expect()` 调用应返回 Result |
+| `evif-core/src/plugin_pool.rs` | 4 | `.unwrap()` on std::sync::Mutex |
+| `evif-mcp/src/lib.rs` | 3 | Regex `expect()` 编译失败会 panic |
 
 ### 1.2 插件实现状态
 
@@ -49,6 +106,45 @@
 | `shopifyfs` | ⚠️ Stub | 硬编码返回，无真实 API |
 | `notionfs` | ⚠️ Stub | 硬编码返回 |
 | `githubfs` | ⚠️ 部分 | 有结构定义，使用 stub |
+
+---
+
+## 一.5 测试覆盖现状 ⚠️
+
+### 1.5.1 按 Crate 测试覆盖
+
+| Crate | 覆盖文件 | 总文件 | 覆盖率 | 未覆盖文件 |
+|-------|----------|--------|--------|------------|
+| **evif-rest** | 8 | 22 | **36%** ⚠️ | middleware.rs, routes.rs, memory_handlers.rs 等 14 个 |
+| **evif-bench** | 0 | 6 | **0%** ⚠️ | 全部未覆盖 |
+| evif-auth | 4 | 6 | 66% | 2 个 |
+| evif-cli | 7 | 10 | 70% | 3 个 |
+| evif-core | 25 | 32 | 78% | 6 个 |
+| evif-mem | 25 | 31 | 80% | 6 个 |
+| evif-plugins | 41 | 47 | 87% | 6 个 |
+| evif-mcp | 7 | 8 | 87% | 1 个 |
+| **evif-client** | 3 | 3 | **100%** ✅ | 无 |
+
+### 1.5.2 测试统计
+
+| 指标 | 数值 |
+|------|------|
+| 测试总数 | ~2,488 |
+| 内联测试 | 2,140 |
+| 集成测试 | 338 |
+| E2E 测试 | 31 |
+| Error case 测试 | 仅 3 个 `#[should_panic]` |
+| 属性测试 | 0 (无 proptest/quickcheck) |
+
+### 1.5.3 测试质量缺口
+
+| 问题 | 当前 | 目标 |
+|------|------|------|
+| 错误路径测试 | 1:8 (错误:正常) | 1:3 |
+| 属性测试 | 0 | >10 |
+| 模糊测试 | 0 | >5 |
+| 睡眠等待 | 131 处 | <20 |
+| 覆盖率工具 | 无 | cargo-llvm-cov |
 
 ---
 
@@ -95,10 +191,11 @@
 
 | 检查项 | 当前状态 | 优先级 |
 |--------|----------|--------|
-| Mutex/RwLock 使用模式 | 已使用 parking_lot | 中 |
+| Mutex/RwLock 使用模式 | ⚠️ 混用 std/tokio/parking_lot | 高 |
+| PluginPool 内存泄漏 | 🔴 `return_plugin()` 不返回池 | 严重 |
 | Send/Sync trait bounds | 部分验证 | 中 |
 | 潜在死锁 | 未检查 | 高 |
-| Async runtime 兼容性 | OK | 低 |
+| Async runtime 兼容性 | ⚠️ SQLite 用 std::Mutex | 高 |
 
 ### 3.3 资源管理 ⚠️
 
@@ -106,8 +203,8 @@
 |--------|----------|--------|
 | 连接池大小配置 | 硬编码 | 中 |
 | 文件句柄泄漏 | 未检测 | 高 |
-| 内存泄漏（长运行） | 未检测 | 高 |
-| 关闭时清理 | 部分实现 | 中 |
+| 内存泄漏（长运行） | 🔴 PluginPool 不回收 | 严重 |
+| 关闭时清理 | ⚠️ 无 JoinSet 协调 | 中 |
 
 ### 3.4 输入验证 ⚠️
 
@@ -374,13 +471,23 @@
 
 ## 六、实施计划
 
-### Phase 1: 技术债务清理（2 周）
+### Phase 1: CRITICAL 修复（1 周）
+
+| 日期 | 任务 | 交付物 |
+|------|------|--------|
+| Day 1 | PluginPool 内存泄漏修复 | `return_plugin()` 真正返回池 |
+| Day 2 | MCP Token 安全加固 | argon2 密码哈希 |
+| Day 3 | 动态插件签名验证 | Ed25519/SHA256 校验 |
+| Day 4 | SQLite async 兼容 | `spawn_blocking` 或连接池 |
+| Day 5 | 优雅关闭 | `JoinSet` + 取消协调 |
+
+### Phase 2: 技术债务清理（2 周）
 
 | 日期 | 任务 | 交付物 |
 |------|------|--------|
 | Day 1-2 | 消除 panic!() | skill_runtime.rs, postgresfs.rs, skillfs.rs |
-| Day 3-4 | 减少 unwrap() | embedding.rs, pipeline.rs, dynamic_loader.rs |
-| Day 5-7 | 安全加固 | TLS, 输入验证 |
+| Day 3-4 | 减少 unwrap()/expect() | embedding.rs, pipeline.rs, dynamic_loader.rs |
+| Day 5-7 | 安全加固 | TLS 强制, CORS 限制, 输入验证 |
 | Day 8-10 | 添加核心测试 | llm.rs, embedding.rs, pipeline.rs |
 | Day 11-14 | 依赖更新 | 解决版本冲突 |
 
@@ -424,6 +531,9 @@
 | 插件 API 实现 | 5/13 (38%) | 11/13 (85%) |
 | 依赖版本过期 | 6 | 0 |
 | 测试覆盖率 | ~70% | 85%+ |
+| 无测试源文件 | 45 (23%) | <10 |
+| Error case 测试 | 仅 3 个 | >50 |
+| 属性测试 | 0 | >10 |
 | 安全漏洞 | 未知 | 0 高危 |
 | TLS 强制 | 否 | 是 |
 | 输入验证覆盖 | 部分 | 100% |
