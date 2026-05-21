@@ -5,18 +5,21 @@
 [![Tests](https://img.shields.io/badge/Tests-600+-green.svg)](#testing)
 [![Crate](https://img.shields.io/badge/Crates-13-orange.svg)](#core-components)
 
-> Context-oriented virtual filesystem built with Rust, following Plan 9's "Everything Is a File" philosophy. Provides persistent context, reusable skills, and multi-agent coordination for AI Agents.
+> Agent infrastructure for context, skills, memory, coordination, and universal system connectivity. EVIF turns heterogeneous systems into a unified file interface so AI Agents can work with less integration code, less repeated context, and lower token cost.
 
 **Documentation**: [English](docs/README.md) | [中文](README-CN.md)
 
 ## Overview
 
-EVIF evolved from "Everything Is a File" to "Context Is a File" for AI Agents:
+EVIF evolved from "Everything Is a File" to an Agent-native connectivity layer:
 
 - **ContextFS** - Layered `L0/L1/L2` working context
 - **SkillFS** - Standard `SKILL.md` skill discovery and invocation
 - **PipeFS** - Lightweight multi-agent coordination
-- **Traditional EVIF plugin infrastructure**
+- **MemoryFS/VectorFS** - Long-term memory and semantic retrieval
+- **Plugin + Mount Model** - Connect cloud storage, databases, SaaS apps, and local systems through one interface
+
+EVIF's product goal is simple: let Agents operate across many systems with one model — files, directories, skills, memories, queues, and pipes — instead of bespoke API glue for every integration.
 
 ### Agent Positioning
 
@@ -26,6 +29,18 @@ EVIF provides unified file interface for Agents:
 - `/skills` - Reusable workflows (SKILL.md format)
 - `/pipes` - Task coordination (multi-agent communication)
 - `/memories` - Vector memory with semantic search
+- `/queue` - Durable task queues for asynchronous work
+
+### Why EVIF for AI Agents
+
+| Need | EVIF Capability | Agent Benefit |
+|------|-----------------|---------------|
+| Persistent context | `/context/L0`, `/context/L1`, `/context/L2` | Less repeated prompt setup |
+| Reusable procedures | `/skills/*.SKILL.md` | Workflows become versioned assets |
+| Multi-agent work | `/pipes`, `/queue` | Explicit coordination instead of prompt forwarding |
+| Long-term memory | `/memories`, vector retrieval | Retrieve relevant knowledge without loading everything |
+| System connectivity | plugin + mount adapters | One interface for many external systems |
+| Lower token cost | compact reads, output filtering, bounded search | Smaller model inputs and cheaper tool loops |
 
 ### Key Features
 
@@ -37,6 +52,7 @@ EVIF provides unified file interface for Agents:
 | **150 REST Endpoints** | Comprehensive HTTP API |
 | **600+ Tests** | High test coverage |
 | **Multi-Agent Coordination** | PipeFS with wait_for_result, atomic claim |
+| **Cost-Optimized Retrieval** | max_lines, compact search, output filtering, caching |
 
 ## Architecture
 
@@ -162,6 +178,19 @@ echo "review code" > /pipes/task-001/input
 | `sqlfs` | SQLite |
 | `postgresfs` | PostgreSQL |
 
+### Connectivity Model
+
+EVIF does not expose integrations as unrelated one-off tools. Each integration is an adapter behind the same mount and file interface:
+
+| Layer | Responsibility |
+|-------|----------------|
+| Mount | Maps a path such as `/mem`, `/context`, or `/github` to a backend |
+| Plugin | Encapsulates auth, API calls, storage semantics, retries, and errors |
+| Access Layer | Exposes the same capability through CLI, REST, MCP, FUSE, or SDKs |
+| Agent Layer | Consumes files, skills, memory, queues, and pipes with a stable mental model |
+
+See [Connector Capability Matrix](docs/connector-capability-matrix.md) for the current connector map.
+
 ## MCP Server
 
 The EVIF MCP Server provides **63 tools** for AI agents, fully implemented with real backend calls.
@@ -189,6 +218,8 @@ The EVIF MCP Server provides **63 tools** for AI agents, fully implemented with 
 | `evif_cat` | `max_lines` (default 100), `mode` (head/tail/snippet/full) | 60-90% |
 | `evif_memory_search` | `compact` (default true), `limit` (default 3) | 40-60% |
 | Output Filter | strip_ansi, truncate_lines, compact_json, max_string_length | 30-50% |
+
+EVIF reduces Agent cost across six areas: model tokens, repeated context setup, integration code, tool output size, multi-agent coordination, and long-term maintenance. See [Cost Optimization Matrix](docs/cost-optimization-matrix.md) for the optimization model.
 
 ## AI Platform Integration
 
@@ -359,4 +390,4 @@ Apache 2.0 or MIT
 ---
 
 **Docs**: [English](docs/README.md) | [中文](README-CN.md)
-**Roadmap**: [MVP 4.0](mvp4.0.md) | [MVP 4.1](mvp4.1.md)
+**Roadmap**: [MVP 6.0](mvp6.0.md) | [MVP 4.0](mvp4.0.md) | [MVP 4.1](mvp4.1.md)
