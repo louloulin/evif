@@ -385,3 +385,149 @@ impl TrafficStats {
         latency_total.fetch_add(latency_micros, Ordering::Relaxed);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_traffic_stats_default() {
+        let stats = TrafficStats::default();
+        assert_eq!(stats.total_requests.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.total_bytes_read.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.total_bytes_written.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_record_read() {
+        let stats = TrafficStats::default();
+        stats.record_read(1024);
+
+        assert_eq!(stats.total_requests.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.read_count.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.total_bytes_read.load(Ordering::Relaxed), 1024);
+    }
+
+    #[test]
+    fn test_record_write() {
+        let stats = TrafficStats::default();
+        stats.record_write(2048);
+
+        assert_eq!(stats.total_requests.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.write_count.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.total_bytes_written.load(Ordering::Relaxed), 2048);
+    }
+
+    #[test]
+    fn test_record_list() {
+        let stats = TrafficStats::default();
+        stats.record_list();
+
+        assert_eq!(stats.total_requests.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.list_count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_other() {
+        let stats = TrafficStats::default();
+        stats.record_other();
+
+        assert_eq!(stats.total_requests.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.other_count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_error() {
+        let stats = TrafficStats::default();
+        stats.record_error();
+
+        assert_eq!(stats.total_errors.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_read_outcome_success() {
+        let stats = TrafficStats::default();
+        stats.record_read_outcome(true, 1000);
+
+        assert_eq!(stats.read_success_count.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.read_error_count.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.read_latency_micros_total.load(Ordering::Relaxed), 1000);
+    }
+
+    #[test]
+    fn test_record_read_outcome_failure() {
+        let stats = TrafficStats::default();
+        stats.record_read_outcome(false, 500);
+
+        assert_eq!(stats.read_success_count.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.read_error_count.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.read_latency_micros_total.load(Ordering::Relaxed), 500);
+    }
+
+    #[test]
+    fn test_record_request_duration_secs() {
+        let stats = TrafficStats::default();
+
+        // Test duration in 5ms bucket
+        stats.record_request_duration_secs(0.003);
+        assert_eq!(stats.request_duration_bucket_5ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_10ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_25ms.load(Ordering::Relaxed), 1);
+
+        // Test duration in 50ms bucket (cumulative - both durations fall in this bucket)
+        stats.record_request_duration_secs(0.050);
+        assert_eq!(stats.request_duration_bucket_50ms.load(Ordering::Relaxed), 2);
+        // Both durations are <= 100ms, so bucket_100ms should be 2
+        assert_eq!(stats.request_duration_bucket_100ms.load(Ordering::Relaxed), 2);
+
+        // Verify sum is recorded
+        let sum = stats.request_duration_sum_micros.load(Ordering::Relaxed);
+        assert_eq!(sum, 53000); // 3000 + 50000 micros
+    }
+
+    #[test]
+    fn test_cumulative_histogram_buckets() {
+        let stats = TrafficStats::default();
+
+        // 1ms duration should fall into ALL buckets up to 5ms
+        stats.record_request_duration_secs(0.001);
+
+        assert_eq!(stats.request_duration_bucket_5ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_10ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_25ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_50ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_100ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_250ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_500ms.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.request_duration_bucket_1s.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_reset_metrics() {
+        let stats = TrafficStats::default();
+
+        // Add some data
+        stats.record_read(1024);
+        stats.record_write(2048);
+        stats.record_error();
+
+        // Verify data exists
+        assert!(stats.total_requests.load(Ordering::Relaxed) > 0);
+
+        // Reset all counters
+        stats.total_requests.store(0, Ordering::Relaxed);
+        stats.total_bytes_read.store(0, Ordering::Relaxed);
+        stats.total_bytes_written.store(0, Ordering::Relaxed);
+        stats.total_errors.store(0, Ordering::Relaxed);
+        stats.read_count.store(0, Ordering::Relaxed);
+        stats.write_count.store(0, Ordering::Relaxed);
+        stats.read_success_count.store(0, Ordering::Relaxed);
+        stats.request_duration_sum_micros.store(0, Ordering::Relaxed);
+
+        // Verify reset
+        assert_eq!(stats.total_requests.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.total_bytes_read.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.total_bytes_written.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.total_errors.load(Ordering::Relaxed), 0);
+    }
+}

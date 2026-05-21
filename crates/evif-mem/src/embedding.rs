@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -60,17 +59,19 @@ impl EmbeddingClient for OpenAIEmbeddingClient {
 
         let embeddings = data["data"]
             .as_array()
-            .ok_or_else(|| MemError::Embedding("Invalid response format".to_string()))?
+            .ok_or_else(|| MemError::Embedding("Invalid response format: missing 'data' array".to_string()))?
             .iter()
             .map(|item| {
-                item["embedding"]
+                let embedding_array = item["embedding"]
                     .as_array()
-                    .unwrap()
+                    .ok_or_else(|| MemError::Embedding("Invalid response format: missing 'embedding' array".to_string()))?;
+                let values: Vec<f32> = embedding_array
                     .iter()
                     .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-                    .collect()
+                    .collect();
+                Ok(values)
             })
-            .collect();
+            .collect::<MemResult<Vec<Vec<f32>>>>()?;
 
         Ok(embeddings)
     }
@@ -104,12 +105,13 @@ struct CacheEntry {
 
 impl CacheEntry {
     fn new(embedding: Vec<f32>) -> Self {
+        let created_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0); // Fallback to 0 if system time is before epoch (shouldn't happen)
         Self {
             embedding,
-            created_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created_at,
             access_count: 1,
         }
     }
@@ -287,10 +289,12 @@ pub struct EmbeddingManager {
 impl EmbeddingManager {
     /// Create new embedding manager with configuration
     pub fn new(client: Arc<dyn EmbeddingClient>, config: CacheConfig) -> MemResult<Self> {
-        // Provide a safe default if l1_size is 0
-        let l1_size = NonZeroUsize::new(config.l1_size.max(1))
-            .unwrap_or(NonZeroUsize::new(1).unwrap());
-        let l1_cache = LruCache::new(l1_size);
+        // Ensure at least size 1, NonZeroUsize::new(1) is statically guaranteed to succeed
+        let l1_size = config.l1_size.max(1);
+        let l1_cache = LruCache::new(unsafe {
+            // SAFETY: l1_size is at least 1, so this is safe
+            std::num::NonZeroUsize::new_unchecked(l1_size)
+        });
 
         let l2_cache = if let Some(ref l2_dir) = config.l2_dir {
             Some(L2Cache::new(l2_dir.clone(), config.l2_max_entries)?)
@@ -490,7 +494,11 @@ impl EmbeddingManager {
         // Clear L1
         {
             let mut l1 = self.l1_cache.lock().await;
-            *l1 = LruCache::new(NonZeroUsize::new(self.config.l1_size).unwrap());
+            let size = self.config.l1_size.max(1);
+            *l1 = LruCache::new(unsafe {
+                // SAFETY: size is at least 1
+                std::num::NonZeroUsize::new_unchecked(size)
+            });
         }
 
         // Clear L2

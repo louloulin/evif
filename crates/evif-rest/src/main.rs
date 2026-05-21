@@ -26,6 +26,7 @@
 //! | EVIF_REST_PORT | Port | 8081 |
 //! | EVIF_REST_PRODUCTION_MODE | Enable strict validation | false |
 //! | EVIF_CORS_ENABLED | Enable CORS | false |
+//! | EVIF_LOG_FORMAT | Log format: "pretty" or "json" | pretty |
 //!
 //! ## Endpoints
 //!
@@ -123,17 +124,36 @@ async fn main() -> Result<(), evif_rest::RestError> {
     // Note: File logging disabled for now due to sandbox restrictions
     // Original: RollingFileAppender for log rotation
     // N10: JSON structured logging — all tracing output in JSON format for log aggregation
-    let _ = tracing_subscriber::registry()
-        .with(env_filter)
-        // Only stderr output (useful in dev / docker logs)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(true)
-                .with_thread_ids(false)
-                .with_thread_names(false)
-                .with_span_events(FmtSpan::CLOSE),
-        )
-        .try_init();
+    let env = std::env::var("EVIF_LOG_FORMAT").unwrap_or_else(|_| "pretty".to_string());
+
+    let subscriber = tracing_subscriber::registry().with(env_filter);
+
+    if env == "json" {
+        // JSON format for production log aggregation (ELK, Loki, etc.)
+        subscriber
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_thread_names(true)
+                    .with_span_events(FmtSpan::CLOSE),
+            )
+            .try_init()
+            .ok();
+    } else {
+        // Pretty format for development
+        subscriber
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_target(true)
+                    .with_thread_ids(false)
+                    .with_thread_names(false)
+                    .with_span_events(FmtSpan::CLOSE),
+            )
+            .try_init()
+            .ok();
+    }
 
     info!(
         "EVIF REST API v{} starting on {}:{} (production={}, log_dir={})",

@@ -43,7 +43,7 @@ use tokio::sync::broadcast;
 type OperationId = String;
 
 /// 批量操作状态
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum OperationStatus {
     Pending,
     Running,
@@ -481,4 +481,140 @@ pub fn create_batch_routes(
             axum::routing::delete(cancel_batch_operation),
         )
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_batch_operation_manager_new() {
+        let manager = BatchOperationManager::new();
+        let ops = manager.list_operations();
+        assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn test_create_operation() {
+        let manager = BatchOperationManager::new();
+        let info = manager.create_operation("op-1".to_string(), "copy".to_string());
+
+        assert_eq!(info.id, "op-1");
+        assert_eq!(info.operation_type, "copy");
+        assert_eq!(info.status, OperationStatus::Pending);
+        assert_eq!(info.progress, 0.0);
+        assert!(info.error.is_none());
+        assert!(info.end_time.is_none());
+    }
+
+    #[test]
+    fn test_update_progress() {
+        let manager = BatchOperationManager::new();
+        manager.create_operation("op-1".to_string(), "copy".to_string());
+
+        manager.update_progress("op-1", 50.0, Some("/file.txt".to_string()));
+
+        let info = manager.get_operation("op-1").unwrap();
+        assert_eq!(info.progress, 50.0);
+        assert_eq!(info.current_file, Some("/file.txt".to_string()));
+    }
+
+    #[test]
+    fn test_mark_completed() {
+        let manager = BatchOperationManager::new();
+        manager.create_operation("op-1".to_string(), "copy".to_string());
+
+        manager.mark_completed("op-1", Some("Success".to_string()));
+
+        let info = manager.get_operation("op-1").unwrap();
+        assert_eq!(info.status, OperationStatus::Completed);
+        assert_eq!(info.progress, 100.0);
+        assert!(info.end_time.is_some());
+    }
+
+    #[test]
+    fn test_mark_failed() {
+        let manager = BatchOperationManager::new();
+        manager.create_operation("op-1".to_string(), "delete".to_string());
+
+        manager.mark_failed("op-1", "File not found".to_string());
+
+        let info = manager.get_operation("op-1").unwrap();
+        assert_eq!(info.status, OperationStatus::Failed);
+        assert_eq!(info.error, Some("File not found".to_string()));
+        assert!(info.end_time.is_some());
+    }
+
+    #[test]
+    fn test_cancel_operation() {
+        let manager = BatchOperationManager::new();
+        manager.create_operation("op-1".to_string(), "copy".to_string());
+
+        let result = manager.cancel_operation("op-1");
+        assert!(result);
+
+        let info = manager.get_operation("op-1").unwrap();
+        assert_eq!(info.status, OperationStatus::Cancelled);
+        assert!(info.end_time.is_some());
+    }
+
+    #[test]
+    fn test_cancel_nonexistent_operation() {
+        let manager = BatchOperationManager::new();
+        let result = manager.cancel_operation("nonexistent");
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_list_operations() {
+        let manager = BatchOperationManager::new();
+        manager.create_operation("op-1".to_string(), "copy".to_string());
+        manager.create_operation("op-2".to_string(), "delete".to_string());
+
+        let ops = manager.list_operations();
+        assert_eq!(ops.len(), 2);
+    }
+
+    #[test]
+    fn test_get_operation_info() {
+        let manager = BatchOperationManager::new();
+        manager.create_operation("op-1".to_string(), "copy".to_string());
+
+        let info = manager.get_operation("op-1");
+        assert!(info.is_some());
+
+        let none = manager.get_operation("nonexistent");
+        assert!(none.is_none());
+    }
+
+    #[test]
+    fn test_operation_status_serialization() {
+        let status = OperationStatus::Pending;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"Pending\"");
+
+        let completed = OperationStatus::Completed;
+        let json = serde_json::to_string(&completed).unwrap();
+        assert_eq!(json, "\"Completed\"");
+    }
+
+    #[test]
+    fn test_batch_operation_info_serialization() {
+        let info = BatchOperationInfo {
+            id: "op-1".to_string(),
+            operation_type: "copy".to_string(),
+            status: OperationStatus::Running,
+            progress: 50.0,
+            current_file: Some("/file.txt".to_string()),
+            error: None,
+            start_time: 1000,
+            end_time: None,
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("\"op-1\""));
+        assert!(json.contains("\"copy\""));
+        assert!(json.contains("\"Running\""));
+        assert!(json.contains("50.0"));
+    }
 }

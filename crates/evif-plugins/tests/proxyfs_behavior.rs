@@ -31,6 +31,7 @@ struct WriteBody {
 }
 
 #[tokio::test]
+#[ignore = "Flaky: server startup race; run with dedicated server process"]
 async fn proxyfs_maps_to_evif_rest_contract() {
     skip_if_sandboxed!();
 

@@ -1,6 +1,29 @@
-// EVIF Core Error Types
-//
-// 统一错误处理,支持所有插件和服务组件
+//! EVIF Core Error Types
+//!
+//! 统一错误处理,支持所有插件和服务组件。
+//!
+//! # 错误处理
+//!
+//! 使用 `EvifResult<T>` 作为标准返回类型:
+//! ```rust,ignore
+//! use evif_core::{EvifResult, EvifError};
+//!
+//! fn read_file(path: &str) -> EvifResult<Vec<u8>> {
+//!     if path.is_empty() {
+//!         Err(EvifError::InvalidPath("empty path".to_string()))
+//!     } else {
+//!         Ok(vec![])
+//!     }
+//! }
+//! ```
+//!
+//! # 错误来源
+//!
+//! - **IO**: 文件系统读写错误
+//! - **Path**: 路径相关错误 (NotFound, AlreadyExists)
+//! - **Plugin**: 插件相关错误 (NotSupported, NotMounted)
+//! - **Handle**: 句柄相关错误 (HandleNotFound, HandleClosed)
+//! - **Network**: 网络相关错误 (Http, Network, Timeout)
 
 use std::io;
 

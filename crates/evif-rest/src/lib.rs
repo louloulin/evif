@@ -33,15 +33,16 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use evif_rest::{create_routes, ServerConfig};
-//! use axum::Server;
+//! use evif_rest::create_routes;
+//! use evif_core::RadixMountTable;
+//! use std::sync::Arc;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let config = ServerConfig::default();
-//!     let app = create_routes(config);
-//!     let addr = "0.0.0.0:8081".parse().unwrap();
-//!     Server::bind(&addr).serve(app.into_make_service()).await;
+//!     let mount_table = Arc::new(RadixMountTable::new());
+//!     let app = create_routes(mount_table);
+//!     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081").await.unwrap();
+//!     axum::serve(listener, app).await;
 //! }
 //! ```
 //!
@@ -64,6 +65,7 @@ mod handlers;
 mod memory_handlers;
 mod metrics_handlers;
 mod middleware;
+mod mcp_handlers;
 mod plugin_handlers;
 mod routes;
 mod server;
@@ -104,6 +106,7 @@ pub use memory_handlers::{
 };
 pub use metrics_handlers::{MetricsHandlers, MetricsState, TrafficStats};
 pub use middleware::{AuthMiddleware, LoggingMiddleware, RestAuthState, TenantMiddleware};
+pub use mcp_handlers::{create_mcp_state, McpHttpState, McpServerConfig, Tool};
 pub use plugin_handlers::{PluginHandlers, PluginState};
 pub use routes::{
     create_routes, create_routes_with_auth, create_routes_with_context,

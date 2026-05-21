@@ -6,12 +6,17 @@ use crate::error::{MemError, MemResult};
 use crate::models::{CategoryItem, MemoryCategory, MemoryItem, Resource};
 use rusqlite::{params, Connection, Row};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 /// SQLite-based storage for memory items
 ///
 /// Provides persistent storage with full-text search capabilities.
 /// Thread-safe through Arc<Mutex<Connection>>.
+/// Uses parking_lot::Mutex instead of std::sync::Mutex for better async compatibility:
+/// - Faster locking (no system call overhead)
+/// - Poison-resistant (doesn't lock forever on panic)
+/// - Better performance under contention
 pub struct SQLiteStorage {
     conn: Arc<Mutex<Connection>>,
 }
@@ -53,7 +58,7 @@ impl SQLiteStorage {
     /// Path to the backup file on success
     pub fn backup<P: AsRef<Path>>(&self, dest_path: P) -> MemResult<String> {
         let dest_path = dest_path.as_ref();
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
 
         // Use VACUUM INTO for a consistent online backup (SQLite 3.31.0+)
         // This creates a consistent snapshot without blocking readers
@@ -71,7 +76,7 @@ impl SQLiteStorage {
     /// Each migration is a numbered version with SQL to apply.
     /// Applied versions are tracked in `schema_migrations` table.
     fn initialize_schema(&self) -> MemResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
 
         // Step 1: Create migrations tracking table (always safe to run)
         conn.execute_batch(
@@ -223,7 +228,7 @@ impl SQLiteStorage {
     // Resource operations
 
     pub fn put_resource(&self, resource: Resource) -> MemResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
 
         conn.execute(
             "INSERT OR REPLACE INTO resources (id, url, modality, local_path, caption, embedding_id, created_at, updated_at)
@@ -245,7 +250,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_resource(&self, id: &str) -> MemResult<Resource> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
                 "SELECT id, url, modality, local_path, caption, embedding_id, created_at, updated_at FROM resources WHERE id = ?1",
@@ -267,7 +272,7 @@ impl SQLiteStorage {
     // Memory item operations
 
     pub fn put_item(&self, mut item: MemoryItem) -> MemResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
 
         // Check for duplicates by content hash
         if let Some(ref hash) = item.content_hash {
@@ -330,7 +335,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_item(&self, id: &str) -> MemResult<MemoryItem> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
                 "SELECT id, resource_id, memory_type, summary, content, embedding_id,
@@ -352,7 +357,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_items_by_hash(&self, hash: &str) -> MemResult<Vec<MemoryItem>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
                 "SELECT id, resource_id, memory_type, summary, content, embedding_id,
@@ -371,7 +376,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_items_by_type(&self, memory_type: &str) -> Vec<MemoryItem> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
             "SELECT id, resource_id, memory_type, summary, content, embedding_id,
                     happened_at, content_hash, ref_id, reinforcement_count, last_reinforced_at, category_id, created_at, updated_at
@@ -391,7 +396,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_all_items(&self) -> Vec<MemoryItem> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
             "SELECT id, resource_id, memory_type, summary, content, embedding_id,
                     happened_at, content_hash, ref_id, reinforcement_count, last_reinforced_at, category_id, created_at, updated_at
@@ -411,7 +416,7 @@ impl SQLiteStorage {
     }
 
     pub fn delete_item(&self, id: &str) -> MemResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
 
         let rows_affected = conn
             .execute("DELETE FROM memory_items WHERE id = ?1", params![id])
@@ -427,7 +432,7 @@ impl SQLiteStorage {
     // Category operations
 
     pub fn put_category(&self, category: MemoryCategory) -> MemResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
 
         // Count items in this category
         let item_count: i32 = conn
@@ -459,7 +464,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_category(&self, id: &str) -> MemResult<MemoryCategory> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
                 "SELECT id, name, description, embedding_id, summary, item_count, created_at, updated_at
@@ -480,7 +485,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_all_categories(&self) -> Vec<MemoryCategory> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
             "SELECT id, name, description, embedding_id, summary, item_count, created_at, updated_at
              FROM categories",
@@ -499,7 +504,7 @@ impl SQLiteStorage {
     }
 
     pub fn delete_category(&self, id: &str) -> MemResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
 
         let rows_affected = conn
             .execute("DELETE FROM categories WHERE id = ?1", params![id])
@@ -519,7 +524,7 @@ impl SQLiteStorage {
         self.get_item(item_id)?;
         self.get_category(category_id)?;
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let relation = CategoryItem::new(item_id.to_string(), category_id.to_string());
 
         conn.execute(
@@ -547,7 +552,7 @@ impl SQLiteStorage {
     }
 
     pub fn get_items_in_category(&self, category_id: &str) -> Vec<MemoryItem> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
             "SELECT m.id, m.resource_id, m.memory_type, m.summary, m.content, m.embedding_id,
                     m.happened_at, m.content_hash, m.ref_id, m.reinforcement_count, m.last_reinforced_at, m.category_id, m.created_at, m.updated_at

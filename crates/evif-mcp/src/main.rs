@@ -32,10 +32,23 @@ impl Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
-    tracing_subscriber::fmt()
+    // 初始化日志 with configurable format
+    let env = std::env::var("EVIF_LOG_FORMAT").unwrap_or_else(|_| "pretty".to_string());
+
+    let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
-        .init();
+        .with_target(true);
+
+    match env.as_str() {
+        "json" => {
+            // JSON format for log aggregation (ELK, Loki, etc.)
+            subscriber.json().init();
+        }
+        _ => {
+            // Pretty format for development
+            subscriber.init();
+        }
+    }
 
     let args = Args::parse();
     let use_mock = args.mock;

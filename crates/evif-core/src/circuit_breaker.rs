@@ -1,18 +1,39 @@
-// Circuit Breaker Pattern — prevents cascade failures from downstream services
-//
-// Three states:
-//   Closed  → Normal operation; requests pass through.
-//              On failure: increment failure counter.
-//              If failures >= threshold: transition to Open.
-//   Open    → Fast-fail; all requests return CircuitOpen immediately.
-//              After recovery_timeout_secs: transition to HalfOpen.
-//   HalfOpen → Testing; allow up to half_open_max_calls through.
-//              On success: transition to Closed.
-//              On failure: transition back to Open.
-//
-// Usage:
-//   let cb = CircuitBreaker::new("llm", CircuitBreakerConfig::default());
-//   let result = cb.execute(|| async { call_llm().await }).await;
+//! Circuit Breaker Pattern — prevents cascade failures from downstream services
+//!
+//! 熔断器模式，防止下游服务故障导致的级联失败。
+//!
+//! # 状态机
+//!
+//! ```text
+//!     ┌─────────┐  failures >= threshold  ┌─────────┐
+//!     │ Closed  │ ───────────────────────► │  Open   │
+//!     │  正常   │                          │  熔断   │
+//!     └─────────┘ ◄───────────────────────  └─────────┘
+//!           ▲                                  │
+//!           │   success >= threshold          │ recovery_timeout
+//!           │                                  │
+//!           │                          ┌───────────────┐
+//!           └───────────────────────── │  HalfOpen    │
+//!                                     │   半开       │
+//!                                     └───────────────┘
+//! ```
+//!
+//! # 状态说明
+//!
+//! - **Closed (正常)**: 请求正常通过。失败计数累加，达到阈值后切换到 Open
+//! - **Open (熔断)**: 快速失败，所有请求立即返回错误。等待 recovery_timeout 后切换到 HalfOpen
+//! - **HalfOpen (半开)**: 测试状态。允许部分请求通过，成功率达到阈值后切换到 Closed
+//!
+//! # 使用示例
+//!
+//! ```rust,ignore
+//! use evif_core::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
+//!
+//! let cb = CircuitBreaker::new("llm", CircuitBreakerConfig::default());
+//! let result = cb.execute(|| async {
+//!     call_external_service().await
+//! }).await;
+//! ```
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;

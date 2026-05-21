@@ -11,7 +11,7 @@ name = "api_tests"
 path = "src/lib.rs"
 
 [dependencies]
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "native-tls", "tokio-native-tls"] }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 axum = { version = "0.7.4", features = ["json", "ws"] }

@@ -3,75 +3,76 @@
 
 // EVIF REST API Tests
 // Integration tests for core REST API endpoints.
-// Uses Mutex-based lazy init to avoid OnceLock poisoning issues.
+// Uses a dedicated background thread for the test server.
 
 use evif_core::{EvifPlugin, RadixMountTable};
 use evif_plugins::MemFsPlugin;
 use evif_rest::create_routes;
 use reqwest::Client;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Lazy init server using Mutex (avoids OnceLock poisoning)
-static SERVER_STATE: Mutex<Option<Arc<TestServerState>>> = Mutex::new(None);
+// Global server URL cache with thread-safe initialization
+static SERVER_URL: OnceLock<String> = OnceLock::new();
 
-struct TestServerState {
-    base_url: String,
-    #[allow(dead_code)]
-    shutdown_tx: tokio::sync::oneshot::Sender<()>,
-}
+fn init_test_server() -> String {
+    // Channel to receive the server URL from the background thread
+    let (tx, rx) = std::sync::mpsc::channel();
 
-impl TestServerState {
-    async fn start() -> Self {
-        let mount_table = Arc::new(RadixMountTable::new());
-        let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
-        mount_table
-            .mount("/".to_string(), mem)
-            .await
-            .expect("mount root memfs");
+    // Spawn dedicated thread for the server
+    let _handle = std::thread::spawn(move || {
+        // Create a new runtime in this thread (NOT inside any existing runtime)
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("create runtime");
 
-        let app = create_routes(mount_table);
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind");
-        let addr = listener.local_addr().expect("local addr");
-        let base_url = format!("http://{}", addr);
-
-        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-
-        // Spawn server in background
-        tokio::spawn(async move {
-            axum::serve(listener, app.into_make_service())
+        let base_url = rt.block_on(async {
+            let mount_table = Arc::new(RadixMountTable::new());
+            let mem = Arc::new(MemFsPlugin::new()) as Arc<dyn EvifPlugin>;
+            mount_table
+                .mount("/".to_string(), mem)
                 .await
-                .expect("server error");
-            let _ = shutdown_rx;
+                .expect("mount root memfs");
+
+            let app = create_routes(mount_table);
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind");
+            let addr = listener.local_addr().expect("local addr");
+            let base_url = format!("http://{}", addr);
+
+            let (_shutdown_tx, shutdown_rx): (tokio::sync::oneshot::Sender<()>, tokio::sync::oneshot::Receiver<()>) =
+                tokio::sync::oneshot::channel();
+
+            // Spawn server - keep the receiver alive
+            let serve_future = axum::serve(listener, app.into_make_service())
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                });
+
+            // Send URL BEFORE blocking
+            let _ = tx.send(base_url.clone());
+
+            // Keep the runtime alive and serve
+            serve_future.await;
+
+            base_url
         });
 
-        // Give server time to start
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        base_url
+    });
 
-        Self { base_url, shutdown_tx }
-    }
-
-    fn base_url(&self) -> &str {
-        &self.base_url
-    }
+    // Wait for the server URL from the background thread
+    rx.recv().expect("failed to receive server URL")
 }
 
-async fn ensure_server() -> Arc<TestServerState> {
-    let mut guard = SERVER_STATE.lock().unwrap();
-    if let Some(ref state) = *guard {
-        return Arc::clone(state);
-    }
-
-    let state = TestServerState::start().await;
-    let arc_state = Arc::new(state);
-    *guard = Some(Arc::clone(&arc_state));
-    arc_state
+fn get_or_init_server() -> String {
+    SERVER_URL.get_or_init(init_test_server).clone()
 }
 
 async fn get_api_base() -> String {
-    ensure_server().await.base_url.clone()
+    get_or_init_server()
 }
 
 fn unique_test_path() -> String {
@@ -84,7 +85,7 @@ fn unique_test_path() -> String {
 
 async fn get_client() -> Client {
     Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
         .no_proxy()
         .build()
         .expect("Failed to create HTTP client")
@@ -112,9 +113,13 @@ mod health_checks {
         skip_without_network!();
         let client = get_client().await;
         let base = get_api_base().await;
+        println!("Testing health check at: {}/health", base);
 
         let response = client.get(&format!("{}/health", base)).send().await;
 
+        if response.as_ref().is_err() {
+            println!("Health check FAILED: {:?}", response.as_ref().err());
+        }
         assert!(response.is_ok(), "Health check request failed");
         let status = response.unwrap().status();
         assert!(

@@ -50,6 +50,7 @@ use evif_plugins::{
 use std::path::Path;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::task::JoinSet;
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
 
@@ -595,6 +596,13 @@ impl EvifServer {
             return Err(RestError::Internal(e));
         }
 
+        // Production mode requires TLS for security
+        if self.config.production_mode && !self.config.is_tls_enabled() {
+            return Err(RestError::Internal(
+                "Production mode requires TLS to be enabled. Set EVIF_TLS_CERT_FILE and EVIF_TLS_KEY_FILE environment variables.".to_string()
+            ));
+        }
+
         let memory_state = create_memory_state_from_env()
             .await
             .map_err(RestError::Internal)?;
@@ -652,43 +660,67 @@ impl EvifServer {
         // Apply CORS configuration
         if self.config.enable_cors {
             use tower_http::cors::{Any, CorsLayer};
+
             let cors = if self.config.cors_origins.is_empty() {
-                // No specific origins configured: allow all
+                // No specific origins configured
                 if self.config.production_mode {
-                    warn!("CORS enabled in production mode with no origin restrictions - consider setting EVIF_CORS_ORIGINS");
+                    // Production mode: block all cross-origin requests
+                    warn!("CORS enabled in production with no origins - blocking all cross-origin requests");
+                    warn!("Set EVIF_CORS_ORIGINS=https://yourdomain.com for production");
+                    CorsLayer::new()
+                        .allow_origin(tower_http::cors::AllowOrigin::predicate(|_, _| false))
+                        .allow_methods([
+                            axum::http::Method::GET,
+                            axum::http::Method::POST,
+                            axum::http::Method::PUT,
+                            axum::http::Method::DELETE,
+                            axum::http::Method::PATCH,
+                        ])
+                        .allow_headers([
+                            axum::http::header::CONTENT_TYPE,
+                            axum::http::header::AUTHORIZATION,
+                            axum::http::HeaderName::from_static("x-api-key"),
+                            axum::http::HeaderName::from_static("x-evif-api-key"),
+                            axum::http::HeaderName::from_static("x-request-id"),
+                            axum::http::HeaderName::from_static("x-correlation-id"),
+                        ])
+                } else {
+                    // Development mode: allow all for easier testing
+                    info!("CORS enabled in development mode - allowing all origins");
+                    CorsLayer::new()
+                        .allow_origin(Any)
+                        .allow_methods([
+                            axum::http::Method::GET,
+                            axum::http::Method::POST,
+                            axum::http::Method::PUT,
+                            axum::http::Method::DELETE,
+                            axum::http::Method::PATCH,
+                        ])
+                        .allow_headers([
+                            axum::http::header::CONTENT_TYPE,
+                            axum::http::header::AUTHORIZATION,
+                            axum::http::HeaderName::from_static("x-api-key"),
+                            axum::http::HeaderName::from_static("x-evif-api-key"),
+                            axum::http::HeaderName::from_static("x-request-id"),
+                            axum::http::HeaderName::from_static("x-correlation-id"),
+                        ])
+                        .expose_headers([
+                            axum::http::HeaderName::from_static("x-request-id"),
+                            axum::http::HeaderName::from_static("x-correlation-id"),
+                        ])
+                        .max_age(std::time::Duration::from_secs(3600))
                 }
-                CorsLayer::new()
-                    .allow_origin(Any)
-                    .allow_methods([
-                        axum::http::Method::GET,
-                        axum::http::Method::POST,
-                        axum::http::Method::PUT,
-                        axum::http::Method::DELETE,
-                        axum::http::Method::PATCH,
-                    ])
-                    .allow_headers([
-                        axum::http::header::CONTENT_TYPE,
-                        axum::http::header::AUTHORIZATION,
-                        axum::http::HeaderName::from_static("x-api-key"),
-                        axum::http::HeaderName::from_static("x-evif-api-key"),
-                        axum::http::HeaderName::from_static("x-request-id"),
-                        axum::http::HeaderName::from_static("x-correlation-id"),
-                    ])
-                    .expose_headers([
-                        axum::http::HeaderName::from_static("x-request-id"),
-                        axum::http::HeaderName::from_static("x-correlation-id"),
-                    ])
-                    .max_age(std::time::Duration::from_secs(3600))
             } else {
-                // Specific origins configured
+                // Specific origins configured - use them
                 let origins: Vec<_> = self
                     .config
                     .cors_origins
                     .iter()
                     .filter_map(|o| o.parse().ok())
                     .collect();
+                info!("CORS enabled with {} configured origins", origins.len());
                 CorsLayer::new()
-                    .allow_origin(origins)
+                    .allow_origin(tower_http::cors::AllowOrigin::from(origins))
                     .allow_methods([
                         axum::http::Method::GET,
                         axum::http::Method::POST,
@@ -711,14 +743,6 @@ impl EvifServer {
                     .max_age(std::time::Duration::from_secs(3600))
             };
             app = app.layer(cors);
-            info!(
-                "CORS enabled (origins: {})",
-                if self.config.cors_origins.is_empty() {
-                    "any".to_string()
-                } else {
-                    self.config.cors_origins.join(", ")
-                }
-            );
         } else {
             info!("CORS disabled");
         }
@@ -756,9 +780,11 @@ impl EvifServer {
 
         // Spawn shutdown signal receiver — sends () to shutdown_tx on SIGTERM/SIGINT
         let shutdown_sender = shutdown_tx.clone();
-        tokio::spawn(async move {
+        let mut server_tasks = JoinSet::new();
+        server_tasks.spawn(async move {
             shutdown_signal.await;
             let _ = shutdown_sender.send(());
+            tracing::info!("Shutdown signal handler completed");
         });
 
         if self.config.is_tls_enabled() {
@@ -867,7 +893,7 @@ impl EvifServer {
         let config_file_path = std::env::var("EVIF_CONFIG_FILE").ok();
         if let Some(ref path) = config_file_path {
             let path_for_spawn = path.clone();
-            tokio::spawn(async move {
+            server_tasks.spawn(async move {
                 use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
                 use std::path::PathBuf;
 
@@ -920,6 +946,33 @@ impl EvifServer {
         // N9: Mark server as ready — all routes registered, listener bound, ready to accept traffic
         mark_server_ready();
         info!("Server marked as ready (GET /api/v1/ready → 200)");
+
+        // N9: Wait for all background tasks to complete with timeout
+        info!("Waiting for {} background tasks to complete...", server_tasks.len());
+        let shutdown_timeout = tokio::time::Duration::from_secs(30);
+        let deadline = tokio::time::Instant::now() + shutdown_timeout;
+
+        while let Ok(Some(result)) = tokio::time::timeout_at(deadline, server_tasks.join_next()).await {
+            match result {
+                Ok(()) => {
+                    tracing::debug!("Background task completed successfully");
+                }
+                Err(e) => {
+                    if e.is_panic() {
+                        tracing::warn!(error = %e, "Background task panicked");
+                    } else {
+                        tracing::warn!(error = %e, "Background task cancelled");
+                    }
+                }
+            }
+        }
+
+        // Abort any remaining tasks
+        let remaining = server_tasks.len();
+        if remaining > 0 {
+            tracing::warn!("Aborting {} remaining background tasks", remaining);
+            server_tasks.abort_all();
+        }
 
         info!("EVIF REST API shutdown complete");
         Ok(())

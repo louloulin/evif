@@ -505,12 +505,13 @@ impl EvifPlugin for TeamsFsPlugin {
             "/Teams" | "Teams" | "/teams" | "teams" => {
                 // 尝试获取真实的 Teams 列表
                 match self.api_list_teams().await {
-                    Ok(teams) => {
+                    Ok(teams) if !teams.is_empty() => {
                         teams.into_iter()
                             .map(|t| Self::make_file_info(&t.display_name, true, 0))
                             .collect()
                     }
-                    Err(_) => {
+                    _ => {
+                        // Fallback to mock data when API fails or returns empty
                         vec![
                             Self::make_file_info("Engineering", true, 0),
                             Self::make_file_info("Product", true, 0),

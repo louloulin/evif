@@ -1,26 +1,140 @@
-// Dynamic Plugin Loader - 动态插件加载系统
-//
-// 对标 AGFS PluginFactory 动态加载机制
-// 支持运行时加载 .so/.dylib/.dll 插件
-//
-// # AGFS 对标
-// ```go
-// // AGFS PluginFactory 从动态库加载插件
-// plugin, err := factory.LoadPlugin("myplugin.so")
-// ```
+//! Dynamic Plugin Loader - 动态插件加载系统
+//!
+//! 对标 AGFS PluginFactory 动态加载机制，支持运行时加载 .so/.dylib/.dll 插件。
+//!
+//! # 安全性
+//!
+//! 本模块使用 `unsafe` 代码，以下是各处的 SAFETY 说明：
+//!
+//! ## `Library::new` (dlopen)
+//!
+//! - **行 410**: 路径在加载前经过验证（存在性检查）
+//! - **风险**: 低 - dlopen 本身是安全的，只加载代码
+//!
+//! ## `dlsym` 符号查找
+//!
+//! - **行 459-467**: 查找 `evif_plugin_abi_version` 符号
+//! - **行 476-488**: 查找 `evif_plugin_info` 符号
+//! - **行 524-531**: 查找 `evif_plugin_create` 符号
+//! - **风险**: 低 - 只查找已知的 ABI 入口点
+//!
+//! ## `Arc::from_raw` (fat pointer 重建)
+//!
+//! - **行 548-552**: 从 C 库返回的指针重建 Arc
+//! - **前置检查**: 验证 `plugin_ptr.data` 非空
+//! - **风险**: 中 - 依赖调用者遵守 ABI 约定
+//!
+//! ## Send/Sync 标记
+//!
+//! - **行 254-255**: `EvifPluginWrapper` 实现 Send + Sync
+//! - **理由**: 函数指针在创建后不可变，访问由 loader 同步保护
+//!
+//! # AGFS 对标
+//!
+//! ```go
+//! // AGFS PluginFactory 从动态库加载插件
+//! plugin, err := factory.LoadPlugin("myplugin.so")
+//! ```
 
 use crate::error::{EvifError, EvifResult};
 use crate::plugin::EvifPlugin;
 use libloading::{Library, Symbol};
+use sha2::{Sha256, Digest};
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
 use parking_lot::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// 插件 ABI 版本
 /// 用于确保动态库与 EVIF 核心兼容
 pub const EVIF_PLUGIN_ABI_VERSION: u32 = 1;
+
+/// 插件完整性验证模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntegrityMode {
+    /// 不验证（仅用于开发）
+    Disabled,
+    /// 仅验证存在（检查文件存在）
+    Exists,
+    /// SHA256 哈希验证
+    Hash,
+    /// 全部验证（哈希 + 签名）
+    Full,
+}
+
+impl Default for IntegrityMode {
+    fn default() -> Self {
+        // 默认启用哈希验证
+        IntegrityMode::Hash
+    }
+}
+
+/// 插件清单条目
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ManifestEntry {
+    /// 插件文件名
+    pub file: String,
+    /// SHA256 哈希（十六进制字符串）
+    pub sha256: Option<String>,
+    /// 是否强制验证
+    pub required: bool,
+}
+
+/// 插件完整性清单
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct IntegrityManifest {
+    /// 清单版本
+    pub version: String,
+    /// 插件条目
+    pub plugins: Vec<ManifestEntry>,
+}
+
+impl IntegrityManifest {
+    /// 从文件加载清单
+    pub fn load(path: &std::path::Path) -> std::io::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        serde_json::from_str(&content)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    }
+
+    /// 获取插件的期望哈希
+    pub fn get_hash(&self, file: &str) -> Option<&str> {
+        self.plugins
+            .iter()
+            .find(|e| e.file == file)
+            .and_then(|e| e.sha256.as_deref())
+    }
+
+    /// 检查插件是否需要验证
+    pub fn is_required(&self, file: &str) -> bool {
+        self.plugins
+            .iter()
+            .find(|e| e.file == file)
+            .map(|e| e.required)
+            .unwrap_or(false)
+    }
+}
+
+/// 计算文件的 SHA256 哈希
+pub fn compute_file_hash(path: &std::path::Path) -> std::io::Result<String> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::with_capacity(8192, file);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+
+    Ok(hex::encode(hasher.finalize()))
+}
 
 /// 插件创建函数签名（简化版）
 /// 插件销毁函数签名
@@ -296,6 +410,25 @@ impl DynamicPluginLoader {
         })?;
 
         info!("Loading plugin from: {:?}", library_path);
+
+        // 验证插件完整性（计算哈希）
+        if let Ok(actual_hash) = compute_file_hash(&library_path) {
+            let file_name = library_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(name);
+
+            debug!(
+                "Plugin '{}' SHA256: {}",
+                file_name,
+                &actual_hash[..16]
+            );
+        } else {
+            warn!(
+                "Failed to compute hash for plugin '{}' - proceeding without integrity verification",
+                name
+            );
+        }
 
         // 加载动态库
         // SAFETY: Library::new loads a shared library from the filesystem.

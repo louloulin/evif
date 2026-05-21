@@ -1,8 +1,38 @@
-// EVIF Plugin Trait - 核心插件接口
-//
-// 对标 AGFS FileSystem 接口
-// 所有插件实现此 trait 即可挂载到 EVIF 系统
-// Phase 8: 增加 Validate/GetReadme/GetConfigParams（对标 AGFS ServicePlugin）
+//! EVIF Plugin Trait - 核心插件接口
+//!
+//! 对标 AGFS FileSystem 接口，所有插件实现此 trait 即可挂载到 EVIF 系统。
+//!
+//! # 插件架构
+//!
+//! EVIF 使用 VFS (Virtual File System) 架构：
+//! - 路径通过 Radix Tree 路由到对应插件
+//! - 每个插件实现 `EvifPlugin` trait
+//! - 支持动态插件加载 (dlopen/wasm)
+//!
+//! # 实现插件
+//!
+//! ```rust,ignore
+//! use async_trait::async_trait;
+//! use evif_core::{EvifPlugin, EvifResult, FileInfo};
+//!
+//! struct MyPlugin;
+//!
+//! #[async_trait]
+//! impl EvifPlugin for MyPlugin {
+//!     fn name(&self) -> &str { "my_plugin" }
+//!
+//!     async fn readdir(&self, path: &str) -> EvifResult<Vec<FileInfo>> {
+//!         Ok(vec![])
+//!     }
+//!     // ... 实现其他方法
+//! }
+//! ```
+//!
+//! # Phase 8 扩展
+//!
+//! - `Validate`: 插件验证
+//! - `GetReadme`: 插件文档
+//! - `GetConfigParams`: 配置参数元数据
 
 use crate::error::{EvifError, EvifResult};
 use async_trait::async_trait;

@@ -138,9 +138,9 @@ impl Drop for PooledPlugin {
             // 尝试获取池的引用并异步归还
             if let Some(pool) = self.pool.upgrade() {
                 let pool = Arc::clone(&pool);
-                tokio::spawn(async move {
-                    pool.return_plugin().await;
-                });
+                // 需要重新创建池化插件，因为 Drop 不能移动数据
+                // 这里标记为准备归还，acquire 时检查并复用
+                pool.mark_for_return();
             }
         }
     }
@@ -162,6 +162,8 @@ pub struct PluginPool {
     acquire_semaphore: Semaphore,
     /// 池是否已关闭
     closed: AtomicUsize,
+    /// 归还计数（用于在 Drop 时增量归还）
+    return_count: AtomicUsize,
 }
 
 impl std::fmt::Debug for PluginPool {
@@ -194,6 +196,7 @@ impl PluginPool {
             total_count: AtomicUsize::new(0),
             acquire_semaphore: Semaphore::new(max_total),
             closed: AtomicUsize::new(0),
+            return_count: AtomicUsize::new(0),
         };
 
         tracing::info!(
@@ -210,6 +213,50 @@ impl PluginPool {
     /// 创建新的插件池（使用默认配置）
     pub fn with_default_config(config: WasmPluginConfig) -> EvifResult<Self> {
         Self::new(config, PoolConfig::default())
+    }
+
+    /// 标记插件准备归还（从 Drop 调用）
+    pub fn mark_for_return(&self) {
+        self.return_count.fetch_add(1, Ordering::Relaxed);
+        self.active_count.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    /// 处理待归还的插件（在 acquire 时调用）
+    async fn process_returns(&self) {
+        let returns = self.return_count.load(Ordering::Relaxed);
+        if returns == 0 {
+            return;
+        }
+
+        let mut idle = self.idle.lock().await;
+        let current_idle = idle.len();
+
+        // 如果空闲槽位未满，尝试创建新的空闲实例
+        if current_idle < self.pool_config.max_idle {
+            // 创建新实例来替换归还的数量
+            let to_create = std::cmp::min(returns, self.pool_config.max_idle - current_idle);
+            for _ in 0..to_create {
+                match self.create_plugin().await {
+                    Ok(plugin) => {
+                        idle.push(PooledPlugin::new(plugin, self));
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create replacement plugin: {}", e);
+                        break;
+                    }
+                }
+            }
+            self.return_count.fetch_sub(to_create, Ordering::Relaxed);
+        } else {
+            // 空闲池已满，将所有归还计数转为销毁
+            self.return_count.store(0, Ordering::Relaxed);
+            self.total_count.fetch_sub(returns, Ordering::Relaxed);
+            tracing::debug!(
+                "Plugin pool '{}': destroyed {} plugins (idle pool full)",
+                self.config.name,
+                returns
+            );
+        }
     }
 
     /// 预热池（创建最小空闲实例）
@@ -243,10 +290,13 @@ impl PluginPool {
     ///
     /// # 返回
     /// 池化插件实例
-    pub async fn acquire(&self) -> PoolResult<PooledPlugin> {
+    pub async fn acquire(self: &Arc<Self>) -> PoolResult<PooledPlugin> {
         if self.is_closed() {
             return Err(PoolError::PoolClosed);
         }
+
+        // 处理待归还的插件，尝试补充空闲池
+        self.process_returns().await;
 
         // 等待获取许可
         let timeout_duration = Duration::from_millis(self.pool_config.acquire_timeout_ms);
@@ -281,8 +331,8 @@ impl PluginPool {
                 self.total_count.fetch_add(1, Ordering::Relaxed);
                 self.active_count.fetch_add(1, Ordering::Relaxed);
                 drop(idle);
-                // 使用临时池引用
-                Ok(PooledPlugin::new(plugin, &Arc::new(PluginPool::dummy())))
+                // 使用实际池引用
+                Ok(PooledPlugin::new(plugin, self))
             }
             Err(e) => {
                 drop(idle);

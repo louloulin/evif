@@ -1,13 +1,44 @@
-// EVIF 监控和指标系统
+//! EVIF 监控和指标系统
+//!
+//! 提供性能监控、指标收集和健康检查功能。
+//!
+//! # 性能监控
+//!
+//! - `MetricsCollector`: 通用指标收集器 (Counter, Gauge, Histogram)
+//! - `PerformanceMonitor`: 专门用于请求监控
+//! - `SystemCollector`: 系统资源监控 (CPU, Memory)
+//!
+//! # 使用示例
+//!
+//! ```rust,ignore
+//! use evif_core::monitoring::{MetricsCollector, PerformanceMonitor};
+//!
+//! let monitor = PerformanceMonitor::new();
+//!
+//! // 记录请求
+//! monitor.record_request("read_file").await;
+//!
+//! // 记录延迟
+//! monitor.record_latency("read_file", 45.2).await;
+//!
+//! // 获取 Prometheus 格式指标
+//! let prometheus_output = monitor.collector().export_prometheus().await;
+//! ```
+//!
+//! # 环境变量
+//!
+//! | Variable | Description |
+//! |----------|-------------|
+//! | EVIF_METRICS_ENABLED | 启用指标收集 |
+
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use sysinfo::System;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex as AsyncMutex, RwLock};
 
 /// 系统信息采集器（延迟初始化以避免性能开销）
 struct SystemCollector {
@@ -99,8 +130,8 @@ pub struct MetricsCollector {
     start_time: Instant,
     counters: Arc<RwLock<HashMap<String, u64>>>,
     gauges: Arc<RwLock<HashMap<String, f64>>>,
-    /// 系统信息采集器（使用 RefCell 实现内部可变性）
-    system_collector: RefCell<SystemCollector>,
+    /// 系统信息采集器（使用 AsyncMutex 实现线程安全）
+    system_collector: AsyncMutex<SystemCollector>,
 }
 
 impl MetricsCollector {
@@ -110,7 +141,7 @@ impl MetricsCollector {
             start_time: Instant::now(),
             counters: Arc::new(RwLock::new(HashMap::new())),
             gauges: Arc::new(RwLock::new(HashMap::new())),
-            system_collector: RefCell::new(SystemCollector::new()),
+            system_collector: AsyncMutex::new(SystemCollector::new()),
         }
     }
 
@@ -156,7 +187,7 @@ impl MetricsCollector {
 
         // 刷新系统信息并获取数据
         let (memory_bytes, cpu_usage) = {
-            let mut collector = self.system_collector.borrow_mut();
+            let mut collector = self.system_collector.lock().await;
             collector.refresh();
             (collector.memory_used(), collector.cpu_usage())
         };
@@ -302,6 +333,45 @@ impl PerformanceMonitor {
 impl Default for PerformanceMonitor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// 操作计时器 - 用于测量操作延迟
+///
+/// # 使用示例
+///
+/// ```rust,ignore
+/// use evif_core::monitoring::OperationTimer;
+///
+/// let mut timer = OperationTimer::start();
+/// // ... 执行操作 ...
+/// let elapsed = timer.elapsed_ms(); // 获取毫秒
+/// ```
+pub struct OperationTimer {
+    start: Instant,
+}
+
+impl OperationTimer {
+    /// 创建并启动计时器
+    pub fn start() -> Self {
+        Self {
+            start: Instant::now(),
+        }
+    }
+
+    /// 获取经过的时间（毫秒）
+    pub fn elapsed_ms(&self) -> f64 {
+        self.start.elapsed().as_secs_f64() * 1000.0
+    }
+
+    /// 获取经过的时间（微秒）
+    pub fn elapsed_us(&self) -> u64 {
+        self.start.elapsed().as_micros() as u64
+    }
+
+    /// 获取经过的时间（纳秒）
+    pub fn elapsed_ns(&self) -> u64 {
+        self.start.elapsed().as_nanos() as u64
     }
 }
 

@@ -180,11 +180,13 @@ impl GitHubFs {
     /// 获取认证头
     fn auth_headers(&self) -> reqwest::header::HeaderMap {
         let mut headers = reqwest::header::HeaderMap::new();
+        // Safe: these are constant strings we control, parsing will always succeed
         headers.insert(
             reqwest::header::ACCEPT,
             "application/vnd.github.v3+json".parse().unwrap(),
         );
         if let Some(token) = &self.token {
+            // Safe: Bearer token format is well-defined ASCII
             headers.insert(
                 reqwest::header::AUTHORIZATION,
                 format!("Bearer {}", token).parse().unwrap(),

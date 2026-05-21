@@ -42,6 +42,8 @@ pub struct AppState {
     pub tenant_state: TenantState,
     /// N9: 就绪探针标志 — 由 server.rs 在所有初始化完成后设置为 true
     pub is_ready: Arc<AtomicBool>,
+    /// MVP 7.1: MCP 服务器状态
+    pub mcp_state: Option<Arc<crate::mcp_handlers::McpHttpState>>,
 }
 
 impl AppState {

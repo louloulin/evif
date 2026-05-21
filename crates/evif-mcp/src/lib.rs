@@ -1,6 +1,41 @@
-// EVIF MCP Server - Model Context Protocol 服务器实现
-//
-// 提供17个工具对等AGFS,支持Claude Desktop和其他MCP客户端
+//! EVIF MCP Server - Model Context Protocol 服务器实现
+//!
+//! 提供 17+ 工具，支持 Claude Desktop 和其他 MCP 客户端。
+//!
+//! # MCP 工具
+//!
+//! | 工具 | 说明 | Token 优化 |
+//! |------|------|------------|
+//! | `evif_cat` | 读取文件内容 | `max_lines`, `mode` |
+//! | `evif_ls` | 列出目录 | - |
+//! | `evif_search` | 全文搜索 | `limit` |
+//! | `evif_memory_search` | 记忆向量搜索 | `compact` |
+//! | `evif_write` | 写入文件 | - |
+//! | `evif_mkdir` | 创建目录 | - |
+//! | `evif_cp` | 复制文件/目录 | - |
+//! | `evif_mv` | 移动文件/目录 | - |
+//! | `evif_rm` | 删除文件/目录 | - |
+//!
+//! # Token 优化
+//!
+//! 为了减少 LLM token 消耗，默认应用以下优化：
+//!
+//! - `evif_cat`: 最多返回 100 行 (`max_lines=100`)
+//! - `evif_search`: 最多返回 10 个结果 (`limit=10`)
+//! - `evif_memory_search`: 紧凑输出模式 (`compact=true`)
+//!
+//! # 配置
+//!
+//! ```json
+//! {
+//!   "mcpServers": {
+//!     "evif": {
+//!       "command": "evif",
+//!       "args": ["mcp", "serve"]
+//!     }
+////!   }
+// //! }
+//! ```
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};

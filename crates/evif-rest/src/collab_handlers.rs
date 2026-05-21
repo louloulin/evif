@@ -499,3 +499,235 @@ impl CollabHandlers {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_collab_state_default() {
+        let state = CollabState::default();
+        assert!(state.shares.try_read().is_ok());
+        assert!(state.comments.try_read().is_ok());
+        assert!(state.activities.try_read().is_ok());
+        assert!(state.permissions.try_read().is_ok());
+    }
+
+    #[test]
+    fn test_share_record_serialization() {
+        let record = ShareRecord {
+            id: "share-1".to_string(),
+            file_id: "file-1".to_string(),
+            file_path: "/path/to/file".to_string(),
+            file_name: "file.txt".to_string(),
+            access_url: "https://example.com/share/abc".to_string(),
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            expires_at: Some("2024-12-31T23:59:59Z".to_string()),
+            permissions: vec![],
+            access_count: 5,
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("share-1"));
+        assert!(json.contains("file-1"));
+        assert!(json.contains("file.txt"));
+    }
+
+    #[test]
+    fn test_share_permission_record() {
+        let record = SharePermissionRecord {
+            user_id: "user-1".to_string(),
+            user_name: "John Doe".to_string(),
+            permissions: vec!["read".to_string(), "write".to_string()],
+        };
+
+        assert_eq!(record.user_id, "user-1");
+        assert_eq!(record.permissions.len(), 2);
+    }
+
+    #[test]
+    fn test_comment_record_serialization() {
+        let record = CommentRecord {
+            id: "comment-1".to_string(),
+            file_id: "file-1".to_string(),
+            file_path: "/path/to/file".to_string(),
+            content: "This is a comment".to_string(),
+            author: "John Doe".to_string(),
+            author_id: "user-1".to_string(),
+            line_number: Some(42),
+            column: Some(10),
+            reply_to: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: None,
+            resolved: false,
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("comment-1"));
+        assert!(json.contains("This is a comment"));
+        assert!(json.contains("42")); // line_number
+    }
+
+    #[test]
+    fn test_activity_record_serialization() {
+        let record = ActivityRecord {
+            id: "activity-1".to_string(),
+            activity_type: "edit".to_string(),
+            file_id: "file-1".to_string(),
+            file_path: "/path/to/file".to_string(),
+            file_name: "file.txt".to_string(),
+            description: "Edited file.txt".to_string(),
+            user_id: "user-1".to_string(),
+            user_name: "John Doe".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("activity-1"));
+        assert!(json.contains("edit"));
+    }
+
+    #[test]
+    fn test_create_share_request_deserialization() {
+        let json = r#"{
+            "file_id": "file-1",
+            "file_path": "/path/to/file",
+            "file_name": "file.txt",
+            "access_type": "public",
+            "permissions": [],
+            "expires_at": "2024-12-31T23:59:59Z"
+        }"#;
+
+        let request: CreateShareRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.file_id, "file-1");
+        assert_eq!(request.file_path, "/path/to/file");
+        assert_eq!(request.access_type, "public");
+    }
+
+    #[test]
+    fn test_create_share_request_defaults() {
+        let json = r#"{
+            "file_id": "file-1",
+            "file_path": "/path/to/file",
+            "file_name": "file.txt"
+        }"#;
+
+        let request: CreateShareRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.file_id, "file-1");
+        assert_eq!(request.access_type, "");
+        assert!(request.expires_at.is_none());
+    }
+
+    #[test]
+    fn test_share_response_serialization() {
+        let response = ShareResponse {
+            id: "share-1".to_string(),
+            access_url: "https://example.com/share/abc".to_string(),
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            expires_at: Some("2024-12-31T23:59:59Z".to_string()),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("share-1"));
+        assert!(json.contains("https://example.com"));
+    }
+
+    #[test]
+    fn test_list_shares_response_serialization() {
+        let response = ListSharesResponse {
+            shares: vec![ShareListItem {
+                id: "share-1".to_string(),
+                file_id: "file-1".to_string(),
+                file_name: "file.txt".to_string(),
+                file_path: "/path/to/file".to_string(),
+                created_by: "user-1".to_string(),
+                created_at: "2024-01-01T00:00:00Z".to_string(),
+                expires_at: None,
+                access_url: "https://example.com/share/abc".to_string(),
+                permissions: vec![],
+                access_count: 5,
+            }],
+            total: 1,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("total"));
+        assert!(json.contains("1"));
+    }
+
+    #[test]
+    fn test_comment_list_item_serialization() {
+        let item = CommentListItem {
+            id: "comment-1".to_string(),
+            file_id: "file-1".to_string(),
+            file_path: "/path/to/file".to_string(),
+            content: "This is a comment".to_string(),
+            author: "John Doe".to_string(),
+            author_id: "user-1".to_string(),
+            line_number: Some(42),
+            column: Some(10),
+            reply_to: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: None,
+            resolved: false,
+        };
+
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("comment-1"));
+    }
+
+    #[test]
+    fn test_activity_list_item_serialization() {
+        let item = ActivityListItem {
+            id: "activity-1".to_string(),
+            r#type: "edit".to_string(),
+            file_id: "file-1".to_string(),
+            file_path: "/path/to/file".to_string(),
+            file_name: "file.txt".to_string(),
+            description: "Edited file.txt".to_string(),
+            user_id: "user-1".to_string(),
+            user_name: "John Doe".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("activity-1"));
+        assert!(json.contains("edit"));
+    }
+
+    #[test]
+    fn test_user_item_serialization() {
+        let user = UserItem {
+            id: "user-1".to_string(),
+            name: "John Doe".to_string(),
+            email: Some("john@example.com".to_string()),
+        };
+
+        let json = serde_json::to_string(&user).unwrap();
+        assert!(json.contains("user-1"));
+        assert!(json.contains("John Doe"));
+    }
+
+    #[test]
+    fn test_users_response_serialization() {
+        let response = UsersResponse {
+            users: vec![
+                UserItem {
+                    id: "user-1".to_string(),
+                    name: "John Doe".to_string(),
+                    email: None,
+                },
+                UserItem {
+                    id: "user-2".to_string(),
+                    name: "Jane Doe".to_string(),
+                    email: Some("jane@example.com".to_string()),
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("users"));
+        assert!(json.contains("John Doe"));
+        assert!(json.contains("Jane Doe"));
+    }
+}

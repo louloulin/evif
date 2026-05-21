@@ -1,6 +1,43 @@
-// EVIF Plugins - AGFS 插件实现
-//
-// 完全对标 AGFS 的插件集合
+//! EVIF Plugins - AGFS 插件实现
+//!
+//! 完全对标 AGFS 的插件集合，提供各种文件系统实现。
+//!
+//! # 核心插件
+//!
+//! | 插件 | 说明 | 优先级 |
+//! |------|------|--------|
+//! | `contextfs` | L0/L1/L2 三层上下文 | P0 |
+//! | `skillfs` | SKILL.md 技能发现 | P0 |
+//! | `pipefs` | 进程间通信管道 | P0 |
+//! | `memfs` | 内存文件系统 | P1 |
+//! | `vectorfs` | 向量搜索 | P1 |
+//!
+//! # 存储插件
+//!
+//! | 插件 | 说明 |
+//! |------|------|
+//! | `localfs` | 本地文件系统 |
+//! | `kvfs` | Key-Value 存储 |
+//! | `sqlfs` | SQL 数据库 (SQLite/PostgreSQL) |
+//! | `s3fs` | S3 兼容对象存储 |
+//!
+//! # 云存储插件
+//!
+//! | 插件 | 说明 |
+//! |------|------|
+//! | `s3fs_opendal` | OpenDAL S3 实现 |
+//! | `azureblobfs` | Azure Blob Storage |
+//! | `gcsfs` | Google Cloud Storage |
+//! | `aliyunossfs` | 阿里云 OSS |
+//!
+//! # 使用示例
+//!
+//! ```rust,ignore
+//! use evif_plugins::{contextfs::ContextFs, skillfs::SkillFs};
+//!
+//! let ctx_fs = ContextFs::new();
+//! let skill_fs = SkillFs::new();
+//! ```
 
 pub mod catalog;
 pub mod contextfs;

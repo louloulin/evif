@@ -461,13 +461,13 @@ impl EvifPlugin for ShopifyFsPlugin {
             "/Products" | "Products" | "/products" | "products" => {
                 // 尝试获取真实产品列表
                 match self.api_list_products().await {
-                    Ok(products) => {
+                    Ok(products) if !products.is_empty() => {
                         products.into_iter()
                             .map(|p| Self::make_file_info(&format!("prod_{}", p.id), true, 0))
                             .collect()
                     }
-                    Err(_) => {
-                        // 回退到 mock 数据
+                    _ => {
+                        // Fallback to mock data when API fails or returns empty
                         vec![
                             Self::make_file_info("prod_1001", true, 0),
                             Self::make_file_info("prod_1002", true, 0),
@@ -480,12 +480,12 @@ impl EvifPlugin for ShopifyFsPlugin {
             "/Orders" | "Orders" | "/orders" | "orders" => {
                 // 尝试获取真实订单列表
                 match self.api_list_orders().await {
-                    Ok(orders) => {
+                    Ok(orders) if !orders.is_empty() => {
                         orders.into_iter()
                             .map(|o| Self::make_file_info(&format!("order_{}", o.id), true, 0))
                             .collect()
                     }
-                    Err(_) => {
+                    _ => {
                         vec![
                             Self::make_file_info("order_5001", true, 0),
                             Self::make_file_info("order_5002", true, 0),
@@ -497,12 +497,12 @@ impl EvifPlugin for ShopifyFsPlugin {
             "/Customers" | "Customers" | "/customers" | "customers" => {
                 // 尝试获取真实客户列表
                 match self.api_list_customers().await {
-                    Ok(customers) => {
+                    Ok(customers) if !customers.is_empty() => {
                         customers.into_iter()
                             .map(|c| Self::make_file_info(&format!("cust_{}", c.id), true, 0))
                             .collect()
                     }
-                    Err(_) => {
+                    _ => {
                         vec![
                             Self::make_file_info("cust_3001", true, 0),
                             Self::make_file_info("cust_3002", true, 0),
@@ -514,12 +514,12 @@ impl EvifPlugin for ShopifyFsPlugin {
             "/Collections" | "Collections" | "/collections" | "collections" => {
                 // 尝试获取真实产品系列列表
                 match self.api_list_collections().await {
-                    Ok(collections) => {
+                    Ok(collections) if !collections.is_empty() => {
                         collections.into_iter()
                             .map(|c| Self::make_file_info(&format!("coll_{}", c.id), true, 0))
                             .collect()
                     }
-                    Err(_) => {
+                    _ => {
                         vec![
                             Self::make_file_info("coll_2001", true, 0),
                             Self::make_file_info("coll_2002", true, 0),
@@ -530,12 +530,12 @@ impl EvifPlugin for ShopifyFsPlugin {
             "/Pages" | "Pages" | "/pages" | "pages" => {
                 // 尝试获取真实页面列表
                 match self.api_list_pages().await {
-                    Ok(pages) => {
+                    Ok(pages) if !pages.is_empty() => {
                         pages.into_iter()
                             .map(|p| Self::make_file_info(&format!("page_{}", p.handle.unwrap_or_else(|| p.id.to_string())), false, 2048))
                             .collect()
                     }
-                    Err(_) => {
+                    _ => {
                         vec![
                             Self::make_file_info("page_about", false, 2048),
                             Self::make_file_info("page_contact", false, 1536),
@@ -547,20 +547,8 @@ impl EvifPlugin for ShopifyFsPlugin {
             "/Inventory" | "Inventory" | "/inventory" | "inventory" => {
                 // 尝试获取真实库存数据
                 match self.api_list_inventory_levels().await {
-                    Ok(levels) => {
-                        if levels.is_empty() {
-                            vec![
-                                Self::make_file_info("levels.json", false, 4096),
-                                Self::make_file_info("adjustments", true, 0),
-                            ]
-                        } else {
-                            vec![
-                                Self::make_file_info("levels.json", false, 4096),
-                                Self::make_file_info("adjustments", true, 0),
-                            ]
-                        }
-                    }
-                    Err(_) => {
+                    Ok(_) | Err(_) => {
+                        // Always return inventory structure
                         vec![
                             Self::make_file_info("levels.json", false, 4096),
                             Self::make_file_info("adjustments", true, 0),

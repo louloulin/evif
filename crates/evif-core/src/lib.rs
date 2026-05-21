@@ -1,7 +1,24 @@
-// EVIF Core - Everything Is a File System
-//
-// 核心文件系统抽象，完全对标 AGFS
-// 使用 Radix Tree 进行插件路由，无图结构依赖
+//! EVIF Core - Everything Is a File System
+//!
+//! 核心文件系统抽象，提供 VFS 风格的插件系统。
+//! 使用 Radix Tree 进行插件路由，支持动态插件加载。
+//!
+//! # 核心概念
+//!
+//! - **Plugin**: 文件系统插件，实现 `EvifPlugin` trait
+//! - **Mount Table**: 插件挂载表，通过 Radix Tree 路由路径
+//! - **Handle**: 文件句柄，用于读写操作
+//! - **Circuit Breaker**: 熔断器，防止级联故障
+//!
+//! # 示例
+//!
+//! ```rust,ignore
+//! use evif_core::{EvifServer, RadixMountTable};
+//!
+//! let mount_table = RadixMountTable::new();
+//! mount_table.mount("memory", my_plugin).unwrap();
+//! let server = EvifServer::new(mount_table).await?;
+//! ```
 
 pub mod acl;
 pub mod agent_tracking;
@@ -70,7 +87,8 @@ pub use file_monitor::{
 pub use handle_manager::GlobalHandleManager;
 pub use memory_handle::MemoryFileHandle;
 pub use monitoring::{
-    HealthStatus, MetricsCollector, PerformanceMonitor, PluginHealth, PluginStats, SystemStats,
+    HealthStatus, MetricsCollector, OperationTimer, PerformanceMonitor, PluginHealth, PluginStats,
+    SystemStats,
 };
 pub use mount_table::MountTable;
 pub use plugin::{

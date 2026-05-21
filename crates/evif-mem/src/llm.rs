@@ -8,6 +8,58 @@ use crate::models::MemoryItem;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "cb")]
+mod circuit_breaker_integration {
+    //! Circuit breaker integration for LLM calls
+    //!
+    //! Wraps LLM HTTP calls with circuit breaker to prevent cascade failures.
+    //! Enable with `cb` feature.
+
+    use crate::error::MemError;
+    use evif_core::circuit_breaker::{get_circuit_breaker, CircuitBreakerError};
+
+    /// Get a circuit breaker for LLM calls
+    pub fn get_llm_circuit_breaker(name: &str) -> std::sync::Arc<evif_core::circuit_breaker::CircuitBreaker> {
+        get_circuit_breaker(name)
+    }
+
+    /// Map circuit breaker error to MemError
+    pub fn map_cb_error(e: CircuitBreakerError) -> MemError {
+        match e {
+            CircuitBreakerError::Open { name } => {
+                MemError::Llm(format!("Circuit breaker OPEN for '{}' - downstream unavailable", name))
+            }
+            CircuitBreakerError::HalfOpenBusy { name } => {
+                MemError::Llm(format!("Circuit breaker HALF-OPEN exhausted for '{}'", name))
+            }
+            CircuitBreakerError::DownstreamError { name, source } => {
+                MemError::Llm(format!("Downstream error in '{}': {}", name, source))
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "cb"))]
+mod circuit_breaker_integration {
+    //! Circuit breaker integration disabled
+
+    use crate::error::MemError;
+
+    /// Stub when circuit breaker is disabled
+    #[allow(dead_code)]
+    pub fn get_llm_circuit_breaker(_name: &str) -> () {
+        ()
+    }
+
+    /// Stub when circuit breaker is disabled
+    #[allow(dead_code)]
+    pub fn map_cb_error(_e: ()) -> MemError {
+        MemError::Llm("Circuit breaker not enabled".to_string())
+    }
+}
+
+pub use circuit_breaker_integration::{get_llm_circuit_breaker, map_cb_error};
+
 /// LLM Client Trait
 ///
 /// Abstract interface for LLM operations needed by the memory platform.

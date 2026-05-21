@@ -2,10 +2,12 @@
 
 use crate::{
     batch_handlers, collab_handlers, context_handlers, encryption_handlers,
-    graphql_handlers, handle_handlers, handlers, memory_handlers, metrics_handlers, sync_handlers,
-    tenant_handlers, wasm_handlers, ws_handlers, AuthMiddleware, CompatFsHandlers, ContextState,
-    EncryptionState, GraphqlAppContext, HandleState, RestAuthState, SyncState, TenantState,
+    graphql_handlers, handle_handlers, handlers, memory_handlers, metrics_handlers,
+    mcp_handlers, sync_handlers, tenant_handlers, wasm_handlers, ws_handlers,
+    AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState, GraphqlAppContext,
+    HandleState, RestAuthState, SyncState, TenantState,
 };
+use crate::mcp_handlers::McpServerConfig;
 use axum::extract::DefaultBodyLimit;
 use axum::{middleware, routing, Router};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
@@ -192,6 +194,7 @@ fn build_routes(
         cross_fs_copy_manager,
         tenant_state: tenant_state.clone(),
         is_ready: get_ready_flag(),
+        mcp_state: None, // MVP 7.1: MCP 通过独立路由提供
     };
     let traffic_stats = app_state.traffic_stats.clone();
     let _app_state_for_return = app_state.clone();
@@ -505,6 +508,28 @@ fn build_routes(
             crate::middleware::TrafficMetricsMiddleware,
         ));
 
+    // ============== MCP HTTP 桥接 (MVP 7.1) ==============
+    // 创建 MCP 状态
+    let mcp_state = std::sync::Arc::new(crate::mcp_handlers::McpHttpState {
+        server: evif_mcp::EvifMcpServer::new(McpServerConfig::default()),
+    });
+
+    // MCP 路由 (独立路由)
+    let mcp_routes = Router::new()
+        .route(
+            "/api/v1/mcp/tools",
+            axum::routing::get(mcp_handlers::list_tools),
+        )
+        .route(
+            "/api/v1/mcp/call",
+            axum::routing::post(mcp_handlers::call_tool),
+        )
+        .route(
+            "/api/v1/mcp/health",
+            axum::routing::get(mcp_handlers::health),
+        )
+        .layer(axum::extract::Extension(mcp_state.clone()));
+
     // 创建 WebSocket 状态
     let ws_state = ws_handlers::WebSocketState {
         mount_table: mount_table.clone(),
@@ -789,6 +814,7 @@ fn build_routes(
         .merge(sync_routes)
         .merge(graphql_routes)
         .merge(memory_routes)
+        .merge(mcp_routes)
         .layer(DefaultBodyLimit::max(max_body_bytes_from_env()))
 }
 

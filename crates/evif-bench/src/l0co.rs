@@ -302,3 +302,63 @@ async fn l0co_abstract_generation() {
         "Summarize endpoint should not return server error"
     );
 }
+
+/// Benchmark metadata for L0CO benchmark suite
+pub fn benchmarks() -> Vec<BenchmarkInfo> {
+    vec![
+        BenchmarkInfo {
+            name: "l0co_context_window".to_string(),
+            category: "context".to_string(),
+            description: "Large context window handling".to_string(),
+        },
+        BenchmarkInfo {
+            name: "l0co_summarization".to_string(),
+            category: "summarization".to_string(),
+            description: "Context summarization".to_string(),
+        },
+        BenchmarkInfo {
+            name: "l0co_retrieval".to_string(),
+            category: "retrieval".to_string(),
+            description: "Information retrieval from context".to_string(),
+        },
+    ]
+}
+
+/// Benchmark information structure
+#[derive(Debug, Clone)]
+pub struct BenchmarkInfo {
+    pub name: String,
+    pub category: String,
+    pub description: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_benchmark_info_creation() {
+        let info = BenchmarkInfo {
+            name: "test".to_string(),
+            category: "unit".to_string(),
+            description: "Test benchmark".to_string(),
+        };
+        assert_eq!(info.name, "test");
+        assert_eq!(info.category, "unit");
+    }
+
+    #[test]
+    fn test_benchmarks_returns_expected_count() {
+        let benchmarks = benchmarks();
+        assert_eq!(benchmarks.len(), 3);
+    }
+
+    #[test]
+    fn test_benchmarks_have_valid_names() {
+        let benchmarks = benchmarks();
+        for bench in benchmarks {
+            assert!(!bench.name.is_empty());
+            assert!(!bench.category.is_empty());
+        }
+    }
+}

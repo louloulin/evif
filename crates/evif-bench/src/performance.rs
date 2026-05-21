@@ -221,3 +221,68 @@ async fn performance_multi_layer_read_latency() {
     assert!(p50 <= 20, "P50 latency should be <= 20ms, got {}ms", p50);
     assert!(p99 <= 100, "P99 latency should be <= 100ms, got {}ms", p99);
 }
+
+/// Benchmark metadata for Performance benchmark suite
+pub fn benchmarks() -> Vec<BenchmarkInfo> {
+    vec![
+        BenchmarkInfo {
+            name: "performance_throughput".to_string(),
+            category: "throughput".to_string(),
+            description: "Request throughput (req/s)".to_string(),
+        },
+        BenchmarkInfo {
+            name: "performance_single_request".to_string(),
+            category: "latency".to_string(),
+            description: "Single request latency".to_string(),
+        },
+        BenchmarkInfo {
+            name: "performance_concurrent_load".to_string(),
+            category: "concurrency".to_string(),
+            description: "100 concurrent requests".to_string(),
+        },
+        BenchmarkInfo {
+            name: "performance_multi_layer_read_latency".to_string(),
+            category: "latency".to_string(),
+            description: "P50/P99 read latency".to_string(),
+        },
+    ]
+}
+
+/// Benchmark information structure
+#[derive(Debug, Clone)]
+pub struct BenchmarkInfo {
+    pub name: String,
+    pub category: String,
+    pub description: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_benchmark_info_creation() {
+        let info = BenchmarkInfo {
+            name: "test".to_string(),
+            category: "unit".to_string(),
+            description: "Test benchmark".to_string(),
+        };
+        assert_eq!(info.name, "test");
+        assert_eq!(info.category, "unit");
+    }
+
+    #[test]
+    fn test_benchmarks_returns_expected_count() {
+        let benchmarks = benchmarks();
+        assert_eq!(benchmarks.len(), 4);
+    }
+
+    #[test]
+    fn test_benchmarks_have_valid_names() {
+        let benchmarks = benchmarks();
+        for bench in benchmarks {
+            assert!(!bench.name.is_empty());
+            assert!(!bench.category.is_empty());
+        }
+    }
+}

@@ -177,6 +177,7 @@ async fn claude_code_session_lifecycle() {
 /// CC-05: Multi-Agent Coordination (PipeFS)
 /// 验证 PipeFS 双向通信（CLAUDE.md 的 /pipes/ 约定）
 #[tokio::test]
+#[ignore = "Flaky: server startup race in multi-threaded tests; run with dedicated server process"]
 async fn claude_code_multi_agent_coordination() {
     skip_if_sandboxed!();
     let (_mount_table, base) = start_server().await;

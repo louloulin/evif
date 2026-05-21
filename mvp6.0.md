@@ -368,7 +368,167 @@ EVIF 通过文件化通信把协作显式化，从而降低 orchestration 成本
 
 所以 EVIF 的长期价值不只是“省 token”，而是 **降低 Agent 工程总拥有成本（Total Cost of Agent Operations）**。
 
-### 3.2 传统文件系统能力不是主卖点
+### 3.5 核心功能完善蓝图
+
+基于当前代码，EVIF 的核心功能不应继续按“更多插件、更多端点、更多命令”扩展，而应围绕 8 个可产品化内核继续加深。
+
+#### 1）Universal Mount Kernel：统一挂载内核
+
+已有基础：
+
+- `EvifPlugin` trait 已覆盖 create / mkdir / read / write / readdir / stat / remove / rename / truncate / validate / initialize / shutdown
+- `FileHandle` / `HandleFS` 已覆盖大文件和有状态读写
+- mount table / radix mount table 已承担路径到插件的路由
+
+需要完善：
+
+- 给每个 mount 增加标准 capability manifest
+- 明确哪些操作是必需、可选、实验性
+- 统一错误模型、权限模型、配置模型
+- 对 connector 做一致性测试
+
+目标：
+
+> 让任何系统只要接入 EVIF，就自动获得 CLI / REST / MCP / SDK 多入口能力。
+
+#### 2）Agent Context Kernel：上下文内核
+
+已有基础：
+
+- `/context/L0`
+- `/context/L1`
+- `/context/L2`
+- 当前项目已经在 AGENTS.md 中明确 EVIF context layers
+
+需要完善：
+
+- 明确 L0/L1/L2 的生命周期、大小限制和写入规范
+- 给 L1 决策记录增加结构化模板
+- 给 L2 项目知识增加索引和摘要机制
+- 建立 context compaction 策略，避免长期膨胀
+
+目标：
+
+> 让 Agent 从“每次重新解释背景”变成“读取稳定上下文状态”。
+
+#### 3）Skill Runtime Kernel：技能内核
+
+已有基础：
+
+- `skillfs`
+- `skill_runtime`
+- `SKILL.md` 发现模型
+
+需要完善：
+
+- 区分 passive skill（文档型）和 executable skill（可执行型）
+- 给 skill 增加输入/输出 schema
+- 给 skill 执行增加 sandbox、超时、日志和审计
+- 给 skill registry 增加版本和兼容性声明
+
+目标：
+
+> 让 Agent 的经验、流程和工具调用习惯成为可复用、可验证、可迁移的资产。
+
+#### 4）Memory Retrieval Kernel：记忆检索内核
+
+已有基础：
+
+- `evif-mem`
+- embeddings
+- vector retrieval
+- storage
+- proactive extraction
+
+需要完善：
+
+- 把 `/memories` 和 `evif-mem` 的产品边界讲清楚
+- 默认 compact retrieval，避免检索结果过大
+- 为 memory item 增加来源、可信度、时间衰减、去重策略
+- 建立 “retrieve -> cite -> expand” 的分层检索模式
+
+目标：
+
+> 让 Agent 先拿到最小相关记忆，需要时再展开证据，而不是一次性加载知识库。
+
+#### 5）Coordination Kernel：协作内核
+
+已有基础：
+
+- `pipefs`
+- `queuefs`
+- 多 Agent coordination 文档和 demo 方向
+
+需要完善：
+
+- 标准化 task envelope：input / status / output / error / metadata
+- 增加 claim / lease / timeout / retry / dead-letter 语义
+- 把 `/pipes` 用于临时协作，把 `/queue` 用于可靠异步任务
+- 给多 Agent 协作建立最小端到端示例
+
+目标：
+
+> 让 Agent 协作从 prompt 传话升级为可追踪、可恢复、可审计的文件化协议。
+
+#### 6）Connectivity Kernel：系统连接内核
+
+已有基础：
+
+- `evif-plugins/src/catalog.rs` 已区分 core / experimental plugin catalog
+- 插件覆盖 storage、database、messaging、collaboration、VCS、email、commerce 等类别
+- `evif connect` 已开始连接 Claude / Cursor / Gemini / Codex 等 Agent 平台
+
+需要完善：
+
+- 将 plugin catalog 升级为 connector catalog
+- 每个 connector 明确 capability level：discover / read / write / coordinate / optimize
+- 每个 connector 声明 auth、配置、限制、成本策略
+- 将 core connector 与 experimental connector 在文档、测试和发布中分层
+
+目标：
+
+> 让 EVIF 成为 Agent 连接所有系统的标准适配层，而不是插件堆叠。
+
+#### 7）Cost Optimization Kernel：降本内核
+
+已有基础：
+
+- `output_filter` 已有 strip_ansi / truncate_lines / compact_json / max_string_length
+- MCP 层已有 `max_lines`、compact search、cache 等设计信号
+- core 层已有 batch / streaming / circuit breaker 等基础能力
+
+需要完善：
+
+- 默认 bounded output，full output 必须显式请求
+- 为每个 Agent-facing tool 定义 response budget
+- 为大文件、大 JSON、大搜索结果提供摘要/分页/继续读取协议
+- 记录每类工具调用的响应大小和节省估算
+
+目标：
+
+> 让 EVIF 的默认行为就是低 token、低延迟、低重复调用成本。
+
+#### 8）Governance Kernel：治理内核
+
+已有基础：
+
+- auth crate
+- ACL / capability / metrics / tracing / health
+- encryption handlers
+- request identity / metrics 相关历史工作
+
+需要完善：
+
+- 统一 auth / ACL / capability / audit 的产品模型
+- 为 connector 增加最小权限配置
+- 对 Agent 操作记录审计事件
+- 对敏感 context / memory / connector credential 做统一保护
+
+目标：
+
+> 让 EVIF 既能连接万物，也能安全地连接万物。
+
+### 3.6 传统文件系统能力不是主卖点
 
 虽然 EVIF 强调 “Everything Is a File”，但真正强价值并不在：
 
@@ -642,6 +802,35 @@ Python / Go / TS SDK 的存在说明方向对：
 
 没有统一口径，就很难把“降低 AI Agent 成本”从隐性好处提升成显性卖点。
 
+### 5.11 问题十一：核心能力缺少统一 capability contract
+
+当前 `EvifPlugin` trait 很完整，但产品层还缺一层更适合 Agent 和 connector 的 capability contract。
+
+现在的问题是：
+
+- 调用者不容易知道某个 connector 支持哪些操作
+- 文档中的 plugin 类型与 Agent 使用场景之间没有直接映射
+- MCP/REST/SDK 无法基于 capability 自动生成更好的工具提示和限制
+- 测试也难以按 capability level 做一致性验证
+
+这会导致“连接很多系统”但“每个系统行为都要重新理解”。
+
+### 5.12 问题十二：核心 Agent 工作流缺少标准 envelope
+
+`/context`、`/skills`、`/pipes`、`/queue`、`/memories` 都已经出现，但还缺一个统一的 Agent workflow envelope。
+
+建议统一以下结构：
+
+- `input`
+- `status`
+- `output`
+- `error`
+- `metadata`
+- `trace`
+- `cost`
+
+这样 EVIF 才能把工具调用、协作任务、技能执行、记忆检索统一纳入可观测工作流。
+
 ---
 
 ## 六、架构层面的深挖判断
@@ -729,6 +918,20 @@ REST 应更明确地区分：
 - tiered detail expansion
 
 这会让降本从“局部技巧”升级为“平台默认行为”。
+
+#### Seam G：agent workflow envelope seam
+
+应把 Agent 任务、技能执行、队列任务、pipe 协作统一到一个 envelope seam：
+
+- input
+- status
+- output
+- error
+- metadata
+- trace
+- cost
+
+这样不同 Agent 和不同工具之间的工作流才有统一形状，便于恢复、审计、调试和复用。
 
 ---
 
@@ -973,6 +1176,58 @@ MVP 6.0 不再定义为“验证体系完善版”。
 - 跨系统检索时如何减少重复接入代码
 - 多 Agent 协作时如何减少 prompt 中转成本
 
+#### E4. 建立 capability contract
+
+为每个 connector 和 Agent 原语定义统一 contract：
+
+```yaml
+id: contextfs
+category: agent-primitive
+support_tier: core
+capabilities:
+  discover: true
+  read: true
+  write: true
+  coordinate: false
+  optimize: true
+cost_policy:
+  bounded_read: true
+  compact_default: true
+  full_output_requires_opt_in: true
+security:
+  requires_auth: configurable
+  audit_events: true
+```
+
+这个 contract 后续可驱动：
+
+- MCP tool 描述
+- REST capability endpoint
+- SDK 类型生成
+- connector conformance tests
+- 文档矩阵自动生成
+
+#### E5. 建立 Agent workflow envelope
+
+为 `/skills`、`/pipes`、`/queue`、MCP tool call 建立统一 envelope：
+
+```json
+{
+  "input": {},
+  "status": "pending|running|done|failed",
+  "output": {},
+  "error": null,
+  "metadata": {},
+  "trace": [],
+  "cost": {
+    "estimated_tokens": 0,
+    "tool_calls": 0
+  }
+}
+```
+
+这能把“Agent 工作流”从隐式 prompt 变成显式、可追踪、可恢复的文件化协议。
+
 ### Phase F：收敛默认可信验证路径
 
 目标：定义“通过这些检查，就说明 EVIF 主价值可用”。
@@ -1092,6 +1347,8 @@ MVP 6.0 不再定义为“验证体系完善版”。
 - 成本优化能力矩阵
 - 2~3 个低成本 Agent workflow 样例
 - 默认 compact / cache / bounded retrieval 策略
+- connector capability contract 草案
+- Agent workflow envelope 草案
 
 ### Milestone 5：Agent 原语验证闭环
 
@@ -1137,12 +1394,68 @@ MVP 6.0 的关键，不是再“增加功能”，而是把现有能力 **收敛
 
 ## 十一、建议的下一步执行清单
 
-- [ ] 重写根 `README.md`，把产品主叙事收敛到 Agent Infra
+- [x] 重写根 `README.md`，把产品主叙事收敛到 Agent Infra
+- [x] 输出一份 connector capability matrix，明确 EVIF 连接层能力
+- [x] 输出一份 cost-optimization matrix，明确 EVIF 的 Agent 降本策略
 - [ ] 定义官方最小 demo：`context + skills + pipes + MCP`
 - [ ] 盘点并清理 generated artifacts / `.backup` / 缓存残留
 - [ ] 给 `evif-mcp` 输出单独的产品化设计文档
-- [ ] 输出一份 connector capability matrix，明确 EVIF 连接层能力
-- [ ] 输出一份 cost-optimization matrix，明确 EVIF 的 Agent 降本策略
+- [ ] 起草 connector capability contract，并映射到现有 plugin catalog
+- [ ] 起草 Agent workflow envelope，并映射到 `/skills`、`/pipes`、`/queue`
+- [ ] 明确 8 个核心 Kernel 的 owner、接口和验证标准
 - [ ] 建立主价值验证脚本，只覆盖默认主路径
 - [ ] 重新分层 SDK / Web / examples / archive 目录
 - [ ] 收敛现有 `mvp*.md` / `mem*.md` 文档体系
+
+---
+
+## 十二、核心功能完善优先级
+
+综合当前代码成熟度、AI Agent 价值和产品收敛难度，建议按以下顺序完善核心功能：
+
+### P0：先做产品主闭环
+
+目标：让用户和 Agent 明确知道 EVIF 先解决什么问题。
+
+- MCP core tool set：context / skill / pipe / memory / bounded fs
+- 官方 demo：`context + skill + pipe + memory_search`
+- low-cost defaults：bounded read、compact search、output filter
+- README / docs / mvp6.0 口径统一
+
+### P1：再做连接层 contract
+
+目标：让“连接万物”从插件清单变成稳定产品能力。
+
+- connector capability contract
+- connector support tiers：core / stable / experimental
+- connector conformance tests
+- connector capability endpoint / MCP resource
+
+### P2：再做 Agent workflow envelope
+
+目标：让 Agent 的技能执行、pipe 协作、queue 任务统一形状。
+
+- 标准 envelope schema
+- skill execution result 写入 envelope
+- pipe task 使用 envelope
+- queue task 使用 envelope
+- cost / trace 字段进入 envelope
+
+### P3：再做治理与安全
+
+目标：让 EVIF 可以安全连接更多系统。
+
+- connector credential model
+- per-mount permissions
+- audit trail
+- sensitive output masking
+- memory/context encryption policy
+
+### P4：最后扩展生态
+
+目标：在主闭环稳定后再扩张。
+
+- Python SDK 优先
+- TypeScript SDK 次之
+- Go SDK 保持系统集成定位
+- Web UI 作为 demo / admin / debugging surface

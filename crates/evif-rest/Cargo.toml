@@ -56,6 +56,7 @@ evif-plugins = { path = "../evif-plugins", features = ["sqlfs"] }
 evif-mem = { path = "../evif-mem", features = ["sqlite", "postgres"] }
 evif-auth = { path = "../evif-auth" }
 evif-metrics = { path = "../evif-metrics", features = ["prometheus"] }
+evif-mcp = { path = "../evif-mcp" }
 
 # Config file formats (re-export from evif-core for mount config)
 toml = "0.8"

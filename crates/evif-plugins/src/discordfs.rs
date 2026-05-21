@@ -752,7 +752,8 @@ impl EvifPlugin for DiscordFsPlugin {
                 let webhook_id = parts[pos + 1].trim_start_matches("webhook_");
                 match self.api_get_webhook(webhook_id).await {
                     Ok(wh) => {
-                        let json = serde_json::to_string_pretty(&wh).unwrap_or_else(|_| "{}".to_string());
+                        let json = serde_json::to_string_pretty(&wh)
+                            .map_err(|e| EvifError::InvalidInput(format!("JSON serialization failed: {}", e)))?;
                         return Ok(json.into_bytes());
                     }
                     Err(_) => {

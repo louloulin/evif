@@ -181,6 +181,35 @@ pub struct SecurityConfig {
     pub cors: Option<CorsConfig>,
 }
 
+impl SecurityConfig {
+    /// 从环境变量加载 API Keys
+    ///
+    /// 支持的环境变量:
+    /// - EVIF_API_KEYS: 逗号分隔的 API Key 列表
+    ///
+    /// 示例: EVIF_API_KEYS="key1,key2,key3"
+    pub fn load_api_keys_from_env() -> Option<Vec<String>> {
+        std::env::var("EVIF_API_KEYS")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                s.split(',')
+                    .map(|k| k.trim().to_string())
+                    .filter(|k| !k.is_empty())
+                    .collect()
+            })
+            .filter(|keys: &Vec<String>| !keys.is_empty())
+    }
+
+    /// 获取 API Keys，优先使用环境变量中的值
+    ///
+    /// 如果设置了 EVIF_API_KEYS 环境变量，优先使用它。
+    /// 否则返回配置文件中的值。
+    pub fn get_api_keys(&self) -> Option<Vec<String>> {
+        Self::load_api_keys_from_env().or_else(|| self.api_keys.clone())
+    }
+}
+
 /// CORS配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorsConfig {
@@ -371,5 +400,77 @@ mod tests {
         let config = EvifConfig::default();
         let json_str = serde_json::to_string_pretty(&config).unwrap();
         assert!(json_str.contains("8080"));
+    }
+
+    #[test]
+    fn test_api_keys_from_env() {
+        // Clear any existing env var
+        std::env::remove_var("EVIF_API_KEYS");
+
+        // Without env var, should return None
+        assert!(SecurityConfig::load_api_keys_from_env().is_none());
+
+        // With single key
+        std::env::set_var("EVIF_API_KEYS", "test-key-123");
+        let keys = SecurityConfig::load_api_keys_from_env();
+        assert!(keys.is_some());
+        assert_eq!(keys.unwrap(), vec!["test-key-123"]);
+
+        // With multiple keys
+        std::env::set_var("EVIF_API_KEYS", "key1, key2, key3");
+        let keys = SecurityConfig::load_api_keys_from_env();
+        assert!(keys.is_some());
+        let keys = keys.unwrap();
+        assert_eq!(keys.len(), 3);
+        assert_eq!(keys[0], "key1");
+        assert_eq!(keys[1], "key2");
+        assert_eq!(keys[2], "key3");
+
+        // Cleanup
+        std::env::remove_var("EVIF_API_KEYS");
+    }
+
+    #[test]
+    fn test_get_api_keys_priority() {
+        // Clear env var first
+        std::env::remove_var("EVIF_API_KEYS");
+
+        // Config without API keys, env without keys
+        let security = SecurityConfig {
+            tls_enabled: false,
+            cert_path: None,
+            key_path: None,
+            api_keys: None,
+            cors: None,
+        };
+        assert!(security.get_api_keys().is_none());
+
+        // Config with keys, no env var (ensure clean state)
+        std::env::remove_var("EVIF_API_KEYS");
+        let security = SecurityConfig {
+            tls_enabled: false,
+            cert_path: None,
+            key_path: None,
+            api_keys: Some(vec!["config-key".to_string()]),
+            cors: None,
+        };
+        assert_eq!(security.get_api_keys(), Some(vec!["config-key".to_string()]));
+
+        // Env var should take priority - set it first, then create config
+        std::env::set_var("EVIF_API_KEYS", "env-key");
+        // Drop previous security to avoid any caching
+        drop(security);
+        let security = SecurityConfig {
+            tls_enabled: false,
+            cert_path: None,
+            key_path: None,
+            api_keys: Some(vec!["config-key".to_string()]),
+            cors: None,
+        };
+        let keys = security.get_api_keys();
+        assert_eq!(keys, Some(vec!["env-key".to_string()]), "env var should take priority over config");
+
+        // Cleanup
+        std::env::remove_var("EVIF_API_KEYS");
     }
 }

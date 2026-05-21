@@ -9,6 +9,11 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use thiserror::Error;
 use chrono::{DateTime, Utc, Duration};
+use argon2::{
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
+use rand::rngs::OsRng;
 
 /// 认证错误
 #[derive(Error, Debug)]
@@ -246,6 +251,16 @@ impl McpAuth {
         Self::new(config.clone())
     }
 
+    /// 使用 argon2 哈希密钥
+    pub fn hash_secret(secret: &str) -> Result<String, AuthError> {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let hash = argon2
+            .hash_password(secret.as_bytes(), &salt)
+            .map_err(|e| AuthError::ServiceError(format!("Failed to hash secret: {}", e)))?;
+        Ok(hash.to_string())
+    }
+
     /// 注册 Token
     pub fn register_token(&self, token: McpToken) {
         let mut tokens = self.tokens.write();
@@ -281,7 +296,9 @@ impl McpAuth {
 
         // 检查是否过期
         if token.is_expired() {
-            return Err(AuthError::TokenExpired(token.expires_at.unwrap()));
+            return Err(AuthError::TokenExpired(
+                token.expires_at.unwrap_or_else(|| Utc::now()) // Should not happen if is_expired() is true
+            ));
         }
 
         // 如果提供了密钥，验证哈希
@@ -294,11 +311,16 @@ impl McpAuth {
         Ok(token)
     }
 
-    /// 验证密钥 (简化版本，实际应使用 bcrypt 或 argon2)
+    /// 使用 argon2 验证密钥
     fn verify_secret(&self, secret: &str, hash: &str) -> bool {
-        // 简化实现：直接比较
-        // 生产环境应使用 bcrypt 或 argon2
-        secret == hash
+        // 使用 argon2 验证密码哈希
+        let parsed_hash = match PasswordHash::new(hash) {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+        Argon2::default()
+            .verify_password(secret.as_bytes(), &parsed_hash)
+            .is_ok()
     }
 
     /// 创建会话

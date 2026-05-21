@@ -1,4 +1,41 @@
 //! Core data models for the memory platform
+//!
+//! # 核心类型
+//!
+//! - `MemoryItem`: 记忆项，包含内容、元数据和向量嵌入
+//! - `Resource`: 原始资源（对话、文档、图片等）
+//! - `Category`: 记忆分类
+//! - `MemoryType`: 记忆类型枚举
+//! - `Modality`: 输入模态枚举
+//!
+//! # MD 文件格式
+//!
+//! 记忆使用 YAML Frontmatter + Markdown 格式存储：
+//!
+//! ```yaml
+//! ---
+//! id: "memory_123"
+//! type: knowledge
+//! created: 2024-01-01T00:00:00Z
+//! updated: 2024-01-01T00:00:00Z
+//! importance: 0.8
+//! tags: ["rust", "programming"]
+//! ---
+//!
+//! 记忆内容...
+//! ```
+//!
+//! # 使用示例
+//!
+//! ```rust,ignore
+//! use evif_mem::{MemoryItem, MemoryType, Modality};
+//!
+//! let memory = MemoryItem::new(
+//!     "Hello world".to_string(),
+//!     MemoryType::Knowledge,
+//!     Modality::Document,
+//! );
+//! ```
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
