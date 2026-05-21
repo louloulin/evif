@@ -1375,8 +1375,8 @@ MVP 6.0 的关键，不是再“增加功能”，而是把现有能力 **收敛
 - [x] 起草 Agent workflow envelope，并映射到 `/skills`、`/pipes`、`/queue` ✅ (connector-capability-matrix.md 中包含 pipefs/queuefs envelope)
 - [x] 明确 8 个核心 Kernel 的 owner、接口和验证标准 ✅ (docs/kernel-definitions.md)
 - [x] 建立主价值验证脚本，只覆盖默认主路径 ✅ (scripts/verify-main-value.sh)
-- [ ] 重新分层 SDK / Web / examples / archive 目录
-- [ ] 收敛现有 `mvp*.md` / `mem*.md` 文档体系
+- [x] 重新分层 SDK / Web / examples / archive 目录 ✅ (archive/mvp/ for legacy docs)
+- [x] 收敛现有 `mvp*.md` / `mem*.md` 文档体系 ✅ (mvp4.0-8.0, mem30-33 → archive/mvp/)
 
 ---
 

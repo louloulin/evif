@@ -86,6 +86,7 @@ run_check "Connector matrix exists" "[ -f docs/connector-capability-matrix.md ]"
 run_check "Cost optimization matrix exists" "[ -f docs/cost-optimization-matrix.md ]"
 run_check "CLAUDE.md template exists" "[ -f CLAUDE.md ]"
 run_check "AGENTS.md template exists" "[ -f AGENTS.md ]"
+run_check "Archive directory for legacy docs" "[ -d archive/mvp ]"
 
 # Phase 5: Skills
 echo -e "\n${BLUE}=== Phase 5: EVIF Skills ===${NC}"
