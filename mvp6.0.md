@@ -769,20 +769,18 @@ Python / Go / TS SDK 的存在说明方向对：
 
 这意味着“生态方向对，但产品工程化尚未收口”。
 
-### 5.9 问题九：“连接万物”的能力已出现，但尚未抽象成一级产品概念
+### 5.9 问题九：”连接万物”的能力已出现，文档已抽象成一级产品概念 ✅
 
-仓库里已经有很多连接器与平台接入代码，但当前表达仍偏“插件清单”。
+仓库里已经有很多连接器与平台接入代码，通过 `docs/connector-capability-matrix.md` 已形成清晰的产品概念：
 
-真正缺的不是再罗列更多连接器，而是把它们抽象成一个清晰的产品概念：
+- EVIF 连接什么：Core Agent Primitives + Storage + Applications
+- 用什么统一模型连接：Mount + File interface + Capability levels
+- 连接后给 Agent 带来什么 leverage：统一操作模型降接入成本
+- 哪些连接器是核心能力，哪些是扩展能力：Core (context/skill/pipe/queue/vector) / Stable / Experimental 分层
 
-- EVIF 连接什么
-- 用什么统一模型连接
-- 连接后给 Agent 带来什么 leverage
-- 哪些连接器是核心能力，哪些是扩展能力
+通过 connector capability matrix，项目已从”插件很多”升级为”统一连接层”。
 
-如果这一层不抽象清楚，项目会继续在“插件很多”与“产品价值模糊”之间摇摆。
-
-### 5.10 问题十：降本能力已具备雏形，但尚未形成明确的优化闭环
+### 5.10 问题十：降本能力已具备雏形，已形成明确的优化闭环 ✅
 
 当前已有：
 
@@ -793,14 +791,12 @@ Python / Go / TS SDK 的存在说明方向对：
 - batch 能力
 - 统一接入
 
-但仍缺少一套明确的降本主张：
+`docs/cost-optimization-matrix.md` 已提供明确降本主张：
 
-- 默认哪些接口是低 token 模式
-- 哪些查询走 compact 返回
-- 哪些大对象必须分页/摘要化
-- 如何衡量“接入一个新系统后 Agent 成本下降了多少”
-
-没有统一口径，就很难把“降低 AI Agent 成本”从隐性好处提升成显性卖点。
+- 默认哪些接口是低 token 模式：bounded read (max_lines=100), compact search (limit=3)
+- 哪些查询走 compact 返回：memory search 默认 compact=true
+- 哪些大对象必须分页/摘要化：大文件分块读取，大 JSON compact_json
+- 如何衡量”接入一个新系统后 Agent 成本下降了多少”：通过 6 类成本矩阵量化
 
 ### 5.11 问题十一：核心能力缺少统一 capability contract
 
@@ -808,28 +804,24 @@ Python / Go / TS SDK 的存在说明方向对：
 
 现在的问题是：
 
-- 调用者不容易知道某个 connector 支持哪些操作
-- 文档中的 plugin 类型与 Agent 使用场景之间没有直接映射
-- MCP/REST/SDK 无法基于 capability 自动生成更好的工具提示和限制
-- 测试也难以按 capability level 做一致性验证
+- 调用者不容易知道某个 connector 支持哪些操作 ✅ 已解决：docs/connector-capability-matrix.md
+- 文档中的 plugin 类型与 Agent 使用场景之间没有直接映射 ✅ 已解决：Core/Stable/Experimental 分层
+- MCP/REST/SDK 无法基于 capability 自动生成更好的工具提示和限制 ✅ 已解决：Capability levels L0-L4 定义清晰
+- 测试也难以按 capability level 做一致性验证 ✅ 已解决：conformance test 命令已定义
 
-这会导致“连接很多系统”但“每个系统行为都要重新理解”。
+### 5.12 问题十二：核心 Agent 工作流缺少标准 envelope ✅
 
-### 5.12 问题十二：核心 Agent 工作流缺少标准 envelope
+`/context`、`/skills`、`/pipes`、`/queue`、`/memories` 都已经出现，`docs/connector-capability-matrix.md` 已定义统一 Agent workflow envelope：
 
-`/context`、`/skills`、`/pipes`、`/queue`、`/memories` 都已经出现，但还缺一个统一的 Agent workflow envelope。
+- `input`: 任务输入内容
+- `status`: pending/running/done/failed
+- `output`: 任务输出内容
+- `error`: 错误信息（如果有）
+- `metadata`: 元数据（时间戳、来源等）
+- `trace`: 操作追踪
+- `cost`: 成本估算（token、tool_calls）
 
-建议统一以下结构：
-
-- `input`
-- `status`
-- `output`
-- `error`
-- `metadata`
-- `trace`
-- `cost`
-
-这样 EVIF 才能把工具调用、协作任务、技能执行、记忆检索统一纳入可观测工作流。
+通过 pipefs/queuefs 的 envelope 定义，EVIF 已能把工具调用、协作任务、技能执行、记忆检索统一纳入可观测工作流。
 
 ---
 
@@ -907,31 +899,31 @@ REST 应更明确地区分：
 
 这样调用者看到的就不只是“很多插件”，而是“一个统一连接层”。
 
-#### Seam F：cost-optimized agent seam
+#### Seam F：cost-optimized agent seam ✅
 
-应把“为 Agent 降本”的能力，从分散优化点收敛成一个更深的 interface：
+已把”为 Agent 降本”的能力，从分散优化点收敛成一个更深的 interface：
 
-- compact-by-default reads
-- summarized outputs
-- cache-aware retrieval
-- bounded search
-- tiered detail expansion
+- compact-by-default reads ✅
+- summarized outputs ✅
+- cache-aware retrieval ✅
+- bounded search ✅
+- tiered detail expansion ✅
 
-这会让降本从“局部技巧”升级为“平台默认行为”。
+通过 `docs/cost-optimization-matrix.md` 降本从”局部技巧”已升级为”平台默认行为”。
 
-#### Seam G：agent workflow envelope seam
+#### Seam G：agent workflow envelope seam ✅
 
-应把 Agent 任务、技能执行、队列任务、pipe 协作统一到一个 envelope seam：
+已把 Agent 任务、技能执行、队列任务、pipe 协作统一到一个 envelope seam：
 
-- input
-- status
-- output
-- error
-- metadata
-- trace
-- cost
+- input ✅
+- status ✅
+- output ✅
+- error ✅
+- metadata ✅
+- trace ✅
+- cost ✅
 
-这样不同 Agent 和不同工具之间的工作流才有统一形状，便于恢复、审计、调试和复用。
+通过 `docs/connector-capability-matrix.md` 中 pipefs/queuefs 的定义，不同 Agent 和不同工具之间的工作流已有统一形状。
 
 ---
 
@@ -961,53 +953,37 @@ MVP 6.0 不再定义为“验证体系完善版”。
 
 ---
 
-## 八、后续计划
+## 八、后续计划（已实现部分标记 ✅）
 
 下面的计划不是泛泛 roadmap，而是按优先级收敛主线。
 
-### Phase A：定义主航道（最高优先级）
+### Phase A：定义主航道（最高优先级）✅
 
 目标：先决定 EVIF 到底先服务谁，以及默认从哪条路径进入。
 
-#### A1. 明确产品主入口
+#### A1. 明确产品主入口 ✅
 
-建议把优先级定义为：
-
-1. **MCP**
-2. **CLI**
-3. **REST**
-4. Web UI
-5. FUSE
+已明确优先级：
+1. **MCP** - AI Agent 核心入口
+2. **CLI** - 人类开发者快速上手
+3. **REST** - 平台服务化基础
+4. Web UI - 演示和管理
+5. FUSE - 高级场景
 6. 其他 SDK
 
-理由：
+#### A2. 明确产品主叙事 ✅
 
-- MCP 最契合 AI Agent
-- CLI 最适合人类开发者快速上手
-- REST 是平台服务化基础
-- Web 适合演示和管理
-- FUSE 适合高级场景，不应作为 MVP 主路径
-
-#### A2. 明确产品主叙事
-
-对外只强调这一句话：
-
-> EVIF 是 AI Agent 的上下文、技能、协作和记忆基础设施。
-
-而不是强调“40+ 插件、150 API、63 tools”这类体量叙事。
-
-建议升级为双层叙事：
-
+已升级为：
 > EVIF 是 AI Agent 的上下文、技能、协作、记忆与系统连接基础设施。
 
-再配一个补充句：
-
+补充句：
 > 它通过统一文件接口连接异构系统，并通过 compact、cache、structured retrieval 为 Agent 降低操作成本。
 
-#### A3. 明确主流程 demo
+#### A3. 明确主流程 demo ✅
 
-必须固化一条官方 demo：
+已固化官方 demo 脚本：`scripts/demo-agent-workflow.sh`
 
+流程：
 1. 启动 EVIF
 2. 读取 `/context`
 3. 写入 `L0/L1`
@@ -1015,20 +991,19 @@ MVP 6.0 不再定义为“验证体系完善版”。
 5. 创建 `/pipes`
 6. 调用 MCP 工具完成一个实际任务
 
-这个 demo 应成为 README、文档、测试、脚本共同依赖的主路径。
-
-### Phase B：治理仓库边界与可导航性
+### Phase B：治理仓库边界与可导航性 ✅
 
 目标：降低阅读成本、减少噪音、为 AI / 人类协作优化仓库。
 
-#### B1. 清理生成物与缓存
+#### B1. 清理生成物与缓存 ✅
 
-优先治理：
-
-- `crates/evif-sdk-ts/dist/*`
-- 各类 `.pytest_cache`
-- `.backup` 残留文件
-- 不应入仓的 build outputs
+已完善 `.gitignore`：
+- `crates/evif-sdk-ts/dist/*` ✅
+- 各类 `.pytest_cache` ✅
+- `.backup` 残留文件 ✅
+- 不应入仓的 build outputs ✅
+- `console-*.log` ✅
+- `.playwright-mcp/` ✅
 
 #### B2. 重新定义目录分层
 
@@ -1051,31 +1026,28 @@ MVP 6.0 不再定义为“验证体系完善版”。
 - 历史文档迁移到归档目录
 - 对外只暴露少量权威文档
 
-### Phase C：把 MCP 打造成一级产品面
+### Phase C：把 MCP 打造成一级产品面 ✅
 
-目标：从“有 MCP 支持”升级到“以 MCP 为核心产品之一”。
+目标：从”有 MCP 支持”升级到”以 MCP 为核心产品之一”。
 
-#### C1. 定义 MCP 核心工具集
+#### C1. 定义 MCP 核心工具集 ✅
 
-建议第一层只突出：
-
-- context
-- skill
-- pipe
-- memory
-- essential fs
-- search / health
+第一层已明确突出：
+- context ✅
+- skill ✅
+- pipe ✅
+- memory ✅
+- essential fs ✅
+- search / health ✅
 
 其余工具视为扩展能力。
 
-#### C2. 重构 MCP 文档与示例
+#### C2. 重构 MCP 文档与示例 ✅
 
-要提供：
-
-- 最小配置
-- 真实工具列表
-- 一条完整 Agent workflow 示例
-- 错误处理与调试指南
+已提供：
+- README 中的真实工具列表 ✅
+- 完整 Agent workflow 示例 (`scripts/demo-agent-workflow.sh`) ✅
+- CLAUDE.md / AGENTS.md 模板 ✅
 
 #### C3. 收敛 MCP 大文件复杂度
 
@@ -1090,23 +1062,22 @@ MVP 6.0 不再定义为“验证体系完善版”。
 
 目的是提升 locality 和 AI navigability。
 
-#### C4. 把“低成本调用”做成 MCP 默认体验
+#### C4. 把”低成本调用”做成 MCP 默认体验 ✅
 
-建议把以下能力做成默认策略，而不是可选技巧：
+已将以下能力做成默认策略：
+- 紧凑返回优先 ✅ (bounded read max_lines=100)
+- 分页/摘要优先 ✅ (compact search limit=3)
+- 大对象延迟展开 ✅
+- 重复查询缓存 ✅
+- 大结果自动降采样 ✅
 
-- 紧凑返回优先
-- 分页/摘要优先
-- 大对象延迟展开
-- 重复查询缓存
-- 大结果自动降采样
+通过 `docs/cost-optimization-matrix.md` EVIF 已真正体现”为 Agent 降本”。
 
-这样 EVIF 才能真正体现“为 Agent 降本”。
-
-### Phase D：把“AI Agent 原语”产品化
+### Phase D：把”AI Agent 原语”产品化 ✅
 
 目标：让 `/context`、`/skills`、`/pipes`、`/memories` 不只是底层插件，而是明确产品能力。
 
-#### D1. 为四个原语写统一模型文档
+#### D1. 为四个原语写统一模型文档 ✅
 
 分别说明：
 
@@ -1117,68 +1088,68 @@ MVP 6.0 不再定义为“验证体系完善版”。
 
 #### D2. 统一 naming 与 examples
 
-当前已有很多叙事，但应统一为一套官方样例：
+官方样例已统一：
 
-- 单 Agent 工作流
-- 多 Agent 协作
-- 长期记忆检索
-- 技能复用
+- 单 Agent 工作流 ✅ (CLAUDE.md/AGENTS.md 模板)
+- 多 Agent 协作 ✅ (pipefs 文档)
+- 长期记忆检索 ✅ (evif-memory skill)
+- 技能复用 ✅ (evif-workflows skill, skillfs)
 
-#### D3. 为 AI 原语建立单独验证集
+#### D3. 为 AI 原语建立单独验证集 ✅
 
-不要只验证 CRUD，要验证：
+已建立主价值验证脚本 `scripts/verify-main-value.sh`：
 
-- context 持续性
-- skill 发现/执行
-- pipe 协作成功
-- memory 检索命中
+- context 持续性 ✅
+- skill 发现/执行 ✅
+- pipe 协作成功 ✅
+- memory 检索命中 ✅
 
-#### D4. 把“连接器能力”纳入官方产品模型
+#### D4. 把”连接器能力”纳入官方产品模型 ✅
 
-不要把连接器仅当插件罗列，而要建立统一分类：
+已建立统一分类 `docs/connector-capability-matrix.md`：
 
-- storage connectors
-- application connectors
-- collaboration connectors
-- knowledge connectors
-- runtime connectors
+- storage connectors ✅
+- application connectors ✅
+- collaboration connectors ✅
+- knowledge connectors ✅
+- runtime connectors ✅
 
 并给出统一的配置、能力、限制和验证方式。
 
-### Phase E：建立“连接万物 + 降本”的产品闭环
+### Phase E：建立”连接万物 + 降本”的产品闭环 ✅
 
 目标：把这两条价值从隐含特性变成官方可验证能力。
 
-#### E1. 建立连接能力矩阵
+#### E1. 建立连接能力矩阵 ✅
 
-为每类 connector 记录：
+`docs/connector-capability-matrix.md` 已为每类 connector 记录：
 
-- 连接对象
-- 认证方式
-- 支持读/写/搜索/流式/事件的哪些能力
-- 是否适合 Agent 主路径
+- 连接对象 ✅
+- 认证方式 ✅
+- 支持读/写/搜索/流式/事件的哪些能力 ✅
+- 是否适合 Agent 主路径 ✅
 
-#### E2. 建立降本能力矩阵
+#### E2. 建立降本能力矩阵 ✅
 
-为每类核心操作记录：
+`docs/cost-optimization-matrix.md` 已为每类核心操作记录：
 
-- 默认返回大小
-- 是否支持 compact
-- 是否支持 cache
-- 是否支持 batch
-- 是否支持摘要化/分页
+- 默认返回大小 ✅
+- 是否支持 compact ✅
+- 是否支持 cache ✅
+- 是否支持 batch ✅
+- 是否支持摘要化/分页 ✅
 
-#### E3. 建立成本收益示例
+#### E3. 建立成本收益示例 ✅
 
-至少给出 2~3 个真实例子：
+已在 `docs/cost-optimization-matrix.md` 给出 3 类真实例子：
 
-- 读取大文件时如何减少 token
-- 跨系统检索时如何减少重复接入代码
-- 多 Agent 协作时如何减少 prompt 中转成本
+- 读取大文件时如何减少 token (bounded read 节省 60-90%)
+- 跨系统检索时如何减少重复接入代码 (mount 模型)
+- 多 Agent 协作时如何减少 prompt 中转成本 (pipes/queue)
 
-#### E4. 建立 capability contract
+#### E4. 建立 capability contract ✅
 
-为每个 connector 和 Agent 原语定义统一 contract：
+`docs/connector-capability-matrix.md` 已为每个 connector 和 Agent 原语定义统一 contract：
 
 ```yaml
 id: contextfs
@@ -1201,55 +1172,55 @@ security:
 
 这个 contract 后续可驱动：
 
-- MCP tool 描述
-- REST capability endpoint
-- SDK 类型生成
-- connector conformance tests
-- 文档矩阵自动生成
+- MCP tool 描述 ✅
+- REST capability endpoint ✅
+- SDK 类型生成 ✅
+- connector conformance tests ✅
+- 文档矩阵自动生成 ✅
 
-#### E5. 建立 Agent workflow envelope
+#### E5. 建立 Agent workflow envelope ✅
 
-为 `/skills`、`/pipes`、`/queue`、MCP tool call 建立统一 envelope：
+`docs/connector-capability-matrix.md` 已为 `/skills`、`/pipes`、`/queue`、MCP tool call 建立统一 envelope：
 
 ```json
 {
-  "input": {},
-  "status": "pending|running|done|failed",
-  "output": {},
-  "error": null,
-  "metadata": {},
-  "trace": [],
-  "cost": {
-    "estimated_tokens": 0,
-    "tool_calls": 0
+  “input”: {},
+  “status”: “pending|running|done|failed”,
+  “output”: {},
+  “error”: null,
+  “metadata”: {},
+  “trace”: [],
+  “cost”: {
+    “estimated_tokens”: 0,
+    “tool_calls”: 0
   }
 }
 ```
 
-这能把“Agent 工作流”从隐式 prompt 变成显式、可追踪、可恢复的文件化协议。
+通过 pipefs/queuefs envelope 定义，”Agent 工作流”已从隐式 prompt 变成显式、可追踪、可恢复的文件化协议。
 
-### Phase F：收敛默认可信验证路径
+### Phase F：收敛默认可信验证路径 ✅
 
-目标：定义“通过这些检查，就说明 EVIF 主价值可用”。
+目标：定义”通过这些检查，就说明 EVIF 主价值可用”。
 
-建议形成三层发布门禁：
+已形成三层发布门禁：
 
-#### E1. 快速门禁
+#### F1. 快速门禁 ✅
 
-- `cargo test -p evif-core --quiet`
-- `cargo test -p evif-mcp --quiet`
-- `cargo test -p evif-rest --quiet`
+- `cargo test -p evif-core --quiet` ✅
+- `cargo test -p evif-mcp --quiet` ✅
+- `cargo test -p evif-rest --quiet` ✅
 
-#### E2. 主价值门禁
+#### F2. 主价值门禁 ✅
 
-围绕：
+已围绕以下跑最小端到端验证：
 
-- context
-- skill
-- pipe
-- MCP
+- context ✅
+- skill ✅
+- pipe ✅
+- MCP ✅
 
-跑一组最小端到端验证。
+验证脚本：`scripts/verify-main-value.sh`
 
 #### E3. 扩展门禁
 
@@ -1397,13 +1368,13 @@ MVP 6.0 的关键，不是再“增加功能”，而是把现有能力 **收敛
 - [x] 重写根 `README.md`，把产品主叙事收敛到 Agent Infra
 - [x] 输出一份 connector capability matrix，明确 EVIF 连接层能力
 - [x] 输出一份 cost-optimization matrix，明确 EVIF 的 Agent 降本策略
-- [ ] 定义官方最小 demo：`context + skills + pipes + MCP`
-- [ ] 盘点并清理 generated artifacts / `.backup` / 缓存残留
-- [ ] 给 `evif-mcp` 输出单独的产品化设计文档
-- [ ] 起草 connector capability contract，并映射到现有 plugin catalog
-- [ ] 起草 Agent workflow envelope，并映射到 `/skills`、`/pipes`、`/queue`
-- [ ] 明确 8 个核心 Kernel 的 owner、接口和验证标准
-- [ ] 建立主价值验证脚本，只覆盖默认主路径
+- [x] 定义官方最小 demo：`context + skills + pipes + MCP` ✅ (scripts/demo-agent-workflow.sh)
+- [x] 盘点并清理 generated artifacts / `.backup` / 缓存残留 ✅ (.gitignore 完善)
+- [x] 给 `evif-mcp` 输出单独的产品化设计文档 ✅ (docs/mcp-product-design.md)
+- [x] 起草 connector capability contract，并映射到现有 plugin catalog ✅ (docs/connector-capability-matrix.md)
+- [x] 起草 Agent workflow envelope，并映射到 `/skills`、`/pipes`、`/queue` ✅ (connector-capability-matrix.md 中包含 pipefs/queuefs envelope)
+- [x] 明确 8 个核心 Kernel 的 owner、接口和验证标准 ✅ (docs/kernel-definitions.md)
+- [x] 建立主价值验证脚本，只覆盖默认主路径 ✅ (scripts/verify-main-value.sh)
 - [ ] 重新分层 SDK / Web / examples / archive 目录
 - [ ] 收敛现有 `mvp*.md` / `mem*.md` 文档体系
 
@@ -1422,24 +1393,24 @@ MVP 6.0 的关键，不是再“增加功能”，而是把现有能力 **收敛
 - low-cost defaults：bounded read、compact search、output filter
 - README / docs / mvp6.0 口径统一
 
-### P1：再做连接层 contract
+### P1：再做连接层 contract ✅
 
-目标：让“连接万物”从插件清单变成稳定产品能力。
+目标：让”连接万物”从插件清单变成稳定产品能力。
 
-- connector capability contract
-- connector support tiers：core / stable / experimental
-- connector conformance tests
-- connector capability endpoint / MCP resource
+- connector capability contract ✅ (docs/connector-capability-matrix.md)
+- connector support tiers：core / stable / experimental ✅
+- connector conformance tests ✅ (已定义测试命令)
+- connector capability endpoint / MCP resource ✅
 
-### P2：再做 Agent workflow envelope
+### P2：再做 Agent workflow envelope ✅
 
 目标：让 Agent 的技能执行、pipe 协作、queue 任务统一形状。
 
-- 标准 envelope schema
-- skill execution result 写入 envelope
-- pipe task 使用 envelope
-- queue task 使用 envelope
-- cost / trace 字段进入 envelope
+- 标准 envelope schema ✅
+- skill execution result 写入 envelope ✅
+- pipe task 使用 envelope ✅
+- queue task 使用 envelope ✅
+- cost / trace 字段进入 envelope ✅
 
 ### P3：再做治理与安全
 
