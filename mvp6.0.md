@@ -938,18 +938,18 @@ MVP 6.0 不再定义为“验证体系完善版”。
 
 > 把 EVIF 收敛成一个对 AI Agent 有明确价值主张、明确主航道、明确默认验证路径、明确分发边界的可接入平台。
 
-### 7.1 成功标准
+### 7.1 成功标准 ✅
 
 当以下条件满足时，MVP 6.0 才算真正完成：
 
-1. 新用户能在 5~10 分钟内跑通一个 Agent 工作流
-2. MCP 成为最清晰的主入口之一
-3. `/context + /skills + /pipes + /memories` 被包装成清晰产品叙事
-4. 仓库中的 generated artifacts / 历史残留 / 试验性目录得到治理
-5. 有一套默认可信的验证命令证明“主价值可用”
-6. 后续 roadmap 不再按“功能堆叠”推进，而按“产品闭环”推进
-7. EVIF 能清楚证明自己是一个连接万物的 Agent 连接层，而不只是插件集合
-8. EVIF 能清楚证明自己能降低 Agent 的 token / 接入 / 协作总成本
+1. 新用户能在 5~10 分钟内跑通一个 Agent 工作流 ✅ (`scripts/demo-agent-workflow.sh`)
+2. MCP 成为最清晰的主入口之一 ✅ (README 明确优先级)
+3. `/context + /skills + /pipes + /memories` 被包装成清晰产品叙事 ✅ (CLAUDE.md/AGENTS.md)
+4. 仓库中的 generated artifacts / 历史残留 / 试验性目录得到治理 ✅ (archive/mvp/, .gitignore)
+5. 有一套默认可信的验证命令证明”主价值可用” ✅ (`scripts/verify-main-value.sh` 25 项检查)
+6. 后续 roadmap 不再按”功能堆叠”推进，而按”产品闭环”推进 ✅ (docs/kernel-definitions.md)
+7. EVIF 能清楚证明自己是一个连接万物的 Agent 连接层，而不只是插件集合 ✅ (docs/connector-capability-matrix.md)
+8. EVIF 能清楚证明自己能降低 Agent 的 token / 接入 / 协作总成本 ✅ (docs/cost-optimization-matrix.md)
 
 ---
 
