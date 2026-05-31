@@ -1,0 +1,81 @@
+# P1-5: EVIF Helm Chart Values
+# Default values for EVIF deployment
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/louloulin/evif
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: evif.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Environment variables
+env:
+  RUST_LOG: "info"
+  EVIF_REST_PORT: "8080"
+  EVIF_REST_TENANT_STATE_PATH: "/data/tenant-state.json"
+  EVIF_REST_ENCRYPTION_STATE_PATH: "/data/encryption-state.json"
+  EVIF_REST_SYNC_STATE_PATH: "/data/sync-state.json"
+
+# TLS configuration
+tls:
+  enabled: true
+  secretName: evif-tls
+
+# Persistence
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 10Gi
+  accessMode: ReadWriteOnce
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /api/v1/ping
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# ServiceMonitor for Prometheus scraping
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s

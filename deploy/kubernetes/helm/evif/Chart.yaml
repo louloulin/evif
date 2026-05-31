@@ -1,0 +1,20 @@
+# P1-5: EVIF Kubernetes Helm Chart
+# 用途: 生产部署 EVIF 服务
+
+apiVersion: v2
+name: evif
+description: EVIF - AI Agent Infrastructure Framework (Kubernetes Deployment)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - evif
+  - ai-agent
+  - filesystem
+  - mcp
+home: https://evif.io
+sources:
+  - https://github.com/louloulin/evif
+maintainers:
+  - name: EVIF Team
+    email: team@evif.io

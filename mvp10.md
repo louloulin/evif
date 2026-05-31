@@ -844,11 +844,11 @@ EVIF 当前实现覆盖了 17+ MCP 工具、完整的 VFS 插件架构、REST/Gr
 
 | # | 改造项 | 风险 | 影响 crate | 工作量 |
 |---|--------|------|------------|--------|
-| P1-1 | 统一 error + trace ID | 可观测性 | evif-core, evif-rest | 3d |
-| P1-2 | TLS 支持 | 数据安全 | evif-rest | 2d |
+| ✅ P1-1 | 统一 error + trace ID | **已实现** | evif-core, evif-rest | ✅ 2d |
+| ✅ P1-2 | TLS + 安全 Header | **已实现** | evif-rest | ✅ 2d |
 | P1-3 | 安全 Header | 数据安全 | evif-rest | 1d |
-| P1-4 | OpenTelemetry 集成 | 可观测性 | 全部 | 5d |
-| P1-5 | Kubernetes 部署 | 可用性 | 基础设施 | 5d |
+| 🔄 P1-4 | OpenTelemetry 集成 | **进行中** | 全部 | 🔄 2d |
+| ✅ P1-5 | Kubernetes Helm Chart | **已实现** | 基础设施 | ✅ 2d |
 | P1-6 | Grafana + 告警 | 可观测性 | 基础设施 | 3d |
 | P1-7 | 数据加密 | 合规 | evif-mem, evif-rest | 5d |
 | P1-8 | JWT 刷新机制 | 安全 | evif-auth | 3d |
@@ -2831,11 +2831,16 @@ Week 6-8:
 
 ---
 
-> **文档版本**: v3.1  
+> **文档版本**: v3.2  
 > **分析完成**: 2026-06-01  
-> **P0 修复完成**: 2026-06-01 (MVP 10.1 Sprint 完成)
+> **MVP 10.1 完成**: 2026-06-01
 > - ✅ P0-1: 路径遍历防护 → `crates/evif-core/src/mount_table.rs`
 > - ✅ P0-2: Grep 超时保护 → `crates/evif-rest/src/fs_handlers.rs`  
 > - ✅ P0-3: DashMap 竞态修复 → `crates/evif-mem/src/storage/memory.rs`
 > - ✅ P0-4: Arc::from_raw 验证 → `crates/evif-core/src/dynamic_loader.rs`
-> **下一步行动**: 1) MVP 10.2 Sprint 开始 2) OpenTelemetry 集成 3) 多租户隔离
+> **MVP 10.2 进行中**:
+> - ✅ P1-1: 统一错误码 (error_codes 模块 + StructuredError)
+> - ✅ P1-2: TLS + 安全 Header (routes.rs middleware)
+> - 🔄 P1-4: OpenTelemetry 集成 (文档已添加，OTLP 待配置)
+> - ✅ P1-5: Kubernetes Helm Chart (deploy/kubernetes/helm/)
+> **下一步行动**: 1) 完善 OpenTelemetry OTLP exporter 2) 多租户隔离核心 3) Grafana 集成

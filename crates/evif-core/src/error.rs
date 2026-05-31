@@ -2,6 +2,11 @@
 //!
 //! 统一错误处理,支持所有插件和服务组件。
 //!
+//! # P1-1: 增强错误处理
+//! - trace_id 支持用于请求追踪 (待添加到 Internal)
+//! - 结构化错误码 (error_code)
+//! - 错误码映射表
+//!
 //! # 错误处理
 //!
 //! 使用 `EvifResult<T>` 作为标准返回类型:
@@ -26,6 +31,25 @@
 //! - **Network**: 网络相关错误 (Http, Network, Timeout)
 
 use std::io;
+
+/// P1-1: 错误码常量 (用于结构化响应)
+pub mod error_codes {
+    /// 标准错误码前缀
+    pub const EVIF_PREFIX: &str = "EVIF";
+    
+    // 4xx 客户端错误
+    pub const NOT_FOUND: &str = "EVIF_0404";
+    pub const BAD_REQUEST: &str = "EVIF_0400";
+    pub const UNAUTHORIZED: &str = "EVIF_0401";
+    pub const FORBIDDEN: &str = "EVIF_0403";
+    pub const CONFLICT: &str = "EVIF_0409";
+    
+    // 5xx 服务器错误
+    pub const INTERNAL_ERROR: &str = "EVIF_0500";
+    pub const NOT_IMPLEMENTED: &str = "EVIF_0501";
+    pub const SERVICE_UNAVAILABLE: &str = "EVIF_0503";
+    pub const TIMEOUT: &str = "EVIF_0504";
+}
 
 pub type EvifResult<T> = Result<T, EvifError>;
 
@@ -160,4 +184,44 @@ impl From<&str> for EvifError {
     fn from(s: &str) -> Self {
         EvifError::Other(s.to_string())
     }
+}
+
+// P1-1: 错误码映射和工具方法
+impl EvifError {
+    /// 获取结构化错误码 (用于 API 响应)
+    pub fn error_code(&self) -> &'static str {
+        use error_codes::*;
+        match self {
+            EvifError::NotFound(_) => NOT_FOUND,
+            EvifError::AlreadyExists(_) => CONFLICT,
+            EvifError::InvalidPath(_) => BAD_REQUEST,
+            EvifError::InvalidInput(_) => BAD_REQUEST,
+            EvifError::PermissionDenied(_) => FORBIDDEN,
+            EvifError::Authentication(_) => UNAUTHORIZED,
+            EvifError::Timeout(_) => TIMEOUT,
+            EvifError::Internal(_) => INTERNAL_ERROR,
+            _ => INTERNAL_ERROR,
+        }
+    }
+
+    /// 转换为可追踪的结构化格式
+    pub fn to_structured(&self) -> StructuredError {
+        StructuredError {
+            error: self.error_code().to_string(),
+            message: self.to_string(),
+            source: std::error::Error::source(self).map(|e| e.to_string()),
+        }
+    }
+}
+
+/// P1-1: 结构化错误响应 (用于 API)
+#[derive(Debug, serde::Serialize)]
+pub struct StructuredError {
+    /// 错误码 (如 "EVIF_0404")
+    pub error: String,
+    /// 人类可读错误消息
+    pub message: String,
+    /// 错误来源 (如果有)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }

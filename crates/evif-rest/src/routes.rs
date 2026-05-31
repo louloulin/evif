@@ -10,6 +10,7 @@ use crate::{
 use crate::mcp_handlers::McpServerConfig;
 use axum::extract::DefaultBodyLimit;
 use axum::{middleware, routing, Router};
+use axum::http::{header, HeaderValue, HeaderName};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
