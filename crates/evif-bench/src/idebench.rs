@@ -13,6 +13,7 @@ fn is_network_available() -> bool {
     std::net::TcpListener::bind("127.0.0.1:0").is_ok()
 }
 
+#[allow(dead_code)]
 macro_rules! skip_if_sandboxed {
     () => {
         if !is_network_available() {
