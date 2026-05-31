@@ -1462,3 +1462,1377 @@ MVP 10.5: SaaS 准备 (4 周)
 > **分析范围**: 全代码库 (13 crates, 120K+ lines of Rust) + 商业价值  
 > **下一行动**: Review 报告 → 确认优先级 → 开始 MVP 10.1 P0 修复 → 推送 mvp10.md  
 > **文档状态**: v2.0 - 包含生产改造 + 商业价值分析
+
+---
+
+## 二十一、MVP 商业化核心功能规格
+
+> **目标**: 为每个 MVP 版本定义清晰的功能规格、API 设计、数据模型和成功指标  
+> **覆盖范围**: Plugin Marketplace、企业特性、计费系统、多租户、管理后台、MCP 协议增强  
+> **版本策略**: 开源免费 → Pro ($29/月) → Team ($99/月) → Enterprise ($499/月)
+
+### 21.1 功能层次总览
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EVIF 功能层次                                  │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 5: 生态层                                                  │
+│  ├── Plugin Marketplace (付费插件市场)                            │
+│  ├── Developer Portal (开发者文档/API keys)                      │
+│  └── MCP 协议规范贡献                                             │
+│                                                                  │
+│  Layer 4: 商业化层                                                │
+│  ├── 使用量计费 (API calls, storage, agents)                     │
+│  ├── 订阅管理 (tiers, upgrades, invoices)                         │
+│  └── Webhooks (事件通知)                                          │
+│                                                                  │
+│  Layer 3: 企业特性层                                              │
+│  ├── 多租户隔离 (tenant, quota, billing)                         │
+│  ├── SSO/OIDC + SCIM 用户同步                                     │
+│  ├── 审计日志 WORM (不可变审计)                                    │
+│  └── 细粒度 RBAC (资源级权限)                                     │
+│                                                                  │
+│  Layer 2: 基础设施层 (生产就绪)                                   │
+│  ├── TLS + 安全 Header                                           │
+│  ├── OpenTelemetry (traces/metrics/logs)                         │
+│  ├── Kubernetes 部署                                             │
+│  └── Prometheus + Grafana + 告警                                  │
+│                                                                  │
+│  Layer 1: 核心层 (MVP 10.x 基石)                                 │
+│  ├── 17+ MCP 工具 (已实现)                                        │
+│  ├── 150 REST 端点 (已实现)                                       │
+│  ├── ContextFS + SkillFS + PipeFS (已实现)                        │
+│  └── MemoryFS + VectorFS (已实现)                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 21.2 MVP 10.1 — 安全补丁版 (Week 1)
+
+> **目标**: 修复所有 P0 安全问题，为商业化奠定安全基础  
+> **发布版本**: v0.10.1  
+> **目标用户**: 所有用户（安全修复强制升级）
+
+#### 功能规格
+
+**F-10.1.1: 路径遍历防护**
+```
+描述: 所有路径参数在处理前进行规范化，检测并拒绝 ../
+验收标准:
+  - [ ] GET /api/v1/files?path=/local/../../../etc/passwd → 400 Bad Request
+  - [ ] POST /api/v1/fs/cp {"src": "../secret"} → 400 Bad Request
+  - [ ] 路径规范化后长度不超过 4096 字符
+  - [ ] 所有插件的路径输入统一经过 EvifPath::normalize()
+API 设计:
+  POST /api/v1/path/validate
+  Body: {"path": "/local/../../../etc/passwd"}
+  Response: {"valid": false, "reason": "path traversal detected", "normalized": "/local"}
+数据模型:
+  pub struct PathValidation {
+      pub original: String,
+      pub normalized: String,
+      pub valid: bool,
+      pub reason: Option<String>,
+  }
+成功指标: 0 个已知的路径遍历漏洞
+```
+
+**F-10.1.2: Grep 正则超时保护**
+```
+描述: 所有正则表达式搜索设置编译超时和执行超时
+验收标准:
+  - [ ] 用户提供的正则编译超时 > 50ms → 返回错误
+  - [ ] 正则执行时间 > 5s → 超时终止
+  - [ ] 编译后的正则缓存，相同模式不重复编译
+  - [ ] 可配置的 max_regex_complexity 阈值
+API 设计:
+  POST /api/v1/grep
+  Body: {"path": "/test", "pattern": "(a+)+$", "timeout_ms": 5000}
+  Response (on timeout): {"error": "REGEX_TIMEOUT", "message": "Pattern execution exceeded 5s"}
+数据模型:
+  pub struct RegexConfig {
+      pub compile_timeout_ms: u64,   // 默认 50ms
+      pub execution_timeout_ms: u64, // 默认 5000ms
+      pub max_pattern_length: usize,  // 默认 200 chars
+      pub cache_size: usize,          // 默认 1000 patterns
+  }
+成功指标: 100% 的 Grep 调用在 10s 内返回
+```
+
+**F-10.1.3: MemoryStorage 并发安全**
+```
+描述: 将 DashMap 替换为 tokio::sync 的并发安全结构
+验收标准:
+  - [ ] MemoryStorage 使用 RwLock<HashMap> 替代 DashMap
+  - [ ] 100 并发写入测试无数据竞争 (运行 1000 次无失败)
+  - [ ] 读写性能下降 < 20% (对比 DashMap baseline)
+  - [ ] 所有 HashMap 写入操作使用事务边界
+数据模型变更:
+  // Before
+  items: Arc<DashMap<String, MemoryItem>>
+  // After
+  items: Arc<tokio::sync::RwLock<HashMap<String, MemoryItem>>>
+成功指标: cargo test -p evif-mem -- 100 并发测试 100% 通过
+```
+
+**F-10.1.4: 动态插件 Arc::from_raw 安全验证**
+```
+描述: 增强插件指针验证，添加 magic header + 长度检查
+验收标准:
+  - [ ] 插件指针加载时验证 magic bytes (0x45564946 = "EVIF")
+  - [ ] 指针非空验证
+  - [ ] 结构体大小验证 (不超过声明大小)
+  - [ ] 加载后立即执行完整性校验
+  - [ ] 任何验证失败返回清晰的错误码 (PLUGIN_LOAD_UNSAFE_PTR)
+数据模型:
+  const PLUGIN_MAGIC: u32 = 0x45564946;
+  const PLUGIN_VERSION: u32 = 1;
+  
+  pub struct PluginHeader {
+      pub magic: u32,           // 必须为 PLUGIN_MAGIC
+      pub version: u32,         // 必须为 PLUGIN_VERSION
+      pub struct_size: u32,     // 结构体大小
+      pub abi_version: u32,     // ABI 版本
+  }
+成功指标: 恶意构造的插件 .so 文件无法导致内存破坏
+```
+
+---
+
+### 21.3 MVP 10.2 — 生产就绪版 (Weeks 2-5)
+
+> **目标**: 完整生产就绪，支持企业客户评估  
+> **发布版本**: v0.11.0  
+> **目标用户**: 企业 AI 平台团队、AI Startup
+
+#### 功能规格
+
+**F-10.2.1: 统一错误处理 + trace ID**
+```
+描述: 全系统统一错误格式，每个请求携带 trace_id
+验收标准:
+  - [ ] 所有 API 响应包含 trace_id header (X-Trace-ID)
+  - [ ] 所有日志包含 trace_id 和 span_id
+  - [ ] 错误响应格式: {error, code, message, trace_id, timestamp}
+  - [ ] 全局 panic handler 将 panic 转为带 trace_id 的错误响应
+  - [ ] 错误码体系: 4xxxx = 客户端错误, 5xxxx = 服务端错误
+API 设计:
+  // 错误响应格式
+  {
+    "error": "PLUGIN_NOT_FOUND",
+    "code": 40401,
+    "message": "Plugin 'xyz' not registered",
+    "trace_id": "abc123-def456-ghi789",
+    "timestamp": "2026-06-01T12:00:00Z",
+    "details": {}  // 可选的额外上下文
+  }
+成功指标: 100% 的 API 响应包含 trace_id
+```
+
+**F-10.2.2: TLS + 安全 Header**
+```
+描述: HTTPS 支持 + RFC 安全响应头
+验收标准:
+  - [ ] 支持 TLS 1.2 + 1.3 (通过 axum_server 或 nginx 反向代理)
+  - [ ]
+  响应头包含:
+    - Strict-Transport-Security: max-age=31536000; includeSubDomains
+    - X-Content-Type-Options: nosniff
+    - X-Frame-Options: DENY
+    - X-XSS-Protection: 1; mode=block
+    - Content-Security-Policy: default-src 'self'
+    - Referrer-Policy: strict-origin-when-cross-origin
+    - Permissions-Policy: camera=(), microphone=(), geolocation=()
+  - [ ] 支持 TLS 终止 (EVIF_REST_TLS_CERT, EVIF_REST_TLS_KEY)
+API 设计:
+  # 启动参数
+  evif-rest --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+  # 或环境变量
+  EVIF_REST_TLS_CERT=/path/to/cert.pem
+  EVIF_REST_TLS_KEY=/path/to/key.pem
+成功指标: Qualys SSL Labs 评分 A 或以上
+```
+
+**F-10.2.3: OpenTelemetry 集成**
+```
+描述: 统一 traces/metrics/logs 到 OTLP 兼容后端
+验收标准:
+  - [ ] 每个 HTTP 请求生成 trace，自动传播 trace context
+  - [ ] 所有插件操作生成 span
+  - [ ] 自定义 metrics: evif_api_requests_total, evif_tool_calls_total,
+         evif_token_usage_estimate, evif_error_total
+  - [ ] 结构化日志 (JSON) 输出到 stdout，由 OTEL Collector 收集
+  - [ ] 支持 OTLP HTTP 导出 (无 gRPC 依赖)
+环境变量:
+  EVIF_OTEL_ENDPOINT=http://otel-collector:4317
+  EVIF_OTEL_SERVICE_NAME=evif-rest
+  EVIF_OTEL_EXPORTER=otlp-http
+成功指标: 100% 的 API 调用可追踪到具体 span
+```
+
+**F-10.2.4: Kubernetes 部署**
+```
+描述: Helm Chart + HPA + PodDisruptionBudget + 细化健康检查
+验收标准:
+  - [ ] Helm Chart 安装: helm install evif oci://evif/evif --version 0.11.0
+  - [ ] HorizontalPodAutoscaler: CPU > 70% 或内存 > 80% 自动扩容 (2-10 pod)
+  - [ ] PodDisruptionBudget: 升级时至少保留 1 个可用 pod
+  - [ ] 细化健康检查:
+         /health/live → liveness (进程存活)
+         /health/ready → readiness (所有插件初始化完成)
+         /health/startup → startup (启动探测, 30s 超时)
+  - [ ] 资源限制: request CPU 250m / memory 256Mi, limit CPU 2 / memory 2Gi
+  - [ ] 持久化存储: PVC for /data and /var/log/evif
+API 设计:
+  # Helm values 示例 (values.yaml)
+  replicaCount: 2
+  
+  image:
+    repository: evif/evif-rest
+    tag: "0.11.0"
+  
+  service:
+    type: ClusterIP
+    port: 8081
+  
+  ingress:
+    enabled: true
+    className: "nginx"
+    hosts:
+      - host: evif.example.com
+        paths: [{path: /, pathType: Prefix}]
+    tls:
+      - secretName: evif-tls
+        hosts: [evif.example.com]
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  env:
+    - name: EVIF_REST_TLS_CERT
+      valueFrom:
+        secretKeyRef:
+          name: evif-tls-secret
+          key: cert
+    - name: EVIF_REST_TLS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: evif-tls-secret
+          key: key
+成功指标: helm install 在 5 分钟内完成，HPA 在 3 分钟内响应负载变化
+```
+
+**F-10.2.5: Grafana Dashboard + 告警**
+```
+描述: 预置 Dashboard + Prometheus AlertManager 告警规则
+验收标准:
+  - [ ] Dashboard JSON 模板提供，包含以下面板:
+         API QPS (req/s)
+         延迟 P50 / P95 / P99
+         错误率 (5xx 比例)
+         熔断器状态 (每个插件)
+         插件健康状态
+         Memory 使用量
+         活跃连接数
+         Token 使用估算
+  - [ ] 告警规则:
+         HighErrorRate: 5xx 比例 > 5%，持续 5 分钟
+         CircuitBreakerOpen: 熔断器 Open 状态 > 1 分钟
+         HighLatency: P99 > 1s，持续 5 分钟
+         OutOfMemory: memory usage > 90%
+  - [ ] 告警通知到 Slack + PagerDuty (通过 AlertManager)
+Grafana Dashboard JSON: 见 docs/grafana/evif-dashboard.json
+成功指标: 告警在 30 秒内触发，通知在 1 分钟内送达
+```
+
+**F-10.2.6: 多租户隔离**
+```
+描述: 完整的多租户架构，支持租户级别的资源配额和计费
+验收标准:
+  - [ ] 每个请求携带 X-Tenant-ID header (必填)
+  - [ ] 租户间数据完全隔离 (插件状态、Memory、Context、Queue)
+  - [ ] 租户级资源配额:
+         max_api_calls_per_day: u64
+         max_storage_bytes: u64
+         max_concurrent_agents: usize
+         max_plugins: usize
+  - [ ] 配额超限返回 429 Too Many Requests (带 Retry-After)
+  - [ ] 租户元数据: name, plan (free/pro/team/enterprise), created_at
+  - [ ] 租户管理员可查看本租户使用量 (GET /api/v1/tenants/:id/usage)
+  - [ ] 超级管理员可管理所有租户
+API 设计:
+  # 租户管理
+  POST   /api/v1/admin/tenants          # 创建租户 (superadmin)
+  GET    /api/v1/admin/tenants          # 列出所有租户 (superadmin)
+  GET    /api/v1/admin/tenants/:id      # 租户详情 (superadmin)
+  PUT    /api/v1/admin/tenants/:id      # 更新租户 (superadmin)
+  DELETE /api/v1/admin/tenants/:id     # 删除租户 (superadmin)
+  
+  # 租户使用量
+  GET    /api/v1/tenants/:id/usage           # 当前租户使用量
+  GET    /api/v1/tenants/:id/usage/daily     # 每日使用历史
+  GET    /api/v1/tenants/:id/usage/summary   # 使用量汇总 (API calls, storage, agents)
+  
+  # 配额管理
+  GET    /api/v1/tenants/:id/quotas          # 租户配额
+  PUT    /api/v1/tenants/:id/quotas          # 更新配额 (superadmin)
+  
+  # 配额超限响应
+  HTTP/1.1 429 Too Many Requests
+  X-RateLimit-Limit: 10000
+  X-RateLimit-Remaining: 0
+  X-RateLimit-Reset: 1719830400
+  Retry-After: 86400
+  
+  {
+    "error": "QUOTA_EXCEEDED",
+    "code": 42901,
+    "message": "Daily API calls quota exceeded (10000/10000)",
+    "quota_type": "api_calls_per_day",
+    "current": 10000,
+    "limit": 10000,
+    "reset_at": "2026-06-02T00:00:00Z",
+    "upgrade_url": "/billing/upgrade"
+  }
+数据模型:
+  pub struct Tenant {
+      pub id: Uuid,
+      pub name: String,
+      pub plan: TenantPlan,
+      pub quotas: TenantQuotas,
+      pub created_at: DateTime<Utc>,
+      pub updated_at: DateTime<Utc>,
+      pub status: TenantStatus,
+  }
+  
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  pub enum TenantPlan {
+      Free,
+      Pro,       // $29/月
+      Team,      // $99/月
+      Enterprise, // $499/月
+  }
+  
+  pub struct TenantQuotas {
+      pub max_api_calls_per_day: u64,
+      pub max_storage_bytes: u64,
+      pub max_concurrent_agents: usize,
+      pub max_plugins: usize,
+      pub max_mcp_tools: usize,
+      pub rate_limit_rpm: u32,  // requests per minute
+  }
+  
+  pub enum TenantStatus {
+      Active,
+      Suspended,
+      Trial,
+      Cancelled,
+  }
+成功指标: 租户 A 的请求无法访问租户 B 的数据 (100% 隔离)
+```
+
+---
+
+###
+### 21.4 MVP 10.3 — Plugin Marketplace + 计费系统版 (Weeks 6-8)
+
+> **目标**: Plugin Marketplace MVP + 使用量计费 API，为商业化建立收入引擎  
+> **发布版本**: v0.12.0  
+> **目标用户**: Plugin 开发者 (收入来源)、企业客户 (采购插件)、EVIF 团队 (平台运营)
+
+#### 功能规格
+
+**F-10.3.1: Plugin Marketplace API**
+```
+描述: 插件发布、发现、安装、评价的完整 API
+验收标准:
+  - [ ] 开发者可发布插件 (上传 .so + SKILL.md + metadata.json)
+  - [ ] 插件审核流程: DRAFT → PENDING_REVIEW → APPROVED/REJECTED
+  - [ ] 用户可搜索插件 (按名称、标签、类别)
+  - [ ] 用户可安装/卸载插件 (安装到自己的挂载表)
+  - [ ] 插件可设置付费 ($0-$999/月，精度 $0.01)
+  - [ ] 付费插件支持免费试用 (7 天)
+  - [ ] 开发者可查看插件收入报表
+  - [ ] EVIF 管理员可审核/下架插件
+
+插件元数据 metadata.json:
+  {
+    "id": "notionfs",
+    "name": "Notion FS",
+    "version": "1.0.0",
+    "author": "evif-team",
+    "description": "Mount your Notion workspace as a filesystem",
+    "category": "productivity",
+    "tags": ["notion", "docs", "productivity"],
+    "homepage": "https://github.com/evif/notionfs",
+    "license": "MIT",
+    "pricing": {
+      "monthly_cents": 499,  // $4.99/月, 0 = 免费
+      "trial_days": 7
+    },
+    "requirements": {
+      "min_evif_version": "0.10.0",
+      "env_vars": ["NOTION_API_KEY"],
+      "permissions": ["filesystem:read", "network:outbound"]
+    },
+    "manifest": {
+      "so_file": "notionfs.so",
+      "skill_file": "SKILL.md",
+      "size_bytes": 2097152
+    }
+  }
+
+API 设计:
+  # 开发者端
+  POST   /api/v1/marketplace/plugins              # 发布插件 (开发者)
+  PUT    /api/v1/marketplace/plugins/:id         # 更新插件 (开发者)
+  DELETE /api/v1/marketplace/plugins/:id         # 删除插件 (开发者)
+  GET    /api/v1/marketplace/plugins/:id/stats  # 插件统计 (开发者)
+  
+  # 市场端
+  GET    /api/v1/marketplace/plugins            # 搜索插件 (分页)
+  GET    /api/v1/marketplace/plugins/:id       # 插件详情
+  GET    /api/v1/marketplace/plugins/:id/schema # 插件 Schema
+  POST   /api/v1/marketplace/plugins/:id/install # 安装插件
+  DELETE /api/v1/marketplace/plugins/:id/install # 卸载插件
+  POST   /api/v1/marketplace/plugins/:id/reviews # 评价插件
+  GET    /api/v1/marketplace/plugins/:id/reviews # 查看评价
+  
+  # 管理端
+  GET    /api/v1/marketplace/admin/plugins       # 所有插件 (含审核状态)
+  PUT    /api/v1/marketplace/admin/plugins/:id/review # 审核插件
+  DELETE /api/v1/marketplace/admin/plugins/:id # 下架插件
+  
+  # 开发者收入
+  GET    /api/v1/marketplace/developer/earnings       # 收入汇总
+  GET    /api/v1/marketplace/developer/earnings/daily # 每日收入明细
+  GET    /api/v1/marketplace/developer/payouts        # 支付历史
+
+  # 搜索参数
+  GET /api/v1/marketplace/plugins?category=productivity&tags=notion&sort=popular&page=1&size=20&free_only=false&price_max=500
+
+数据模型:
+  pub struct MarketplacePlugin {
+      pub id: Uuid,
+      pub developer_id: Uuid,
+      pub status: PluginStatus,
+      pub download_count: u64,
+      pub rating_avg: f32,
+      pub review_count: u32,
+      pub monthly_revenue_cents: u32,
+      pub created_at: DateTime<Utc>,
+      pub metadata: PluginMetadata,
+  }
+  
+  pub enum PluginStatus {
+      Draft,
+      PendingReview,
+      Approved,
+      Rejected,
+      Suspended,
+      Deprecated,
+  }
+  
+  pub struct PluginReview {
+      pub id: Uuid,
+      pub user_id: Uuid,
+      pub tenant_id: Uuid,
+      pub rating: u8,           // 1-5
+      pub title: String,
+      pub body: String,
+      pub verified_purchase: bool,
+      pub created_at: DateTime<Utc>,
+  }
+成功指标: Plugin Marketplace 上线 30 天内 10+ 插件、100+ 安装量
+```
+
+**F-10.3.2: 使用量计费 API**
+```
+描述: 精确计量每个租户的 API 调用量、存储量、Agent 数量
+验收标准:
+  - [ ] 每个 API 请求计量 (tenant_id, endpoint, timestamp, latency_ms)
+  - [ ] 存储使用量计量 (tenant_id, path, size_bytes, timestamp)
+  - [ ] 活跃 Agent 计数 (per tenant, per minute)
+  - [ ] 按计划 tier 计算配额和超限计费
+  - [ ] 使用量数据保留 12 个月
+  - [ ] 支持 Webhook 通知配额使用达到 80%/100%
+  - [ ] 计费 API 支持导出 CSV/PDF 发票
+
+配额与定价:
+  | Plan       | API calls/day | Storage    | Agents | MCP tools | Price       |
+  |------------|---------------|------------|--------|-----------|-------------|
+  | Free       | 1,000         | 100MB      | 1      | 10        | $0          |
+  | Pro        | 100,000       | 10GB       | 10     | 100       | $29/月      |
+  | Team       | 1,000,000     | 100GB      | 50     | 500       | $99/月      |
+  | Enterprise | unlimited     | 1TB        | unlimited | unlimited | $499/月   |
+  
+  超限计费 (API calls):
+  - Free: 超限后请求被拒绝
+  - Pro/Team: 超限部分 $0.001/1000 calls
+  - Enterprise: 无超限
+
+API 设计:
+  # 使用量查询
+  GET    /api/v1/billing/usage                    # 当前计费周期使用量
+  GET    /api/v1/billing/usage/history             # 历史使用量 (最多 12 个月)
+  GET    /api/v1/billing/usage/by-endpoint         # 按端点分布
+  GET    /api/v1/billing/usage/by-day             # 每日使用量
+  GET    /api/v1/billing/subscription             # 当前订阅
+  GET    /api/v1/billing/invoices                 # 历史发票
+  GET    /api/v1/billing/invoices/:id             # 发票详情 (PDF)
+  
+  # 订阅管理
+  POST   /api/v1/billing/subscription             # 创建订阅
+  PUT    /api/v1/billing/subscription             # 升级/降级
+  DELETE /api/v1/billing/subscription             # 取消订阅
+  
+  # Webhook 配置
+  GET    /api/v1/billing/webhooks                 # Webhook 配置
+  POST   /api/v1/billing/webhooks                # 创建 Webhook
+  DELETE /api/v1/billing/webhooks/:id           # 删除 Webhook
+
+  # 使用量响应格式
+  {
+    "period": {
+      "start": "2026-06-01T00:00:00Z",
+      "end": "2026-06-30T23:59:59Z"
+    },
+    "plan": "Pro",
+    "quotas": {
+      "api_calls": {"used": 45000, "limit": 100000, "unit": "calls/day"},
+      "storage": {"used": 5368709120, "limit": 10737418240, "unit": "bytes"},
+      "agents": {"used": 3, "limit": 10, "unit": "count"}
+    },
+    "usage": {
+      "api_calls": {
+        "current": 45000,
+        "limit": 100
+**F-10.3.3: Admin Dashboard API**
+```
+描述: 超级管理员和租户管理员的管理 API
+验收标准:
+  - [ ] 超级管理员可管理所有租户 (CRUD)
+  - [ ] 超级管理员可查看全局使用量统计
+  - [ ] 超级管理员可审核 Plugin Marketplace 插件
+  - [ ] 超级管理员可查看全局错误日志和性能指标
+  - [ ] 租户管理员可管理本租户用户
+  - [ ] 租户管理员可查看本租户使用量和配额
+  - [ ] 管理员操作全部记录审计日志
+
+API 设计:
+  # 全局统计 (superadmin)
+  GET    /api/v1/admin/stats/overview            # 全局概览
+  GET    /api/v1/admin/stats/tenants             # 租户统计
+  GET    /api/v1/admin/stats/plugins             # 插件统计
+  GET    /api/v1/admin/stats/revenue            # 收入统计
+  GET    /api/v1/admin/stats/usage/by-day      # 全局每日使用量
+  
+  # 用户管理 (租户管理员)
+  GET    /api/v1/admin/users                   # 租户用户列表
+  POST   /api/v1/admin/users                   # 创建用户
+  GET    /api/v1/admin/users/:id              # 用户详情
+  PUT    /api/v1/admin/users/:id              # 更新用户
+  DELETE /api/v1/admin/users/:id              # 删除用户
+  PUT    /api/v1/admin/users/:id/disable      # 禁用用户
+  
+  # 审计日志 (租户管理员)
+  GET    /api/v1/admin/audit                   # 本租户审计日志
+  GET    /api/v1/admin/audit/export            # 导出审计日志 (CSV)
+  
+  # 全局审计日志 (superadmin)
+  GET    /api/v1/admin/audit/global            # 全局审计日志
+  GET    /api/v1/admin/audit/global/export     # 导出全局审计日志
+
+  # 响应格式
+  {
+    "stats": {
+      "total_tenants": 150,
+      "active_tenants": 142,
+      "total_api_calls_today": 4500000,
+      "total_storage_bytes": 536870912000,
+      "revenue_mtd_cents": 285000,
+      "active_plugins": 42,
+      "marketplace_gmv_cents": 15000
+    }
+  }
+成功指标: Admin Dashboard 覆盖 100% 的管理操作
+```
+
+---
+
+### 21.5 MVP 10.4 — 企业特性版 (Weeks 9-12)
+
+> **目标**: 企业级安全特性，支持大企业采购  
+> **发布版本**: v0.13.0  
+> **目标用户**: Enterprise 客户 (1000+ 人企业)
+
+#### 功能规格
+
+**F-10.4.1: SSO/OIDC + SCIM 用户同步**
+```
+描述: 企业身份提供商集成 + 用户自动Provisioning
+验收标准:
+  - [ ] OIDC 登录: 支持 Okta, Azure AD, Google Workspace
+  - [ ] SAML 登录: 支持企业 SSO
+  - [ ] SCIM 2.0: 自动同步用户目录 (创建/更新/删除)
+  - [ ] 角色映射: IdP groups → EVIF roles
+  - [ ] JIT (Just-In-Time) provisioning: 首次登录时自动创建用户
+  - [ ] 会话管理: 单点登出 (SLO), 会话超时配置
+  - [ ] 强制 MFA: 企业可要求所有用户启用 MFA
+
+OIDC 配置 (evif.toml):
+  [auth.oidc]
+  enabled = true
+  issuer = "https://your-okta.com"
+  client_id = "${OKTA_CLIENT_ID}"
+  client_secret = "${OKTA_CLIENT_SECRET}"
+  scopes = ["openid", "profile", "email", "groups"]
+  role_mapping = [
+    {group = "evif-admins", role = "superadmin"},
+    {group = "evif-users", role = "member"}
+  ]
+  
+  [auth.sso]
+  enabled = false  # SAML configuration when enabled
+
+SCIM 端点:
+  POST   /scim/v2/Users         # 创建用户
+  GET    /scim/v2/Users         # 列出用户
+  GET    /scim/v2/Users/:id    # 用户详情
+  PUT    /scim/v2/Users/:id    # 更新用户
+  DELETE /scim/v2/Users/:id    # 删除用户
+  POST   /scim/v2/Groups        # 创建组
+  GET    /scim/v2/Groups       # 列出组
+  PATCH  /scim/v2/Users/:id    # 部分更新
+成功指标: Okta/Azure AD 集成在 2 小时内完成配置
+```
+
+**F-10.4.2: 不可变审计日志 (WORM)**
+```
+描述: 审计日志写入不可变存储，支持合规要求
+验收标准:
+  - [ ] 审计日志追加写入 append-only 存储 (无法修改/删除)
+  - [ ] 日志加密存储 (AES-256-GCM)
+  - [ ] 每日归档到冷存储 (S3 Glacier 或等价物)
+  - [ ] 保留期限: 默认 7 年 (可配置)
+  - [ ] 支持完整性校验 (Merkle tree 或 hash chain)
+  - [ ] 合规导出: 支持导出为 PDF/CSV 用于审计
+  - [ ] 审计事件类型覆盖: 认证、授权、文件操作、插件操作、计费、管理操作
+
+审计事件类型:
+  - AuthenticationSuccess/Failed
+  - SessionCreated/Terminated/Expired
+  - UserCreated/Updated/Deleted/Disabled
+  - PermissionGranted/Revoked
+  - FileRead/Write/Delete/Mkdir/Rename
+  - PluginInstalled/Uninstalled/Updated
+  - TenantCreated/Updated/Suspended
+  - BillingPlanChanged/InvoiceGenerated
+  - ApiKeyCreated/Revoked
+  - SsoLogin/Logout/SCIMSync
+
+API 设计:
+  GET /api/v1/admin/audit/export
+    ?from=2026-01-01&to=2026-06-01
+    &types=AuthenticationSuccess,FileRead
+    &format=csv|pdf
+    &encrypted=true
+  
+  响应: CSV/PDF 文件下载 (加密压缩包)
+  
+  审计日志记录格式:
+  {
+    "id": "audit-uuid",
+    "event_type": "FileRead",
+    "timestamp": "2026-06-01T12:00:00.123Z",
+    "actor": {
+      "type": "User",
+      "id": "user-uuid",
+      "email": "alice@example.com",
+      "ip_address": "203.0.113.10",
+      "user_agent": "EVIF-CLI/0.10.0"
+    },
+    "resource": {
+      "type": "File",
+      "path": "/context/L2/architecture.md",
+      "tenant_id": "tenant-uuid"
+    },
+    "action": "read",
+    "outcome": "success",
+    "metadata": {
+      "size_bytes": 4096,
+      "duration_ms": 12
+    },
+    "integrity": {
+      "hash": "sha256:abc123...",
+      "prev_hash": "sha256:prev..."
+    }
+  }
+成功指标: 审计日志导出响应时间 < 10s (for 1 年数据)
+```
+
+**F-10.4.3: Webhooks 事件系统**
+```
+描述: Webhook 通知，支持插件和外部系统集成
+验收标准:
+  - [ ] Webhook 配置: URL, secret, 事件类型过滤, 激活状态
+  - [ ] 事件类型: 所有审计事件类型 + 自定义事件
+  - [ ] Payload 签名: HMAC-SHA256 (X-EVIF-Signature header)
+  - [ ] 重试机制: 指数退避 (1s → 2s → 4s → ... → 10m), 最多 10 次
+  - [ ] 事件队列: 持久化到磁盘，防止 Webhook 漏发
+  - [ ] 投递日志: 每个 Webhook 投递的历史记录
+  - [ ] 签名验证 SDK: 提供多语言 SDK 验证 Webhook 签名
+
+API 设计:
+  POST   /api/v1/webhooks               # 创建 Webhook
+  GET    /api/v1/webhooks               # 列出 Webhook
+  GET    /api/v1/webhooks/:id           # Webhook 详情
+  PUT    /api/v1/webhooks/:id           # 更新 Webhook
+  DELETE /api/v1/webhooks/:id           # 删除 Webhook
+  GET    /api/v1/webhooks/:id/deliveries # 投递历史
+  POST   /api/v1/webhooks/:id/test      # 发送测试事件
+  
+  # Webhook payload 格式
+  {
+    "id": "evt_uuid",
+    "type
+**F-10.4.4: 细粒度 RBAC**
+```
+描述: 资源级权限控制，支持 ABAC 条件
+验收标准:
+  - [ ] 权限粒度: tenant > namespace > path > plugin
+  - [ ] 内置角色: superadmin, tenant_admin, developer, member, guest
+  - [ ] 自定义角色: 企业可定义自己的角色组合
+  - [ ] ABAC 条件: 基于资源属性的动态权限判断
+  - [ ] 权限继承: path 权限继承自 namespace 权限
+  - [ ] 即时权限撤销: 权限变更立即生效
+
+权限模型:
+  enum Permission {
+      // 文件系统
+      fs_read,
+      fs_write,
+      fs_delete,
+      fs_admin,
+      // 内存
+      memory_read,
+      memory_write,
+      memory_search,
+      memory_admin,
+      // 上下文
+      context_read_l0,
+      context_write_l0,
+      context_read_l1,
+      context_write_l1,
+      context_read_l2,
+      context_write_l2,
+      // 插件
+      plugin_install,
+      plugin_uninstall,
+      plugin_configure,
+      plugin_admin,
+      // Marketplace
+      marketplace_publish,
+      marketplace_manage,
+      // 管理
+      tenant_manage,
+      user_manage,
+      billing_manage,
+      audit_read,
+  }
+  
+  // ABAC 条件示例
+  condition: "tenant_id == resource.tenant_id && (role == 'admin' || owner == principal.user_id)"
+成功指标: 权限检查延迟 < 1ms，权限验证覆盖率 100%
+```
+
+---
+
+### 21.6 MVP 10.5 — MCP 协议增强 + Developer Portal 版 (Weeks 13-16)
+
+> **目标**: MCP 协议完整实现 + 开发者生态基础设施  
+> **发布版本**: v0.14.0  
+> **目标用户**: Plugin 开发者、企业 AI 平台
+
+#### 功能规格
+
+**F-10.5.1: MCP 协议完整实现**
+```
+描述: 完整 MCP 协议支持，包括 batching、subscriptions、roots
+验收标准:
+  - [ ] Protocol 版本协商: 支持 MCP 2024-11-05
+  - [ ] Batch 工具调用: 单请求多个工具调用，结果并行处理
+  - [ ] Roots 协议: workspace roots 发现和更新通知
+  - [ ] Subscriptions: 服务器推送文件变化、工具变化通知
+  - [ ] Progress 通知: 长时间操作的进度反馈
+  - [ ] Cancelled 通知: 客户端取消请求的优雅处理
+  - [ ] 完整的 JSON Schema for all 工具 input/output
+
+MCP Protocol 版本协商:
+  // 客户端发送
+  {
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {
+        "roots": {"listChanged": true},
+        "tools": {},
+        "sampling": {}
+      },
+      "clientInfo": {"name": "evif-cli", "version": "0.14.0"}
+    }
+  }
+  
+  // 服务器响应
+  {
+    "jsonrpc": "2.0",
+    "result": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {
+        "tools": {"changeNotifications": true},
+        "resources": {"subscribe": true, "listChanged": true}
+      },
+      "serverInfo": {"name": "evif-mcp", "version": "0.14.0"}
+    }
+  }
+
+Batch 工具调用:
+  // 单请求多个工具
+  {
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "requests": [
+        {"name": "evif_ls", "arguments": {"path": "/skills"}},
+        {"name": "evif_cat", "arguments": {"path": "/context/L0/current"}}
+      ],
+      "parallel": true  // 并行执行
+    }
+  }
+
+  // Batch 响应
+  {
+    "jsonrpc": "2.0",
+    "result": {
+      "results": [
+        {"index": 0, "content": [{"type": "text", "text": "skill1\nskill2"}]},
+        {"index": 1, "content": [{"type": "text", "text": "Implementing feature X"}]}
+      ]
+    }
+  }
+成功指标: Batch 调用吞吐量提升 3x (对比串行调用)
+```
+
+**F-10.5.2: Developer Portal API**
+```
+描述: 开发者自助服务门户 API
+验收标准:
+  - [ ] API Key 管理: 创建/撤销/轮换 API keys
+  - [ ] 速率限制: 按 plan 应用不同的 RPM/RPD 限制
+  - [ ] OAuth 应用: 创建 OAuth 应用供第三方集成
+  - [ ] 使用量仪表盘: 可视化 API 调用、错误率、延迟
+  - [ ] 文档访问: OpenAPI spec, SDK 下载
+  - [ ] Webhook 管理: 配置事件通知
+  - [ ] 开发者社区: 论坛/API status page
+
+API 设计:
+  # API Keys
+  GET    /api/v1/developer/keys             # 列出 API Keys
+  POST   /api/v1/developer/keys            # 创建 API Key
+  PUT    /api/v1/developer/keys/:id/rotate # 轮换 API Key
+  DELETE /api/v1/developer/keys/:id         # 撤销 API Key
+  
+  # OAuth 应用 (for 第三方集成)
+  GET    /api/v1/developer/oauth-apps      # 列出 OAuth 应用
+  POST   /api/v1/developer/oauth-apps    # 创建 OAuth 应用
+  PUT    /api/v1/developer/oauth-apps/:id
+  DELETE /api/v1/developer/oauth-apps/:id
+  GET    /api/v1/developer/oauth-apps/:id/tokens # 应用访问令牌
+  
+  # 使用量仪表盘
+  GET    /api/v1/developer/dashboard/usage      # 使用量总览
+  GET    /api/v1/developer/dashboard/errors     # 错误分析
+  GET    /api/v1/developer/dashboard/latency    # 延迟分析
+  GET    /api/v1/developer/dashboard/top-endpoints # Top 端点
+  
+  # 文档
+  GET    /api/v1/developer/docs/openapi.json   # OpenAPI Spec
+  GET    /api/v1/developer/docs/sdk/python     # Python SDK 下载
+  GET    /api/v1/developer/docs/sdk/typescript # TypeScript SDK 下载
+  GET    /api/v1/developer/status              # API Status Page
+
+  # API Key 响应格式
+  {
+    "id": "key_uuid",
+    "name": "Production Key",
+    "key_prefix": "evif_sk_prod_abc1...",
+    "created_at": "2026-06-01T00:00:00Z",
+    "last_used_at": "2026-06-01T12:00:00Z",
+    "rate_limit_rpm": 100,
+    "permissions": ["fs_read", "memory_search", "context_read"]
+  }
+成功指标: 开发者自助注册到第一个 API 调用 < 5 分钟
+```
+
+**F-10.5.3: Token 使用量精确计量**
+```
+描述: 基于实际 LLM token 消耗的精确计费
+验收标准:
+  - [ ] 每个 MCP 工具调用估算 token 输入/输出
+  - [ ] 按工具聚合 token 使用量
+  - [ ] 按 Agent 聚合 token 使用量
+  - [ ] 每日 token 使用报表
+  - [ ] Token 使用趋势图
+  - [ ] 与实际 LLM API 成本对标 (支持 OpenAI/Anthropic/Azure 定价)
+  - [ ] Agent 成本分析: 每个 Agent 的 token 消耗和成本
+
+Token 估算模型:
+  // 工具输出 token 估算
+  let input_tokens = estimate_tokens(input_json);
+  let output_tokens = estimate_tokens(output_text);
+  let cached_tokens = estimate_cached_tokens(output_text); // 输出过滤节省
+  let actual_tokens = output_tokens - cached_tokens;
+  
+  // 成本计算
+  let input_cost = input_tokens * model_pricing.input_per_token;
+  let output_cost = actual_tokens * model_pricing.output_per_token;
+  let total_cost = input_cost + output_cost;
+
+API 设计:
+  GET /api/v1/billing/usage/tokens
+    ?from=2026-06-01&to=2026-06-30&group_by=agent|tool|day
+  
+  响应:
+  {
+    "period": {...},
+    "tokens": {
+      "input": 15000000,
+      "output": 45000000,
+      "cached_saved": 12000000,
+      "actual_output": 33000000
+    },
+    "cost_usd": 87.50,
+    "breakdown": [
+      {"agent_id": "agent-1", "input": 5000000, "output": 15000000, "cost": 29.17},
+     
+**F-10.5.4: 多区域部署支持**
+```
+描述: EVIF Cloud SaaS 的多区域架构
+验收标准:
+  - [ ] 支持区域: us-east-1, eu-west-1, ap-southeast-1
+  - [ ] 数据 residency: 用户数据存储在选定区域
+  - [ ] 全球负载均衡: 就近路由到最低延迟区域
+  - [ ] 区域级故障隔离: 单区域故障不影响其他区域
+  - [ ] 跨区域数据同步: 异步复制保证最终一致性
+  - [ ] 区域健康检查: 每个区域的 /health/ready 端点
+  - [ ] 区域选择 API: 允许企业指定数据存储区域
+
+多区域配置:
+  # DNS 路由 (Cloudflare/AWS Route53)
+  evif.io → latency-based routing
+    us-east-1.evif.io (美区用户)
+    eu-west-1.evif.io (欧洲用户)
+    ap-southeast-1.evif.io (亚太用户)
+  
+  # 租户区域配置
+  {
+    "region": "eu-west-1",  // GDPR 合规
+    "data_residency": "EU"
+  }
+成功指标: 跨区域复制延迟 < 5s, 故障切换 < 30s
+```
+
+---
+
+### 21.7 完整 API 端点清单 (MVP 10.x)
+
+```
+API 命名空间                   端点数量    MVP 版本
+─────────────────────────────────────────────────
+/api/v1/files                  8          10.x (已有)
+/api/v1/directories            5          10.x (已有)
+/api/v1/context                6          10.x (已有)
+/api/v1/skills                 4          10.x (已有)
+/api/v1/memories               5          10.x (已有)
+/api/v1/pipes                  4          10.x (已有)
+/api/v1/plugins                6          10.x (已有)
+/api/v1/health                 3          10.x (已有)
+/api/v1/admin/tenants          5          10.2
+/api/v1/admin/users            6          10.2
+/api/v1/billing/usage          5          10.3
+/api/v1/billing/subscription    3          10.3
+/api/v1/billing/webhooks        4          10.3
+/api/v1/marketplace/plugins     12         10.3
+/api/v1/marketplace/developer  4          10.3
+/api/v1/webhooks               7          10.4
+/api/v1/developer/keys         5          10.5
+/api/v1/developer/dashboard    5          10.5
+/scim/v2/Users                 6          10.4
+/scim/v2/Groups                4          10.4
+─────────────────────────────────────────────────
+总计                           ~107       + 57 新增
+```
+
+---
+
+## 二十二、定价模型与商业模式
+
+### 22.1 定价层级详细设计
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EVIF 定价层级                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  FREE                          PRO ($29/月)                     │
+│  ────                          ──────────────                    │
+│  ✓ 1,000 API calls/day          ✓ 100,000 API calls/day         │
+│  ✓ 1 Agent                     ✓ 10 Agents                      │
+│  ✓ 100MB Storage               ✓ 10GB Storage                   │
+│  ✓ 10 MCP tools                ✓ 100 MCP tools                 │
+│  ✓ 基础 ContextFS              ✓ 完整 ContextFS + SkillFS      │
+│  ✓ 社区支持                    ✓ 邮件支持 (48h 响应)            │
+│                                  ✓ 使用量仪表盘                  │
+│                                  ✓ API Keys                     │
+│                                                                  │
+│  TEAM ($99/月)                  ENTERPRISE ($499/月)           │
+│  ───────────────                ─────────────────────────       │
+│  ✓ 1,000,000 API calls/day     ✓ 无限 API calls                │
+│  ✓ 50 Agents                   ✓ 无限 Agents                   │
+│  ✓ 100GB Storage               ✓ 1TB Storage                    │
+│  ✓ 500 MCP tools               ✓ 无限 MCP tools                 │
+│  ✓ Plugin Marketplace 访问     ✓ Plugin Marketplace + 发布      │
+│  ✓ Webhooks (5 endpoints)      ✓ Webhooks (50 endpoints)        │
+│  ✓ 邮件支持 (24h 响应)          ✓ SSO/OIDC + SCIM               │
+│  ✓ 使用量仪表盘                ✓ 不可变审计日志                  │
+│  ✓ 团队协作功能                ✓ 细粒度 RBAC                    │
+│                                  ✓ SLA 99.9%                    │
+│                                  ✓ 专属客户经理                   │
+│                                  ✓ 电话支持                      │
+│                                                                  │
+│  CUSTOM (年度合同)                                               │
+│  ─────────────────                                               │
+│  ✓ Enterprise 全部功能                                          │
+│  ✓ 私有部署 (On-premise)                                        │
+│  ✓ 白标定制                                                     │
+│  ✓ 插件定制开发                                                 │
+│  ✓ SLA 99.99%                                                   │
+│  ✓ 合规认证 (SOC2, ISO27001, GDPR)                             │
+│  ✓ 专属解决方案工程师                                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 22.2 Plugin Marketplace 分成模型
+
+```
+收入来源                分成比例    开发者收益    EVIF 收益
+───────────────────────────────────────────────────────
+免费插件安装             0%         0            0
+付费插件月度订阅         70%/30%    $3.50/月     $1.50/月
+付费插件年度订阅         75%/25%    $42/年       $14/年
+Featured 插件推广        60%/40%    $6.00/月     $4.00/月
+插件内购 (premium功能)   75%/25%    $7.50/月     $2.50/月
+
+最低保证金: 每个付费插件每月至少 $5 (即使安装量不足)
+结算周期: 每月结算，下月 15 日支付
+最低支付门槛: $50 (低于门槛结转下月)
+```
+
+### 22.3 收入预测
+
+| 月份 | ARR 目标 | 关键里程碑 |
+|------|----------|------------|
+| Month 6 | $50K | MVP 10.2 发布 → 首批 3 个 Pro 客户 |
+| Month 9 | $200K | MVP 10.3 发布 → 10 个 Pro + 5 个 Team |
+| Month 12 | $500K | Marketplace 上线 → 50 个付费插件 |
+| Month 18 | $1M | 200 个企业客户 + Marketplace 增长 |
+| Month 24 | $3M | Series A 准备 + 500 个企业客户 |
+| Month 36 | $10M | Series B + 国际化 |
+
+---
+
+## 二十三、MVP 10.x 实现路线图 (完整版)
+
+### 23.1 Sprint 分解
+
+```
+Sprint 1 (Week 1): MVP 10.1 — 安全修复
+  Day 1-2:   F-10.1.1 路径遍历防护 (P0-1)
+  Day 3:     F-10.1.2 Grep 超时保护 (P0-2)
+  Day 4-5:   F-10.1.3 MemoryStorage 并发安全 (P0-3)
+  Day 5:     F-10.1.4 Arc::from_raw 验证 (P0-4)
+  Day 5:     测试 + Code Review + 合并
+  Day 5:     发布 v0.10.1
+
+Sprint 2 (Week 2-3): MVP 10.2 Part A
+  Day 6-7:   F-10.2.1 统一错误 + trace ID
+  Day 8:     F-10.2.2 TLS + 安全 Header
+  Day 9-10:  F-10.2.3 OpenTelemetry 集成
+  Day 10-11: F-10.2.4 Kubernetes Helm Chart
+  Day 12:    F-10.2.5 Grafana + 告警规则
+  Day 12-13: F-10.2.6 多租户隔离 (核心)
+  Day 14:    测试 + Code Review
+
+Sprint 3 (Week 4-5): MVP 10.2 Part B
+  Day 15-17: F-10.2.6 多租户隔离 (API + 配额)
+  Day 18-19: F-10.2.7 静态数据加密
+  Day 19-20: F-10.2.8 细粒度 RBAC
+  Day 20-21: 集成测试 + 性能测试
+  Day 22:    Code Review + 合并
+  Day 23-24: 文档 + 发布 v0.11.0
+
+Sprint 4 (Week 6-7): MVP 10.3 Part A
+  Day 25-27: F-10.3.1 Plugin
+  Marketplace API
+  Day 28-29: F-10.3.2 使用量计费 API
+  Day 30-31: F-10.3.3 Admin Dashboard API
+  Day 32-33: 前端 Plugin Marketplace 界面
+  Day 34:    测试 + 合并
+
+Sprint 5 (Week 8): MVP 10.3 Part B
+  Day 35-36: F-10.3.3 Admin Dashboard (完善)
+  Day 37-38: 前端 Admin Dashboard 界面
+  Day 39-40: 订阅管理 + 发票生成
+  Day 41:    集成测试
+  Day 42:    发布 v0.12.0
+
+Sprint 6 (Week 9-10): MVP 10.4 Part A
+  Day 43-45: F-10.4.1 SSO/OIDC + SCIM
+  Day 46-47: F-10.4.2 不可变审计日志
+  Day 48-49: F-10.4.3 Webhooks 事件系统
+  Day 50:    测试 + 合并
+
+Sprint 7 (Week 11-12): MVP 10.4 Part B
+  Day 51-52: F-10.4.4 细粒度 RBAC (完善)
+  Day 53-54: 前端企业特性界面
+  Day 55-56: 集成测试 + 安全审计
+  Day 57:    发布 v0.13.0
+
+Sprint 8 (Week 13-14): MVP 10.5 Part A
+  Day 58-60: F-10.5.1 MCP 协议完整实现
+  Day 61-62: F-10.5.2 Developer Portal API
+  Day 63:    测试 + 合并
+
+Sprint 9 (Week 15-16): MVP 10.5 Part B
+  Day 64-65: F-10.5.3 Token 使用量计量
+  Day 66-67: F-10.5.4 多区域部署
+  Day 68-70: 前端开发者门户
+  Day 71:    全量测试 + 性能基准
+  Day 72:    发布 v0.14.0
+```
+
+### 23.2 团队规模建议
+
+| 角色 | Sprint 1-3 | Sprint 4-6 | Sprint 7-9 |
+|------|-----------|-----------|-----------|
+| 后端工程师 | 3 | 4 | 3 |
+| 前端工程师 | 1 | 2 | 2 |
+| 安全工程师 | 1 (顾问) | 1 | 0 |
+| DevOps | 1 | 1 | 1 |
+| 产品经理 | 0.5 | 0.5 | 0.5 |
+| 设计师 | 0 | 0.5 | 0.5 |
+| QA | 1 | 1 | 1 |
+
+**总人月**: ~30 人月 (MVP 10.x 全部完成)
+
+### 23.3 技术债务清理并行任务
+
+与 MVP 开发并行进行的技术债务清理：
+
+```
+持续进行:
+  □ 每周一: 运行 cargo audit + 修复高危漏洞
+  □ Sprint 间隙: cargo clippy --fix 自动修复
+  □ Sprint 2+: 用 #[expect(lint)] 标记已知 clippy 警告，逐步清理
+  □ Sprint 3+: 迁移 DashMap → tokio::sync (F-10.1.3)
+  □ Sprint 4+: 统一所有日志格式为 JSON + trace_id
+  □ Sprint 5+: 完善单元测试覆盖率 (目标 80%)
+  □ Sprint 6+: 添加模糊测试 (fuzzing)
+  □ Sprint 7+: 添加性能基准测试并设置 SLO
+  □ Sprint 8+: 完整 E2E 测试覆盖
+```
+
+---
+
+## 二十四、Go-To-Market 策略
+
+### 24.1 获客渠道
+
+| 渠道 | 目标 | 策略 | 预期转化 |
+|------|------|------|----------|
+| GitHub Stars + README | 开发者 | 高质量 README + Demo 视频 | 5% 转化到试用 |
+| MCP 协议博客 | AI 开发者 | 技术 SEO + MCP 协议教程 | 10% 转化到试用 |
+| Product Hunt 发布 | 早期用户 | 精心准备 launch | 500+ signups |
+| Hacker News | 技术社区 | Show HN + 技术深度文章 | 1% 转化到付费 |
+| LangChain 社区 | AI 开发者 | 插件集成 + 合作内容 | 15% 转化到付费 |
+| 企业销售 (Outbound) | Enterprise | LinkedIn targeting | 3% 转化到付费 |
+
+### 24.2 上市准备清单
+
+**MVP 10.2 发布前 (Week 5)**:
+- [ ] Landing page 完整 (evif.io)
+- [ ] 定价页面明确 (Pro $29, Team $99, Enterprise $499)
+- [ ] 免费版注册流程打通
+- [ ] 文档网站 (docs.evif.io) 完整
+- [ ] 安全白皮书 v1
+- [ ] 隐私政策 + Terms of Service
+
+**MVP 10.3 发布前 (Week 8)**:
+- [ ] Plugin Marketplace 上线
+- [ ] 开发者文档完整 (docs.evif.io/developers)
+- [ ] Plugin SDK + 教程
+- [ ] Stripe 支付集成 (订阅 + 插件购买)
+- [ ] 发票系统对接
+
+**MVP 10.4 发布前 (Week 12)**:
+- [ ] Enterprise 销售材料 (PPT + 案例研究)
+- [ ] 安全合规文档 (SOC2 Type I prep)
+- [ ] SSO 配置指南 (Okta, Azure AD)
+- [ ] 客户成功手册
+
+### 24.3 关键指标 (KPIs)
+
+| KPI | Month 6 目标 | Month 12 目标 | Month 24 目标 |
+|-----|-------------|---------------|---------------|
+| 活跃用户 | 500 | 5,000 | 50,000 |
+| 付费客户 | 10 | 100 | 500 |
+| ARR | $50K | $500K | $3M |
+| Plugin Marketplace 插件 | 20 | 100 | 500 |
+| Plugin 安装量 | 100 | 1,000 | 10,000 |
+| NPS | 40 | 50 | 60 |
+| API 调用量/天 | 100K | 5M | 50M |
+| SLA 可用性 | 99.5% | 99.9% | 99.99% |
+
+---
+
+## 二十五、风险矩阵 (更新版)
+
+### 25.1 新增商业化风险
+
+| 风险 | 概率 | 影响 | 缓解策略 |
+|------|------|------|----------|
+| Stripe/支付集成复杂度超预期 | 高 | 中 | 使用 Stripe Elements + 订阅管理，减少自研 |
+| Plugin Marketplace 冷启动 | 高 | 高 | 种子插件 (自研 20 个) + 开发者激励计划 |
+| 企业销售周期过长 (6-12 月) | 中 | 中 | 同时发展 SMB/Pro 客户维持现金流 |
+| 大厂 (Anthropic/Microsoft) 推出竞品 | 中 | 高 | 加速 Plugin Marketplace 网络效应 + 差异化 VFS 抽象 |
+| 数据泄露影响品牌 | 中 | 极高 | 安全审计 + 渗透测试 + 应急响应预案 |
+| 计费系统 bug 导致收入损失 | 中 | 高 | 使用成熟计费系统 (Stripe) + 双人对账 |
+| 合规认证 (SOC2/ISO27001) 延期 | 中 | 中 | 提前 6 个月启动认证流程，MVP 10.4 后专注合规 |
+
+### 25.2 技术债务触发条件
+
+| 债务类型 | 触发条件 | 响应策略 |
+|----------|----------|----------|
+| DashMap 迁移 | P0-3 后仍有 DashMap 使用 | Sprint 3 强制清理 |
+| 性能退化 | P99 > 1s 或 QPS 下降 > 20% | 暂停新功能，性能优化冲刺 |
+| 测试覆盖率下降 | < 70% | 暂停功能开发，补测试 |
+| 安全漏洞 | cargo audit 高危 | 24 小时内修复 |
+
+---
+
+## 二十六、成功标准
+
+### 26.1 MVP 10.2 成功标准
+
+- [ ] 所有 P0 安全问题已修复
+- [ ] Qualys SSL Labs 评分 A+
+- [ ] 100% API 请求可追踪 (trace_id)
+- [ ] Helm Chart 安装 < 5 分钟
+- [ ] 告警在 30 秒内触发
+- [ ] 100 并发无数据竞争
+- [ ] 至少 1 个企业 Pilot 客户签约
+
+### 26.2 MVP 10.3 成功标准
+
+- [ ] Plugin Marketplace 上线 (10+ 插件)
+- [ ] Stripe 支付集成完成
+- [ ] 计费 API 误差 < 0.1%
+- [ ] Admin Dashboard 可管理所有租户
+- [ ] 10 个付费插件，$500/月 Marketplace GMV
+- [ ] 100 个付费客户 ($2,500/月 ARR)
+
+### 26.
+### 26.3 MVP 10.4 成功标准
+
+- [ ] SSO 集成通过 Okta 认证测试
+- [ ] SCIM 同步测试 100% 通过
+- [ ] 审计日志不可变性验证通过
+- [ ] Webhooks 投递成功率 > 99.5%
+- [ ] RBAC 权限检查延迟 < 1ms
+- [ ] 3 个 Enterprise 客户 Pilot
+
+### 26.4 MVP 10.5 成功标准
+
+- [ ] MCP Batch 调用吞吐量 3x 提升
+- [ ] Developer Portal 自助注册 < 5 分钟
+- [ ] Token 计量误差 < 1% (对标 OpenAI 实际消耗)
+- [ ] 多区域故障切换 < 30 秒
+- [ ] 全量 API 端点覆盖 OpenAPI spec
+- [ ] 5 个战略合作伙伴 (AI IDE 集成)
+
+---
+
+## 二十七、总结与行动路线
+
+### 27.1 核心发现
+
+1. **EVIF 是 AI Agent 基础设施的真实需求**: Token 优化、Multi-Agent 协调、持久记忆是每个 AI Agent 的刚需
+2. **MVP 10.x 是商业化的唯一路径**: 没有生产就绪 → 没有企业客户 → 没有收入
+3. **Plugin Marketplace 是护城河**: 40+ 插件 + Marketplace = 网络效应
+4. **Rust 实现是性能护城河**: 领先 Python 竞品 5-10x 性能
+5. **MCP 协议先发优势**: EVIF 是 MCP 最好的开源实现之一
+
+### 27.2 最关键的 10 个行动
+
+```
+P0 (本周):
+  □ 1. 修复路径遍历漏洞 (P0-1) → 2 天
+  □ 2. 添加 Grep 超时保护 (P0-2) → 1 天
+
+Week 2-3:
+  □ 3. 替换 DashMap (P0-3) → 3 天
+  □ 4. 统一错误 + trace ID (P1-1) → 3 天
+  □ 5. TLS + 安全 Header (P1-2) → 2 天
+
+Week 4-5:
+  □ 6. 多租户隔离核心 (P1-6) → 5 天
+  □ 7. OpenTelemetry 集成 (P1-4) → 5 天
+  □ 8. Kubernetes 部署 (P1-5) → 5 天
+
+Week 6-8:
+  □ 9. Plugin Marketplace MVP (B-2) → 10 天
+  □ 10. 使用量计费 API (B-3) → 8 天
+```
+
+### 27.3 快速价值捕获
+
+在完成 MVP 10.x 的同时，以下功能可以**快速创造商业价值**，应优先实现：
+
+```
+快速价值 #1: Token 使用量报告
+  → 企业愿意为节省的 LLM 成本付费
+  → 立即开始收集 token 估算数据
+
+快速价值 #2: Plugin Marketplace (简化版)
+  → 只需 Marketplace API + Stripe
+  → 开发者即可开始发布付费插件
+
+快速价值 #3: Pro/Team 订阅
+  → 仅需配额系统 + Stripe 订阅
+  → 可在 2 周内实现第一个付费客户
+```
+
+---
+
+> **文档版本**: v3.0  
+> **分析完成**: 2026-06-01  
+> **覆盖范围**: 全代码库 (13 crates) + 商业价值 + MVP 功能规格  
+> **总行数**: ~1,650 行  
+> **下一步行动**: 1) 确认优先级 2) 创建 MVP 10.1 issues 3) 开始 Sprint 1
