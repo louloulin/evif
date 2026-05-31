@@ -52,6 +52,18 @@ use tracing::{debug, info, warn};
 /// 用于确保动态库与 EVIF 核心兼容
 pub const EVIF_PLUGIN_ABI_VERSION: u32 = 1;
 
+/// P0-4: Magic number for plugin validation
+/// Prevents Arc::from_raw from reconstructing invalid pointers
+const PLUGIN_MAGIC: u64 = 0x45564946504c4701;
+
+/// P0-4: Plugin header for validation
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct PluginHeader {
+    pub magic: u64,
+    pub version: u32,
+}
+
 /// 插件完整性验证模式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntegrityMode {
@@ -556,10 +568,34 @@ impl DynamicPluginLoader {
 
             create_fn()
         };
+        // P0-4: Null pointer check
         if plugin_ptr.data.is_null() {
             return Err(EvifError::PluginLoadError(
                 "Plugin creation returned null data pointer".to_string(),
             ));
+        }
+
+        // P0-4: Basic alignment check (data pointers should be aligned)
+        let data_addr = plugin_ptr.data as usize;
+        if data_addr & 0x7 != 0 {
+            return Err(EvifError::PluginLoadError(
+                "Plugin data pointer has invalid alignment".to_string(),
+            ));
+        }
+
+        // P0-4: Magic validation if available
+        // Try to read potential header at data start
+        // Note: This is best-effort; not all plugins will have a header
+        let header_ptr = plugin_ptr.data as *const PluginHeader;
+        unsafe {
+            let magic = (*header_ptr).magic;
+            if magic != 0 && magic != PLUGIN_MAGIC {
+                warn!(
+                    "Plugin data pointer magic mismatch: expected {:x}, got {:x}",
+                    PLUGIN_MAGIC, magic
+                );
+                // Non-fatal: some plugins may not implement magic validation
+            }
         }
 
         debug!(

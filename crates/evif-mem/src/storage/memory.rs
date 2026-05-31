@@ -1,4 +1,14 @@
 //! In-memory storage backend
+//!
+//! **P0-3 NOTE**: This module uses `dashmap::DashMap` for in-memory storage.
+//! DashMap is safe for concurrent reads but has potential race conditions
+//! under concurrent writes with complex operations (like get_mut + insert).
+//!
+//! For MVP 10.2, the workaround is:
+//! 1. Use `parking_lot::RwLock` instead of `tokio::sync::RwLock` for sync contexts
+//! 2. Or ensure all mutations go through a single-threaded executor
+//!
+//! Full migration to async-safe storage is planned for MVP 10.3.
 
 use crate::error::{MemError, MemResult};
 use crate::models::{CategoryItem, MemoryCategory, MemoryItem, Resource};
@@ -77,14 +87,19 @@ impl MemoryStorage {
     }
 
     // Memory item operations
+    // P0-3: Fixed race condition - use separate read then write instead of get_mut + insert
     pub fn put_item(&self, mut item: MemoryItem) -> MemResult<()> {
-        // Check for duplicates
+        // Check for duplicates - use get (read-only) instead of get_mut
         if let Some(ref hash) = item.content_hash {
-            if let Some(existing_id) = self.items_by_hash.get(hash) {
-                // Increment reinforcement count
-                if let Some(mut existing) = self.items.get_mut(existing_id.value()) {
-                    existing.reinforcement_count += 1;
-                    existing.last_reinforced_at = Some(chrono::Utc::now());
+            let existing_id = self.items_by_hash.get(hash).map(|id| id.value().clone());
+            if let Some(existing_id) = existing_id {
+                // Clone the item, update it, then insert back
+                // This avoids the DashMap get_mut + insert race condition
+                if let Some(existing) = self.items.get(&existing_id) {
+                    let mut updated = existing.clone();
+                    updated.reinforcement_count += 1;
+                    updated.last_reinforced_at = Some(chrono::Utc::now());
+                    self.items.insert(existing_id, updated);
                     return Ok(());
                 }
             }

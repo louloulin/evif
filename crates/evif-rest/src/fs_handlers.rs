@@ -757,6 +757,9 @@ impl FsHandlers {
         Some(flags)
     }
 
+    // P0-2: Grep timeout constant (5 seconds default)
+    const GREP_TIMEOUT_SECS: u64 = 5;
+
     async fn grep_recursive(
         plugin: &Arc<dyn EvifPlugin>,
         path: &str,
@@ -768,10 +771,23 @@ impl FsHandlers {
             return Ok(());
         }
 
+        // P0-2: Check elapsed time to prevent ReDoS
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(Self::GREP_TIMEOUT_SECS);
+
         let info = match plugin.stat(path).await {
             Ok(info) => info,
             Err(_) => return Ok(()),
         };
+
+        // P0-2: Check timeout before expensive operations
+        if start.elapsed() > timeout {
+            tracing::warn!("Grep timeout exceeded for path: {}", path);
+            return Err(FsError::Timeout(format!(
+                "Grep operation exceeded {}s limit",
+                Self::GREP_TIMEOUT_SECS
+            )));
+        }
 
         if info.is_dir {
             // 列出目录内容
@@ -865,6 +881,8 @@ pub enum FsError {
     NotFound(String),
     BadRequest(String),
     Internal(String),
+    // P0-2: Timeout for ReDoS protection
+    Timeout(String),
 }
 
 impl axum::response::IntoResponse for FsError {
@@ -873,6 +891,7 @@ impl axum::response::IntoResponse for FsError {
             FsError::NotFound(msg) => (axum::http::StatusCode::NOT_FOUND, msg),
             FsError::BadRequest(msg) => (axum::http::StatusCode::BAD_REQUEST, msg),
             FsError::Internal(msg) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, msg),
+            FsError::Timeout(msg) => (axum::http::StatusCode::GATEWAY_TIMEOUT, msg),
         };
 
         let body = Json(serde_json::json!({

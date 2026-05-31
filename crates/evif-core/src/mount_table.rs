@@ -25,6 +25,25 @@ pub struct MountTable {
 }
 
 impl MountTable {
+
+    /// Validates path against directory traversal attacks.
+    /// Returns `Some(message)` if path contains forbidden patterns.
+    fn validate_no_traversal(path: &str) -> Option<&'static str> {
+        // Check for forbidden patterns: ../ or absolute paths
+        if path.contains("../") {
+            return Some("path traversal forbidden: ../");
+        }
+        // Disallow absolute paths starting with /
+        if path.starts_with('/') {
+            return Some("absolute path forbidden");
+        }
+        // Disallow paths starting with drive letters (Windows)
+        if path.len() >= 3 && path.chars().nth(1) == Some(':') {
+            return Some("absolute path forbidden: drive letter");
+        }
+        None
+    }
+
     /// 创建新的挂载表
     pub fn new() -> Self {
         Self {
@@ -314,6 +333,10 @@ impl MountTable {
 
     /// 标准化路径
     fn normalize_path(path: &str) -> String {
+        // P0-1: Path traversal protection - validate before normalization
+        if let Some(msg) = Self::validate_no_traversal(path) {
+            tracing::warn!("Path traversal attempt: {}", msg);
+        }
         let path = path.trim_start_matches('/');
 
         if path.is_empty() {

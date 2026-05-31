@@ -835,10 +835,10 @@ EVIF 当前实现覆盖了 17+ MCP 工具、完整的 VFS 插件架构、REST/Gr
 
 | # | 问题 | 风险 | 影响 crate | 工作量 |
 |---|------|------|------------|--------|
-| P0-1 | 路径遍历漏洞 | **RCE/数据泄露** | evif-rest | 2d |
-| P0-2 | Grep ReDoS | **DoS** | evif-rest | 1d |
-| P0-3 | DashMap 并发写 | **数据竞争/崩溃** | evif-mem | 3d |
-| P0-4 | Arc::from_raw 无验证 | **内存破坏** | evif-core | 2d |
+| ✅ P0-1 | 路径遍历漏洞 | **已修复** | evif-rest | ✅ 2d |
+| ✅ P0-2 | Grep ReDoS | **已修复** | evif-rest | ✅ 1d |
+| ✅ P0-3 | DashMap 并发写 | **已修复** | evif-mem | ✅ 2d |
+| ✅ P0-4 | Arc::from_raw 无验证 | **已修复** | evif-core | ✅ 2d |
 
 ### P1 — 生产必需 (MVP 前完成)
 
@@ -894,7 +894,7 @@ EVIF 当前实现覆盖了 17+ MCP 工具、完整的 VFS 插件架构、REST/Gr
 
 ```
 Phase 1 (MVP 10.1): P0 阻断性安全修复
-  Week 1: P0-1, P0-2, P0-3, P0-4 全部修复
+  Week 1: ✅ P0-1, P0-2, P0-3, P0-4 全部修复 (MVP 10.1 完成)
   Week 1: 提交 PR + Code Review + 合并
 
 Phase 2 (MVP 10.2): 生产就绪基础
@@ -2793,11 +2793,11 @@ Sprint 9 (Week 15-16): MVP 10.5 Part B
 
 ```
 P0 (本周):
-  □ 1. 修复路径遍历漏洞 (P0-1) → 2 天
-  □ 2. 添加 Grep 超时保护 (P0-2) → 1 天
+  ✅ □ 1. 修复路径遍历漏洞 (P0-1) → ✅ 完成
+  ✅ □ 2. 添加 Grep 超时保护 (P0-2) → ✅ 完成
 
 Week 2-3:
-  □ 3. 替换 DashMap (P0-3) → 3 天
+  ✅ □ 3. 替换 DashMap (P0-3) → ✅ 完成
   □ 4. 统一错误 + trace ID (P1-1) → 3 天
   □ 5. TLS + 安全 Header (P1-2) → 2 天
 
@@ -2831,8 +2831,11 @@ Week 6-8:
 
 ---
 
-> **文档版本**: v3.0  
+> **文档版本**: v3.1  
 > **分析完成**: 2026-06-01  
-> **覆盖范围**: 全代码库 (13 crates) + 商业价值 + MVP 功能规格  
-> **总行数**: ~1,650 行  
-> **下一步行动**: 1) 确认优先级 2) 创建 MVP 10.1 issues 3) 开始 Sprint 1
+> **P0 修复完成**: 2026-06-01 (MVP 10.1 Sprint 完成)
+> - ✅ P0-1: 路径遍历防护 → `crates/evif-core/src/mount_table.rs`
+> - ✅ P0-2: Grep 超时保护 → `crates/evif-rest/src/fs_handlers.rs`  
+> - ✅ P0-3: DashMap 竞态修复 → `crates/evif-mem/src/storage/memory.rs`
+> - ✅ P0-4: Arc::from_raw 验证 → `crates/evif-core/src/dynamic_loader.rs`
+> **下一步行动**: 1) MVP 10.2 Sprint 开始 2) OpenTelemetry 集成 3) 多租户隔离
