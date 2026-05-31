@@ -59,6 +59,8 @@ mod compat_fs;
 mod context_handlers;
 mod encryption_handlers;
 mod fs_handlers;
+/// P1-8: Plugin Marketplace API handlers (MVP 10.3)
+pub mod marketplace_handlers;
 mod graphql_handlers;
 mod handle_handlers;
 mod handlers;

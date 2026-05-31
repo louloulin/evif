@@ -4,7 +4,7 @@ use crate::{
     batch_handlers, collab_handlers, context_handlers, encryption_handlers,
     graphql_handlers, handle_handlers, handlers, memory_handlers, metrics_handlers,
     mcp_handlers, sync_handlers, tenant_handlers, wasm_handlers, ws_handlers,
-    AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState, GraphqlAppContext,
+    marketplace_handlers, AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState, GraphqlAppContext,
     HandleState, RestAuthState, SyncState, TenantState,
 };
 use crate::mcp_handlers::McpServerConfig;
@@ -278,6 +278,40 @@ fn build_routes(
             "/api/v1/llm/ping",
             axum::routing::post(handlers::EvifHandlers::llm_ping),
         )
+        // ============== Plugin Marketplace API (MVP 10.3) ==============
+        .route(
+            "/api/v1/marketplace/plugins",
+            axum::routing::get(marketplace_handlers::list_plugins),
+        )
+        .route(
+            "/api/v1/marketplace/plugins",
+            axum::routing::post(marketplace_handlers::publish_plugin),
+        )
+        .route(
+            "/api/v1/marketplace/plugins/:id",
+            axum::routing::get(marketplace_handlers::get_plugin),
+        )
+        .route(
+            "/api/v1/marketplace/plugins/:id",
+            axum::routing::put(marketplace_handlers::update_plugin),
+        )
+        .route(
+            "/api/v1/marketplace/plugins/:id/download",
+            axum::routing::post(marketplace_handlers::increment_download),
+        )
+        .route(
+            "/api/v1/marketplace/plugins/:id/rate",
+            axum::routing::post(marketplace_handlers::rate_plugin),
+        )
+        .route(
+            "/api/v1/marketplace/trending",
+            axum::routing::get(marketplace_handlers::get_trending),
+        )
+        .route(
+            "/api/v1/marketplace/free",
+            axum::routing::get(marketplace_handlers::get_free_plugins),
+        )
+
         // ============== 兼容旧前端 API (/api/v1/fs/*) ==============
         .route(
             "/api/v1/fs/list",

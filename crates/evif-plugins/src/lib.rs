@@ -40,6 +40,8 @@
 //! ```
 
 pub mod catalog;
+/// P1-8: Plugin Marketplace API (MVP 10.3)
+pub mod marketplace;
 pub mod contextfs;
 pub mod context_manager;
 pub mod pipefs;
@@ -139,6 +141,13 @@ pub use encryptedfs::{EncryptedFsPlugin, EncryptedConfig};
 pub use catalog::{
     core_supported_plugins, experimental_plugins, find_plugin_catalog_entry, normalize_plugin_id,
     plugin_catalog, PluginCatalogEntry, PluginSupportTier,
+};
+/// P1-8: Plugin Marketplace exports
+pub use marketplace::{
+    MarketplaceManager, MarketplaceEntry, MarketplaceError, MarketplaceStatus,
+    MarketplaceSearchQuery, MarketplaceSearchResponse, PublishPluginRequest,
+    UpdatePluginRequest, RatingRequest, PublisherInfo, PluginPricing, DownloadStats,
+    RatingStats, SortBy,
 };
 
 #[cfg(feature = "postgresfs")]

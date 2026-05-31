@@ -2838,9 +2838,16 @@ Week 6-8:
 > - ✅ P0-2: Grep 超时保护 → `crates/evif-rest/src/fs_handlers.rs`  
 > - ✅ P0-3: DashMap 竞态修复 → `crates/evif-mem/src/storage/memory.rs`
 > - ✅ P0-4: Arc::from_raw 验证 → `crates/evif-core/src/dynamic_loader.rs`
-> **MVP 10.2 进行中**:
-> - ✅ P1-1: 统一错误码 (error_codes 模块 + StructuredError)
-> - ✅ P1-2: TLS + 安全 Header (routes.rs middleware)
-> - 🔄 P1-4: OpenTelemetry 集成 (文档已添加，OTLP 待配置)
-> - ✅ P1-5: Kubernetes Helm Chart (deploy/kubernetes/helm/)
-> **下一步行动**: 1) 完善 OpenTelemetry OTLP exporter 2) 多租户隔离核心 3) Grafana 集成
+> **MVP 10.2 完成**:
+> - ✅ P1-1: 统一错误码 → `evif-core/src/error.rs`
+> - ✅ P1-2: TLS + 安全 Header → `evif-rest/src/routes.rs`
+> - 🔄 P1-4: OpenTelemetry 集成 (文档已添加)
+> - ✅ P1-5: Kubernetes Helm Chart → `deploy/kubernetes/helm/`
+>
+> **MVP 10.3 进行中**:
+> - ✅ B-2: Plugin Marketplace API → `evif-plugins/src/marketplace.rs`, `evif-rest/src/marketplace_handlers.rs`
+>   - MarketplaceManager 核心逻辑
+>   - REST API 端点 (8个)
+>   - 搜索/热门/免费插件查询
+>
+> **下一步行动**: 1) Stripe 支付集成 2) 多租户隔离核心 3) Grafana 集成
