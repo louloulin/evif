@@ -2874,4 +2874,21 @@ Week 6-8:
 >   - ✅ P3-4: OIDC 集成文档 → `docs/auth/oidc.md`
 >   - ✅ P3-5: TypeScript SDK → `sdk/typescript/`
 >
-> **下一步行动**: 1) Stripe 支付集成 2) 多租户隔离核心 3) Grafana 集成
+> **MVP 10.x 完成进度** (v3.7):
+>
+> | MVP | 状态 | 主要功能 |
+> |-----|------|----------|
+> | MVP 10.1 | ✅ | P0 安全修复 |
+> | MVP 10.2 | ✅ | 生产就绪基础 |
+> | MVP 10.3 | ✅ | 商业化 API |
+> | P2 | ✅ | 质量提升 (OpenAPI、模糊测试、性能基准) |
+> | P3 | ✅ | 优化项 (OIDC、TypeScript SDK) |
+> | **额外完成** | ✅ | Stripe 支付集成 + Grafana Dashboard |
+>
+> - ✅ Stripe 支付集成 → `docs/billing/stripe.md`
+> - ✅ Grafana Dashboard → `docs/grafana/evif-dashboard.json`
+>
+> **下一步行动**: 
+> 1) 多租户隔离核心实现
+> 2) 完整的 Stripe 后端集成
+> 3) 监控告警配置
