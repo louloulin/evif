@@ -4,13 +4,12 @@ use crate::{
     batch_handlers, collab_handlers, context_handlers, encryption_handlers,
     graphql_handlers, handle_handlers, handlers, memory_handlers, metrics_handlers,
     mcp_handlers, sync_handlers, tenant_handlers, wasm_handlers, ws_handlers,
-    marketplace_handlers, AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState, GraphqlAppContext,
+    marketplace_handlers, billing_handlers, admin_handlers, AuthMiddleware, CompatFsHandlers, ContextState, EncryptionState, GraphqlAppContext,
     HandleState, RestAuthState, SyncState, TenantState,
 };
 use crate::mcp_handlers::McpServerConfig;
 use axum::extract::DefaultBodyLimit;
 use axum::{middleware, routing, Router};
-use axum::http::{header, HeaderValue, HeaderName};
 use evif_core::{DynamicPluginLoader, GlobalHandleManager, PluginRegistry, RadixMountTable};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -278,6 +277,74 @@ fn build_routes(
             "/api/v1/llm/ping",
             axum::routing::post(handlers::EvifHandlers::llm_ping),
         )
+        // ============== Admin Dashboard API (MVP 10.3) ==============
+        .route(
+            "/api/v1/admin/stats/overview",
+            axum::routing::get(admin_handlers::get_overview),
+        )
+        .route(
+            "/api/v1/admin/stats/tenants",
+            axum::routing::get(admin_handlers::get_tenant_stats),
+        )
+        .route(
+            "/api/v1/admin/stats/plugins",
+            axum::routing::get(admin_handlers::get_plugin_stats),
+        )
+        .route(
+            "/api/v1/admin/stats/revenue",
+            axum::routing::get(admin_handlers::get_revenue_stats),
+        )
+        .route(
+            "/api/v1/admin/audit",
+            axum::routing::get(admin_handlers::get_audit_log),
+        )
+        .route(
+            "/api/v1/admin/users",
+            axum::routing::get(admin_handlers::list_users),
+        )
+        .route(
+            "/api/v1/admin/users",
+            axum::routing::post(admin_handlers::create_user),
+        )
+
+        // ============== Usage Billing API (MVP 10.3) ==============
+        .route(
+            "/api/v1/billing/usage",
+            axum::routing::get(billing_handlers::get_usage),
+        )
+        .route(
+            "/api/v1/billing/usage/history",
+            axum::routing::get(billing_handlers::get_usage_history),
+        )
+        .route(
+            "/api/v1/billing/usage/by-endpoint",
+            axum::routing::get(billing_handlers::get_usage_by_endpoint),
+        )
+        .route(
+            "/api/v1/billing/subscription",
+            axum::routing::get(billing_handlers::get_subscription),
+        )
+        .route(
+            "/api/v1/billing/subscription",
+            axum::routing::post(billing_handlers::create_subscription),
+        )
+        .route(
+            "/api/v1/billing/subscription",
+            axum::routing::put(billing_handlers::update_subscription),
+        )
+        .route(
+            "/api/v1/billing/invoices",
+            axum::routing::get(billing_handlers::get_invoices),
+        )
+        .route(
+            "/api/v1/billing/webhooks",
+            axum::routing::get(billing_handlers::get_webhooks),
+        )
+        .route(
+            "/api/v1/billing/webhooks",
+            axum::routing::post(billing_handlers::create_webhook),
+        )
+
         // ============== Plugin Marketplace API (MVP 10.3) ==============
         .route(
             "/api/v1/marketplace/plugins",

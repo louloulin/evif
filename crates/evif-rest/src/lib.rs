@@ -61,6 +61,10 @@ mod encryption_handlers;
 mod fs_handlers;
 /// P1-8: Plugin Marketplace API handlers (MVP 10.3)
 pub mod marketplace_handlers;
+/// B-3: Usage Billing API handlers (MVP 10.3)
+pub mod billing_handlers;
+/// B-4: Admin Dashboard API handlers (MVP 10.3)
+pub mod admin_handlers;
 mod graphql_handlers;
 mod handle_handlers;
 mod handlers;

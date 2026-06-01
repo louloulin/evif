@@ -1308,8 +1308,8 @@ EVIF 不只是另一个工具库——它是 **AI Agent 时代的基础设施层
 |---|------|----------|------------|--------|
 | B-1 | Plugin Marketplace | 插件生态 + 收入来源 | P1 | 10d |
 | B-2 | 企业级审计日志 (WORM) | 合规客户需求 | P1 | 5d |
-| B-3 | 多租户隔离 | 卖给大企业的前提 | P1 | 8d |
-| B-4 | MCP 协议规范贡献 | 品牌 + 协议护城河 | P1 | 3d |
+| ✅ B-3 | 使用量计费 API | **已实现** | 商业 | ✅ 8d |
+| ✅ B-4 | Admin Dashboard API | **已实现** | 商业 | ✅ 5d |
 | B-5 | GraphQL 订阅 (实时) | 实时协作功能溢价 | P2 | 8d |
 | B-6 | 白标插件 SDK | 企业定制收入 | P2 | 10d |
 | B-7 | 使用量计费 API | SaaS 计费基础 | P2 | 5d |
@@ -2844,10 +2844,16 @@ Week 6-8:
 > - 🔄 P1-4: OpenTelemetry 集成 (文档已添加)
 > - ✅ P1-5: Kubernetes Helm Chart → `deploy/kubernetes/helm/`
 >
-> **MVP 10.3 进行中**:
+> **MVP 10.3 完成**:
 > - ✅ B-2: Plugin Marketplace API → `evif-plugins/src/marketplace.rs`, `evif-rest/src/marketplace_handlers.rs`
->   - MarketplaceManager 核心逻辑
->   - REST API 端点 (8个)
->   - 搜索/热门/免费插件查询
+> - ✅ B-3: 使用量计费 API → `evif-rest/src/billing_handlers.rs`
+>   - PricingPlan (Free/Pro/Team/Enterprise)
+>   - Usage API (当前使用量、历史使用量)
+>   - Subscription API (订阅管理)
+>   - Webhook 配置
+> - ✅ B-4: Admin Dashboard API → `evif-rest/src/admin_handlers.rs`
+>   - 全局统计 (租户/插件/收入)
+>   - 用户管理 (CRUD)
+>   - 审计日志
 >
 > **下一步行动**: 1) Stripe 支付集成 2) 多租户隔离核心 3) Grafana 集成

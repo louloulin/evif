@@ -5,7 +5,7 @@
 
 use axum::{
     extract::{Path, Query},
-    Json, Router,
+    Json,
 };
 use evif_plugins::{
     MarketplaceEntry, MarketplaceManager, MarketplaceSearchQuery, MarketplaceSearchResponse,
