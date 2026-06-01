@@ -1,0 +1,1218 @@
+# EVIF API OpenAPI Specification
+# P2-1: OpenAPI Documentation
+# Version: 1.0.0
+# Generated: 2026-06-01
+
+openapi: 3.0.3
+info:
+  title: EVIF API
+  description: |
+    EVIF (Everything Is a File) - AI Agent Infrastructure Framework
+    
+    Provides persistent context, reusable skills, and multi-agent coordination
+    for AI agents through a unified VFS (Virtual File System) interface.
+    
+    ## Features
+    - **VFS API**: Virtual filesystem operations (read, write, list, stat)
+    - **Memory API**: Persistent context and memory management
+    - **MCP Protocol**: Model Context Protocol for AI tool integration
+    - **Plugin Marketplace**: Discover and install community plugins
+    - **Billing API**: Usage tracking and subscription management
+    - **Admin API**: Tenant and user management
+    
+    ## Authentication
+    API requests require authentication via API key:
+    - Header: `X-API-Key: your-api-key`
+    - Or: `Authorization: Bearer your-api-key`
+  version: 1.0.0
+  contact:
+    name: EVIF Team
+    email: team@evif.io
+    url: https://evif.io
+  license:
+    name: MIT OR Apache-2.0
+    url: https://github.com/louloulin/evif/blob/main/LICENSE
+  x-logo:
+    url: https://evif.io/logo.png
+
+servers:
+  - url: https://api.evif.io/v1
+    description: Production server
+  - url: https://staging.evif.io/v1
+    description: Staging server
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: VFS
+    description: Virtual File System operations
+  - name: Memory
+    description: Memory and context management
+  - name: MCP
+    description: Model Context Protocol operations
+  - name: Marketplace
+    description: Plugin Marketplace
+  - name: Billing
+    description: Usage tracking and subscriptions
+  - name: Admin
+    description: Administration endpoints
+
+paths:
+  # ============ Health Endpoints ============
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Basic health check endpoint
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Detailed health check (v1)
+      operationId: getHealthV1
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Kubernetes readiness probe endpoint
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Service is ready
+        '503':
+          description: Service is not ready
+
+  /api/v1/ping:
+    post:
+      tags: [Health]
+      summary: Liveness check
+      operationId: postPing
+      responses:
+        '200':
+          description: Pong response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: pong
+
+  # ============ VFS Endpoints ============
+  /api/v1/fs/list:
+    get:
+      tags: [VFS]
+      summary: List directory contents
+      operationId: listDirectory
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: VFS path to list
+      responses:
+        '200':
+          description: Directory listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryListing'
+
+  /api/v1/fs/read:
+    get:
+      tags: [VFS]
+      summary: Read file contents
+      operationId: readFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: File contents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileReadResponse'
+
+  /api/v1/fs/write:
+    post:
+      tags: [VFS]
+      summary: Write file contents
+      operationId: writeFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileWriteRequest'
+      responses:
+        '200':
+          description: File written successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWriteResponse'
+
+  /api/v1/fs/stat:
+    post:
+      tags: [VFS]
+      summary: Get file/directory info
+      operationId: statFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+      responses:
+        '200':
+          description: File information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileInfo'
+
+  /api/v1/fs/mkdir:
+    post:
+      tags: [VFS]
+      summary: Create directory
+      operationId: createDirectory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+                perm:
+                  type: integer
+                  default: 0o755
+      responses:
+        '200':
+          description: Directory created
+
+  /api/v1/fs/delete:
+    delete:
+      tags: [VFS]
+      summary: Delete file or directory
+      operationId: deleteFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: recursive
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: File deleted
+
+  # ============ Grep Endpoint ============
+  /api/v1/grep:
+    post:
+      tags: [VFS]
+      summary: Search files with regex
+      operationId: grepFiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrepRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrepResponse'
+
+  # ============ Memory Endpoints ============
+  /api/v1/memory/items:
+    get:
+      tags: [Memory]
+      summary: List memory items
+      operationId: listMemoryItems
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: memory_type
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory items list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemoryItem'
+
+    post:
+      tags: [Memory]
+      summary: Create memory item
+      operationId: createMemoryItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryItemCreate'
+      responses:
+        '201':
+          description: Memory item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryItem'
+
+  /api/v1/memory/search:
+    post:
+      tags: [Memory]
+      summary: Search memory with vector similarity
+      operationId: searchMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                limit:
+                  type: integer
+                  default: 10
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemorySearchResult'
+
+  # ============ MCP Endpoints ============
+  /api/v1/mcp/tools:
+    get:
+      tags: [MCP]
+      summary: List available MCP tools
+      operationId: listMcpTools
+      responses:
+        '200':
+          description: MCP tools list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpTool'
+
+  /api/v1/mcp/call:
+    post:
+      tags: [MCP]
+      summary: Call MCP tool
+      operationId: callMcpTool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tool, arguments]
+              properties:
+                tool:
+                  type: string
+                arguments:
+                  type: object
+      responses:
+        '200':
+          description: Tool call result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpCallResult'
+
+  # ============ Marketplace Endpoints ============
+  /api/v1/marketplace/plugins:
+    get:
+      tags: [Marketplace]
+      summary: Search plugins
+      operationId: searchPlugins
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query
+        - name: tier
+          in: query
+          schema:
+            type: string
+            enum: [free, paid, all]
+            default: all
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceSearchResponse'
+
+    post:
+      tags: [Marketplace]
+      summary: Publish plugin to marketplace
+      operationId: publishPlugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishPluginRequest'
+      responses:
+        '201':
+          description: Plugin published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceEntry'
+
+  /api/v1/marketplace/plugins/{id}:
+    get:
+      tags: [Marketplace]
+      summary: Get plugin details
+      operationId: getPlugin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceEntry'
+        '404':
+          description: Plugin not found
+
+  /api/v1/marketplace/trending:
+    get:
+      tags: [Marketplace]
+      summary: Get trending plugins
+      operationId: getTrendingPlugins
+      responses:
+        '200':
+          description: Trending plugins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MarketplaceEntry'
+
+  /api/v1/marketplace/free:
+    get:
+      tags: [Marketplace]
+      summary: Get free plugins
+      operationId: getFreePlugins
+      responses:
+        '200':
+          description: Free plugins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MarketplaceEntry'
+
+  # ============ Billing Endpoints ============
+  /api/v1/billing/usage:
+    get:
+      tags: [Billing]
+      summary: Get current usage
+      operationId: getUsage
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Usage information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageResponse'
+
+  /api/v1/billing/usage/history:
+    get:
+      tags: [Billing]
+      summary: Get usage history
+      operationId: getUsageHistory
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: months
+          in: query
+          schema:
+            type: integer
+            default: 12
+            maximum: 12
+      responses:
+        '200':
+          description: Usage history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsageHistoryEntry'
+
+  /api/v1/billing/subscription:
+    get:
+      tags: [Billing]
+      summary: Get subscription
+      operationId: getSubscription
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subscription information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+    post:
+      tags: [Billing]
+      summary: Create subscription
+      operationId: createSubscription
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionRequest'
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+  /api/v1/billing/invoices:
+    get:
+      tags: [Billing]
+      summary: Get invoices
+      operationId: getInvoices
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invoice'
+
+  # ============ Admin Endpoints ============
+  /api/v1/admin/stats/overview:
+    get:
+      tags: [Admin]
+      summary: Get global overview stats
+      operationId: getOverviewStats
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Overview statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlobalStats'
+
+  /api/v1/admin/stats/tenants:
+    get:
+      tags: [Admin]
+      summary: Get tenant statistics
+      operationId: getTenantStats
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Tenant statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantStats'
+
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: List tenant users
+      operationId: listUsers
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminUser'
+
+    post:
+      tags: [Admin]
+      summary: Create user
+      operationId: createUser
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+
+  /api/v1/admin/audit:
+    get:
+      tags: [Admin]
+      summary: Get audit log
+      operationId: getAuditLog
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntry'
+
+# ============ Components ============
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+    
+    AdminAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+      description: Admin API key for admin endpoints
+
+  schemas:
+    # Common schemas
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: 0.1.0
+        uptime:
+          type: integer
+          example: 3600
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        trace_id:
+          type: string
+          description: Trace ID for debugging
+
+    # VFS schemas
+    DirectoryListing:
+      type: object
+      properties:
+        path:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileInfo'
+
+    FileInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+        mode:
+          type: integer
+        modified:
+          type: string
+          format: date-time
+        is_dir:
+          type: boolean
+
+    FileReadResponse:
+      type: object
+      properties:
+        content:
+          type: string
+        data:
+          type: string
+          description: Base64 encoded content
+        size:
+          type: integer
+
+    FileWriteRequest:
+      type: object
+      required: [path, data]
+      properties:
+        path:
+          type: string
+        data:
+          type: string
+        encoding:
+          type: string
+          enum: [plain, base64]
+          default: plain
+
+    FileWriteResponse:
+      type: object
+      properties:
+        bytes_written:
+          type: integer
+        path:
+          type: string
+
+    GrepRequest:
+      type: object
+      required: [path, pattern]
+      properties:
+        path:
+          type: string
+        pattern:
+          type: string
+          description: Regex pattern
+        max_results:
+          type: integer
+          default: 100
+        recursive:
+          type: boolean
+          default: true
+        trace:
+          type: boolean
+          default: false
+
+    GrepResponse:
+      type: object
+      properties:
+        pattern:
+          type: string
+        matches:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              line_number:
+                type: integer
+              line:
+                type: string
+
+    # Memory schemas
+    MemoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+        memory_type:
+          type: string
+          enum: [profile, knowledge, context, skill]
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    MemoryItemCreate:
+      type: object
+      required: [memory_type, content]
+      properties:
+        memory_type:
+          type: string
+        content:
+          type: string
+        user_id:
+          type: string
+
+    MemorySearchResult:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/MemoryItem'
+        score:
+          type: number
+          format: float
+
+    # MCP schemas
+    McpTool:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+
+    McpCallResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        result:
+          type: object
+        error:
+          type: string
+
+    # Marketplace schemas
+    MarketplaceEntry:
+      type: object
+      properties:
+        marketplace_id:
+          type: string
+        plugin_id:
+          type: string
+        publisher:
+          $ref: '#/components/schemas/PublisherInfo'
+        pricing:
+          $ref: '#/components/schemas/PluginPricing'
+        stats:
+          $ref: '#/components/schemas/DownloadStats'
+        ratings:
+          $ref: '#/components/schemas/RatingStats'
+        status:
+          type: string
+          enum: [draft, pending_review, published, suspended, removed]
+        created_at:
+          type: string
+          format: date-time
+
+    PublisherInfo:
+      type: object
+      properties:
+        user_id:
+          type: string
+        display_name:
+          type: string
+        verified:
+          type: boolean
+
+    PluginPricing:
+      oneOf:
+        - type: object
+          properties:
+            type:
+              type: string
+              const: free
+        - type: object
+          properties:
+            type:
+              type: string
+              const: subscription
+            monthly_price_cents:
+              type: integer
+        - type: object
+          properties:
+            type:
+              type: string
+              const: purchase
+            price_cents:
+              type: integer
+
+    DownloadStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        monthly:
+          type: integer
+        weekly:
+          type: integer
+
+    RatingStats:
+      type: object
+      properties:
+        average:
+          type: number
+        count:
+          type: integer
+        distribution:
+          type: object
+          additionalProperties:
+            type: integer
+
+    MarketplaceSearchResponse:
+      type: object
+      properties:
+        plugins:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketplaceEntry'
+        total:
+          type: integer
+        page:
+          type: integer
+        per_page:
+          type: integer
+        has_more:
+          type: boolean
+
+    PublishPluginRequest:
+      type: object
+      required: [plugin_id]
+      properties:
+        plugin_id:
+          type: string
+        description:
+          type: string
+        pricing:
+          $ref: '#/components/schemas/PluginPricing'
+
+    # Billing schemas
+    UsageResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        period:
+          $ref: '#/components/schemas/BillingPeriod'
+        plan:
+          type: string
+          enum: [free, pro, team, enterprise]
+        quotas:
+          $ref: '#/components/schemas/UsageStats'
+
+    BillingPeriod:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+
+    UsageStats:
+      type: object
+      properties:
+        api_calls:
+          $ref: '#/components/schemas/Quota'
+        storage:
+          $ref: '#/components/schemas/Quota'
+        agents:
+          $ref: '#/components/schemas/Quota'
+
+    Quota:
+      type: object
+      properties:
+        used:
+          type: integer
+        limit:
+          type: integer
+        unit:
+          type: string
+
+    UsageHistoryEntry:
+      type: object
+      properties:
+        date:
+          type: string
+        api_calls:
+          type: integer
+        storage_bytes:
+          type: integer
+        active_agents:
+          type: integer
+
+    Subscription:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        plan:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        next_billing_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, trial, cancelled, past_due]
+
+    CreateSubscriptionRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan:
+          type: string
+          enum: [free, pro, team, enterprise]
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+        period:
+          $ref: '#/components/schemas/BillingPeriod'
+        amount_cents:
+          type: integer
+        status:
+          type: string
+          enum: [draft, paid, unpaid, void]
+        created_at:
+          type: string
+          format: date-time
+        pdf_url:
+          type: string
+
+    # Admin schemas
+    GlobalStats:
+      type: object
+      properties:
+        total_tenants:
+          type: integer
+        active_tenants:
+          type: integer
+        total_api_calls_today:
+          type: integer
+        total_storage_bytes:
+          type: integer
+        revenue_mtd_cents:
+          type: integer
+        active_plugins:
+          type: integer
+        marketplace_gmv_cents:
+          type: integer
+
+    TenantStats:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        display_name:
+          type: string
+        plan:
+          type: string
+        api_calls_today:
+          type: integer
+        storage_bytes:
+          type: integer
+        user_count:
+          type: integer
+        active:
+          type: boolean
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [member, admin, superadmin]
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required: [email, name]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [member, admin]
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        actor_id:
+          type: string
+        actor_type:
+          type: string
+          enum: [user, system, admin]
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        details:
+          type: object
+        ip_address:
+          type: string
+
+# ============ Security ============
+security:
+  - ApiKeyAuth: []

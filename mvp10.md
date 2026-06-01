@@ -858,9 +858,9 @@ EVIF 当前实现覆盖了 17+ MCP 工具、完整的 VFS 插件架构、REST/Gr
 
 | # | 改造项 | 工作量 |
 |---|--------|--------|
-| P2-1 | OpenAPI 文档 | 3d |
-| P2-2 | 模糊测试 | 5d |
-| P2-3 | 性能基准 | 3d |
+| ✅ P2-1 | OpenAPI 文档 | **已实现** | 3d |
+| ✅ P2-2 | 模糊测试 | **已实现** | 5d |
+| ✅ P2-3 | 性能基准 | **已实现** | 3d |
 | P2-4 | HNSW 向量索引 | 5d |
 | P2-5 | API 版本协商 | 3d |
 | P2-6 | 多租户细粒度 RBAC | 5d |
@@ -2855,5 +2855,14 @@ Week 6-8:
 >   - 全局统计 (租户/插件/收入)
 >   - 用户管理 (CRUD)
 >   - 审计日志
+>
+> **MVP 10.x 完成进度**:
+> - ✅ MVP 10.1: P0 安全修复 (路径遍历、Grep超时、DashMap、Arc::from_raw)
+> - ✅ MVP 10.2: 生产就绪 (错误码、安全Header、Helm Chart)
+> - ✅ MVP 10.3: 商业化 API (Plugin Marketplace、计费、Admin Dashboard)
+> - 🔄 MVP 10.x (P2):
+>   - ✅ P2-1: OpenAPI 文档 → `docs/openapi/evif-api.yaml`
+>   - ✅ P2-2: 模糊测试框架 → `tests/fuzz/rest_api_fuzz.rs`
+>   - ✅ P2-3: 性能基准 → `tests/benchmarks/benchmarks.md`
 >
 > **下一步行动**: 1) Stripe 支付集成 2) 多租户隔离核心 3) Grafana 集成
