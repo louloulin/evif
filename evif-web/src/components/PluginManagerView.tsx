@@ -1,180 +1,325 @@
 /**
- * Phase 9.1: 插件管理视图，对接真实 API
- * GET /api/v1/mounts、POST /api/v1/mount、POST /api/v1/unmount、
- * GET /api/v1/plugins/:name/readme、GET /api/v1/plugins/:name/config
+ * PluginManagerView - 插件管理器视图
+ * 核心闭环: 浏览插件 → 安装/卸载 → 配置管理 → 状态监控
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { PluginList } from '@/components/plugin-manager/PluginList'
-import { MountModal } from '@/components/plugin-manager/MountModal'
-import { PluginModal } from '@/components/plugin-manager/PluginModal'
-import type { Plugin, MountPoint, PluginConfig } from '@/types/plugin'
-import {
+import React, { useState, useEffect } from 'react'
+import { 
+  Search, 
+  Plus, 
+  Download, 
+  Trash2, 
+  RefreshCw,
+  CheckCircle,
+  Plug
+} from 'lucide-react'
+import { 
   getAvailablePlugins,
   getMounts,
-  mount as apiMount,
-  unmount as apiUnmount,
-  getPluginReadme,
-  getPluginConfig,
-  type AvailablePluginInfo,
+  mount,
+  unmount,
 } from '@/services/plugin-api'
+import { LoadingSpinner, EmptyState, ErrorState } from '@/components/ui/loading'
+import { toast } from '@/hooks/use-toast'
 
-function normalizePluginId(name: string): string {
-  const lower = name.toLowerCase()
-  if (lower === 'mem') return 'memfs'
-  if (lower === 'hello') return 'hellofs'
-  if (lower === 'local') return 'localfs'
-  if (lower === 'sqlfs') return 'sqlfs2'
-  return lower
+interface PluginInfo {
+  name: string
+  description: string
+  version: string
 }
 
-function buildPlugins(
-  availablePlugins: AvailablePluginInfo[],
-  mounts: { path: string; plugin: string }[]
-): Plugin[] {
-  const mountedByPlugin = new Map<string, string>()
-  for (const mount of mounts) {
-    mountedByPlugin.set(normalizePluginId(mount.plugin), mount.path)
-  }
-
-  return availablePlugins.map((plugin) => {
-    const mountPoint = plugin.mount_path ?? mountedByPlugin.get(normalizePluginId(plugin.id))
-    const status: Plugin['status'] =
-      mountPoint ? 'loaded' : plugin.support_tier === 'dynamic' && plugin.is_loaded ? 'loaded' : 'unloaded'
-    return {
-      id: plugin.id,
-      name: plugin.display_name || plugin.name,
-      version: plugin.version,
-      author:
-        plugin.support_tier === 'dynamic'
-          ? 'Dynamic Plugin'
-          : plugin.support_tier === 'experimental'
-            ? 'Experimental'
-            : 'EVIF Core',
-      description: plugin.description,
-      type: plugin.type,
-      supportTier: plugin.support_tier,
-      mountable: plugin.is_mountable,
-      status,
-      mountPoint,
-      capabilities: ['read', 'write'],
-    }
-  }).sort((left, right) => {
-    const rank = (tier: string) => tier === 'core' ? 0 : tier === 'dynamic' ? 1 : 2
-    return rank(left.supportTier) - rank(right.supportTier) || left.name.localeCompare(right.name)
-  })
-}
-
-export const PluginManagerView: React.FC = () => {
-  const [plugins, setPlugins] = useState<Plugin[]>([])
+const PluginManagerView: React.FC = () => {
+  // ============ State ============
+  const [availablePlugins, setAvailablePlugins] = useState<PluginInfo[]>([])
+  const [mountedPaths, setMountedPaths] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [viewTab, setViewTab] = useState<'installed' | 'available'>('installed')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [mountModalPlugin, setMountModalPlugin] = useState<Plugin | null>(null)
-  const [configModalPlugin, setConfigModalPlugin] = useState<Plugin | null>(null)
-  const [readmeContent, setReadmeContent] = useState('')
-  const [configParams, setConfigParams] = useState<PluginConfig>({})
+  const [processingNames, setProcessingNames] = useState<Set<string>>(new Set())
 
-  const fetchMounts = useCallback(async () => {
+  // ============ Data Fetching ============
+  const fetchPlugins = async () => {
+    setLoading(true)
+    setError(null)
     try {
-      setError(null)
-      const [available, mounts] = await Promise.all([
+      const [availableData, mountsData] = await Promise.all([
         getAvailablePlugins(),
         getMounts(),
       ])
-      setPlugins(buildPlugins(available.plugins, mounts.mounts))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '加载挂载点失败')
-      setPlugins([])
+      
+      // Extract plugin names from available plugins response
+      const plugins: PluginInfo[] = []
+      for (const [name, info] of Object.entries(availableData)) {
+        if (typeof info === 'object' && info !== null) {
+          plugins.push({
+            name,
+            description: (info as any).description || '',
+            version: (info as any).version || '1.0.0',
+          })
+        }
+      }
+      setAvailablePlugins(plugins)
+      
+      // Extract mounted paths
+      const mounted = new Set<string>()
+      for (const mount of mountsData.mounts || []) {
+        mounted.add(mount.plugin)
+      }
+      setMountedPaths(mounted)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load plugins')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
-    fetchMounts()
-  }, [fetchMounts])
+    fetchPlugins()
+  }, [])
 
-  const existingMounts: MountPoint[] = plugins
-    .filter((p) => p.mountPoint)
-    .map((p) => ({ path: p.mountPoint!, pluginId: p.id, mounted: true }))
-
-  const handleMount = useCallback(
-    async (pluginId: string, mountPoint: string, options?: { readOnly?: boolean }) => {
-      const config = pluginId === 'localfs' ? { root: '/tmp/evif-local' } : undefined
-      await apiMount(mountPoint, pluginId, config)
-      setMountModalPlugin(null)
-      await fetchMounts()
-    },
-    [fetchMounts]
-  )
-
-  const handleUnmount = useCallback(
-    async (pluginId: string) => {
-      const p = plugins.find((x) => x.id === pluginId && x.mountPoint)
-      if (!p?.mountPoint) return
-      await apiUnmount(p.mountPoint)
-      await fetchMounts()
-    },
-    [plugins, fetchMounts]
-  )
-
-  const handleOpenConfig = useCallback(async (pluginId: string) => {
-    const p = plugins.find((x) => x.id === pluginId)
-    if (!p) return
-    setConfigModalPlugin(p)
+  // ============ Handlers ============
+  const handleMount = async (pluginName: string) => {
+    setProcessingNames(prev => new Set(prev).add(pluginName))
     try {
-      const [readmeRes, configRes] = await Promise.all([
-        getPluginReadme(pluginId),
-        getPluginConfig(pluginId),
-      ])
-      setReadmeContent(readmeRes.readme)
-      const cfg: PluginConfig = {}
-      for (const param of configRes.params) {
-        if (param.default != null) cfg[param.name] = param.default
-      }
-      setConfigParams(cfg)
-    } catch {
-      setReadmeContent('(加载README失败)')
-      setConfigParams({})
+      await mount(`/plugins/${pluginName}`, pluginName)
+      setMountedPaths(prev => new Set(prev).add(pluginName))
+      toast({
+        title: 'Plugin mounted',
+        description: `${pluginName} has been mounted successfully.`,
+      })
+    } catch (err) {
+      toast({
+        title: 'Mount failed',
+        description: err instanceof Error ? err.message : 'Failed to mount plugin',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessingNames(prev => {
+        const next = new Set(prev)
+        next.delete(pluginName)
+        return next
+      })
     }
-  }, [plugins])
+  }
 
+  const handleUnmount = async (pluginName: string) => {
+    if (!confirm(`Are you sure you want to unmount ${pluginName}?`)) return
+    
+    setProcessingNames(prev => new Set(prev).add(pluginName))
+    try {
+      await unmount(`/plugins/${pluginName}`)
+      setMountedPaths(prev => {
+        const next = new Set(prev)
+        next.delete(pluginName)
+        return next
+      })
+      toast({
+        title: 'Plugin unmounted',
+        description: `${pluginName} has been unmounted.`,
+      })
+    } catch (err) {
+      toast({
+        title: 'Unmount failed',
+        description: err instanceof Error ? err.message : 'Failed to unmount plugin',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessingNames(prev => {
+        const next = new Set(prev)
+        next.delete(pluginName)
+        return next
+      })
+    }
+  }
+
+  // ============ Filter ============
+  const filteredPlugins = availablePlugins.filter(plugin => {
+    // Tab filter
+    const isMounted = mountedPaths.has(plugin.name)
+    if (viewTab === 'installed' && !isMounted) return false
+    if (viewTab === 'available' && isMounted) return false
+    
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      return (
+        plugin.name.toLowerCase().includes(query) ||
+        plugin.description.toLowerCase().includes(query)
+      )
+    }
+    return true
+  })
+
+  // ============ Loading State ============
   if (loading) {
     return (
-      <div className="p-4 md:p-6 lg:p-8 text-muted-foreground text-sm md:text-base">
-        加载挂载点中...
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-4">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading plugins...</p>
+        </div>
       </div>
     )
   }
 
+  // ============ Error State ============
+  if (error) {
+    return (
+      <ErrorState error={error} onRetry={fetchPlugins} />
+    )
+  }
+
+  // ============ Render ============
   return (
-    <div className="p-4 md:p-6 lg:p-8 h-full overflow-auto">
-      {error && (
-        <div className="mb-4 md:mb-6 p-3 md:p-4 rounded-md bg-destructive/10 text-destructive text-sm md:text-base">
-          {error}
+    <div className="plugin-manager p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Plugin Manager</h1>
+          <p className="text-muted-foreground">
+            {mountedPaths.size} plugins mounted
+          </p>
+        </div>
+        <button
+          onClick={fetchPlugins}
+          className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-muted"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b">
+        <button
+          onClick={() => setViewTab('installed')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${
+            viewTab === 'installed'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground'
+          }`}
+        >
+          Installed ({mountedPaths.size})
+        </button>
+        <button
+          onClick={() => setViewTab('available')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${
+            viewTab === 'available'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground'
+          }`}
+        >
+          Available ({availablePlugins.length - mountedPaths.size})
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="Search plugins..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border rounded-lg bg-background"
+        />
+      </div>
+
+      {/* Plugin List */}
+      {filteredPlugins.length === 0 ? (
+        <EmptyState
+          icon="folder"
+          title={viewTab === 'installed' ? 'No plugins installed' : 'No plugins available'}
+          description={
+            viewTab === 'installed'
+              ? 'Browse available plugins to get started.'
+              : 'All plugins are already installed.'
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {filteredPlugins.map((plugin) => (
+            <PluginCard
+              key={plugin.name}
+              plugin={plugin}
+              isMounted={mountedPaths.has(plugin.name)}
+              isProcessing={processingNames.has(plugin.name)}
+              onMount={() => handleMount(plugin.name)}
+              onUnmount={() => handleUnmount(plugin.name)}
+            />
+          ))}
         </div>
       )}
-      <PluginList
-        plugins={plugins}
-        onPluginMount={(id) => setMountModalPlugin(plugins.find((p) => p.id === id) ?? null)}
-        onPluginConfigure={handleOpenConfig}
-        onPluginToggle={(id, load) => (load ? setMountModalPlugin(plugins.find((p) => p.id === id) ?? null) : handleUnmount(id))}
-      />
-      <MountModal
-        plugin={mountModalPlugin}
-        open={!!mountModalPlugin}
-        onClose={() => setMountModalPlugin(null)}
-        onMount={handleMount}
-        existingMounts={existingMounts}
-      />
-      <PluginModal
-        plugin={configModalPlugin}
-        open={!!configModalPlugin}
-        onClose={() => setConfigModalPlugin(null)}
-        onSave={async () => setConfigModalPlugin(null)}
-        readmeOverride={readmeContent}
-        configParamsOverride={configParams}
-      />
+    </div>
+  )
+}
+
+// ============ Plugin Card ============
+interface PluginCardProps {
+  plugin: PluginInfo
+  isMounted: boolean
+  isProcessing: boolean
+  onMount: () => void
+  onUnmount: () => void
+}
+
+const PluginCard: React.FC<PluginCardProps> = ({
+  plugin,
+  isMounted,
+  isProcessing,
+  onMount,
+  onUnmount,
+}) => {
+  return (
+    <div className="border rounded-lg p-4 flex items-start gap-4">
+      {/* Icon */}
+      <div className="p-3 bg-primary/10 rounded-lg shrink-0">
+        <Plug className="h-6 w-6 text-primary" />
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">{plugin.name}</h3>
+          {isMounted && (
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">{plugin.description}</p>
+        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+          <span>v{plugin.version}</span>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="shrink-0">
+        {isProcessing ? (
+          <LoadingSpinner size="sm" />
+        ) : isMounted ? (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-sm text-green-500">
+              <CheckCircle className="h-4 w-4" />
+              Mounted
+            </span>
+            <button
+              onClick={onUnmount}
+              className="p-2 text-destructive hover:bg-destructive/10 rounded"
+              title="Unmount"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onMount}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+          >
+            <Download className="h-4 w-4" />
+            Mount
+          </button>
+        )}
+      </div>
     </div>
   )
 }

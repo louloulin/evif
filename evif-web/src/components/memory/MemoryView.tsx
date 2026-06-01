@@ -1,42 +1,108 @@
 /**
  * MemoryView - 记忆管理视图
- *
- * 主容器组件，包含 MemoryExplorer、CategoryView、MemoryTimeline、
- * 关系视图、AIChatPanel 和 MemoryInsights
+ * 核心闭环: 创建记忆 → 分类管理 → 搜索检索 → 关系分析
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import MemoryExplorer from './MemoryExplorer'
 import CategoryView from './CategoryView'
 import MemoryTimeline from './MemoryTimeline'
 import KnowledgeGraph from './KnowledgeGraph'
 import AIChatPanel from './AIChatPanel'
 import MemoryInsights from './MemoryInsights'
-import type { MemoryItem, Category } from '@/services/memory-api'
+import { LoadingSpinner, EmptyState, ErrorState } from '@/components/ui/loading'
+import { listMemories, listCategories, MemoryItem, Category } from '@/services/memory-api'
 
 type MemoryViewTab = 'explorer' | 'timeline' | 'graph' | 'ai-chat' | 'insights'
 
 const MemoryView: React.FC = () => {
+  // ============ State ============
   const [activeTab, setActiveTab] = useState<MemoryViewTab>('explorer')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
   const [selectedMemory, setSelectedMemory] = useState<MemoryItem | null>(null)
+  
+  // Core Data States
+  const [memories, setMemories] = useState<MemoryItem[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  
+  // Loading & Error States
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // 处理分类选择
+  // ============ Data Fetching ============
+  const fetchData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [memoriesData, categoriesData] = await Promise.all([
+        listMemories(),
+        listCategories(),
+      ])
+      setMemories(memoriesData)
+      setCategories(categoriesData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load memories')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  // ============ Handlers ============
   const handleCategorySelect = (category: Category) => {
     setSelectedCategoryId(category.id)
   }
 
-  // 处理记忆选择
   const handleMemorySelect = (memory: MemoryItem) => {
     setSelectedMemory(memory)
   }
 
-  // 返回分类列表
   const handleBackToCategories = () => {
     setSelectedCategoryId(null)
   }
 
-  // 如果选择了分类，显示分类详情
+  // ============ Loading State ============
+  if (loading) {
+    return (
+      <div className="memory-view h-full flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading memories...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ============ Error State ============
+  if (error) {
+    return (
+      <div className="memory-view h-full">
+        <ErrorState error={error} onRetry={fetchData} />
+      </div>
+    )
+  }
+
+  // ============ Empty State ============
+  if (memories.length === 0 && categories.length === 0) {
+    return (
+      <div className="memory-view h-full">
+        <EmptyState
+          icon="folder"
+          title="No memories yet"
+          description="Start by creating your first memory to capture important information."
+          action={{
+            label: 'Create Memory',
+            onClick: () => console.log('Create memory'),
+          }}
+        />
+      </div>
+    )
+  }
+
+  // ============ Category Detail View ============
   if (selectedCategoryId) {
     return (
       <CategoryView
@@ -47,46 +113,42 @@ const MemoryView: React.FC = () => {
     )
   }
 
+  // ============ Main View ============
   return (
-    <div className="memory-view">
-      {/* Tab 导航 */}
-      <div className="memory-view-tabs">
-        <button
-          className={`tab-button ${activeTab === 'explorer' ? 'active' : ''}`}
-          onClick={() => setActiveTab('explorer')}
-        >
-          记忆浏览器
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'timeline' ? 'active' : ''}`}
-          onClick={() => setActiveTab('timeline')}
-        >
-          时间线
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'graph' ? 'active' : ''}`}
-          onClick={() => setActiveTab('graph')}
-        >
-          关系视图
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'ai-chat' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ai-chat')}
-        >
-          AI 助手
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'insights' ? 'active' : ''}`}
-          onClick={() => setActiveTab('insights')}
-        >
-          洞察分析
-        </button>
+    <div className="memory-view flex flex-col h-full">
+      {/* Tab Navigation */}
+      <div className="memory-view-tabs border-b flex">
+        {[
+          { id: 'explorer', label: '浏览器', icon: '📁' },
+          { id: 'timeline', label: '时间线', icon: '📅' },
+          { id: 'graph', label: '关系图', icon: '🔗' },
+          { id: 'ai-chat', label: 'AI 助手', icon: '🤖' },
+          { id: 'insights', label: '洞察', icon: '💡' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+              activeTab === tab.id
+                ? 'text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => setActiveTab(tab.id as MemoryViewTab)}
+          >
+            <span className="mr-2">{tab.icon}</span>
+            {tab.label}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* Tab 内容 */}
-      <div className="memory-view-content">
+      {/* Tab Content */}
+      <div className="memory-view-content flex-1 overflow-auto">
         {activeTab === 'explorer' && (
           <MemoryExplorer
+            memories={memories}
+            categories={categories}
             onCategorySelect={handleCategorySelect}
             onMemorySelect={handleMemorySelect}
           />
@@ -104,43 +166,6 @@ const MemoryView: React.FC = () => {
           <MemoryInsights />
         )}
       </div>
-
-      {/* 选中的记忆详情面板 */}
-      {selectedMemory && (
-        <div className="memory-detail-panel">
-          <div className="detail-header">
-            <h4>记忆详情</h4>
-            <button
-              className="close-btn"
-              onClick={() => setSelectedMemory(null)}
-            >
-              ×
-            </button>
-          </div>
-          <div className="detail-content">
-            <div className="detail-field">
-              <label>ID:</label>
-              <span>{selectedMemory.id}</span>
-            </div>
-            <div className="detail-field">
-              <label>类型:</label>
-              <span>{selectedMemory.type}</span>
-            </div>
-            <div className="detail-field">
-              <label>摘要:</label>
-              <span>{selectedMemory.summary}</span>
-            </div>
-            <div className="detail-field">
-              <label>创建时间:</label>
-              <span>{selectedMemory.created}</span>
-            </div>
-            <div className="detail-field">
-              <label>更新时间:</label>
-              <span>{selectedMemory.updated}</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

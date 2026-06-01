@@ -83,7 +83,33 @@ const IconLogs = () => (
   </svg>
 );
 
-export type ActivityView = 'explorer' | 'terminal' | 'problems' | 'plugins' | 'search' | 'monitor' | 'memory' | 'context' | 'skills' | 'queue' | 'logs';
+// NEW: Admin Icon
+const IconAdmin = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    <path d="M12 8v4" />
+    <path d="M12 16h.01" />
+  </svg>
+);
+
+// NEW: Billing Icon
+const IconBilling = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="14" x="2" y="5" rx="2" />
+    <line x1="2" x2="22" y1="10" y2="10" />
+  </svg>
+);
+
+// NEW: Marketplace Icon
+const IconMarketplace = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="9" cy="21" r="1" />
+    <circle cx="20" cy="21" r="1" />
+    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+  </svg>
+);
+
+export type ActivityView = 'explorer' | 'terminal' | 'problems' | 'plugins' | 'search' | 'monitor' | 'memory' | 'context' | 'skills' | 'queue' | 'logs' | 'admin' | 'billing' | 'marketplace';
 
 interface ActivityBarProps {
   activeView: ActivityView | null;
@@ -132,6 +158,18 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   };
   const handleLogs = () => {
     onViewChange('logs');
+  };
+  // NEW: Admin handler
+  const handleAdmin = () => {
+    onViewChange('admin');
+  };
+  // NEW: Billing handler
+  const handleBilling = () => {
+    onViewChange('billing');
+  };
+  // NEW: Marketplace handler
+  const handleMarketplace = () => {
+    onViewChange('marketplace');
   };
 
   return (
@@ -227,6 +265,33 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
           title="Log Stream"
         >
           <IconLogs />
+        </button>
+        {/* NEW: Admin Button */}
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'admin' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleAdmin}
+          title="Admin Dashboard"
+        >
+          <IconAdmin />
+        </button>
+        {/* NEW: Billing Button */}
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'billing' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleBilling}
+          title="Billing Dashboard"
+        >
+          <IconBilling />
+        </button>
+        {/* NEW: Marketplace Button */}
+        <button
+          type="button"
+          className={`activity-bar-item ${activeView === 'marketplace' && sidebarVisible ? 'active' : ''}`}
+          onClick={handleMarketplace}
+          title="Plugin Marketplace"
+        >
+          <IconMarketplace />
         </button>
       </div>
     </div>

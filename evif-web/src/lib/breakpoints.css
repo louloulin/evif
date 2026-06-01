@@ -1,0 +1,83 @@
+/**
+ * Responsive Breakpoints Utilities
+ * 
+ * P2-4: Responsive Layout
+ * - Mobile adaptation
+ * - Tablet adaptation
+ * - Breakpoint management
+ */
+
+/* Breakpoint variables */
+:root {
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+}
+
+/* Mobile-first responsive utilities */
+@media (max-width: 639px) {
+  .hide-mobile { display: none !important; }
+  .sidebar { width: 100% !important; max-width: 100% !important; }
+  .panel { height: 200px !important; }
+  .activity-bar { width: 48px !important; }
+  .activity-bar-inner { padding: 4px 0 !important; }
+  .activity-bar-item { width: 36px !important; height: 36px !important; }
+}
+
+@media (min-width: 640px) and (max-width: 767px) {
+  .hide-tablet { display: none !important; }
+}
+
+@media (min-width: 768px) {
+  .hide-desktop { display: none !important; }
+}
+
+/* Touch-friendly targets */
+@media (max-width: 767px) {
+  button, a, .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .text-base { font-size: 16px !important; }
+  .text-sm { font-size: 14px !important; }
+  .text-xs { font-size: 12px !important; }
+}
+
+/* Compact mode for smaller screens */
+@media (max-width: 1023px) {
+  .compact-sidebar .sidebar-inner {
+    padding: 8px 4px;
+  }
+  
+  .compact-sidebar .file-tree-item {
+    padding: 6px 8px;
+  }
+  
+  .compact-sidebar .tab-bar {
+    height: 32px;
+  }
+  
+  .compact-sidebar .panel-tabs {
+    height: 32px;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Orientation handling */
+@media (orientation: landscape) and (max-height: 500px) {
+  .sidebar { width: 200px !important; }
+  .panel { height: 150px !important; }
+}

@@ -11,6 +11,9 @@ import ContextMenu from './components/ContextMenu';
 import PluginManagerView from './components/PluginManagerView';
 import SearchUploadView from './components/SearchUploadView';
 import { MonitorView } from './components/MonitorView';
+import AdminDashboard from './components/admin/AdminDashboard';
+import BillingDashboard from './components/billing/BillingDashboard';
+import { MarketplaceView } from './components/marketplace/MarketplaceView';
 import MemoryView from './components/memory/MemoryView';
 import ContextExplorer from './components/ContextExplorer';
 import SkillGallery from './components/SkillGallery';
@@ -921,6 +924,12 @@ function App() {
               <QueuePipePanel />
             ) : activeView === 'logs' ? (
               <LogViewer />
+            ) : activeView === 'admin' ? (
+              <AdminDashboard />
+            ) : activeView === 'billing' ? (
+              <BillingDashboard />
+            ) : activeView === 'marketplace' ? (
+              <MarketplaceView />
             ) : (
             <FileTree
               files={files}
