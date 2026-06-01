@@ -1,0 +1,39 @@
+{
+  "name": "evif-sdk",
+  "version": "0.1.0",
+  "description": "EVIF TypeScript SDK - AI Agent Infrastructure Framework",
+  "main": "dist/client.js",
+  "types": "dist/types.d.ts",
+  "module": "dist/client.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/client.mjs",
+      "require": "./dist/client.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [
+    "evif",
+    "ai-agent",
+    "mcp",
+    "filesystem",
+    "vfs"
+  ],
+  "author": "EVIF Team",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/louloulin/evif"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
+  }
+}

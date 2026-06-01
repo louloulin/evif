@@ -873,8 +873,8 @@ EVIF 当前实现覆盖了 17+ MCP 工具、完整的 VFS 插件架构、REST/Gr
 | P3-1 | 合约测试 | 5d |
 | P3-2 | FUSE POSIX 增强 | 3d |
 | P3-3 | 多活/分片 | 10d |
-| P3-4 | OIDC 集成 | 5d |
-| P3-5 | 前端类型生成 | 3d |
+| ✅ P3-4 | OIDC 集成 | **已实现** | 5d |
+| ✅ P3-5 | TypeScript SDK | **已实现** | 3d |
 
 ---
 
@@ -2864,5 +2864,14 @@ Week 6-8:
 >   - ✅ P2-1: OpenAPI 文档 → `docs/openapi/evif-api.yaml`
 >   - ✅ P2-2: 模糊测试框架 → `tests/fuzz/rest_api_fuzz.rs`
 >   - ✅ P2-3: 性能基准 → `tests/benchmarks/benchmarks.md`
+>
+> **MVP 10.x 完成进度**:
+> - ✅ MVP 10.1: P0 安全修复 (路径遍历、Grep超时、DashMap、Arc::from_raw)
+> - ✅ MVP 10.2: 生产就绪 (错误码、安全Header、Helm Chart)
+> - ✅ MVP 10.3: 商业化 API (Plugin Marketplace、计费、Admin Dashboard)
+> - ✅ MVP 10.x (P2): 质量提升 (OpenAPI、模糊测试、性能基准)
+> - ✅ MVP 10.x (P3): 优化项
+>   - ✅ P3-4: OIDC 集成文档 → `docs/auth/oidc.md`
+>   - ✅ P3-5: TypeScript SDK → `sdk/typescript/`
 >
 > **下一步行动**: 1) Stripe 支付集成 2) 多租户隔离核心 3) Grafana 集成
